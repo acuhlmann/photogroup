@@ -9,9 +9,9 @@
     core-js "^2.5.7"
     regenerator-runtime "^0.11.1"
 
-"@material-ui/core@^1.2.0":
-  version "1.2.1"
-  resolved "https://registry.yarnpkg.com/@material-ui/core/-/core-1.2.1.tgz#f8c73da10b875762b37be7167ec2ac79b027499f"
+"@material-ui/core@^1.2.3":
+  version "1.2.3"
+  resolved "https://registry.yarnpkg.com/@material-ui/core/-/core-1.2.3.tgz#0765e449a684e3411a77522cd2f314952e923fa6"
   dependencies:
     "@babel/runtime" "^7.0.0-beta.42"
     "@types/jss" "^9.5.3"
@@ -2550,7 +2550,7 @@ event-emitter@~0.3.5:
     d "1"
     es5-ext "~0.10.14"
 
-eventemitter3@^3.0.0:
+eventemitter3@^3.0.0, eventemitter3@^3.1.0:
   version "3.1.0"
   resolved "https://registry.yarnpkg.com/eventemitter3/-/eventemitter3-3.1.0.tgz#090b4d6cdbd645ed10bf750d4b5407942d7ba163"
 
@@ -5804,7 +5804,7 @@ react-dev-utils@^5.0.1:
     strip-ansi "3.0.1"
     text-table "0.2.0"
 
-react-dom@^16.4.0:
+react-dom@^16.4.1:
   version "16.4.1"
   resolved "https://registry.yarnpkg.com/react-dom/-/react-dom-16.4.1.tgz#7f8b0223b3a5fbe205116c56deb85de32685dad6"
   dependencies:
@@ -5899,7 +5899,7 @@ react-transition-group@^2.2.1:
     loose-envify "^1.3.1"
     prop-types "^15.6.1"
 
-react@^16.4.0:
+react@^16.4.1:
   version "16.4.1"
   resolved "https://registry.yarnpkg.com/react/-/react-16.4.1.tgz#de51ba5764b5dbcd1f9079037b862bd26b82fe32"
   dependencies:

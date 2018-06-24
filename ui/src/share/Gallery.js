@@ -60,8 +60,10 @@ class Gallery extends Component {
     }
 
     handleOpen(tile) {
-        this.state.allMetadata = this.model.createMetadataSummary(tile.allMetadata);
-        this.setState({ open: true, allMetadata: this.state.allMetadata });
+        this.setState({
+            open: true,
+            allMetadata: this.model.createMetadataSummary(tile.allMetadata)
+        });
     }
 
     handleClose() {

@@ -2,12 +2,12 @@
 Zero Install, Peer-to-Peer Photo Group Collaboration. 
 This is experimental; an early, hacky stage.
 
-# Install
+# Install and Run
 
 ```
 git clone ...
 cd ...
-npm install
+npm run install-start
 ```
 
 Add an index.js file inside `server/secret/` with account credentials 

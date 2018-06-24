@@ -1,5 +1,5 @@
 {
-  "name": "PhotoGroup",
+  "name": "photogroup-server",
   "version": "0.0.1",
   "description": "Zero Install, Peer-to-Peer Photo Group Collaboration.",
   "main": "app.js",

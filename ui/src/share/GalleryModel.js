@@ -3,8 +3,8 @@ import moment from 'moment';
 
 export default class GalleryModel {
 
-    constructor(logCallback, torrentMaster) {
-        this.log = logCallback;
+    constructor(torrentMaster) {
+        this.log = torrentMaster.log.bind(torrentMaster);
         this.torrentMaster = torrentMaster;
     }
 
@@ -149,24 +149,24 @@ export default class GalleryModel {
 
         const metadata = Object.entries(rawMetadata)
             .filter(entry => entry[0] !== 'thumbnail')
-            .map((entry, index) => {
+            .map(entry => {
 
-                let valueObj = entry[1];
+                let valueObj = entry[1], newValueObj;
                 if(Array.isArray(valueObj)) {
-                    valueObj = valueObj.toString();
+                    newValueObj = valueObj.toString();
                 } else if(typeof valueObj === 'string' || valueObj instanceof String) {
-                    valueObj = valueObj;
+                    newValueObj = valueObj;
                 } else {
-                    valueObj = JSON.stringify(valueObj);
+                    newValueObj = JSON.stringify(valueObj);
                 }
 
                 const key = entry[0];
                 if(key === 'DateTimeOriginal') {
-                    valueObj = this.formatDate(valueObj);
+                    newValueObj = this.formatDate(newValueObj);
                 }
 
                 const item = {key: entry[0],
-                    value: valueObj};
+                    value: newValueObj};
                 return item;
             });
 

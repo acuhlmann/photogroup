@@ -1,7 +1,43 @@
-
+/**
+ * @emits RoomsService#urlChange
+ * @type {array} latest server state of magnet urls
+ */
 export default class RoomsService {
-    constructor() {
+
+    constructor(emitter) {
+        this.emitter = emitter;
         this.url = '/rooms';
+        this.listenToUrlChanges();
+    }
+
+    log(message) {
+        this.emitter.emit('log', message);
+    }
+
+    listenToUrlChanges() {
+        const scope = this;
+        const source = new window.EventSource("/roomstream");
+        source.addEventListener("urls", event => {
+            scope.log('sse: '+JSON.stringify(event));
+
+            const data = JSON.parse(event.data);
+            scope.emitter.emit('urls', data.urls);
+        }, false);
+
+        source.addEventListener('open', e => {
+            scope.log("Connection was opened")
+        }, false);
+
+        source.addEventListener('error', e => {
+            scope.log('sse error: ' + JSON.stringify(e))
+            if (e.readyState === EventSource.CLOSED) {
+                scope.log("Connection was closed")
+            }
+        }, false);
+
+        source.onerror = e => {
+            scope.log('sse error: ' + JSON.stringify(e))
+        };
     }
 
     find() {

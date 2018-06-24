@@ -22,14 +22,15 @@ class Uploader extends Component {
     constructor(props) {
         super(props);
 
-        const { classes, master } = props;
+        const { classes, model, loader } = props;
 
         this.classes = classes;
-        this.master = master;
+        this.model = model;
+        this.loader = loader;
     }
 
     log(message) {
-        this.master.log(message);
+        this.model.log(message);
     }
 
     handleUpload(event) {
@@ -41,7 +42,7 @@ class Uploader extends Component {
 
         //this.readPiexifMetadata(files[0]);
 
-        this.master.seed(files);
+        this.model.seed(files);
 
         const target = event.target || event.srcElement;
         target.value = '';
@@ -92,7 +93,7 @@ class Uploader extends Component {
                         Upload
                     </Button>
                 </label>
-                <LoaderView loader={this.master.loader}/>
+                <LoaderView loader={this.loader}/>
             </div>
         );
     }
@@ -100,7 +101,8 @@ class Uploader extends Component {
 
 Uploader.propTypes = {
     classes: PropTypes.object.isRequired,
-    master: PropTypes.object.isRequired,
+    model: PropTypes.object.isRequired,
+    loader: PropTypes.object.isRequired,
 };
 
 export default withStyles(styles)(Uploader);

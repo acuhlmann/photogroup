@@ -25,9 +25,9 @@ class LogView extends Component {
             open: false,
         };
 
-        const { classes, master } = props;
+        const { classes, emitter } = props;
         this.classes = classes;
-        master.emitter.on('log', this.log, this);
+        emitter.on('log', this.log, this);
     }
 
     componentDidMount() {
@@ -93,7 +93,7 @@ class LogView extends Component {
 
 LogView.propTypes = {
     classes: PropTypes.object.isRequired,
-    master: PropTypes.object.isRequired,
+    emitter: PropTypes.object.isRequired,
 };
 
 export default withStyles(styles)(LogView);

@@ -18,12 +18,13 @@ class ShareCanvas extends Component {
         this.state = {
             numPeer: 0
         };
-        const { classes, master } = props;
+        const { classes, master, gallery } = props;
 
         master.emitter.on('update', this.update, this);
 
         this.classes = classes;
         this.master = master;
+        this.gallery = gallery;
     }
 
     log(message) {
@@ -40,9 +41,10 @@ class ShareCanvas extends Component {
         return (
             <div>
                 <QRCode value={url} />
-                <Uploader master={this.master.torrentAddition} />
+                <Uploader model={this.master.torrentAddition}
+                          loader={this.master.torrentAddition.loader} />
                 <div>Peers {this.state.numPeers}</div>
-                <Gallery model={this.master.gallery} />
+                <Gallery model={this.gallery} />
             </div>
         );
     }
@@ -51,6 +53,7 @@ class ShareCanvas extends Component {
 ShareCanvas.propTypes = {
     classes: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,
+    gallery: PropTypes.object.isRequired,
 };
 
 export default withStyles(styles)(ShareCanvas);
