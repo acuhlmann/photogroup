@@ -1,8 +1,8 @@
-#PhotoTorrent
+# PhotoTorrent
 Zero Install, Peer-to-Peer Photo Group Collaboration. 
 This is experimental; an early, hacky stage.
 
-#Install
+# Install
 
 ```
 git clone ...
@@ -18,11 +18,11 @@ to your Twilio account for their NAT traversal. [instant.io](https://github.com/
    };
 ```
 
-#Other Notes
+# Other Notes
 
 ### Credits
 
-Mostly this builds on the amazing work of 
+This mostly this builds on the amazing work of 
 [webtorrent](https://github.com/webtorrent/webtorrent) and
  [instant.io](https://github.com/webtorrent/instant.io)
 In addition some ideas are from:
