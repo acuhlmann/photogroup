@@ -2,8 +2,8 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
 import QRCode from 'qrcode.react';
-import Uploader from './Uploader';
-import Gallery from "./Gallery";
+import Uploader from './loader/Uploader';
+import Gallery from "./gallery/Gallery";
 
 import { withStyles } from '@material-ui/core/styles';
 const styles = theme => ({
@@ -25,10 +25,6 @@ class ShareCanvas extends Component {
         this.classes = classes;
         this.master = master;
         this.gallery = gallery;
-    }
-
-    log(message) {
-        this.master.log(message);
     }
 
     update() {

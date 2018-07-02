@@ -8,12 +8,13 @@ import './App.css';
 
 import EventEmitter from 'eventemitter3';
 
-import TorrentMaster from "./share/model/TorrentMaster";
+import TorrentMaster from "./share/torrent/TorrentMaster";
 import RoomsService from "./share/RoomsService";
-import GalleryModel from "./share/GalleryModel";
+import GalleryModel from "./share/gallery/GalleryModel";
 
 import ShareCanvas from './share/ShareCanvas';
 import LogView from "./share/LogView";
+import Logger from 'js-logger';
 
 const styles = {
     root: {
@@ -30,6 +31,8 @@ class App extends Component {
         this.classes = classes;
 
         const scope = this;
+
+        Logger.useDefaults();
 
         const emitter = new EventEmitter();
         this.master = new TorrentMaster(new RoomsService(emitter), emitter);

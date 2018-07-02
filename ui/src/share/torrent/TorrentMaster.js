@@ -1,3 +1,5 @@
+import Logger from 'js-logger';
+
 import IdbKvStore from 'idb-kv-store';
 //TODO: fails in create-create-app build
 //import parsetorrent from 'parse-torrent';
@@ -5,9 +7,6 @@ import TorrentAddition from "./TorrentAddition";
 import TorrentDeletion from "./TorrentDeletion";
 
 /**
- * @emits TorrentMaster#log
- * @type {string} message
- *
  * @emits TorrentMaster#deleted
  * @type {string} magnetURI
  */
@@ -41,12 +40,11 @@ export default class TorrentMaster {
             webSeeds: true
         });
 
-        const scope = this;
         client.on('error', err => {
-            scope.log('client.error '+err)
+            Logger.error('client.error '+err);
         });
         client.on('torrent', torrent => {
-            scope.log('client.torrent '+torrent.infoHash)
+            Logger.info('client.torrent '+torrent.infoHash);
         });
 
         this.torrentsDb = new IdbKvStore('torrents');
@@ -54,26 +52,22 @@ export default class TorrentMaster {
         return client;
     }
 
-    log(message) {
-        this.emitter.emit('log', message);
-    }
-
     findExistingContent() {
 
         const scope = this;
         return this.resurrectLocallySavedTorrents().then(values => {
-            scope.log('done with resurrectAllTorrents ' + values);
+            Logger.info('done with resurrectAllTorrents ' + values);
             return scope.service.find();
         }).then(response => {
 
-            scope.log('current server sent Urls: ' + response);
+            Logger.info('current server sent Urls: ' + response);
             return scope.syncUiWithServerUrls(response);
         });
     }
 
     syncUiWithServerUrls(urls) {
         const scope = this;
-        this.log('urls.length: '+urls.length);
+        Logger.debug('urls.length: '+urls.length);
 
         this.client.torrents.forEach(torrent => {
             if(!urls.includes(torrent.magnetURI)) {
@@ -86,7 +80,7 @@ export default class TorrentMaster {
         urls.forEach(url => {
             const metadata = window.parsetorrent(url);
             if(!scope.client.get(metadata.infoHash)) {
-                scope.log('found url');
+                Logger.debug('new url found on server');
                 scope.torrentAddition.add(url);
             }
         });
@@ -99,7 +93,7 @@ export default class TorrentMaster {
 
         return new Promise((resolve, reject) => {
 
-            const loopResolver = (value) => {};
+            const loopResolver = value => {};
             const loopPromise = new Promise(loopResolver);
 
             const allPendingTorrents = [loopPromise];
@@ -119,7 +113,7 @@ export default class TorrentMaster {
             });
 
             Promise.all(allPendingTorrents).then(values => {
-                scope.log('resurrectAllTorrents ' + values);
+                Logger.info('resurrectAllTorrents ' + values);
                 values.shift();
                 resolve(values);
             });
@@ -143,7 +137,7 @@ export default class TorrentMaster {
 
                     }, error => {
                         const msg = 'error, failed to resurrect ' + JSON.stringify(arguments);
-                        scope.log(msg);
+                        Logger.error(msg);
                         reject(msg);
                     });
                 }

@@ -1,3 +1,5 @@
+import Logger from 'js-logger';
+
 /**
  * @emits RoomsService#urlChange
  * @type {array} latest server state of magnet urls
@@ -10,33 +12,29 @@ export default class RoomsService {
         this.listenToUrlChanges();
     }
 
-    log(message) {
-        this.emitter.emit('log', message);
-    }
-
     listenToUrlChanges() {
         const scope = this;
         const source = new window.EventSource("/roomstream");
         source.addEventListener("urls", event => {
-            scope.log('sse: '+JSON.stringify(event));
+            Logger.info('sse: '+JSON.stringify(event));
 
             const data = JSON.parse(event.data);
             scope.emitter.emit('urls', data.urls);
         }, false);
 
         source.addEventListener('open', e => {
-            scope.log("Connection was opened")
+            Logger.info('Connection was opened');
         }, false);
 
         source.addEventListener('error', e => {
-            scope.log('sse error: ' + JSON.stringify(e))
+            Logger.error('sse error: ' + JSON.stringify(e))
             if (e.readyState === EventSource.CLOSED) {
-                scope.log("Connection was closed")
+                Logger.error('Connection was closed');
             }
         }, false);
 
         source.onerror = e => {
-            scope.log('sse error: ' + JSON.stringify(e))
+            Logger.error('sse error: ' + JSON.stringify(e));
         };
     }
 
@@ -46,7 +44,7 @@ export default class RoomsService {
                 return response.json();
             })
             .then(json => {
-                console.log('read ' + json);
+                Logger.info('read ' + json);
                 return json;
             });
     }

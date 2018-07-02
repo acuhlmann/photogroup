@@ -1,13 +1,11 @@
+import Logger from 'js-logger';
+
 export default class TorrentDeletion {
 
     constructor(service, torrentsDb, emitter) {
         this.service = service;
         this.torrentsDb = torrentsDb;
         this.emitter = emitter;
-    }
-
-    log(message) {
-        this.emitter.emit('log', message);
     }
 
     update() {
@@ -17,24 +15,24 @@ export default class TorrentDeletion {
     deleteItem(torrent) {
         return this.service.delete(torrent.magnetURI)
             .then(response => {
-                this.log('deleted ' + response);
+                Logger.info('deleted ' + response);
 
                 return this.deleteTorrent(torrent);
             });
     }
 
     deleteTorrent(torrent) {
-        const scope = this;
         return new Promise((resolve, reject) => {
 
             if(torrent.client) {
                 if(torrent.infoHash) {
                     torrent.client.remove(torrent.infoHash, () => {
-                        scope.log('torrent removed ' + torrent.magnetURI);
+                        Logger.info('torrent removed ' + torrent.magnetURI);
+
                         resolve(torrent.magnetURI);
                     }, () => {
                         const msg = 'error client.remove ' + JSON.stringify(arguments);
-                        scope.log(msg);
+                        Logger.error(msg);
                         reject(msg);
                     });
                 } else {

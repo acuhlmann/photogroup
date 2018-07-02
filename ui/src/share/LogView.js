@@ -1,6 +1,8 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
+import Logger from 'js-logger';
+
 import { withStyles } from '@material-ui/core/styles';
 import Button from '@material-ui/core/Button';
 import IconButton from '@material-ui/core/IconButton';
@@ -25,18 +27,22 @@ class LogView extends Component {
             open: false,
         };
 
-        const { classes, emitter } = props;
+        const { classes } = props;
         this.classes = classes;
-        emitter.on('log', this.log, this);
+
+        Logger.setHandler((messages, context) => {
+            this.log(messages[0], context.level.name);
+        });
     }
 
     componentDidMount() {
         this.mounted = true;
     }
 
-    log(message) {
-        console.log(message);
-        this.state.messages.unshift(message);
+    log(message, level) {
+        const msg = level + ': ' + message;
+        console.log(msg);
+        this.state.messages.unshift(msg);
         if(this.mounted) {
             this.setState({messages: this.state.messages});
         }

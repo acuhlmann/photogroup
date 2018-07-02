@@ -1,4 +1,5 @@
-import Loader from "../Loader";
+import Logger from 'js-logger';
+import Loader from "./Loader";
 
 import idb from 'indexeddb-chunk-store';
 
@@ -18,10 +19,6 @@ export default class TorrentAddition {
         this.emitter = emitter;
 
         this.loader = new Loader();
-    }
-
-    log(message) {
-        this.emitter.emit('log', message);
     }
 
     update() {
@@ -47,12 +44,12 @@ export default class TorrentAddition {
 
     add(torrentId) {
 
-        this.log('add ' + torrentId);
+        Logger.info('add ' + torrentId);
 
         const scope = this;
         const torrent = this.addSeedOrGetTorrent('add', torrentId, torrent => {
 
-            this.log('this.client.add ' + torrent.infoHash);
+            Logger.info('this.client.add ' + torrent.infoHash);
             this.numPeers = torrent.numPeers;
             this.update();
 
@@ -67,7 +64,7 @@ export default class TorrentAddition {
         return new Promise((resolve, reject) => {
 
             torrent.on('error', err => {
-                scope.log('error torrent '+err);
+                Logger.error('torrent.add '+err);
                 reject(err);
             });
 
@@ -85,7 +82,7 @@ export default class TorrentAddition {
         const torrent = this.addSeedOrGetTorrent('seed', files, torrent => {
 
             const magnetUri = torrent.magnetURI;
-            this.log('Client is seeding ' + torrent.infoHash);
+            Logger.info('Client is seeding ' + torrent.infoHash);
 
             this.numPeers = torrent.numPeers;
             this.update();
@@ -94,7 +91,7 @@ export default class TorrentAddition {
 
             this.service.share(magnetUri)
                 .then(response => {
-                    this.log('shared ' + response);
+                    Logger.info('shared ' + response);
                 });
         });
 
@@ -106,7 +103,8 @@ export default class TorrentAddition {
         //in case local indexeddb data is lost for some reason, reseed file.
         const fileBak = files[0];
         torrent.on('error', err => {
-            scope.log('error torrent '+err);
+
+            Logger.error('torrent.seed '+JSON.stringify(err));
             const msg = err.message;
             const isDuplicateError = msg.indexOf('Cannot add duplicate') !== -1;
             if(!isDuplicateError) return;
@@ -141,7 +139,7 @@ export default class TorrentAddition {
     }
 
     metadata(torrent) {
-        this.log('metadata ' + arguments);
+        Logger.info('metadata '+arguments);
 
         //Once generated, stores the metadata for later use when re-adding the torrent!
         const parsed = window.parsetorrent(torrent.torrentFile);
@@ -159,23 +157,21 @@ export default class TorrentAddition {
             if(!value) {
                 scope.torrentsDb.add(key, parsed);
             } else {
-                scope.log('already added' + key + ' with value ' + value);
+                Logger.warn('already added' + key + ' with value ' + value);
             }
         });
-
-        this.log(`[${torrent.infoHash}] Seeding torrent`)
     }
 
     infoHash(t, hash) {
-        this.log('infoHash '+hash);
+        Logger.info('infoHash '+hash);
     }
 
     noPeers(t, announceType) {
-        this.log('noPeers '+announceType);
+        Logger.info('noPeers '+announceType);
     }
 
     warning(t, err) {
-        this.log('warning '+err);
+        Logger.warn('warning '+err);
     }
 
     done(torrent) {
@@ -184,7 +180,7 @@ export default class TorrentAddition {
             //Since client.seed is sequential, this is okay here.
             const empty = torrent.store.mem && !torrent.store.mem[torrent.store.mem.length-1];
             if(empty){
-                this.log(`[${torrent.infoHash}] Import into indexedDB done`);
+                Logger.info(`[${torrent.infoHash}] Import into indexedDB done`);
                 clearInterval(isMemStoreEmpty)
             }
         },500)
