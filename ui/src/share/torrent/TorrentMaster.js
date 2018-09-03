@@ -15,6 +15,7 @@ export default class TorrentMaster {
     constructor(service, emitter) {
 
         const scope = this;
+        this.numPeers = 0;
 
         this.service = service;
         this.service.emitter.on('urls', urls => {
@@ -35,16 +36,19 @@ export default class TorrentMaster {
 
         const WebTorrent = window.WebTorrent;
         const client = this.client = new WebTorrent({
+            //maxConns: 3,
             tracker: true,
             dht: true,
             webSeeds: true
         });
-
+        const scope = this;
         client.on('error', err => {
             Logger.error('client.error '+err);
         });
         client.on('torrent', torrent => {
-            Logger.info('client.torrent '+torrent.infoHash);
+            Logger.info('client.torrent numPeers '+ torrent.numPeers + ' infoHash ' + torrent.infoHash);
+            scope.numPeers = torrent.numPeers;
+            scope.emitter.emit('update');
         });
 
         this.torrentsDb = new IdbKvStore('torrents');

@@ -8,11 +8,8 @@ import DialogActions from '@material-ui/core/DialogActions';
 import Button from '@material-ui/core/Button';
 
 import List from '@material-ui/core/List';
-import ListItem from '@material-ui/core/ListItem';
-import ListItemSecondaryAction from '@material-ui/core/ListItemSecondaryAction';
-import ListItemText from '@material-ui/core/ListItemText';
-
 import { withStyles } from '@material-ui/core/styles';
+import PhotoDetailsRenderer from "./PhotoDetailsRenderer";
 
 const styles = theme => ({
     root: {
@@ -37,14 +34,8 @@ class PhotoDetails extends Component {
     render() {
         const classes = this.classes;
 
-        const metadataList = this.props.metadata.map((item, index) => (
-            <ListItem key={index} dense className={classes.listItem}>
-                <ListItemText primary={item.key} />
-                <ListItemSecondaryAction>
-                    <ListItemText primary={item.value} />
-                </ListItemSecondaryAction>
-            </ListItem>
-        ));
+        const metadataList = PhotoDetailsRenderer.render(this.props.metadata);
+
         return (
             <div className={classes.root}>
                 <Dialog

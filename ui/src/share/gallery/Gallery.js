@@ -51,7 +51,7 @@ class Gallery extends Component {
     }
 
     handleImageLoaded(tile, event) {
-        this.model.updateMetadata(tile, event);
+        this.model.parser.readMetadata(tile, event);
     }
 
     handleDelete(tile) {
@@ -61,7 +61,7 @@ class Gallery extends Component {
     handleOpen(tile) {
         this.setState({
             open: true,
-            allMetadata: this.model.createMetadataSummary(tile.allMetadata)
+            allMetadata: this.model.parser.createMetadataSummary(tile.allMetadata)
         });
     }
 
@@ -75,18 +75,23 @@ class Gallery extends Component {
 
         return (
             <div className={classes.root}>
-                <GridList cellHeight={200} className={classes.gridList} cols={2} spacing={1}>
+                <GridList cellHeight={400} className={classes.gridList} cols={1} spacing={1}>
                     {tileData.map((tile, index) => (
                         <GridListTile key={tile.img} cols={tile.cols || 1}>
                             <img id={'img' + index} src={tile.img} alt={tile.title}
                                  crossOrigin="Anonymous"
                                  onLoad={this.handleImageLoaded.bind(this, tile)} />
                             <GridListTileBar
-                                title={tile.dateTaken} titlePosition="bottom"
-                                subtitle={<IconButton onClick={this.handleOpen.bind(this, tile)}
-                                                      className={classes.icon}>
-                                    <InfoIcon />
-                                </IconButton>}
+                                title={<div onClick={this.handleOpen.bind(this, tile)}
+                                            title={tile.summary}>{tile.summary}</div>}
+                                titlePosition="bottom"
+                                subtitle={<span onClick={this.handleOpen.bind(this, tile)}
+                                                title={tile.cameraSettings}>
+                                    <IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
+                                        <InfoIcon />
+                                    </IconButton>
+                                    {tile.size} MB, {tile.cameraSettings}
+                                </span>}
                                 actionIcon={
                                     <IconButton onClick={this.handleDelete.bind(this, tile)}
                                                 className={classes.icon}>

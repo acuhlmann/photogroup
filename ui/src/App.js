@@ -13,8 +13,10 @@ import RoomsService from "./share/RoomsService";
 import GalleryModel from "./share/gallery/GalleryModel";
 
 import ShareCanvas from './share/ShareCanvas';
-import LogView from "./share/LogView";
+import LogView from "./share/header/LogView";
 import Logger from 'js-logger';
+import Uploader from "./share/loader/Uploader";
+import QRCodeView from "./share/header/QRCodeView";
 
 const styles = {
     root: {
@@ -35,6 +37,7 @@ class App extends Component {
         Logger.useDefaults();
 
         const emitter = new EventEmitter();
+        //new RoomsService(emitter);
         this.master = new TorrentMaster(new RoomsService(emitter), emitter);
         this.gallery = new GalleryModel(this.master);
 
@@ -59,14 +62,18 @@ class App extends Component {
     }
 
     render() {
+
         return (
             <div className="App">
                 <header className="App-header">
                     <AppBar position="static" color="default">
                         <Toolbar>
-                            <Typography variant="title" color="inherit" align="center">
+                            <Typography variant="body1" color="inherit" align="center">
                                 PhotoGroup - Zero Install, Peer-to-Peer Photo Group Collaboration.
                             </Typography>
+                            <QRCodeView />
+                            <Uploader model={this.master.torrentAddition}
+                                      loader={this.master.torrentAddition.loader} />
                             <LogView emitter={this.master.emitter}/>
                         </Toolbar>
                     </AppBar>

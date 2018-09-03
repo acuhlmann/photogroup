@@ -1,6 +1,13 @@
 # PhotoTorrent
-Zero Install, Peer-to-Peer Photo Group Collaboration. 
-This is experimental; an early, hacky stage.
+Zero Install, Peer-to-Peer, Lossless Photo Group Collaboration. 
+This web app (React, NodeJS/Express) uses 
+[WebTorrent](https://github.com/webtorrent/webtorrent) 
+to share original photos between peers, 
+using WebRTC and the NodeJS server that 
+shares magnet links. 
+The UI extracts and renders Exif and XMP metadata.
+
+This is in an experimental stage.
 
 # Install and Run
 
@@ -11,7 +18,7 @@ npm run install-start
 ```
 
 Add an index.js file inside `server/secret/` with account credentials 
-to your Twilio account for their NAT traversal. [instant.io](https://github.com/webtorrent/instant.io)
+to your Twilio account for their NAT traversal.
 ```exports.twilio = {
      accountSid: '',
      authToken: ''
@@ -23,8 +30,9 @@ to your Twilio account for their NAT traversal. [instant.io](https://github.com/
 ### Credits
 
 This mostly this builds on the amazing work of 
-[webtorrent](https://github.com/webtorrent/webtorrent) and
- [instant.io](https://github.com/webtorrent/instant.io)
+[WebTorrent](https://github.com/webtorrent/webtorrent), 
+[Instant.io](https://github.com/webtorrent/instant.io) and 
+[Exif.js](https://github.com/exif-js/exif-js).
 In addition some ideas are from:
 * https://github.com/SilentBot1/webtorrent-examples/blob/master/resurrection/index.js
 * https://github.com/webtorrent/webtorrent/issues/1412

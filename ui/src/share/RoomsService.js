@@ -8,13 +8,13 @@ export default class RoomsService {
 
     constructor(emitter) {
         this.emitter = emitter;
-        this.url = '/rooms';
+        this.url = '/api/rooms';
         this.listenToUrlChanges();
     }
 
     listenToUrlChanges() {
         const scope = this;
-        const source = new window.EventSource("/roomstream");
+        const source = new window.EventSource("/api/roomstream");
         source.addEventListener("urls", event => {
             Logger.info('sse: '+JSON.stringify(event));
 

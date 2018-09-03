@@ -3,53 +3,64 @@
 /** Inspired by https://instant.io */
 const express = require('express');
 const path = require('path');
-const EventEmitter = require('events');
 const twilio = require('twilio');
 const util = require('util');
 const compress = require('compression');
 
+const SseChannel = require('sse-channel');
+
 const app = express();
-const Stream = new EventEmitter();
-Stream.setMaxListeners(0);
 
 const bodyParser = require('body-parser');
-app.use(bodyParser.json()); // support json encoded bodies
-app.use(bodyParser.urlencoded({ extended: true })); // support encoded bodies
 
 // Use GZIP
 app.use(compress());
 
-app.use(function (req, res, next) {
-    //res.header('Access-Control-Allow-Origin', '*');
+app.use(express.static(path.join(__dirname, 'ui')));
+app.use(bodyParser.json());
+
+app.use((request, response, next) => {
+    //response.header('Access-Control-Allow-Origin', '*');
 
     // Prevents IE and Chrome from MIME-sniffing a response. Reduces exposure to
     // drive-by download attacks on sites serving user uploaded content.
-    res.header('X-Content-Type-Options', 'nosniff');
+    response.header('X-Content-Type-Options', 'nosniff');
 
     // Prevent rendering of site within a frame.
-    res.header('X-Frame-Options', 'DENY');
+    response.header('X-Frame-Options', 'DENY');
 
     // Enable the XSS filter built into most recent web browsers. It's usually
     // enabled by default anyway, so role of this headers is to re-enable for this
     // particular website if it was disabled by the user.
-    res.header('X-XSS-Protection', '1; mode=block');
+    response.header('X-XSS-Protection', '1; mode=block');
 
     // Force IE to use latest rendering engine or Chrome Frame
-    res.header('X-UA-Compatible', 'IE=Edge,chrome=1');
+    response.header('X-UA-Compatible', 'IE=Edge,chrome=1');
+
+    response.header('X-Accel-Buffering', 'no');
 
     next();
 });
 
 
 const urls = [];
-Stream.emit("push", "urls", { urls: urls });
 
-app.get('/rooms', (req, res) => {
-    res.send(urls);
+app.get('/api/rooms', (request, response) => {
+    response.send(urls);
 });
 
-app.delete('/rooms', (req, res) => {
-    const url = req.body.url;
+const roomsChannel = new SseChannel({
+    retryTimeout: 250,
+    historySize: 300,
+    pingInterval: 5000,
+    jsonEncode: true,
+    //cors: {
+        //origins: ['*'] // Defaults to []
+    //}
+});
+
+app.delete('/api/rooms', (request, response) => {
+    const url = request.body.url;
     let found = undefined;
     if (url) {
         found = urls.find((item, index) => {
@@ -61,47 +72,41 @@ app.delete('/rooms', (req, res) => {
         });
 
         if (found) {
-            Stream.emit("push", "urls", { urls: urls });
+            roomsChannel.send({
+                event: 'urls',
+                data: { urls: urls }
+            });
         }
     }
-    res.send([found]);
+    response.send([found]);
 });
 
-app.post('/rooms', (req, res) => {
+app.post('/api/rooms', (request, response) => {
 
-    const url = req.body.url;
+    const url = request.body.url;
     if (url) {
         if (!urls.includes(url)) {
             urls.push(url);
-            Stream.emit("push", "urls", { urls: urls });
+            roomsChannel.send({
+                event: 'urls',
+                data: { urls: urls }
+            });
         }
     }
-    res.send([url])
+    response.send([url])
 });
 
-app.get('/roomstream', (request, response) => {
+app.get('/api/roomstream', (request, response) => {
 
-    response.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        //no-transform is only for create-react-app dev server hack
-        'Cache-Control': 'no-cache,no-transform',
-        'Connection': 'keep-alive'
-    });
-
-    Stream.on("push", (event, data) => {
-        response.write("event: " + String(event) + "\n" + "data: " + JSON.stringify(data) + "\n\n");
-    });
+    response.header('X-Accel-Buffering', 'no');
+    roomsChannel.addClient(request, response);
 });
 
+app.get('/api/connections', (request, response) => {
 
-app.use(express.static(__dirname + '/ui'));
-app.set('views', path.join(__dirname, 'ui'));
-app.set('view engine', 'ejs');
-app.engine('html', require('ejs').renderFile);
-app.get('/', (req, res) => {
-    res.render('index.html');
+    const connections = roomsChannel.getConnectionCount();
+    response.send([connections]);
 });
-
 
 const secret = require('./secret');
 
@@ -137,6 +142,9 @@ if (twilioClient) {
     updateIceServers();
 }
 
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'ui/index.html'));
+});
 
 if (module === require.main) {
     // [START server]

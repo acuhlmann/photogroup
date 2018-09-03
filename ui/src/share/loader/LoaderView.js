@@ -50,12 +50,6 @@ class LoaderView extends Component {
                                       variant="static"
                                       value={this.state.completed}
                     />
-                    <label>peers {this.state.peers} </label>
-                    <label>downloaded {this.state.downloaded} </label>
-                    <label>total {this.state.total} </label>
-                    <label>remaining {this.state.remaining} </label>
-                    <label>download speed {this.state.downloadspeed} </label>
-                    <label>upload speed {this.state.uploadspeed} </label>
                 </div> : null}
             </div>
         );
