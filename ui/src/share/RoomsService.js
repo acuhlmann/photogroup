@@ -14,12 +14,19 @@ export default class RoomsService {
 
     listenToUrlChanges() {
         const scope = this;
-        const source = new window.EventSource("/api/roomstream");
-        source.addEventListener("urls", event => {
-            Logger.info('sse: '+JSON.stringify(event));
+        const source = new window.EventSource("/api/updates");
+        source.addEventListener("updates", event => {
+            Logger.info('sse urls: '+JSON.stringify(event));
 
             const data = JSON.parse(event.data);
-            scope.emitter.emit('urls', data.urls);
+
+            if(data.sseConnections) {
+                scope.emitter.emit('sseConnections', data.sseConnections, data.ips);
+            }
+
+            if (data.urls) {
+                scope.emitter.emit('urls', data.urls);
+            }
         }, false);
 
         source.addEventListener('open', e => {

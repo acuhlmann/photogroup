@@ -90,7 +90,7 @@ class Gallery extends Component {
                                     <IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
                                         <InfoIcon />
                                     </IconButton>
-                                    {tile.size} MB, {tile.cameraSettings}
+                                    {tile.size} {tile.cameraSettings}
                                 </span>}
                                 actionIcon={
                                     <IconButton onClick={this.handleDelete.bind(this, tile)}

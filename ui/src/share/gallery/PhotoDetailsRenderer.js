@@ -22,11 +22,10 @@ export default class PhotoDetailsRenderer {
             } else if(item.key === 'GPSAltitude') {
                 content = item.value + 'm'
             }
-            return <ListItem key={index} dense>
-                <ListItemText primary={item.key} />
-                <ListItemSecondaryAction>
-                    <ListItemText primary={content} />
-                </ListItemSecondaryAction>
+
+            return <ListItem key={index}
+                             divider>
+                <ListItemText primary={content} secondary={item.key} />
             </ListItem>
         });
     }

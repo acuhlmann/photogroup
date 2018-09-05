@@ -66,14 +66,27 @@ export default class GalleryModel {
 
             Logger.info('New DOM node with the content' + elem);
 
+            const fileSize = GalleryModel.formatBytes(file.length);
             this.view.state.tileData.push({
                 img: elem,
                 name: file.name,
-                size: Math.round(file.length / 1024),
+                size: fileSize.size + fileSize.type,
                 torrent: torrent
             });
             this.updateTiles();
         });
+    }
+
+    //https://stackoverflow.com/a/34166265
+    static formatBytes(bytes) {
+        const kb = 1024;
+        const ndx = Math.floor( Math.log(bytes) / Math.log(kb) );
+        const fileSizeTypes = ["bytes", "kb", "mb", "gb", "tb", "pb", "eb", "zb", "yb"];
+
+        return {
+            size: +(bytes / kb / kb).toFixed(2),
+            type: fileSizeTypes[ndx]
+        };
     }
 
     updateTiles() {

@@ -12,6 +12,11 @@ import Dialog from '@material-ui/core/Dialog';
 import DialogContent from '@material-ui/core/DialogContent';
 import DialogTitle from '@material-ui/core/DialogTitle';
 import DialogActions from '@material-ui/core/DialogActions';
+import Slide from '@material-ui/core/Slide';
+
+function Transition(props) {
+    return <Slide direction="down" {...props} />;
+}
 
 const styles = theme => ({
 
@@ -49,8 +54,6 @@ class LogView extends Component {
     }
 
     showLogs() {
-        LogView.getSseConnections().then(() => this.setState({messages: this.state.messages}));
-
         this.setState({
             open: true,
             messages: this.state.messages
@@ -59,17 +62,6 @@ class LogView extends Component {
 
     handleClose() {
         this.setState({ open: false });
-    }
-
-    static getSseConnections() {
-        return fetch('/api/connections').then(response => {
-            return response.json();
-        }).then(json => {
-            Logger.info('sse connections ' + json);
-            return Number(json);
-        }).catch((error) => {
-            return JSON.stringify(error);
-        });
     }
 
     render() {
@@ -92,10 +84,10 @@ class LogView extends Component {
                 <Dialog
                     open={this.state.open}
                     onClose={this.handleClose.bind(this)}
-                    aria-labelledby="alert-dialog-title"
-                    aria-describedby="alert-dialog-description"
+                    TransitionComponent={Transition}
+                    keepMounted
                 >
-                    <DialogTitle id="alert-dialog-title">just some boooring logs</DialogTitle>
+                    <DialogTitle>just some boooring logs</DialogTitle>
                     <DialogActions>
                         <Button onClick={this.handleClose.bind(this)} color="primary">
                             Close

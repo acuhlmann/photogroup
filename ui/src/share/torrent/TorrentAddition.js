@@ -21,17 +21,21 @@ export default class TorrentAddition {
         this.loader = new Loader();
     }
 
-    update() {
-        this.emitter.emit('update');
+    update(numPeers) {
+        if(numPeers) {
+            this.emitter.emit('numPeers', Number(numPeers));
+        }
     }
 
-    addSeedOrGetTorrent(addOrSeed, uri, callback){
+    addSeedOrGetTorrent(addOrSeed, uri, callback) {
         const torrent = this.client.get(uri);
+
         if(torrent) {
+            this.update(torrent.numPeers);
             if(torrent.ready){
                 callback(torrent);
                 return torrent;
-            }else{
+            } else {
                 torrent.on("ready",() => {
                     callback(torrent);
                     return torrent;
@@ -50,9 +54,8 @@ export default class TorrentAddition {
         const torrent = this.addSeedOrGetTorrent('add', torrentId, torrent => {
 
             Logger.info('this.client.add ' + torrent.infoHash);
-            this.numPeers = torrent.numPeers;
-            this.update();
 
+            this.update(torrent.numPeers);
             this.addToDom(torrent);
         });
 
@@ -84,9 +87,7 @@ export default class TorrentAddition {
             const magnetUri = torrent.magnetURI;
             Logger.info('Client is seeding ' + torrent.infoHash);
 
-            this.numPeers = torrent.numPeers;
-            this.update();
-
+            this.update(torrent.numPeers);
             this.addToDom(torrent);
 
             this.service.share(magnetUri)
@@ -94,7 +95,7 @@ export default class TorrentAddition {
                     Logger.info('shared ' + response);
                 });
         });
-
+        this.update(torrent.numPeers);
         torrent.on('metadata', () => scope.metadata(torrent));
         torrent.on('infoHash', hash => scope.infoHash(torrent, hash));
         torrent.on('noPeers', announceType => scope.noPeers(torrent, announceType));
@@ -105,6 +106,7 @@ export default class TorrentAddition {
         torrent.on('error', err => {
 
             Logger.error('torrent.seed '+JSON.stringify(err));
+            this.update(torrent.numPeers);
             const msg = err.message;
             const isDuplicateError = msg.indexOf('Cannot add duplicate') !== -1;
             if(!isDuplicateError) return;
@@ -145,8 +147,7 @@ export default class TorrentAddition {
         const parsed = window.parsetorrent(torrent.torrentFile);
         const key = parsed.infoHash;
 
-        this.numPeers = torrent.numPeers;
-        this.update();
+        this.update(torrent.numPeers);
 
         const scope = this;
         this.torrentsDb.get(key, (err, value) => {
@@ -164,17 +165,21 @@ export default class TorrentAddition {
 
     infoHash(t, hash) {
         Logger.info('infoHash '+hash);
+        this.update(t.numPeers);
     }
 
     noPeers(t, announceType) {
         Logger.info('noPeers '+announceType);
+        this.update(t.numPeers);
     }
 
     warning(t, err) {
         Logger.warn('warning '+err);
+        this.update(t.numPeers);
     }
 
     done(torrent) {
+        this.update(torrent.numPeers);
         //Checks to make sure that ImmediateChunkStore has finished writing to store before destroying the torrent!
         const isMemStoreEmpty = setInterval(()=>{
             //Since client.seed is sequential, this is okay here.

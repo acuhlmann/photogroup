@@ -27,13 +27,7 @@ class LoaderView extends Component {
 
         this.state = {
             show: false,
-            completed: 0,
-            peers: 0,
-            downloaded: 0,
-            total: 0,
-            remaining: 0,
-            downloadspeed: '',
-            uploadspeed: ''
+            completed: 0
         };
 
         const { classes } = props;

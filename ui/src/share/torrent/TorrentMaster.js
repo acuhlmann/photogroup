@@ -49,6 +49,7 @@ export default class TorrentMaster {
             Logger.info('client.torrent numPeers '+ torrent.numPeers + ' infoHash ' + torrent.infoHash);
             scope.numPeers = torrent.numPeers;
             scope.emitter.emit('update');
+            scope.emitter.emit('numPeers', Number(scope.numPeers));
         });
 
         this.torrentsDb = new IdbKvStore('torrents');

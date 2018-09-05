@@ -17,6 +17,7 @@ import LogView from "./share/header/LogView";
 import Logger from 'js-logger';
 import Uploader from "./share/loader/Uploader";
 import QRCodeView from "./share/header/QRCodeView";
+import PeersView from "./share/header/PeersView";
 
 const styles = {
     root: {
@@ -75,6 +76,7 @@ class App extends Component {
                             <Uploader model={this.master.torrentAddition}
                                       loader={this.master.torrentAddition.loader} />
                             <LogView emitter={this.master.emitter}/>
+                            <PeersView emitter={this.master.emitter} />
                         </Toolbar>
                     </AppBar>
                 </header>

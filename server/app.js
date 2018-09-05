@@ -10,6 +10,7 @@ const compress = require('compression');
 const SseChannel = require('sse-channel');
 
 const app = express();
+app.enable('trust proxy');
 
 const bodyParser = require('body-parser');
 
@@ -49,10 +50,10 @@ app.get('/api/rooms', (request, response) => {
     response.send(urls);
 });
 
-const roomsChannel = new SseChannel({
-    retryTimeout: 250,
+const updateChannel = new SseChannel({
+    retryTimeout: 1000,
     historySize: 300,
-    pingInterval: 5000,
+    pingInterval: 4000,
     jsonEncode: true,
     //cors: {
         //origins: ['*'] // Defaults to []
@@ -72,8 +73,8 @@ app.delete('/api/rooms', (request, response) => {
         });
 
         if (found) {
-            roomsChannel.send({
-                event: 'urls',
+            updateChannel.send({
+                event: 'updates',
                 data: { urls: urls }
             });
         }
@@ -87,8 +88,8 @@ app.post('/api/rooms', (request, response) => {
     if (url) {
         if (!urls.includes(url)) {
             urls.push(url);
-            roomsChannel.send({
-                event: 'urls',
+            updateChannel.send({
+                event: 'updates',
                 data: { urls: urls }
             });
         }
@@ -96,15 +97,43 @@ app.post('/api/rooms', (request, response) => {
     response.send([url])
 });
 
-app.get('/api/roomstream', (request, response) => {
+function getConnectionCount() {
+    return updateChannel.getConnectionCount();
+}
+
+function sendConnectionCount(connections, globalIPs) {
+
+    const ips = [];
+    for (const node of globalIPs.values()) {
+        ips.push(node);
+    }
+
+    updateChannel.send({
+        event: 'updates',
+        data: { sseConnections: connections, ips: ips }
+    });
+}
+
+let globalIPs = new Map();
+updateChannel.on('connect', (channel, request, response) => {
+    globalIPs.set(request, request.ips);
+    sendConnectionCount(channel.connectionCount, globalIPs);
+});
+
+updateChannel.on('disconnect', (channel, response) => {
+    globalIPs.delete(response.req);
+    sendConnectionCount(channel.connectionCount, globalIPs);
+});
+
+app.get('/api/updates', (request, response) => {
 
     response.header('X-Accel-Buffering', 'no');
-    roomsChannel.addClient(request, response);
+    updateChannel.addClient(request, response);
 });
 
 app.get('/api/connections', (request, response) => {
 
-    const connections = roomsChannel.getConnectionCount();
+    const connections = getConnectionCount();
     response.send([connections]);
 });
 

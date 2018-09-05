@@ -10,6 +10,11 @@ import Dialog from '@material-ui/core/Dialog';
 import DialogContent from '@material-ui/core/DialogContent';
 import DialogActions from '@material-ui/core/DialogActions';
 import QRCode from "qrcode.react";
+import Slide from '@material-ui/core/Slide';
+
+function Transition(props) {
+    return <Slide direction="down" {...props} />;
+}
 
 const styles = theme => ({
 
@@ -28,19 +33,10 @@ class QRCodeView extends Component {
         this.classes = classes;
     }
 
-    componentDidMount() {
-        this.mounted = true;
-    }
-
-    show() {
-
+    show(open) {
         this.setState({
-            open: true
+            open: open
         });
-    }
-
-    handleClose() {
-        this.setState({ open: false });
     }
 
     render() {
@@ -50,7 +46,7 @@ class QRCodeView extends Component {
             <div>
                 <IconButton
                     aria-haspopup="true"
-                    onClick={this.show.bind(this)}
+                    onClick={this.show.bind(this, true)}
                     color="inherit"
                 >
                     <CropFreeRounded />
@@ -58,15 +54,15 @@ class QRCodeView extends Component {
 
                 <Dialog
                     open={this.state.open}
-                    onClose={this.handleClose.bind(this)}
-                    aria-labelledby="alert-dialog-title"
-                    aria-describedby="alert-dialog-description"
+                    onClose={this.show.bind(this, false)}
+                    TransitionComponent={Transition}
+                    keepMounted
                 >
                     <DialogContent>
                         <QRCode value={url} />
                     </DialogContent>
                     <DialogActions>
-                        <Button onClick={this.handleClose.bind(this)} color="primary">
+                        <Button onClick={this.show.bind(this, false)} color="primary">
                             Close
                         </Button>
                     </DialogActions>

@@ -8,11 +8,14 @@ export default class TorrentDeletion {
         this.emitter = emitter;
     }
 
-    update() {
-        this.emitter.emit('update');
+    update(numPeers) {
+        if(numPeers) {
+            this.emitter.emit('numPeers', Number(numPeers));
+        }
     }
 
     deleteItem(torrent) {
+        this.update(torrent.numPeers);
         return this.service.delete(torrent.magnetURI)
             .then(response => {
                 Logger.info('deleted ' + response);
@@ -22,13 +25,14 @@ export default class TorrentDeletion {
     }
 
     deleteTorrent(torrent) {
+        this.update(torrent.numPeers);
         return new Promise((resolve, reject) => {
 
             if(torrent.client) {
                 if(torrent.infoHash) {
                     torrent.client.remove(torrent.infoHash, () => {
                         Logger.info('torrent removed ' + torrent.magnetURI);
-
+                        this.update(torrent.numPeers);
                         resolve(torrent.magnetURI);
                     }, () => {
                         const msg = 'error client.remove ' + JSON.stringify(arguments);
