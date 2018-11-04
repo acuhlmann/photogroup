@@ -10,15 +10,21 @@
     "deploy": "gcloud app deploy"
   },
   "dependencies": {
+    "bittorrent-protocol": "^3.0.1",
+    "bittorrent-tracker": "^9.10.1",
     "body-parser": "^1.18.3",
     "compression": "^1.7.2",
     "ejs": "^2.6.1",
     "events": "^3.0.0",
     "express": "^4.8.5",
+    "magnet-uri": "^5.2.4",
     "path": "^0.12.7",
+    "socket.io": "^2.1.1",
     "sse-channel": "^3.1.1",
     "twilio": "^3.17.2",
-    "util": "^0.11.0"
+    "ut_pex": "^1.2.1",
+    "util": "^0.11.0",
+    "webtorrent": "^0.102.4"
   },
   "engines": {
     "node": ">=4.3.2"

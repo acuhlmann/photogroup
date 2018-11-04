@@ -1,4 +1,5 @@
 import moment from 'moment';
+import FileUtil from "../util/FileUtil";
 
 export default class Loader {
 
@@ -23,8 +24,8 @@ export default class Loader {
         // Progress
         const completed = Math.round(torrent.progress * 100 * 100) / 100;
         //const percent = completed + '%';
-        const downloaded = this.prettyBytes(torrent.downloaded);
-        const total = this.prettyBytes(torrent.length);
+        const downloaded = FileUtil.prettyBytes(torrent.downloaded);
+        const total = FileUtil.prettyBytes(torrent.length);
 
         // Remaining time
         let remaining;
@@ -37,8 +38,8 @@ export default class Loader {
         }
 
         // Speed rates
-        const downloadSpeed = this.prettyBytes(torrent.downloadSpeed) + '/s';
-        const uploadSpeed = this.prettyBytes(torrent.uploadSpeed) + '/s';
+        const downloadSpeed = FileUtil.prettyBytes(torrent.downloadSpeed) + '/s';
+        const uploadSpeed = FileUtil.prettyBytes(torrent.uploadSpeed) + '/s';
 
         this.parent.setState({
             peers: peers, completed: completed,
@@ -47,15 +48,4 @@ export default class Loader {
             downloadSpeed: downloadSpeed, uploadSpeed: uploadSpeed
         });
     }
-
-    prettyBytes(num) {
-        let exponent, unit, neg = num < 0, units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-        if (neg) num = -num;
-        if (num < 1) return (neg ? '-' : '') + num + ' B';
-        exponent = Math.min(Math.floor(Math.log(num) / Math.log(1000)), units.length - 1);
-        num = Number((num / Math.pow(1000, exponent)).toFixed(2));
-        unit = units[exponent];
-        return (neg ? '-' : '') + num + ' ' + unit
-    }
-
 }

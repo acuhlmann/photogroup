@@ -5,8 +5,21 @@ import Logger from 'js-logger';
 import { withStyles } from '@material-ui/core/styles';
 
 import LoaderView from './LoaderView';
+import Encrypter from '../security/Encrypter';
+
 import IconButton from "@material-ui/core/IconButton/IconButton";
 import CloudUploadRounded from '@material-ui/icons/CloudUploadRounded';
+import Dialog from "@material-ui/core/Dialog/Dialog";
+import DialogContent from "@material-ui/core/DialogContent/DialogContent";
+import DialogActions from "@material-ui/core/DialogActions/DialogActions";
+import Button from "@material-ui/core/Button/Button";
+
+import Slide from '@material-ui/core/Slide';
+import PasswordInput from "../security/PasswordInput";
+
+function Transition(props) {
+    return <Slide direction="down" {...props} />;
+}
 
 const styles = theme => ({
 
@@ -18,7 +31,6 @@ const styles = theme => ({
     },
 });
 
-
 class Uploader extends Component {
 
     constructor(props) {
@@ -29,19 +41,58 @@ class Uploader extends Component {
         this.classes = classes;
         this.model = model;
         this.loader = loader;
+
+        this.state = {
+            open: false
+        };
     }
 
     handleUpload(event) {
+        this.show(true);
+
         const files = event.target.files;
         if(!files[0]) {
             return;
         }
-        Logger.info('handleUpload ' + files[0].name);
+        this.files = files;
+        const file = this.file = files[0];
+        Logger.info('handleUpload ' + file.name);
 
-        this.model.seed(files);
+        this.uploaderDom = event.target || event.srcElement;
+    }
 
-        const target = event.target || event.srcElement;
-        target.value = '';
+    share() {
+
+        this.seed(false);
+        this.show(false);
+    }
+
+    secureShare() {
+
+        this.seed(true);
+        this.show(false);
+    }
+
+    cancel() {
+        this.show(false);
+        this.uploaderDom.value = '';
+    }
+
+    seed(secure) {
+
+        const scope = this;
+        Encrypter.encryptPic(this.file, secure, this.state.password, (file) => {
+
+            scope.model.seed(file, secure, scope.file, () => {
+                scope.uploaderDom.value = '';
+            });
+        });
+    }
+
+    show(open) {
+        this.setState({
+            open: open
+        });
     }
 
     render() {
@@ -64,6 +115,31 @@ class Uploader extends Component {
                     </IconButton>
                 </label>
                 <LoaderView loader={this.loader}/>
+
+                <Dialog
+                    open={this.state.open}
+                    onClose={this.show.bind(this, false)}
+                    TransitionComponent={Transition}
+                    keepMounted
+                >
+                    <DialogContent>
+                        <div>
+                            <Button onClick={this.share.bind(this, false)} color="primary">
+                                Share unencrypted
+                            </Button>
+                            <div>or encrypt with</div>
+                            <PasswordInput onChange={value => this.setState({password: value})} />
+                        </div>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={this.cancel.bind(this, false)} color="primary">
+                            Cancel
+                        </Button>
+                        <Button onClick={this.secureShare.bind(this, false)} color="primary">
+                            Submit
+                        </Button>
+                    </DialogActions>
+                </Dialog>
             </div>
         );
     }

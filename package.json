@@ -4,15 +4,16 @@
   "description": "PhotoGroup - Zero Install, Peer-to-Peer Photo Group Collaboration.",
   "scripts": {
     "clean": "cd server && npm run clean",
-    "install": "cd server && npm install & cd ui && npm install",
+    "install-all": "cd server && npm install & cd ui && npm install",
     "start-server": "cd server && npm start",
     "start-ui": "cd ui && npm start",
     "start": "npm run start-server & npm run start-ui",
     "install-start": "npm run install && npm run start",
     "build": "cd ui && npm run build",
     "build-deploy": "npm run build && npm run deploy",
-    "copy-ui": "npm run clean && mkdir -p ./server/build && cp -R ./ui/build/ ./server/ui/ && mv ./server/ui/build/* ./server/ui/ && rm -rf ./server/ui/build/",
-    "deploy": "npm run copy-ui && cd server && npm run deploy"
+    "copy-ui": "npm run clean && mkdir -p ./server/ui && cp -R ./ui/build/ ./server/ui/ && mv ./server/ui/build/* ./server/ui/ && rm -rf ./server/ui/build/",
+    "deploy": "npm run copy-ui && cd server && npm run deploy",
+    "deploy-only": "cd server && npm run deploy"
   },
   "author": "Alex Uhlmann",
   "license": "MIT"

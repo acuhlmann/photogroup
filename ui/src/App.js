@@ -18,12 +18,17 @@ import Logger from 'js-logger';
 import Uploader from "./share/loader/Uploader";
 import QRCodeView from "./share/header/QRCodeView";
 import PeersView from "./share/header/PeersView";
+import { createMuiTheme } from '@material-ui/core/styles';
 
-const styles = {
+
+const styles = theme => createMuiTheme({
+    typography: {
+        useNextVariants: true,
+    },
     root: {
         flexGrow: 1,
     },
-};
+});
 
 class App extends Component {
 
@@ -36,9 +41,9 @@ class App extends Component {
         const scope = this;
 
         Logger.useDefaults();
+        //Logger.setLevel(Logger.INFO);
 
         const emitter = new EventEmitter();
-        //new RoomsService(emitter);
         this.master = new TorrentMaster(new RoomsService(emitter), emitter);
         this.gallery = new GalleryModel(this.master);
 
@@ -46,8 +51,8 @@ class App extends Component {
             this.gallery.performDeleteTile(magnetURI);
         }, this);
 
-        this.master.emitter.on('added', (toAdd) => {
-            this.gallery.addMediaToDom(toAdd.file, toAdd.torrent);
+        this.master.emitter.on('added', toAdd => {
+            this.gallery.addMediaToDom(toAdd.file, toAdd.torrent, toAdd.secure, toAdd.seed);
         }, this);
 
         //When webtorrent errors on a duplicated add, try to remove and re-seed.
@@ -56,7 +61,13 @@ class App extends Component {
         this.master.emitter.on('duplicate', (duplicated) => {
             if(!this.gallery.getTileByUri(duplicated.torrentId).item) {
                 duplicated.torrent.client.remove(duplicated.torrentId, () => {
-                    scope.master.torrentAddition.seed(duplicated.files);
+                    if(duplicated.files) {
+                        //TODO: temporarily disable due to files disapearing bug in seed.torrent
+                        return;
+                        scope.master.torrentAddition.seed(duplicated.files, undefined, duplicated.files[0], () => {
+                            Logger.info('seeded duplicate');
+                        });
+                    }
                 });
             }
         }, this);
@@ -69,7 +80,7 @@ class App extends Component {
                 <header className="App-header">
                     <AppBar position="static" color="default">
                         <Toolbar>
-                            <Typography variant="body1" color="inherit" align="center">
+                            <Typography color="inherit" align="center">
                                 PhotoGroup - Zero Install, Peer-to-Peer Photo Group Collaboration.
                             </Typography>
                             <QRCodeView />

@@ -1,5 +1,7 @@
 import Logger from 'js-logger';
 import MetadataParser from "./MetadataParser";
+import Encrypter from "../security/Encrypter";
+import FileUtil from "../util/FileUtil";
 
 export default class GalleryModel {
 
@@ -54,39 +56,62 @@ export default class GalleryModel {
         return {item: found, index: foundAtIndex};
     }
 
-    addMediaToDom(file, torrent) {
-        // Stream the file in the browser
+    addMediaToDom(file, torrent, secure, seed) {
 
-        file.getBlobURL((err, elem) => {
-            if (err) {
-                Logger.error(err.message);
+        if(seed) {
+            this.renderTo(file, file, torrent, secure);
+        } else {
+            file.getBlob((err, elem) => {
+                if (err) {
+                    Logger.error(err.message);
 
-                throw err
-            } // file failed to download or display in the DOM
+                    throw err
+                }
 
-            Logger.info('New DOM node with the content' + elem);
-
-            const fileSize = GalleryModel.formatBytes(file.length);
-            this.view.state.tileData.push({
-                img: elem,
-                name: file.name,
-                size: fileSize.size + fileSize.type,
-                torrent: torrent
+                this.renderTo(file, elem, torrent, secure);
             });
-            this.updateTiles();
-        });
+        }
     }
 
-    //https://stackoverflow.com/a/34166265
-    static formatBytes(bytes) {
-        const kb = 1024;
-        const ndx = Math.floor( Math.log(bytes) / Math.log(kb) );
-        const fileSizeTypes = ["bytes", "kb", "mb", "gb", "tb", "pb", "eb", "zb", "yb"];
+    renderTo(file, elem, torrent, secure) {
+        Logger.debug('New DOM node of file: ' + file.name);
 
-        return {
-            size: +(bytes / kb / kb).toFixed(2),
-            type: fileSizeTypes[ndx]
-        };
+        const scope = this;
+        //secure is undefined when content is added via local storage; hence the need to inspect if it's encrypted.
+        if(secure === undefined) {
+            Encrypter.isSecure(elem, isSecure => {
+                secure = isSecure;
+                scope.addTile(file, elem, torrent, secure);
+            });
+        } else {
+            this.addTile(file, elem, torrent, secure);
+        }
+    }
+
+    addTile(file, elem, torrent, secure) {
+        const fileSize = FileUtil.formatBytes(file.size || file.length);
+        this.view.state.tileData.push({
+            elem: elem,
+            img: window.URL.createObjectURL(elem),
+            name: file.name,
+            file: file,
+            size: fileSize.size + fileSize.type,
+            torrent: torrent,
+            secure: secure
+        });
+        this.updateTiles();
+    }
+
+    decrypt(tile, password, index) {
+        const file = tile.file;
+        const elem = tile.elem;
+        const torrent = tile.torrent;
+        const scope = this;
+
+        Encrypter.decryptPic(elem, password, (blob) => {
+            scope.view.state.tileData.splice(index, 1);
+            scope.renderTo(file, blob, torrent, false);
+        });
     }
 
     updateTiles() {

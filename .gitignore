@@ -1,4 +1,5 @@
 .idea
+photogroup.iml
 node_modules
 npm-debug.log*
 yarn-debug.log*

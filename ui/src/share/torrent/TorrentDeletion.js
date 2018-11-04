@@ -18,9 +18,7 @@ export default class TorrentDeletion {
         this.update(torrent.numPeers);
         return this.service.delete(torrent.magnetURI)
             .then(response => {
-                Logger.info('deleted ' + response);
-
-                return this.deleteTorrent(torrent);
+                Logger.info('deleted ' + torrent.infoHash);
             });
     }
 
@@ -31,7 +29,7 @@ export default class TorrentDeletion {
             if(torrent.client) {
                 if(torrent.infoHash) {
                     torrent.client.remove(torrent.infoHash, () => {
-                        Logger.info('torrent removed ' + torrent.magnetURI);
+                        Logger.info('torrent removed ' + torrent.infoHash);
                         this.update(torrent.numPeers);
                         resolve(torrent.magnetURI);
                     }, () => {

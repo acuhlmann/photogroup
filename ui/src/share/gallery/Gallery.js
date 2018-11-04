@@ -11,6 +11,8 @@ import DeleteIcon from '@material-ui/icons/Delete';
 import { withStyles } from '@material-ui/core/styles';
 
 import PhotoDetails from './PhotoDetails';
+import Button from "@material-ui/core/Button/Button";
+import PasswordInput from "../security/PasswordInput";
 
 const styles = theme => ({
     root: {
@@ -69,6 +71,44 @@ class Gallery extends Component {
         this.setState({ open: false });
     }
 
+    buildTile(tile, index, classes) {
+
+        if(tile.secure) {
+            return <GridListTile key={index} cols={tile.cols || 1}>
+                <div>Decrypt with</div>
+                <PasswordInput onChange={value => this.setState({password: value})} />
+                <Button onClick={this.model.decrypt.bind(this.model, tile, this.state.password, index)}
+                        color="primary">
+                    Submit
+                </Button>
+            </GridListTile>;
+        } else {
+            return <GridListTile key={tile.img} cols={tile.cols || 1}>
+                <img id={'img' + index}  src={tile.img} alt={tile.title}
+                     crossOrigin="Anonymous"
+                     onLoad={this.handleImageLoaded.bind(this, tile)} />
+                <GridListTileBar
+                    title={<div onClick={this.handleOpen.bind(this, tile)}
+                                title={tile.summary}>{tile.summary}</div>}
+                    titlePosition="bottom"
+                    subtitle={<span onClick={this.handleOpen.bind(this, tile)}
+                                    title={tile.cameraSettings}>
+                                    <IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
+                                        <InfoIcon />
+                                    </IconButton>
+                        {tile.size} {tile.cameraSettings}
+                                </span>}
+                    actionIcon={
+                        <IconButton onClick={this.handleDelete.bind(this, tile)}
+                                    className={classes.icon}>
+                            <DeleteIcon />
+                        </IconButton>
+                    }
+                />
+            </GridListTile>;
+        }
+    }
+
     render() {
         const classes = this.classes;
         const tileData = this.state.tileData;
@@ -76,31 +116,7 @@ class Gallery extends Component {
         return (
             <div className={classes.root}>
                 <GridList cellHeight={400} className={classes.gridList} cols={1} spacing={1}>
-                    {tileData.map((tile, index) => (
-                        <GridListTile key={tile.img} cols={tile.cols || 1}>
-                            <img id={'img' + index} src={tile.img} alt={tile.title}
-                                 crossOrigin="Anonymous"
-                                 onLoad={this.handleImageLoaded.bind(this, tile)} />
-                            <GridListTileBar
-                                title={<div onClick={this.handleOpen.bind(this, tile)}
-                                            title={tile.summary}>{tile.summary}</div>}
-                                titlePosition="bottom"
-                                subtitle={<span onClick={this.handleOpen.bind(this, tile)}
-                                                title={tile.cameraSettings}>
-                                    <IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
-                                        <InfoIcon />
-                                    </IconButton>
-                                    {tile.size} {tile.cameraSettings}
-                                </span>}
-                                actionIcon={
-                                    <IconButton onClick={this.handleDelete.bind(this, tile)}
-                                                className={classes.icon}>
-                                        <DeleteIcon />
-                                    </IconButton>
-                                }
-                            />
-                        </GridListTile>
-                    ))}
+                    {tileData.map((tile, index) => this.buildTile(tile, index, classes))}
                 </GridList>
 
                 <PhotoDetails metadata={this.state.allMetadata}

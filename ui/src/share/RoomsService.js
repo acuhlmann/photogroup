@@ -8,26 +8,41 @@ export default class RoomsService {
 
     constructor(emitter) {
         this.emitter = emitter;
-        this.url = '/api/rooms';
+        this.url = '/api/rooms/1';
         this.listenToUrlChanges();
     }
 
     listenToUrlChanges() {
         const scope = this;
         const source = new window.EventSource("/api/updates");
-        source.addEventListener("updates", event => {
-            Logger.info('sse urls: '+JSON.stringify(event));
+        source.addEventListener("sseConnections", event => {
+
+            const data = JSON.parse(event.data);
+            Logger.info('sse sseConnections: '+JSON.stringify(data));
+
+            scope.emitter.emit('sseConnections', data.sseConnections, data.ips);
+        }, false);
+
+        source.addEventListener("urls", event => {
 
             const data = JSON.parse(event.data);
 
-            if(data.sseConnections) {
-                scope.emitter.emit('sseConnections', data.sseConnections, data.ips);
-            }
+            data.urls.forEach(item => {
+                const parsed = window.parsetorrent(item.url);
+                const key = parsed.infoHash;
+                Logger.info('sse urls: '+key + ' ' + data.secure);
+            });
 
-            if (data.urls) {
-                scope.emitter.emit('urls', data.urls);
-            }
+            scope.emitter.emit('urls', data.urls);
         }, false);
+
+        source.addEventListener("discoveryMessage", event => {
+
+            const data = JSON.parse(event.data);
+
+            Logger.warn('sse discoveryMessage: '+data);
+        }, false);
+
 
         source.addEventListener('open', e => {
             Logger.info('Connection was opened');
@@ -46,20 +61,22 @@ export default class RoomsService {
     }
 
     find() {
+
         return fetch(this.url)
             .then(response => {
                 return response.json();
             })
             .then(json => {
-                Logger.info('read ' + json);
+                Logger.debug('read ' + JSON.stringify(json));
                 return json;
             });
     }
 
-    share(magnetUri) {
+    share(magnetUri, secure) {
 
         const data = {
-            url: magnetUri
+            url: magnetUri,
+            secure: secure
         };
         return fetch(this.url, {
             method: 'POST',
@@ -85,6 +102,32 @@ export default class RoomsService {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(data)
+        }).then(response => {
+            return response.json();
+        });
+    }
+
+    static deleteAll() {
+
+        return fetch('/api/rooms', {
+            method: 'DELETE',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+        }).then(response => {
+            return response.json();
+        });
+    }
+
+    static getAll() {
+
+        return fetch('/api/rooms', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
         }).then(response => {
             return response.json();
         });

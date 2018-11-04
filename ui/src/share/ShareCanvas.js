@@ -3,8 +3,12 @@ import PropTypes from 'prop-types';
 import Gallery from "./gallery/Gallery";
 
 import { withStyles } from '@material-ui/core/styles';
-const styles = theme => ({
+import { createMuiTheme } from '@material-ui/core/styles';
 
+const styles = theme => createMuiTheme({
+    typography: {
+        useNextVariants: true,
+    },
 });
 
 class ShareCanvas extends Component {

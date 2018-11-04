@@ -1,13 +1,12 @@
 import {get} from 'lodash';
 import ListItem from "@material-ui/core/ListItem/ListItem";
 import ListItemText from "@material-ui/core/ListItemText/ListItemText";
-import ListItemSecondaryAction from "@material-ui/core/ListItemSecondaryAction/ListItemSecondaryAction";
 import React from "react";
 import StarOutlined from "@material-ui/icons/StarOutlined";
 import StarBorderOutlined from "@material-ui/icons/StarBorderOutlined";
 import Logger from "js-logger";
 import Tooltip from '@material-ui/core/Tooltip';
-import Async from 'react-promise'
+import Async from 'react-promise';
 import Typography from '@material-ui/core/Typography';
 
 export default class PhotoDetailsRenderer {

@@ -51,8 +51,8 @@ export default class PeersView extends Component {
 
             return <div key={index}>
                     {
-                        node.map((ip, index) => {
-                            let divider = index < node.length -1 ? ' << ' : '';
+                        node.route.map((ip, index) => {
+                            let divider = index < node.route.length -1 ? ' >> ' : '';
                             return <span key={index}>{ip}{divider}</span>
                         })
                     }

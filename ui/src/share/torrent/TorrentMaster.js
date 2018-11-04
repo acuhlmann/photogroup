@@ -46,7 +46,7 @@ export default class TorrentMaster {
             Logger.error('client.error '+err);
         });
         client.on('torrent', torrent => {
-            Logger.info('client.torrent numPeers '+ torrent.numPeers + ' infoHash ' + torrent.infoHash);
+            Logger.debug('client.torrent numPeers '+ torrent.numPeers + ' infoHash ' + torrent.infoHash);
             scope.numPeers = torrent.numPeers;
             scope.emitter.emit('update');
             scope.emitter.emit('numPeers', Number(scope.numPeers));
@@ -62,10 +62,23 @@ export default class TorrentMaster {
         const scope = this;
         return this.resurrectLocallySavedTorrents().then(values => {
             Logger.info('done with resurrectAllTorrents ' + values);
+            //if(values) {
+            //    Logger.info('done with resurrectAllTorrents ' + values);
+            //}
             return scope.service.find();
         }).then(response => {
 
-            Logger.info('current server sent Urls: ' + response);
+            //Logger.debug('current server sent Urls: ' + JSON.stringify(response));
+
+            let msg = response.length + '\n';
+            response.forEach(item => {
+                const parsed = window.parsetorrent(item.url);
+                const key = parsed.infoHash;
+                msg += key + ' '  + item.secure + '\n';
+            });
+
+            Logger.info('current server sent Urls: ' + msg);
+
             return scope.syncUiWithServerUrls(response);
         });
     }
@@ -75,20 +88,30 @@ export default class TorrentMaster {
         Logger.debug('urls.length: '+urls.length);
 
         this.client.torrents.forEach(torrent => {
-            if(!urls.includes(torrent.magnetURI)) {
+            const urlItem = this.findUrl(urls, torrent.magnetURI);
+            if(!urlItem) {
                 scope.torrentDeletion.deleteTorrent(torrent).then(magnetURI => {
                     return this.emitter.emit('deleted', magnetURI);
                 });
             }
         });
 
-        urls.forEach(url => {
-            const metadata = window.parsetorrent(url);
+        urls.forEach(item => {
+            const metadata = window.parsetorrent(item.url);
             if(!scope.client.get(metadata.infoHash)) {
                 Logger.debug('new url found on server');
-                scope.torrentAddition.add(url);
+                scope.torrentAddition.add(item.url, item.secure);
             }
         });
+    }
+
+    findUrl(urls, url) {
+        const index = urls.findIndex(item => item.url === url);
+        let foundItem = null;
+        if(index => 0) {
+            foundItem = urls[index];
+        }
+        return foundItem;
     }
 
     //more on the approach: https://github.com/SilentBot1/webtorrent-examples/blob/master/resurrection/index.js
@@ -132,12 +155,13 @@ export default class TorrentMaster {
 
             if(typeof metadata === 'object' && metadata != null){
                 if(scope.client.get(metadata.infoHash)) {
-
+                    Logger.info('resurrectTorrent.client.get ' + metadata);
                     resolve(metadata);
 
                 } else {
                     scope.torrentAddition.add(metadata).then(torrent => {
 
+                        Logger.info('resurrectTorrent.add ' + torrent.infoHash);
                         resolve(torrent);
 
                     }, error => {
