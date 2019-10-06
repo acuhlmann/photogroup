@@ -1,8 +1,9 @@
 import Logger from 'js-logger';
 import Loader from "./Loader";
 
-import idb from 'indexeddb-chunk-store';
+//import idb from 'indexeddb-chunk-store';
 import moment from "moment";
+import FileUtil from "../util/FileUtil";
 
 /**
  * @emits TorrentAddition.emitter#added
@@ -13,17 +14,12 @@ import moment from "moment";
  */
 export default class TorrentAddition {
 
-    constructor(service, client, torrentsDb, emitter) {
+    constructor(service, torrentsDb, emitter, master) {
         this.service = service;
-        this.client = client;
         this.torrentsDb = torrentsDb;
         this.emitter = emitter;
         this.stopWatch = new Map();
-
-
-        emitter.on('sseConnections', (value, ips) => {
-            //ips.
-        });
+        this.master = master;
 
         this.loader = new Loader();
     }
@@ -34,52 +30,7 @@ export default class TorrentAddition {
         }
     }
 
-    addSeedOrGetTorrent(addOrSeed, uri, callback) {
-        const torrent = this.client.get(uri);
-
-        if(torrent) {
-            this.update(torrent.numPeers);
-            if(torrent.ready){
-                callback(torrent);
-                return torrent;
-            } else {
-                torrent.on("ready",() => {
-                    callback(torrent);
-                    return torrent;
-                });
-            }
-        } else {
-
-            var ANNOUNCE_URLS = [
-                //`${window.location.origin}/tracker/announce`,
-                //`wss://${window.location.host}/tracker/socket`
-                //'http://127.0.0.1:8081/announce',
-                //'ws://127.0.0.1:8081'
-                //'http://' + window.location.hostname
-                //'ws://' + window.location.hostname + ':65080'
-                'ws://' + window.location.hostname
-            ];
-
-            return this.client[addOrSeed](uri, {
-                //'store': idb,
-                'announce': ANNOUNCE_URLS,
-                /*getAnnounceOpts: function () {
-                    // Provide a callback that will be called whenever announce() is called
-                    // internally (on timer), or by the user
-                    console.log('foo');
-                    return {
-                        uploaded: 0,
-                        downloaded: 0,
-                        left: 0,
-                        customParam: 'blah' // custom parameters supported
-                    }
-                },*/
-            }, callback);
-            //return this.client[addOrSeed](uri, {"store": idb}, callback);
-        }
-    }
-
-    add(torrentId, secure) {
+    add(torrentId, secure, sharedBy) {
 
         const parsed = window.parsetorrent(torrentId);
         const key = parsed.infoHash;
@@ -88,21 +39,23 @@ export default class TorrentAddition {
         //Logger.time('add ' + parsed.name + ' ' + key);
 
         const scope = this;
-        const torrent = this.addSeedOrGetTorrent('add', torrentId, torrent => {
+        const torrent = this.master.addSeedOrGetTorrent('add', torrentId, torrent => {
 
             //console.timeEnd('adding ' + torrent.infoHash);
             const date = new Date().getTime() - this.stopWatch.get(torrent.infoHash)
             const passed = moment(date).format("mm:ss");
             Logger.info('this.client.add ' + torrent.infoHash + ' ' + passed);
 
+            scope.listen(torrent);
+
             this.update(torrent.numPeers);
-            this.addToDom(torrent, secure);
+            this.addToDom(torrent, secure, sharedBy);
         });
 
-        torrent.on('metadata', () => scope.metadata(torrent));
-        torrent.on('infoHash', hash => scope.infoHash(torrent, hash));
-        torrent.on('noPeers', announceType => scope.noPeers(torrent, announceType));
-        torrent.on('warning', err => scope.noPeers(torrent, err));
+        //TODO: try kicking off ws tracker if we can't get over this torrent..._openSocket
+        Logger.info('torrent created ' + torrent.infoHash);
+
+        return;
 
         return new Promise((resolve, reject) => {
 
@@ -118,35 +71,86 @@ export default class TorrentAddition {
         });
     }
 
+    listen(torrent) {
+        return;
+        torrent.discovery.tracker._trackers.forEach(tracker => {
+
+            Object.values(tracker.peers).forEach(peer => {
+                Logger.log('tracker.peers ' + peer);
+            });
+        });
+    }
+
     seed(files, secure, origFile, callback) {
 
         const scope = this;
 
         Logger.info('TorrendAddition.seed ' + JSON.stringify(files));
 
-        const torrent = this.addSeedOrGetTorrent('seed', files, torrent => {
+        const torrent = this.master.addSeedOrGetTorrent('seed', files, torrent => {
 
             const magnetUri = torrent.magnetURI;
             Logger.info('Client is seeding ' + torrent.infoHash);
 
-            this.update(torrent.numPeers);
-            //this.addToDom(torrent, secure, origFile);
-            this.emitter.emit('added', {file: origFile, torrent: torrent, seed: true});
+            scope.listen(torrent);
 
-            this.service.share(magnetUri, secure)
+            this.update(torrent.numPeers);
+
+            const sharedBy = {peerId: torrent.client.peerId};
+            const fileSize = FileUtil.formatBytes(torrent.files[0].length);
+            const size = fileSize.size + fileSize.type;
+            this.service.share(torrent.infoHash, magnetUri, secure, sharedBy, size)
                 .then(response => {
                     Logger.debug('shared ' + JSON.stringify(response));
+
+                    this.emitter.emit('added', {file: origFile, torrent: torrent,
+                        seed: true, sharedBy: response.sharedBy});
                 });
 
             if(callback) {
                 callback(torrent);
             }
         });
+
+        this.emitter.on('torrent', torrent => {
+
+            console.log('torrent');
+
+        }, this);
+
+        this.emitter.on('torrentError', err => {
+
+            console.log('torrent');
+
+            const msg = err.message;
+            const isDuplicateError = msg.indexOf('Cannot add duplicate') !== -1;
+            if(!isDuplicateError) {
+                return;
+            }
+
+            const torrentId = msg.substring(msg.lastIndexOf('torrent ') + 8, msg.length);
+            const torrent = scope.master.client.get(torrentId);
+            if(torrent) {
+                scope.emitter.emit('duplicate', {
+                    torrent: torrent,
+                    torrentId: torrentId,
+                    files: files});
+            } else {
+                //scope.master.torrentAddition.seed(files, undefined, files, () => {
+                //    Logger.info('seeded duplicate');
+                //});
+            }
+
+            if(callback) {
+                callback(torrent);
+            }
+
+        }, this);
+
+        return;
+
         this.update(torrent.numPeers);
-        torrent.on('metadata', () => scope.metadata(torrent));
-        torrent.on('infoHash', hash => scope.infoHash(torrent, hash));
-        torrent.on('noPeers', announceType => scope.noPeers(torrent, announceType));
-        torrent.on('warning', err => scope.noPeers(torrent, err));
+
 
         //in case local indexeddb data is lost for some reason, reseed file.
         const fileBak = files[0];
@@ -185,11 +189,12 @@ export default class TorrentAddition {
         torrent.on('done', () => scope.done(torrent));
     }
 
-    addToDom(torrent, secure) {
+    addToDom(torrent, secure, sharedBy) {
 
         const scope = this;
         torrent.files.forEach(file => {
-            scope.emitter.emit('added', {file: file, torrent: torrent, secure: secure});
+            scope.emitter.emit('added', {file: file, torrent: torrent,
+                secure: secure, sharedBy: sharedBy});
         });
 
         // Trigger statistics refresh
@@ -198,6 +203,8 @@ export default class TorrentAddition {
 
     metadata(torrent) {
 
+        this.emitter.emit('connectNode', torrent);
+
         //Once generated, stores the metadata for later use when re-adding the torrent!
         const parsed = window.parsetorrent(torrent.torrentFile);
         const key = parsed.infoHash;
@@ -205,7 +212,8 @@ export default class TorrentAddition {
 
         this.update(torrent.numPeers);
 
-        const scope = this;
+        //const scope = this;
+        /*
         this.torrentsDb.get(key, (err, value) => {
             if (err) {
                 return;
@@ -217,6 +225,7 @@ export default class TorrentAddition {
                 Logger.warn('already added ' + key + ' with value ' + value);
             }
         });
+        */
     }
 
     infoHash(t, hash) {
@@ -232,6 +241,18 @@ export default class TorrentAddition {
     warning(t, err) {
         Logger.warn('warning '+err);
         this.update(t.numPeers);
+    }
+
+    wire(wire, addr) {
+        Logger.info('wire ' + wire._pc + ' ' + addr);
+    }
+
+    trackerAnnounce(...rest) {
+        Logger.info('trackerAnnounce ' + rest);
+    }
+
+    peer(peer, source) {
+        Logger.info('peer ' + peer.id + ' ' + source);
     }
 
     done(torrent) {

@@ -15,15 +15,22 @@ export default class TorrentDeletion {
     }
 
     deleteItem(torrent) {
+
         this.update(torrent.numPeers);
-        return this.service.delete(torrent.magnetURI)
-            .then(response => {
+        this.emitter.emit('disconnectNode', torrent.infoHash);
+
+        return this.service.delete(torrent.infoHash)
+            .then(() => {
                 Logger.info('deleted ' + torrent.infoHash);
+                return torrent.infoHash;
             });
     }
 
     deleteTorrent(torrent) {
+
         this.update(torrent.numPeers);
+        this.emitter.emit('disconnectNode', torrent.infoHash);
+
         return new Promise((resolve, reject) => {
 
             if(torrent.client) {
@@ -31,7 +38,7 @@ export default class TorrentDeletion {
                     torrent.client.remove(torrent.infoHash, () => {
                         Logger.info('torrent removed ' + torrent.infoHash);
                         this.update(torrent.numPeers);
-                        resolve(torrent.magnetURI);
+                        resolve(torrent.infoHash);
                     }, () => {
                         const msg = 'error client.remove ' + JSON.stringify(arguments);
                         Logger.error(msg);
@@ -41,11 +48,11 @@ export default class TorrentDeletion {
                     reject('Could not find torrent.infoHash to delete');
                 }
             } else {
-                resolve(torrent.magnetURI);
+                resolve(torrent.infoHash);
             }
         }).then(() => {
-
-            return this.deleteTorrentDbEntry(torrent);
+            return torrent.infoHash;
+            //return this.deleteTorrentDbEntry(torrent);
         });
     }
 

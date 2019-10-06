@@ -1,11 +1,16 @@
-# PhotoTorrent
+# PhotoGroup
 Zero Install, Peer-to-Peer, Lossless Photo Group Collaboration. 
 This web app (React, NodeJS/Express) uses 
 [WebTorrent](https://github.com/webtorrent/webtorrent) 
 to share original photos between peers, 
 using WebRTC and the NodeJS server that 
 shares magnet links. 
-The UI extracts and renders Exif and XMP metadata.
+The UI extracts and renders Exif and XMP metadata. 
+
+The app tries to share p2p, but if this isn't possible 
+(eg due to symmetric NATs), it falls back to the next best option for a decentralized 
+exchange, incrementally adding centralization (eg relay servers using TURN), 
+ultimately the UI allows to upload images to the central server too.
 
 This is in an experimental stage.
 

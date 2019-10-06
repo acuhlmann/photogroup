@@ -1,0 +1,84 @@
+//-----------------Custom WebTorrent Tracker - ICE Events
+const rp = require('request-promise');
+const isLocal = require('is-local-ip');
+
+module.exports = class IpTranslator {
+
+    static reset() {
+        IpTranslator.lookedUpIPs = new Map();
+    }
+
+    static extractIps(request) {
+        let ips = request.ips;
+        if(!ips || ips.length < 1) {
+            ips = [request.headers['x-real-ip'] || request.connection.remoteAddress];
+        }
+
+        //ips = ['::ffff:119.237.92.133', '::ffff:182.239.120.232'];
+
+        ips = ips
+            .filter(ip => ip)
+            .map(ip => {
+                return (ip.substr(0, 7) === "::ffff:") ? ip.substr(7) : ip;
+            });
+
+        return ips;
+    }
+
+    static getLookupIp(ip) {
+
+        return new Promise((resolve, reject) => {
+            if (IpTranslator.lookedUpIPs.has(ip)) {
+
+                return resolve(IpTranslator.lookedUpIPs.get(ip));
+
+            } else if(isLocal(ip) || ip === 'fd00::1') {
+
+                const ipObj = IpTranslator.createEmptyIpObj(ip);
+                IpTranslator.lookedUpIPs.set(ip, ipObj);
+                return resolve(ipObj);
+
+            } else {
+
+                const key = '8f125144341210254a52ef8d24bcc4dc';
+                return rp('http://api.ipstack.com/' + ip + '?access_key=' + key
+                    + '&hostname=1&security=1&output=json&fields=ip,hostname,country_code,city,region_name,location.country_flag_emoji')
+                    .then(function (result) {
+                        const json = JSON.parse(result);
+                        IpTranslator.lookedUpIPs.set(ip, json);
+                        return resolve(json);
+                    })
+                    .catch(function (err) {
+                        // Crawling failed...
+                        console.error('api.ipstack err' + err);
+                        reject(err)
+                    });
+            }
+        });
+    }
+
+    static createEmptyIpObj(ip) {
+        return {
+            "ip": ip,
+            "hostname": isLocal(ip) ? 'localhost' : '',
+            "country_code": null,
+            "region_name": null,
+            "location": {
+                "country_flag_emoji": null
+            }
+        };
+    }
+
+    static enrichCandidateIPs(candidates) {
+
+        return Promise.all(candidates.map(item => IpTranslator.getLookupIp(item.ip.ip))).then(results => {
+
+            const values = candidates.map(item => {
+                item.ip = results.find(result => result.ip === item.ip.ip);
+                return item;
+            });
+
+            return values;
+        });
+    }
+};

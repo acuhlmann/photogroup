@@ -28,6 +28,7 @@ export default class MetadataParser {
         XmpParser.parse(allMetadata, img.xmpdata);
         ExifParser.parse(allMetadata);
 
+        allMetadata['x-file name'] = tile.torrent.name;
         allMetadata['x-Description'] = MetadataParser.findBestDesc(allMetadata);
 
         tile.allMetadata = allMetadata;
@@ -61,8 +62,8 @@ export default class MetadataParser {
             tileCopy[index].dateTakenDate = timestamp.toDate();
 
             const title = allMetadata['Title XMP'] ? allMetadata['Title XMP'] : '';
-            tileCopy[index].summary = tileCopy[index].dateTaken + ', '
-                + title + ' ' + allMetadata['x-Description'];
+            tileCopy[index].summary = tileCopy[index].dateTaken + ' '
+                + title + ' ' + allMetadata['x-Description'] + ' ' + tile.torrent.name;
             tileCopy[index].cameraSettings = allMetadata['x-Settings'];
 
             tileCopy.sort(function(a,b){
@@ -115,7 +116,7 @@ export default class MetadataParser {
                     value: newValueObj};
             });
 
-        ['Title XMP', 'x-Description', 'Rating XMP', 'Keywords XMP', 'XPKeywords',
+        ['x-file name', 'Title XMP', 'x-Description', 'Rating XMP', 'Keywords XMP', 'XPKeywords',
             'DateTimeOriginal', 'x-Location', 'GPSAltitude',
             'x-Pixel Size', 'x-Camera', 'x-Settings',
             'DigitalZoomRation', 'Flash', 'WhiteBalance', 'MeteringMode',

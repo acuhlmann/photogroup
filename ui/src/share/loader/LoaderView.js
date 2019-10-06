@@ -7,13 +7,13 @@ import CircularProgress from '@material-ui/core/CircularProgress';
 
 const styles = theme => ({
     button: {
-        margin: theme.spacing.unit,
+        margin: theme.spacing(1),
     },
     input: {
         display: 'none',
     },
     progress: {
-        margin: theme.spacing.unit * 2,
+        margin: theme.spacing(2),
     },
 });
 

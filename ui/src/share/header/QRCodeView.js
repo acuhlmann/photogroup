@@ -55,7 +55,7 @@ class QRCodeView extends Component {
                 <Dialog
                     open={this.state.open}
                     onClose={this.show.bind(this, false)}
-                    TransitionComponent={Transition}
+                    //TransitionComponent={Transition}
                     keepMounted
                 >
                     <DialogContent>

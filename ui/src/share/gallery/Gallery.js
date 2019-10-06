@@ -23,6 +23,7 @@ const styles = theme => ({
         backgroundColor: theme.palette.background.paper,
     },
     gridList: {
+        overflow: 'hidden',
         width: '100%',
         height: '100%',
     },
@@ -45,7 +46,9 @@ class Gallery extends Component {
         this.state = {
             open: false,
             tileData: [],
-            allMetadata: []
+            allMetadata: [],
+            sharedBy: {},
+            fileSize: ''
         };
 
         const { classes } = props;
@@ -63,7 +66,9 @@ class Gallery extends Component {
     handleOpen(tile) {
         this.setState({
             open: true,
-            allMetadata: this.model.parser.createMetadataSummary(tile.allMetadata)
+            allMetadata: this.model.parser.createMetadataSummary(tile.allMetadata),
+            sharedBy: tile.sharedBy,
+            fileSize: tile.size
         });
     }
 
@@ -73,6 +78,9 @@ class Gallery extends Component {
 
     buildTile(tile, index, classes) {
 
+        //if(!tile.sharedBy) {
+        //    return <div></div>;
+        //}
         if(tile.secure) {
             return <GridListTile key={index} cols={tile.cols || 1}>
                 <div>Decrypt with</div>
@@ -96,7 +104,7 @@ class Gallery extends Component {
                                     <IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
                                         <InfoIcon />
                                     </IconButton>
-                        {tile.size} {tile.cameraSettings}
+                        {tile.size}, {tile.sharedBy.originPlatform}, {tile.cameraSettings}
                                 </span>}
                     actionIcon={
                         <IconButton onClick={this.handleDelete.bind(this, tile)}
@@ -120,6 +128,8 @@ class Gallery extends Component {
                 </GridList>
 
                 <PhotoDetails metadata={this.state.allMetadata}
+                              sharedBy={this.state.sharedBy}
+                              fileSize={this.state.fileSize}
                               open={this.state.open}
                               handleClose={this.handleClose.bind(this)} />
             </div>

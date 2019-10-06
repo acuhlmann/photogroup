@@ -43,8 +43,16 @@ class Uploader extends Component {
         this.loader = loader;
 
         this.state = {
-            open: false
+            open: false,
+            disabled: true
         };
+
+        model.emitter.on('webPeers', () => {
+
+            if(this.state.disabled) {
+                this.setState({disabled: false})
+            }
+        });
     }
 
     handleUpload(event) {
@@ -103,13 +111,13 @@ class Uploader extends Component {
                 <input
                     accept="image/*"
                     className={classes.input}
-                    id="contained-button-file"
+                    id="contained-button-file" disabled={this.state.disabled}
                     type="file" onChange={this.handleUpload.bind(this)}
                 />
                 <label htmlFor="contained-button-file">
                     <IconButton
                         aria-haspopup="true"
-                        color="inherit" variant="contained" component="span"
+                        color="inherit" variant="contained" component="span" disabled={this.state.disabled}
                     >
                         <CloudUploadRounded />
                     </IconButton>
@@ -119,24 +127,26 @@ class Uploader extends Component {
                 <Dialog
                     open={this.state.open}
                     onClose={this.show.bind(this, false)}
-                    TransitionComponent={Transition}
+                    //TransitionComponent={Transition}
                     keepMounted
                 >
                     <DialogContent>
                         <div>
-                            <Button onClick={this.share.bind(this, false)} color="primary">
-                                Share unencrypted
+                            <Button variant="contained" onClick={this.share.bind(this, false)} color="secondary">
+                                Share
                             </Button>
-                            <div>or encrypt with</div>
-                            <PasswordInput onChange={value => this.setState({password: value})} />
+                            {/*<div>or encrypt with</div>
+                            <span style={{display: 'flex'}}>
+                                <PasswordInput onChange={value => this.setState({password: value})} />
+                                <Button onClick={this.secureShare.bind(this, false)} color="primary">
+                                    Encrypt
+                                </Button>
+                            </span>*/}
                         </div>
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={this.cancel.bind(this, false)} color="primary">
                             Cancel
-                        </Button>
-                        <Button onClick={this.secureShare.bind(this, false)} color="primary">
-                            Submit
                         </Button>
                     </DialogActions>
                 </Dialog>

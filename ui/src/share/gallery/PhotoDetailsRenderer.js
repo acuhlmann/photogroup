@@ -11,7 +11,13 @@ import Typography from '@material-ui/core/Typography';
 
 export default class PhotoDetailsRenderer {
 
-    static render(metadata) {
+    static render(metadata, sharedBy, fileSize) {
+
+        if(metadata[0] && metadata[0].key !== 'Shared by ') {
+            const shared = sharedBy ? sharedBy.originPlatform : '';
+            metadata.unshift({key: 'Shared by ', value: shared + ' ' + fileSize});
+        }
+
         return metadata.map((item, index) => {
             let content = item.value;
             if(item.key === 'Rating XMP') {
@@ -56,8 +62,8 @@ export default class PhotoDetailsRenderer {
             <Async
                 promise={PhotoDetailsRenderer.reverseGeocode(value)}
                 then={val => {
-                    val = val === 'Not found' ? 'lat: '+ value.lat + ', ' + 'long: ' + value.long : val;
-                    return <div>{val}</div>
+                    const msg = (val === 'Not found') ? ('lat: ' + value.lat + ', ' + 'long: ' + value.long) : val;
+                    return <div>{msg}</div>
                 }} />
         </div>
     }

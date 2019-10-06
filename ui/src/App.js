@@ -1,6 +1,9 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import { withStyles } from '@material-ui/core/styles';
+import {withStyles, createMuiTheme } from '@material-ui/core/styles';
+
+import { ThemeProvider } from '@material-ui/styles';
+
 import AppBar from '@material-ui/core/AppBar';
 import Toolbar from '@material-ui/core/Toolbar';
 import Typography from '@material-ui/core/Typography'
@@ -18,17 +21,21 @@ import Logger from 'js-logger';
 import Uploader from "./share/loader/Uploader";
 import QRCodeView from "./share/header/QRCodeView";
 import PeersView from "./share/header/PeersView";
-import { createMuiTheme } from '@material-ui/core/styles';
 
+import { SnackbarProvider } from 'notistack';
+import Visibility from "visibilityjs";
 
-const styles = theme => createMuiTheme({
+const styles = {
     typography: {
         useNextVariants: true,
     },
     root: {
         flexGrow: 1,
     },
-});
+    white: {
+        color: '#ffffff'
+    },
+};
 
 class App extends Component {
 
@@ -45,14 +52,15 @@ class App extends Component {
 
         const emitter = new EventEmitter();
         this.master = new TorrentMaster(new RoomsService(emitter), emitter);
+        this.master.service.master = this.master;
         this.gallery = new GalleryModel(this.master);
 
-        this.master.emitter.on('deleted', magnetURI => {
-            this.gallery.performDeleteTile(magnetURI);
+        this.master.emitter.on('deleted', infoHash => {
+            this.gallery.performDeleteTile(infoHash);
         }, this);
 
         this.master.emitter.on('added', toAdd => {
-            this.gallery.addMediaToDom(toAdd.file, toAdd.torrent, toAdd.secure, toAdd.seed);
+            this.gallery.addMediaToDom(toAdd.file, toAdd.torrent, toAdd.secure, toAdd.seed, toAdd.sharedBy);
         }, this);
 
         //When webtorrent errors on a duplicated add, try to remove and re-seed.
@@ -63,39 +71,89 @@ class App extends Component {
                 duplicated.torrent.client.remove(duplicated.torrentId, () => {
                     if(duplicated.files) {
                         //TODO: temporarily disable due to files disapearing bug in seed.torrent
-                        return;
-                        scope.master.torrentAddition.seed(duplicated.files, undefined, duplicated.files[0], () => {
+                        //return;
+                        scope.master.torrentAddition.seed(duplicated.files, undefined, duplicated.files, () => {
                             Logger.info('seeded duplicate');
                         });
                     }
                 });
             }
         }, this);
+
+
+        if(Visibility.isSupported() ) {
+            Logger.log('Visibility.isSupported');
+        } else {
+            Logger.log('Visibility NOT supported');
+        }
+
+        Visibility.change((e, state) => {
+            //Statistics.visibilityChange(state);
+            Logger.log('Visibility.change ' + state);
+            if(state === 'visible') {
+                const peerId = this.master.client.peerId;
+                if(peerId) {
+                    this.master.service.getPeer(peerId)
+                        .catch((err) => {
+                            Logger.log('reconnect ');
+                            if(Number(err.message) === 404) {
+                                this.master.creator.buildTopology();
+                            }
+                        });
+                }
+            }
+        });
     }
 
     render() {
 
-        return (
-            <div className="App">
-                <header className="App-header">
-                    <AppBar position="static" color="default">
-                        <Toolbar>
-                            <Typography color="inherit" align="center">
-                                PhotoGroup - Zero Install, Peer-to-Peer Photo Group Collaboration.
-                            </Typography>
-                            <QRCodeView />
-                            <Uploader model={this.master.torrentAddition}
-                                      loader={this.master.torrentAddition.loader} />
-                            <LogView emitter={this.master.emitter}/>
-                            <PeersView emitter={this.master.emitter} />
-                        </Toolbar>
-                    </AppBar>
-                </header>
+        const classes = this.classes;
 
-                <div className="App-intro">
-                  <ShareCanvas master={this.master} gallery={this.gallery}/>
-                </div>
-            </div>
+        const defaultTheme = createMuiTheme();
+
+        return (
+            <ThemeProvider theme={defaultTheme}>
+                <SnackbarProvider
+                    anchorOrigin={{
+                        vertical: 'bottom',
+                        horizontal: 'left',
+                    }}
+                    /*action={(
+                        <Button key={'foobar'} className={classes.white} size="small">
+                            Dismiss
+                        </Button>
+                    )}*/
+                    maxSnack={3}>
+                    <div className="App">
+
+                        <header className="App-header">
+                            <AppBar position="static" color="default">
+                                <Toolbar>
+                                    <div>
+                                        <Typography variant="button">
+                                            PhotoGroup
+                                        </Typography>
+                                        <Typography variant="caption">
+                                            Zero Install, Peer-to-Peer Photo Group Collaboration.
+                                        </Typography>
+                                    </div>
+
+                                    <QRCodeView />
+                                    <Uploader model={this.master.torrentAddition}
+                                              loader={this.master.torrentAddition.loader} />
+                                    <LogView master={this.master} emitter={this.master.emitter}/>
+                                    <PeersView emitter={this.master.emitter} />
+                                </Toolbar>
+                            </AppBar>
+                        </header>
+
+                        <div className="App-intro">
+                          <ShareCanvas
+                              master={this.master} gallery={this.gallery}/>
+                        </div>
+                    </div>
+                </SnackbarProvider>
+            </ThemeProvider>
         );
     }
 }

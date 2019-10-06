@@ -2,21 +2,26 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <meta name="theme-color" content="#000000">
     <!--
       manifest.json provides metadata used when your web app is added to the
       homescreen on Android. See https://developers.google.com/web/fundamentals/engage-and-retain/web-app-manifest/
     -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json">
     <link rel="shortcut icon" href="%PUBLIC_URL%/favicon.ico">
-
-    <!--<script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>-->
-    <script src="https://cdn.jsdelivr.net/npm/webtorrent@0.102.4/webtorrent.min.js"></script>
-
-    <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>
-    <script src="parsetorrent.js"></script>
-    <!--<script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.4/piexif.js"></script>-->
+    <!-- Tell the browser it's a PWA -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <!-- Tell iOS it's a PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- Make sure theme-color is defined -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="theme-color" content="#000000">
+    <meta name="description" content="PhotoGroup - Zero Install, Peer-to-Peer, Lossless Photo Group Collaboration.">
+    <meta property="og:title" content="PhotoGroup - Zero Install, Peer-to-Peer Photo Group Collaboration." />
+    <meta property="og:url" content="https://www.photogroup.network" />
+    <meta property="og:description" content="PhotoGroup - Zero Install, Peer-to-Peer, Lossless Photo Group Collaboration.">
+    <meta property="og:image" content="%PUBLIC_URL%/favicon.ico">
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
 
     <!--
       Notice the use of %PUBLIC_URL% in the tags above.
@@ -30,6 +35,15 @@
     <title>PhotoGroup - Zero Install, Peer-to-Peer Photo Group Collaboration.</title>
   </head>
   <body>
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+    <!--<script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>-->
+    <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>
+    <script src="parsetorrent.js"></script>
+    <!--<script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.4/piexif.js"></script>-->
+
     <noscript>
       You need to enable JavaScript to run this app.
     </noscript>
@@ -45,4 +59,15 @@
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
   </body>
+  <script>
+    if ('serviceWorker' in navigator) {
+      console.log("Will the service worker register?");
+      navigator.serviceWorker.register('service-worker.js')
+              .then(function(reg){
+                console.log("Yes, it did.");
+              }).catch(function(err) {
+        console.log("No it didn't. This happened: ", err)
+      });
+    }
+  </script>
 </html>

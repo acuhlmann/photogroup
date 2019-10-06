@@ -16,5 +16,11 @@
     "deploy-only": "cd server && npm run deploy"
   },
   "author": "Alex Uhlmann",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "fs": "0.0.1-security",
+    "http": "0.0.0",
+    "https": "^1.0.0"
+  }
 }

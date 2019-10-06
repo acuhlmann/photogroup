@@ -19,16 +19,16 @@ export default class GalleryModel {
 
     deleteTile(tile) {
         const scope = this;
-        return this.torrentMaster.torrentDeletion.deleteItem(tile.torrent).then(magnetURI => {
-            return scope.performDeleteTile(magnetURI);
+        return this.torrentMaster.torrentDeletion.deleteItem(tile.torrent).then(infoHash => {
+            return scope.performDeleteTile(infoHash);
         });
     }
 
-    performDeleteTile(magnetURI) {
+    performDeleteTile(infoHash) {
         const tiles = this.view.state.tileData;
 
         const found = tiles.find((tile, index) => {
-            if(tile.torrent.magnetURI === magnetURI) {
+            if(tile.torrent.infoHash === infoHash) {
                 tiles.splice(index, 1);
                 return true;
             }
@@ -56,10 +56,10 @@ export default class GalleryModel {
         return {item: found, index: foundAtIndex};
     }
 
-    addMediaToDom(file, torrent, secure, seed) {
+    addMediaToDom(file, torrent, secure, seed, sharedBy) {
 
         if(seed) {
-            this.renderTo(file, file, torrent, secure);
+            this.renderTo(file, file, torrent, secure, sharedBy, seed);
         } else {
             file.getBlob((err, elem) => {
                 if (err) {
@@ -68,12 +68,12 @@ export default class GalleryModel {
                     throw err
                 }
 
-                this.renderTo(file, elem, torrent, secure);
+                this.renderTo(file, elem, torrent, secure, sharedBy, seed);
             });
         }
     }
 
-    renderTo(file, elem, torrent, secure) {
+    renderTo(file, elem, torrent, secure, sharedBy, seed) {
         Logger.debug('New DOM node of file: ' + file.name);
 
         const scope = this;
@@ -81,14 +81,14 @@ export default class GalleryModel {
         if(secure === undefined) {
             Encrypter.isSecure(elem, isSecure => {
                 secure = isSecure;
-                scope.addTile(file, elem, torrent, secure);
+                scope.addTile(file, elem, torrent, secure, sharedBy, seed);
             });
         } else {
-            this.addTile(file, elem, torrent, secure);
+            this.addTile(file, elem, torrent, secure, sharedBy, seed);
         }
     }
 
-    addTile(file, elem, torrent, secure) {
+    addTile(file, elem, torrent, secure, sharedBy, seed) {
         const fileSize = FileUtil.formatBytes(file.size || file.length);
         this.view.state.tileData.push({
             elem: elem,
@@ -97,9 +97,20 @@ export default class GalleryModel {
             file: file,
             size: fileSize.size + fileSize.type,
             torrent: torrent,
-            secure: secure
+            secure: secure,
+            sharedBy: sharedBy || {}
         });
         this.updateTiles();
+
+        if(!seed) {
+
+            this.torrentMaster.emitter.emit('appEventRequest', {level: 'success', type: 'downloaded',
+                event: {file: torrent.name, sharedBy: sharedBy, downloader: this.torrentMaster.client.peerId}
+            });
+            this.torrentMaster.emitter.emit('torrentDone', torrent);
+
+            this.torrentMaster.service.addOwner(torrent.infoHash, this.torrentMaster.client.peerId);
+        }
     }
 
     decrypt(tile, password, index) {
