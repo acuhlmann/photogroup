@@ -35,9 +35,9 @@ module.exports = class Tracker {
         });
 
         // Internal http, udp, and websocket servers exposed as public properties.
-        server.http
-        server.udp
-        server.ws
+        server.http;
+        server.udp;
+        server.ws;
 
         server.on('error', function (err) {
             // fatal server error!

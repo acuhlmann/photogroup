@@ -1,6 +1,7 @@
 //------------------Twillio ICE STUN/TURN
 
 const IpTranslator = require("./IpTranslator");
+const util = require('util');
 
 module.exports = class ServerPeer {
 
@@ -101,7 +102,10 @@ module.exports = class ServerPeer {
             //this.peers.sendWebPeers();
         }
 
-        const tracker = 'ws://localhost:9000';
+        const isProd = process.env.args.includes('prod') || false;
+        console.info('prd ' + isProd);
+        console.info('process.env ' + util.inspect(process.argv));
+        const tracker = isProd ? 'wss://photogroup.network/ws' : 'ws://localhost:9000';
         //const tracker = 'wss://photogroup.network/ws';
 
         this.webtorrent.client.add(url, { 'announce': tracker }, torrent => {

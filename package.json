@@ -3,7 +3,7 @@
   "version": "0.0.2",
   "description": "PhotoGroup - Zero Install, Peer-to-Peer Photo Group Collaboration.",
   "scripts": {
-    "clean": "cd server && npm run clean",
+    "clean": "cdn server && npm run clean",
     "install-all": "cd server && npm install & cd ui && npm install",
     "start-server": "cd server && npm start",
     "start-ui": "cd ui && npm start",

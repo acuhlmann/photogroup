@@ -91,7 +91,7 @@ class App extends Component {
             //Statistics.visibilityChange(state);
             Logger.log('Visibility.change ' + state);
             if(state === 'visible') {
-                const peerId = this.master.client.peerId;
+                const peerId = this.master.client && this.master.client.peerId;
                 if(peerId) {
                     this.master.service.getPeer(peerId)
                         .catch((err) => {
@@ -130,11 +130,11 @@ class App extends Component {
                             <AppBar position="static" color="default">
                                 <Toolbar>
                                     <div>
-                                        <Typography variant="button">
+                                        <Typography variant="button" component="h2">
                                             PhotoGroup
                                         </Typography>
                                         <Typography variant="caption">
-                                            Zero Install, Peer-to-Peer Photo Group Collaboration.
+                                            Zero Install, Peer-to-Peer Photo Group Collaboration.2
                                         </Typography>
                                     </div>
 

@@ -37,10 +37,12 @@ const styles = theme => makeStyles({
     },
     content: {
         padding: '0px 0px 0px 0px',
+        width: '100%',
         overflow: 'hidden'
     },
     nooverflow: {
-        overflow: 'hidden'
+        overflow: 'hidden',
+        width: '100%'
     },
 
     button: {
@@ -107,7 +109,7 @@ class ShareCanvas extends Component {
         emitter.on('wtInitialized', client => {
             progressRunner = setInterval(() => {
 
-                this.setState({
+                /*this.setState({
 
                     loader: {
                         progress: client.progress.toFixed(1) * 100,
@@ -115,7 +117,7 @@ class ShareCanvas extends Component {
                         downloadSpeed: (client.downloadSpeed / 1024).toFixed(1) + 'kb/s',
                         uploadSpeed: (client.uploadSpeed / 1024).toFixed(1) + 'kb/s'
                     }
-                })
+                })*/
 
             }, 1000);
         });
@@ -161,6 +163,9 @@ class ShareCanvas extends Component {
                 /*action: <Button className={props.classes.white} size="small">x</Button>*/
             });
 
+            if(event.level === 'success') {
+                self.displayNotification(msg);
+            }
         });
 
         this.icegatheringstatechange = '';
@@ -205,6 +210,95 @@ class ShareCanvas extends Component {
             this.setState({
                 content: urls
             });
+        });
+
+        window.addEventListener('beforeinstallprompt', e => {
+            console.info('beforeinstallprompt');
+            this.deferredPrompt = e;
+            this.askForInstall();
+        });
+
+        window.addEventListener('appinstalled', e => {
+            console.info('appinstalled');
+        });
+
+        if(window.matchMedia('(display-mode: standalone)').matches) {
+            console.log('matches display-mode:standalone PWA');
+        }
+
+        if('Notification' in window && navigator.serviceWorker) {
+            console.info('Notification.permission ' + Notification.permission);
+            if(Notification.permission === 'granted') {
+
+            } else if(Notification.permission === 'blocked') {
+
+                this.askForPush();
+            } else {
+
+                this.askForPush();
+            }
+        }
+    }
+
+    displayNotification(payload) {
+        if('Notification' in window && navigator.serviceWorker) {
+            if(Notification.permission === 'granted') {
+                navigator.serviceWorker.getRegistration().then(req => {
+                    if(req) {
+                        req.showNotification(payload);
+                    } else {
+                        console.error('Cannot find req for Notification');
+                    }
+                });
+            }
+        }
+    }
+
+    askForPush() {
+
+        this.snack(<div>
+            <Button style={{color: 'white'}} onClick={ () => this.subscribeToPush() }>Subscribe to Notifications?</Button>
+        </div>);
+    }
+
+    subscribeToPush() {
+        Notification.requestPermission(status => {
+            console.info('Notification.status' + status);
+        });
+    }
+
+    askForInstall() {
+
+        this.snack(<div>
+            <Button style={{color: 'white'}} onClick={ () => this.install() }>Install App?</Button>
+        </div>);
+    }
+
+    install() {
+        this.deferredPrompt.prompt();
+        this.deferredPrompt.userChoice.then((choiceResult) => {
+            if(choiceResult.outcome === 'accepted') {
+                console.log('User accepted the A2H2 prompt');
+            } else {
+                console.log('User dismissed the A2HS prompt');
+            }
+            this.deferredPrompt = null;
+        });
+    }
+
+    snack(payload, type = 'info', persist = false) {
+
+        const {enqueueSnackbar, closeSnackbar} = this.props;
+
+        enqueueSnackbar(payload, {
+            variant: type,
+            persist: persist,
+            autoHideDuration: 2000,
+            action: (key) => (<Button className={this.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
+            anchorOrigin: {
+                vertical: 'bottom',
+                horizontal: 'right'
+            }
         });
     }
 

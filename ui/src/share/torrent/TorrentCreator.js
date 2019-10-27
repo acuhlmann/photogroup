@@ -14,7 +14,9 @@ export default class TorrentCreator {
 
     static setupAnnounceUrls() {
         const isLocal = window.location.href.indexOf('localhost');
-        const wsProtocol = isLocal ? 'ws://' : 'wss://';
+        console.log('window.location.href ' + window.location.href);
+        const wsUrl = isLocal ? 'ws://' + window.location.hostname + ':9000' : 'wss://' + window.location.hostname + '/ws';
+        console.log('WEBTORRENT_ANNOUNCE wsUrl ' + wsUrl);
         window.WEBTORRENT_ANNOUNCE = createTorrent.announceList
             .map(function (arr) {
                 return arr[0]
@@ -23,8 +25,9 @@ export default class TorrentCreator {
                 return url.indexOf('wss://') === 0 || url.indexOf('ws://') === 0
             })
             //.concat('wss://' + window.location.hostname + '/tracker');
+            .concat(wsUrl);
             //.concat('ws://' + window.location.hostname + ':9000');
-            .concat(wsProtocol + window.location.hostname + '/ws');
+            //.concat('wss://' + window.location.hostname + '/ws');
 
         //window.WEBTORRENT_ANNOUNCE = ['ws://' + window.location.hostname + ':9000'];
 
@@ -162,7 +165,7 @@ export default class TorrentCreator {
         this.peers = new Map();
 
         const id = setInterval(() => {
-            this.listenToPCs(self, id, torrents);
+            //this.listenToPCs(self, id, torrents);
         }, 1000);
     }
 

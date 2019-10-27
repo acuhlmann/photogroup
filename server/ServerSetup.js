@@ -77,5 +77,15 @@ module.exports = class ServerSetup {
 
             next();
         });
+
+        /*const isProd = process.env.args && process.env.args.includes('prod') || false;
+        if(isProd) {
+            app.use((req, res, next) => {
+                if(req.secure) {
+                    return next();
+                }
+                res.redirect('https://' + req.headers.host + req.url);
+            })
+        }*/
     }
 };

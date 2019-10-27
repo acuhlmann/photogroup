@@ -442,10 +442,15 @@ module.exports = class Topology {
                     }
                 } else if(node.networkType === 'relay') {
 
-                    this.createSingleEdge(edges,
-                        nodes.find(node => node.networkType === 'nat').id,
-                        node.id,
-                        peerId);
+                    const idNode = nodes.find(node => node.networkType === 'nat');
+                    if(idNode) {
+                        this.createSingleEdge(edges,
+                            idNode.id,
+                            node.id,
+                            peerId);
+                    } else {
+                        console.warn('No nat node type found')
+                    }
                 }
 
             });

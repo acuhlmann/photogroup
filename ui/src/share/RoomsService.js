@@ -32,7 +32,6 @@ export default class RoomsService {
 
         this.sessionId = shortid.generate();
         const source = new window.EventSource("/api/updates/?sessionId=" + this.sessionId);
-        //const source = new window.EventSource("/api/updates");
 
         source.addEventListener("webPeers", event => {
 

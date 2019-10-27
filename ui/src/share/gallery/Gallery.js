@@ -13,26 +13,33 @@ import { withStyles } from '@material-ui/core/styles';
 import PhotoDetails from './PhotoDetails';
 import Button from "@material-ui/core/Button/Button";
 import PasswordInput from "../security/PasswordInput";
+import Paper from "@material-ui/core/Paper";
 
 const styles = theme => ({
     root: {
         display: 'flex',
         flexWrap: 'wrap',
         justifyContent: 'space-around',
-        overflow: 'hidden',
+        //overflow: 'hidden',
+        width: '100%',
         backgroundColor: theme.palette.background.paper,
     },
     gridList: {
-        overflow: 'hidden',
+        //overflow: 'hidden',
         width: '100%',
-        height: '100%',
+        paddingBottom: '10px'
     },
-    subheader: {
+    wide: {
         width: '100%',
     },
     icon: {
-        color: 'rgba(255, 255, 255, 0.54)',
+        //color: 'rgba(255, 255, 255, 0.54)',
     },
+    toolbar: {
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap'
+    }
 });
 
 class Gallery extends Component {
@@ -91,11 +98,23 @@ class Gallery extends Component {
                 </Button>
             </GridListTile>;
         } else {
-            return <GridListTile key={tile.img} cols={tile.cols || 1}>
+            return <div key={tile.img} cols={tile.cols || 1} className={classes.gridList}>
                 <img id={'img' + index}  src={tile.img} alt={tile.title}
-                     crossOrigin="Anonymous"
+                     crossOrigin="Anonymous" className={classes.wide}
                      onLoad={this.handleImageLoaded.bind(this, tile)} />
-                <GridListTileBar
+                <Paper className={classes.toolbar}>
+                    <IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
+                        <InfoIcon />
+                    </IconButton>
+                    <span onClick={this.handleOpen.bind(this, tile)}
+                         title={tile.summary}>{tile.summary}: {tile.size}, {tile.sharedBy.originPlatform}, {tile.cameraSettings}
+                    </span>
+                    <IconButton onClick={this.handleDelete.bind(this, tile)}
+                                className={classes.icon}>
+                        <DeleteIcon />
+                    </IconButton>
+                </Paper>
+                {/*<GridListTileBar className={classes.wide}
                     title={<div onClick={this.handleOpen.bind(this, tile)}
                                 title={tile.summary}>{tile.summary}</div>}
                     titlePosition="bottom"
@@ -112,20 +131,21 @@ class Gallery extends Component {
                             <DeleteIcon />
                         </IconButton>
                     }
-                />
-            </GridListTile>;
+                />*/}
+            </div>;
         }
     }
 
     render() {
-        const classes = this.classes;
+        const classes = this.props.classes;
         const tileData = this.state.tileData;
 
         return (
             <div className={classes.root}>
-                <GridList cellHeight={400} className={classes.gridList} cols={1} spacing={1}>
+
+                <div className={classes.gridList}>
                     {tileData.map((tile, index) => this.buildTile(tile, index, classes))}
-                </GridList>
+                </div>
 
                 <PhotoDetails metadata={this.state.allMetadata}
                               sharedBy={this.state.sharedBy}

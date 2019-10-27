@@ -12,4 +12,4 @@ gcloud compute ssh $INSTANCE --zone $ZONE --command "sudo lsof -ti:8081 | sudo x
 gcloud compute ssh $INSTANCE --zone $ZONE --command "sudo lsof -ti:9000 | sudo xargs kill"
 gcloud compute ssh $INSTANCE --zone $ZONE --command "sudo cp pg"
 gcloud compute ssh $INSTANCE --zone $ZONE --command "cd pg && npm install"
-gcloud compute ssh $INSTANCE --zone $ZONE --command "cd pg && sudo pm2 stop app && sudo pm2 delete app && sudo pm2 start app.js"
+gcloud compute ssh $INSTANCE --zone $ZONE --command "cd pg && sudo pm2 stop app && sudo pm2 delete app && sudo pm2 start app.js -- prod"
