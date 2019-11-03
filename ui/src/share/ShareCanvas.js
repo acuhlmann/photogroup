@@ -3,14 +3,7 @@ import PropTypes from 'prop-types';
 import Gallery from "./gallery/Gallery";
 
 import { makeStyles } from '@material-ui/styles';
-import IconButton from '@material-ui/core/IconButton';
 import Button from '@material-ui/core/Button';
-import Card from '@material-ui/core/Card';
-import CardHeader from '@material-ui/core/CardHeader';
-import CardContent from '@material-ui/core/CardContent';
-import CloudUploadIcon from '@material-ui/icons/CloudUpload';
-import CloudDownloadIcon from '@material-ui/icons/CloudDownload';
-import ClearIcon from '@material-ui/icons/Delete';
 
 import {withStyles, createMuiTheme } from '@material-ui/core/styles';
 import { ThemeProvider } from '@material-ui/styles';
@@ -45,30 +38,6 @@ const styles = theme => makeStyles({
         width: '100%'
     },
 
-    button: {
-        margin: theme.spacing(1),
-    },
-    rightIcon: {
-        marginLeft: theme.spacing(1),
-    },
-    card: {
-        margin: theme.spacing(1),
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexDirection: 'column',
-    },
-    item: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'left',
-        flexDirection: 'row',
-    },
-    cardContent: {
-        alignItems: 'left',
-        justifyContent: 'left',
-        textAlign: 'left'
-    },
     white: {
         color: '#ffffff'
     },
@@ -97,7 +66,6 @@ class ShareCanvas extends Component {
         const {emitter} = props.master;
         this.gallery = props.gallery;
 
-
         this.topology = new TopologyHelper(this, emitter, props.master);
 
         emitter.on('addPeerDone', () => {
@@ -110,7 +78,6 @@ class ShareCanvas extends Component {
             progressRunner = setInterval(() => {
 
                 /*this.setState({
-
                     loader: {
                         progress: client.progress.toFixed(1) * 100,
                         ratio: client.ratio,
@@ -120,6 +87,13 @@ class ShareCanvas extends Component {
                 })*/
 
             }, 1000);
+        });
+
+        this.master.emitter.on('urls', urls => {
+
+            this.setState({
+                urls: urls
+            });
         });
 
         emitter.on('appEvent', event => {
@@ -148,24 +122,32 @@ class ShareCanvas extends Component {
                 msg = event.event.toAddr + ' is ' + event.type + ' ' + event.event.label + ' from ' + event.event.fromAddr;
             } else if(event.type === 'downloaded') {
                 //props.master.client.peerId
-                if(event.event.downloader === props.master.client.peerId) return;
-                const peer = self.topology.peers[event.event.downloader];
-                const downloader = peer ? ' by ' + peer.originPlatform : '';
+                if(event.event.downloader === props.master.client.peerId) {
+                    //return;
+                }
+                const downHash = event.event.downloader;
+                let peer = self.topology.peers[downHash];
+                peer = peer ? peer : self.state.urls
+                    .map(item => item.owners)
+                    .flatMap(item => item)
+                    .filter(item => item)
+                    .find(owner => {
+                        return owner.peerId === downHash
+                    });
+                const downloader = peer ? ' by ' + (peer.originPlatform || peer.platform) : '';
                 msg = 'Image ' + event.event.file + ' ' + event.type + downloader;
+                self.displayNotification(msg);
             } else if(event.type === 'serverPeer') {
                 //if(event.event.peerId === props.master.client.peerId) return;
                 msg = 'Server peer photogroup.network seeds ' + event.event.action;
             }
 
-            self.props.enqueueSnackbar(msg, {
+            const {enqueueSnackbar, closeSnackbar} = self.props;
+            enqueueSnackbar(msg, {
                 variant: event.level,
                 autoHideDuration: 6000,
-                /*action: <Button className={props.classes.white} size="small">x</Button>*/
+                action: (key) => (<Button style={{color: 'white'}} size="small" onClick={ () => closeSnackbar(key) }>x</Button>)
             });
-
-            if(event.level === 'success') {
-                self.displayNotification(msg);
-            }
         });
 
         this.icegatheringstatechange = '';
@@ -178,7 +160,6 @@ class ShareCanvas extends Component {
             expandedGallery: true,
             expandedInfo: true,
             eventStatus: '',
-            content: [],
             selectedNodeLabel: '',
             peerId: '',
 
@@ -203,12 +184,6 @@ class ShareCanvas extends Component {
 
             this.setState({
                 selectedNodeLabel: msg
-            });
-        });
-
-        emitter.on('urls', urls => {
-            this.setState({
-                content: urls
             });
         });
 
@@ -325,117 +300,21 @@ class ShareCanvas extends Component {
         this.setState({network: network});
     };
 
-    removeTorrent(url) {
-        this.master.service.delete(url.hash);
-    }
-
-    addServerPeer(url, action) {
-
-        Logger.log(url.url);
-
-        const self = this;
-        this.master.service.addServerPeer(url.url).then(result => {
-
-            self.master.emitter.emit('appEventRequest', {level: 'warning', type: 'serverPeer',
-                event: {action: action, sharedBy: url.sharedBy}
-            });
-            Logger.log('Shared server peer ' + result.url);
-
-        }).catch(err => {
-
-            Logger.log('addServerPeer already added? ' + err);
-
-            self.props.enqueueSnackbar('Image already shared with photogroup.network', {
-                variant: 'error',
-                autoHideDuration: 6000,
-                action: <Button className={self.props.classes.white} size="small">x</Button>
-            });
-        });
-    }
-
-    downloadFromServer(index) {
-        Logger.log(index);
-    }
-
-    removeServerPeer(url, peerId) {
-        this.master.service.removeOwner(url.hash, peerId);
-    }
-
     render() {
 
         const defaultTheme = createMuiTheme();
 
         const { classes } = this.props;
-        const master = this.master;
         const client = this.state.loader;
-        const {eventStatus, selectedNodeLabel, expandedNetwork, expandedGallery, expandedInfo, content} = this.state;
-        /*const stateGrid = Object.keys(peers).forEach(key => {
-            const peer = peers[key];
-            return
-        });*/
-
-        const self = this;
-
-        const stateGrid = content.map((item, index) => {
-
-            const metadata = window.parsetorrent(item.url);
-
-            const label = metadata.name + ' of ' + item.fileSize + ' first shared by ' + item.sharedBy.originPlatform;
-
-            return <Card key={index} className={classes.card}>
-                    <CardHeader title={<Typography className={classes.wordwrap} variant="caption">{label}</Typography>}
-                                action={
-                                    <div><IconButton onClick={this.addServerPeer.bind(self, item, label)}>
-                                        <CloudUploadIcon/>
-                                    </IconButton>
-                                        <IconButton onClick={this.removeTorrent.bind(self, item)}>
-                                            <ClearIcon/>
-                                        </IconButton>
-                                    </div>
-
-                                }
-                    >
-                    </CardHeader>
-                    {/*<div>
-                        <Typography className={classes.wordwrap} variant="caption">{label}</Typography>
-                        <IconButton onClick={this.addServerPeer.bind(self, item, label)}>
-                            <CloudUploadIcon/>
-                        </IconButton>
-                    </div>*/}
-                    <CardContent className={classes.cardContent} component={'ul'}>
-                        <Typography>downloaded by</Typography>
-                        {item.owners
-                            .map((owner, index) => {
-
-                                const meLabel = owner.peerId === master.client.peerId ? 'me - ' : '';
-                                const downloadLabel = meLabel + owner.platform;
-                                const clearButton = owner.platform === 'photogroup.network'
-                                    ? <IconButton onClick={this.removeServerPeer.bind(self, item, owner.peerId)}>
-                                        <ClearIcon/>
-                                    </IconButton> : '';
-                                return <li className={classes.item} key={index}>
-                                        <Typography
-                                        className={classes.wordwrap} variant="caption">{downloadLabel}
-                                        </Typography>
-                                        {clearButton}
-                                </li>})}
-                    </CardContent>
-
-                    {/*<IconButton onClick={this.downloadFromServer.bind(self, index)}>
-                        <CloudDownloadIcon/>
-                    </IconButton>*/}
-            </Card>;
-        });
-
-        //const stateGridTitle = content.length > 0 ? <Typography>Add Server Peer to</Typography> : '';
+        const {eventStatus, selectedNodeLabel, expandedNetwork, expandedGallery} = this.state;
 
         return (
             <ThemeProvider theme={defaultTheme}>
                 <Typography variant="caption" align="center" className={classes.wordwrap}>
-                    <div>{this.state.peerId}</div>
+                    <div>v3 {this.state.peerId}</div>
                     <div>{selectedNodeLabel}</div>
                     <div>{eventStatus}</div>
-                    <div>ratio: {client.ratio} progress: {client.progress} up: {client.uploadSpeed} down: {client.downloadSpeed}</div>
+                    {/*<div>ratio: {client.ratio} progress: {client.progress} up: {client.uploadSpeed} down: {client.downloadSpeed}</div>*/}
                 </Typography>
 
                 <ExpansionPanel expanded={expandedNetwork} onChange={this.handleExpand('expandedNetwork')}>
@@ -449,25 +328,13 @@ class ShareCanvas extends Component {
                     </ExpansionPanelDetails>
                 </ExpansionPanel>
 
-
-                <ExpansionPanel expanded={expandedInfo} onChange={this.handleExpand('expandedInfo')}>
-                    <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
-                        <Typography className={classes.heading}>Download Status</Typography>
-                    </ExpansionPanelSummary>
-                    <ExpansionPanelDetails>
-                        <div>
-                            <div>{stateGrid}</div>
-                        </div>
-                    </ExpansionPanelDetails>
-                </ExpansionPanel>
-
                 <ExpansionPanel className={classes.nooverflow}
                                 expanded={expandedGallery} onChange={this.handleExpand('expandedGallery')}>
                     <ExpansionPanelSummary className={classes.nooverflow} expandIcon={<ExpandMoreIcon />}>
                         <Typography className={classes.heading}>Gallery</Typography>
                     </ExpansionPanelSummary>
                     <ExpansionPanelDetails className={classes.content}>
-                        <Gallery className={classes.nooverflow} model={this.gallery} />
+                        <Gallery className={classes.nooverflow} model={this.gallery} master={this.props.master} />
                     </ExpansionPanelDetails>
                 </ExpansionPanel>
             </ThemeProvider>

@@ -23,22 +23,23 @@ module.exports = class Room {
         });
     }
 
-    start() {
-
+    start(initFunction) {
+        this.initFunction = initFunction;
         this.registerRoomRoutes(this.app);
         this.registerOwnerRoutes(this.app);
         this.registerConnectionRoutes(this.app);
     }
 
     reset() {
-        this.urls = [];
-        IpTranslator.reset();
+        this.urls.length = 0;
+        //IpTranslator.reset();
         this.serverPeer.reset();
         this.peers.reset();
+        //this.initFunction(this.peers.pgServer);
     }
 
     registerRoomRoutes(app) {
-        const urls = this.urls;
+        let urls = this.urls;
 
         app.get('/api/rooms', (request, response) => {
             response.send({'1': urls});
@@ -46,7 +47,7 @@ module.exports = class Room {
 
         app.delete('/api/rooms', (request, response) => {
             this.reset();
-            response.send(urls);
+            response.send({message: 'success'});
         });
 
         app.get('/api/rooms/1', (request, response) => {
@@ -90,6 +91,7 @@ module.exports = class Room {
         app.post('/api/rooms/1', (request, response) => {
 
             const url = request.body.url;
+            const hash = request.body.hash;
             const serverPeer = request.body.serverPeer;
 
             if(serverPeer && url) {
@@ -110,7 +112,7 @@ module.exports = class Room {
 
                 let urlItem;
                 if (url) {
-                    urlItem = this.findUrl(url);
+                    urlItem = this.findUrl(hash);
                     if (!urlItem) {
                         const peer = this.peers.webPeers.get(peerId);
                         if(!peer) {
@@ -170,7 +172,7 @@ module.exports = class Room {
 
 
     findUrl(url) {
-        return this.findByField('url', url);
+        return this.findByField('hash', url);
     }
 
     findByField(field, value) {

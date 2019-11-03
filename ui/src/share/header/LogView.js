@@ -18,6 +18,7 @@ import Slide from '@material-ui/core/Slide';
 import RoomsService from '../RoomsService';
 import moment from "moment";
 import Typography from "@material-ui/core/Typography/Typography";
+import PeersView from "./PeersView";
 
 function Transition(props) {
     return <Slide direction="down" {...props} />;
@@ -258,6 +259,7 @@ class LogView extends Component {
                         <Button onClick={this.restartTrackers.bind(this)} color="secondary">
                             wt track
                         </Button>
+                        <PeersView emitter={this.master.emitter} />
                         <Button onClick={this.handleClose.bind(this)} color="primary">
                             Close
                         </Button>

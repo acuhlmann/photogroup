@@ -36,6 +36,7 @@ export default class TopologyHelper {
         graph.nodes[0].font = {strokeWidth:2};
 
 
+        if(!this.master.client) return;
         const myPeerId = this.master.client.peerId;
 
         /*const putItemsFirst = ({ findFunction, array }) => [

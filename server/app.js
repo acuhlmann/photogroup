@@ -24,23 +24,38 @@ const Tracker = require('./Tracker');
 const Room = require('./Room');
 const Topology = require('./Topology');
 
-const ice = new IceServers(updateChannel, remoteLog, app);
-ice.start();
+function init(pgServer) {
+    const ice = new IceServers(updateChannel, remoteLog, app);
+    ice.start();
 
-const events = new Events(updateChannel, remoteLog, app, emitter);
-events.start();
+    const events = new Events(updateChannel, remoteLog, app, emitter);
+    events.start();
 
-const peers = new Peers(updateChannel, remoteLog, app, emitter);
-peers.start();
+    const peers = new Peers(updateChannel, remoteLog, app, emitter);
+    peers.start();
 
-const room = new Room(updateChannel, remoteLog, app, emitter, peers, ice);
-room.start();
+    const room = new Room(updateChannel, remoteLog, app, emitter, peers, ice);
+    room.start(init);
 
-const tracker = new Tracker(updateChannel, remoteLog, app, emitter, peers);
-tracker.start();
+    const tracker = new Tracker(updateChannel, remoteLog, app, emitter, peers);
+    tracker.start();
 
-const network = new Topology(updateChannel, remoteLog, app, emitter, peers, tracker);
-network.start();
+    const network = new Topology(updateChannel, remoteLog, app, emitter, peers, tracker);
+    network.start();
+
+    if(pgServer) {
+
+        //peers.pgServer = pgServer;
+        IpTranslator.getLookupIp('photogroup.network').then(result => {
+            console.log('photogroup.network is at ' + result.ip + ' hosted at ' + result.hostname);
+            peers.pgServer = result;
+        });
+    }
+
+    return peers;
+}
+
+const peers = init();
 
 
 if (module === require.main) {
@@ -52,9 +67,6 @@ if (module === require.main) {
         IpTranslator.getLookupIp('photogroup.network').then(result => {
             console.log('photogroup.network is at ' + result.ip + ' hosted at ' + result.hostname);
             peers.pgServer = result;
-            //TODO: remove properly. Only :::8081 is not very useful
-            peers.pgServer.originServerHost = '';//host;
-            peers.pgServer.originServerPort = '';//actualPort;
         });
     });
 }

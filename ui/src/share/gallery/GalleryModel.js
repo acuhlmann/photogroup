@@ -104,12 +104,12 @@ export default class GalleryModel {
 
         if(!seed) {
 
-            this.torrentMaster.emitter.emit('appEventRequest', {level: 'success', type: 'downloaded',
-                event: {file: torrent.name, sharedBy: sharedBy, downloader: this.torrentMaster.client.peerId}
-            });
             this.torrentMaster.emitter.emit('torrentDone', torrent);
-
-            this.torrentMaster.service.addOwner(torrent.infoHash, this.torrentMaster.client.peerId);
+            this.torrentMaster.service.addOwner(torrent.infoHash, this.torrentMaster.client.peerId).then(() => {
+                this.torrentMaster.emitter.emit('appEventRequest', {level: 'success', type: 'downloaded',
+                    event: {file: torrent.name, sharedBy: sharedBy, downloader: this.torrentMaster.client.peerId}
+                });
+            });
         }
     }
 

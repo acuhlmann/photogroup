@@ -59,12 +59,13 @@ export default class PhotoDetailsRenderer {
 
     static buildReverseGeocode(value) {
         return <div>
-            <Async
+            {'lat: ' + value.lat + ', ' + 'long: ' + value.long}
+            {/*<Async
                 promise={PhotoDetailsRenderer.reverseGeocode(value)}
                 then={val => {
                     const msg = (val === 'Not found') ? ('lat: ' + value.lat + ', ' + 'long: ' + value.long) : val;
                     return <div>{msg}</div>
-                }} />
+                }} />*/}
         </div>
     }
 
@@ -85,6 +86,7 @@ export default class PhotoDetailsRenderer {
             return response.json();
         }).then(json => {
             Logger.info('reverseGeocode ' + json);
+            if(json.error_message) return {};
             let address = get(json, 'results[0].formatted_address');
             if(!address) {
                 address = noAddress;

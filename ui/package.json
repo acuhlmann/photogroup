@@ -12,6 +12,7 @@
     "core-js": "^3.3.4",
     "create-torrent": "^4.4.1",
     "crypto-js": "^3.1.9-1",
+    "downloadjs": "^1.4.7",
     "event-source-polyfill": "^1.0.9",
     "eventemitter3": "^4.0.0",
     "idb-kv-store": "^4.4.0",

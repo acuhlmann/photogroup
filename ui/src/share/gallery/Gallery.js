@@ -1,19 +1,25 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
-import GridList from '@material-ui/core/GridList';
 import GridListTile from '@material-ui/core/GridListTile';
-import GridListTileBar from '@material-ui/core/GridListTileBar';
 import IconButton from '@material-ui/core/IconButton';
 import InfoIcon from '@material-ui/icons/Info';
 import DeleteIcon from '@material-ui/icons/Delete';
+import CloudUploadIcon from '@material-ui/icons/CloudUpload';
+import CloudDownloadIcon from '@material-ui/icons/CloudDownload';
+import ClearIcon from '@material-ui/icons/Delete';
 
 import { withStyles } from '@material-ui/core/styles';
 
 import PhotoDetails from './PhotoDetails';
 import Button from "@material-ui/core/Button/Button";
+import Typography from "@material-ui/core/Typography";
 import PasswordInput from "../security/PasswordInput";
 import Paper from "@material-ui/core/Paper";
+
+import Logger from "js-logger";
+import {withSnackbar} from "notistack";
+import download from 'downloadjs';
 
 const styles = theme => ({
     root: {
@@ -38,7 +44,34 @@ const styles = theme => ({
     toolbar: {
         display: 'flex',
         alignItems: 'center',
-        flexWrap: 'wrap'
+        flexWrap: 'wrap',
+        padding: '5px',
+    },
+
+    cardContent: {
+        width: '100%',
+        alignItems: 'left',
+        justifyContent: 'left',
+        //textAlign: 'left'
+    },
+    card: {
+        margin: theme.spacing(1),
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'column',
+    },
+    item: {
+        //display: 'flex',
+        //alignItems: 'center',
+        //justifyContent: 'left',
+        //flexDirection: 'row',
+    },
+    white: {
+        color: '#ffffff'
+    },
+    wordwrap: {
+        wordWrap: 'break-word'
     }
 });
 
@@ -47,6 +80,7 @@ class Gallery extends Component {
     constructor(props) {
         super(props);
 
+        this.master = props.master;
         this.model = props.model;
         this.model.view = this;
 
@@ -55,8 +89,17 @@ class Gallery extends Component {
             tileData: [],
             allMetadata: [],
             sharedBy: {},
-            fileSize: ''
+            fileSize: '',
+            urls: []
         };
+
+        this.master.emitter.on('urls', urls => {
+
+            //this.state.tileData
+            this.setState({
+                urls: urls
+            });
+        });
 
         const { classes } = props;
         this.classes = classes;
@@ -68,6 +111,7 @@ class Gallery extends Component {
 
     handleDelete(tile) {
         this.model.deleteTile(tile);
+        //this.master.service.delete(url.hash);
     }
 
     handleOpen(tile) {
@@ -83,12 +127,47 @@ class Gallery extends Component {
         this.setState({ open: false });
     }
 
+    addServerPeer(tile, action) {
+
+        Logger.log(tile.torrent.magnetURI);
+
+        const self = this;
+        this.master.service.addServerPeer(tile.torrent.magnetURI).then(result => {
+
+            self.master.emitter.emit('appEventRequest', {level: 'warning', type: 'serverPeer',
+                event: {action: action, sharedBy: tile.sharedBy}
+            });
+            Logger.log('Shared server peer ' + result.url);
+
+        }).catch(err => {
+
+            Logger.log('addServerPeer already added? ' + err);
+
+            self.props.enqueueSnackbar('Image already shared with photogroup.network', {
+                variant: 'error',
+                autoHideDuration: 6000,
+                action: <Button className={self.props.classes.white} size="small">x</Button>
+            });
+        });
+    }
+
+    removeServerPeer(tile, peerId) {
+        this.master.service.removeOwner(tile.torrent.infoHash, peerId);
+    }
+
+    downloadFromServer(tile) {
+        Logger.log('downloadFromServer ' + tile.name);
+        download(tile.img);
+    }
+
     buildTile(tile, index, classes) {
 
-        //if(!tile.sharedBy) {
-        //    return <div></div>;
-        //}
+        const master = this.master;
+
+        const label = tile.name + ' of ' + tile.size + ' first shared by ' + tile.sharedBy.originPlatform;
+
         if(tile.secure) {
+
             return <GridListTile key={index} cols={tile.cols || 1}>
                 <div>Decrypt with</div>
                 <PasswordInput onChange={value => this.setState({password: value})} />
@@ -98,40 +177,62 @@ class Gallery extends Component {
                 </Button>
             </GridListTile>;
         } else {
+
+            const urlItem = this.state.urls.find(item => item.url === tile.torrent.magnetURI);
+            let downloadedBy;
+            if(urlItem) {
+                downloadedBy = <span>
+                    <Typography>downloaded by</Typography>
+                    <div>
+                        {urlItem.owners
+                        .map((owner, index) => {
+
+                            const meLabel = owner.peerId === master.client.peerId ? 'me - ' : '';
+                            const downloadLabel = meLabel + owner.platform;
+                            const clearButton = owner.platform === 'photogroup.network'
+                                ? <IconButton onClick={this.removeServerPeer.bind(this, tile, owner.peerId)}>
+                                    <ClearIcon/>
+                                </IconButton> : '';
+                            return <div className={classes.item} key={index}>
+                                <Typography
+                                    className={classes.wordwrap} variant="caption">{downloadLabel}
+                                </Typography>
+                                {clearButton}
+                            </div>})}
+                    </div>
+                </span>
+            }
+
             return <div key={tile.img} cols={tile.cols || 1} className={classes.gridList}>
                 <img id={'img' + index}  src={tile.img} alt={tile.title}
                      crossOrigin="Anonymous" className={classes.wide}
                      onLoad={this.handleImageLoaded.bind(this, tile)} />
                 <Paper className={classes.toolbar}>
-                    <IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
-                        <InfoIcon />
-                    </IconButton>
-                    <span onClick={this.handleOpen.bind(this, tile)}
-                         title={tile.summary}>{tile.summary}: {tile.size}, {tile.sharedBy.originPlatform}, {tile.cameraSettings}
-                    </span>
-                    <IconButton onClick={this.handleDelete.bind(this, tile)}
-                                className={classes.icon}>
-                        <DeleteIcon />
-                    </IconButton>
+
+                        <div style={{width: '100%'}}>
+                            <IconButton onClick={this.downloadFromServer.bind(this, tile)}>
+                                <CloudDownloadIcon/>
+                            </IconButton>
+                            <IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
+                                <InfoIcon />
+                            </IconButton>
+                            <Typography onClick={this.handleOpen.bind(this, tile)} className={classes.wordwrap}
+                                title={tile.summary}
+                                variant="caption">{tile.summary} {tile.size} {tile.cameraSettings}
+                            </Typography>
+                        </div>
+                        <div className={classes.cardContent}>
+                            <Typography variant={"caption"}>first shared by {tile.sharedBy.originPlatform}</Typography>
+                            <IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
+                                <CloudUploadIcon/>
+                            </IconButton>
+                            <IconButton onClick={this.handleDelete.bind(this, tile)}
+                                        className={classes.icon}>
+                                <DeleteIcon />
+                            </IconButton>
+                            {downloadedBy}
+                        </div>
                 </Paper>
-                {/*<GridListTileBar className={classes.wide}
-                    title={<div onClick={this.handleOpen.bind(this, tile)}
-                                title={tile.summary}>{tile.summary}</div>}
-                    titlePosition="bottom"
-                    subtitle={<span onClick={this.handleOpen.bind(this, tile)}
-                                    title={tile.cameraSettings}>
-                                    <IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
-                                        <InfoIcon />
-                                    </IconButton>
-                        {tile.size}, {tile.sharedBy.originPlatform}, {tile.cameraSettings}
-                                </span>}
-                    actionIcon={
-                        <IconButton onClick={this.handleDelete.bind(this, tile)}
-                                    className={classes.icon}>
-                            <DeleteIcon />
-                        </IconButton>
-                    }
-                />*/}
             </div>;
         }
     }
@@ -159,6 +260,8 @@ class Gallery extends Component {
 
 Gallery.propTypes = {
     classes: PropTypes.object.isRequired,
+    model: PropTypes.object.isRequired,
+    master: PropTypes.object.isRequired,
 };
 
-export default withStyles(styles)(Gallery);
+export default withSnackbar(withStyles(styles)(Gallery));

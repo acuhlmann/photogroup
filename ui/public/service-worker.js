@@ -1,7 +1,7 @@
 var CACHE_NAME = 'photogroup';
 var urlsToCache = [
-    '/',
-    '/completed'
+    //'/',
+    //'/completed'
 ];
 
 // Install a service worker

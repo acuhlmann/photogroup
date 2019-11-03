@@ -85,6 +85,11 @@ module.exports = class Topology {
         });
     }
 
+    reset() {
+        this.peers = [];
+
+    }
+
     createChainNode(ip, port) {
         return {
             ip: IpTranslator.createEmptyIpObj(ip),

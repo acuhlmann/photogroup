@@ -5,7 +5,7 @@ export default class ExifParser {
 
         if(allMetadata['Make'] && allMetadata['Model']) {
             allMetadata['x-Camera'] = allMetadata['Make'] + ' ' + allMetadata['Model'];
-            delete allMetadata['Make'];
+            //delete allMetadata['Make'];
             delete allMetadata['Model'];
         }
 

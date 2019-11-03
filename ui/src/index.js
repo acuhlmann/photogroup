@@ -1,4 +1,3 @@
-//import registerServiceWorker from './registerServiceWorker';
 import * as serviceWorker from './serviceWorker';
 
 import 'core-js';

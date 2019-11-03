@@ -18,8 +18,8 @@ module.exports = class Peers {
     }
 
     reset() {
-        this.webPeers = new Map();
-        this.peerIdBySessionId = new Map();
+        this.webPeers.clear();
+        this.peerIdBySessionId.clear();
     }
 
     start() {

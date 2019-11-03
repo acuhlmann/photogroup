@@ -129,20 +129,18 @@ class App extends Component {
                         <header className="App-header">
                             <AppBar position="static" color="default">
                                 <Toolbar>
-                                    <div>
+                                    <div edge="start" style={{flexGrow: 1}}>
                                         <Typography variant="button" component="h2">
                                             PhotoGroup
                                         </Typography>
                                         <Typography variant="caption">
-                                            Zero Install, Peer-to-Peer Photo Group Collaboration.2
+                                            Zero Install, Peer-to-Peer Photo Group Collaboration.
                                         </Typography>
                                     </div>
-
                                     <QRCodeView />
                                     <Uploader model={this.master.torrentAddition}
                                               loader={this.master.torrentAddition.loader} />
                                     <LogView master={this.master} emitter={this.master.emitter}/>
-                                    <PeersView emitter={this.master.emitter} />
                                 </Toolbar>
                             </AppBar>
                         </header>

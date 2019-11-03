@@ -5,7 +5,7 @@ const isLocal = require('is-local-ip');
 module.exports = class IpTranslator {
 
     static reset() {
-        IpTranslator.lookedUpIPs = new Map();
+        IpTranslator.lookedUpIPs.clear();
     }
 
     static extractIps(request) {

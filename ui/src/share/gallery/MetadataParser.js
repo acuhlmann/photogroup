@@ -1,6 +1,7 @@
 import moment from 'moment';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
+import _ from 'lodash';
 
 export default class MetadataParser {
 
@@ -61,10 +62,16 @@ export default class MetadataParser {
             tileCopy[index].dateTaken = dateTaken === 'Invalid date' ? '' : dateTaken;
             tileCopy[index].dateTakenDate = timestamp.toDate();
 
-            const title = allMetadata['Title XMP'] ? allMetadata['Title XMP'] : '';
+            const fileSuffix = tile.torrent.name.match(/\.[0-9a-z]+$/i)[0];
+            const fileNameNoSuffix = _.replace(tile.torrent.name, fileSuffix, '');
+            const title = allMetadata['Title XMP'] ? allMetadata['Title XMP'] + ' ' : '';
+            const desc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
             tileCopy[index].summary = tileCopy[index].dateTaken + ' '
-                + title + ' ' + allMetadata['x-Description'] + ' ' + tile.torrent.name;
-            tileCopy[index].cameraSettings = allMetadata['x-Settings'];
+                + title + desc
+                + _.truncate(fileNameNoSuffix, {length: 10}) + fileSuffix;
+            const cameraMake = allMetadata['Make'] ? allMetadata['Make']  + ' ': '';
+            const cameraSettings = allMetadata['x-Settings'] ? allMetadata['x-Settings'] : '';
+            tileCopy[index].cameraSettings = cameraMake + cameraSettings;
 
             tileCopy.sort(function(a,b){
                 return new Date(b.dateTakenDate) - new Date(a.dateTakenDate);

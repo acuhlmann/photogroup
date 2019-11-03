@@ -20,7 +20,9 @@ module.exports = class ServerPeer {
     }
 
     reset() {
-        delete this.webtorrent.client;
+        //if(this.webtorrent.client)
+        //    this.webtorrent.client.destroy();
+        //delete this.webtorrent.client;
     }
 
     start(url, request, response) {
@@ -102,7 +104,7 @@ module.exports = class ServerPeer {
             //this.peers.sendWebPeers();
         }
 
-        const isProd = process.env.args.includes('prod') || false;
+        const isProd = process.env.args && process.env.args.includes('prod') || false;
         console.info('prd ' + isProd);
         console.info('process.env ' + util.inspect(process.argv));
         const tracker = isProd ? 'wss://photogroup.network/ws' : 'ws://localhost:9000';
