@@ -14,12 +14,12 @@ import DialogContent from "@material-ui/core/DialogContent/DialogContent";
 import DialogActions from "@material-ui/core/DialogActions/DialogActions";
 import Button from "@material-ui/core/Button/Button";
 
-import Slide from '@material-ui/core/Slide';
-import PasswordInput from "../security/PasswordInput";
+//import Slide from '@material-ui/core/Slide';
+//import PasswordInput from "../security/PasswordInput";
 
-function Transition(props) {
+/*function Transition(props) {
     return <Slide direction="down" {...props} />;
-}
+}*/
 
 const styles = theme => ({
 

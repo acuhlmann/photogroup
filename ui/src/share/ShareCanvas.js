@@ -68,21 +68,21 @@ class ShareCanvas extends Component {
 
         this.topology = new TopologyHelper(this, emitter, props.master);
 
-        let progressRunner;
+        /*let progressRunner;
         emitter.on('wtInitialized', client => {
             progressRunner = setInterval(() => {
 
-                /*this.setState({
+                this.setState({
                     loader: {
                         progress: client.progress.toFixed(1) * 100,
                         ratio: client.ratio,
                         downloadSpeed: (client.downloadSpeed / 1024).toFixed(1) + 'kb/s',
                         uploadSpeed: (client.uploadSpeed / 1024).toFixed(1) + 'kb/s'
                     }
-                })*/
+                })
 
             }, 1000);
-        });
+        });*/
 
         this.master.emitter.on('urls', urls => {
 
@@ -160,7 +160,12 @@ class ShareCanvas extends Component {
             graph: this.topology.graph,
             options: this.topology.options,
             events: this.topology.events,
+            showTopology: false,
         };
+
+        emitter.on('showTopology', value => {
+            this.setState({showTopology: value});
+        });
 
         emitter.on('pcEvent', (type, value) => {
 
@@ -239,7 +244,7 @@ class ShareCanvas extends Component {
 
         this.snack(<div>
             <Button style={{color: 'white'}} onClick={ () => this.install() }>Install App?</Button>
-        </div>);
+        </div>, 'info', true);
     }
 
     install() {
@@ -261,7 +266,7 @@ class ShareCanvas extends Component {
         enqueueSnackbar(payload, {
             variant: type,
             persist: persist,
-            autoHideDuration: 2000,
+            autoHideDuration: 4000,
             action: (key) => (<Button className={this.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
             anchorOrigin: {
                 vertical: 'bottom',
@@ -298,8 +303,20 @@ class ShareCanvas extends Component {
         const defaultTheme = createMuiTheme();
 
         const { classes } = this.props;
-        const client = this.state.loader;
-        const {eventStatus, selectedNodeLabel, expandedNetwork, expandedGallery} = this.state;
+        const {eventStatus, selectedNodeLabel, expandedNetwork, showTopology} = this.state;
+
+        const graphDom = showTopology ?
+            <ExpansionPanel expanded={expandedNetwork} onChange={this.handleExpand('expandedNetwork')}>
+                <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
+                    <Typography className={classes.heading}>Network Topology</Typography>
+                </ExpansionPanelSummary>
+                <ExpansionPanelDetails className={classes.content}>
+                    <Graph ref={node => this.graph = node} getNetwork={this.setNetworkInstance}
+                           graph={this.state.graph} options={this.state.options} events={this.state.events}
+                           style={{width: "100%", height: "400px"}}/>
+                </ExpansionPanelDetails>
+            </ExpansionPanel>
+            : '';
 
         return (
             <ThemeProvider theme={defaultTheme}>
@@ -309,26 +326,9 @@ class ShareCanvas extends Component {
                     {/*<div>ratio: {client.ratio} progress: {client.progress} up: {client.uploadSpeed} down: {client.downloadSpeed}</div>*/}
                 </Typography>
 
-                <ExpansionPanel expanded={expandedNetwork} onChange={this.handleExpand('expandedNetwork')}>
-                    <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
-                        <Typography className={classes.heading}>Network Topology</Typography>
-                    </ExpansionPanelSummary>
-                    <ExpansionPanelDetails className={classes.content}>
-                        <Graph ref={node => this.graph = node} getNetwork={this.setNetworkInstance}
-                               graph={this.state.graph} options={this.state.options} events={this.state.events}
-                               style={{width: "100%", height: "400px"}}/>
-                    </ExpansionPanelDetails>
-                </ExpansionPanel>
+                {graphDom}
+                <Gallery className={classes.nooverflow} model={this.gallery} master={this.props.master} />
 
-                <ExpansionPanel className={classes.nooverflow}
-                                expanded={expandedGallery} onChange={this.handleExpand('expandedGallery')}>
-                    <ExpansionPanelSummary className={classes.nooverflow} expandIcon={<ExpandMoreIcon />}>
-                        <Typography className={classes.heading}>Gallery</Typography>
-                    </ExpansionPanelSummary>
-                    <ExpansionPanelDetails className={classes.content}>
-                        <Gallery className={classes.nooverflow} model={this.gallery} master={this.props.master} />
-                    </ExpansionPanelDetails>
-                </ExpansionPanel>
             </ThemeProvider>
         );
     }

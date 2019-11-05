@@ -5,11 +5,12 @@ import Dialog from '@material-ui/core/Dialog';
 import DialogContent from '@material-ui/core/DialogContent';
 import DialogTitle from '@material-ui/core/DialogTitle';
 import DialogActions from '@material-ui/core/DialogActions';
-import Button from '@material-ui/core/Button';
+import CloseRounded from '@material-ui/icons/CloseRounded';
 
 import List from '@material-ui/core/List';
 import { withStyles } from '@material-ui/core/styles';
 import PhotoDetailsRenderer from "./PhotoDetailsRenderer";
+import IconButton from "@material-ui/core/IconButton";
 
 const styles = theme => ({
     root: {
@@ -50,9 +51,11 @@ class PhotoDetails extends Component {
                 >
                     <DialogTitle id="alert-dialog-title">{"All that Image Metadata"}</DialogTitle>
                     <DialogActions>
-                        <Button onClick={this.handleClose.bind(this)} color="primary">
-                            Close
-                        </Button>
+                        <IconButton
+                            onClick={this.handleClose.bind(this)}
+                        >
+                            <CloseRounded />
+                        </IconButton>
                     </DialogActions>
                     <DialogContent>
                         <List>

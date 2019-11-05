@@ -16,11 +16,10 @@ import RoomsService from "./share/RoomsService";
 import GalleryModel from "./share/gallery/GalleryModel";
 
 import ShareCanvas from './share/ShareCanvas';
-import LogView from "./share/header/LogView";
+import SettingsView from "./share/header/SettingsView";
 import Logger from 'js-logger';
 import Uploader from "./share/loader/Uploader";
 import QRCodeView from "./share/header/QRCodeView";
-import PeersView from "./share/header/PeersView";
 
 import { SnackbarProvider } from 'notistack';
 import Visibility from "visibilityjs";
@@ -107,8 +106,6 @@ class App extends Component {
 
     render() {
 
-        const classes = this.classes;
-
         const defaultTheme = createMuiTheme();
 
         return (
@@ -140,7 +137,7 @@ class App extends Component {
                                     <QRCodeView />
                                     <Uploader model={this.master.torrentAddition}
                                               loader={this.master.torrentAddition.loader} />
-                                    <LogView master={this.master} emitter={this.master.emitter}/>
+                                    <SettingsView master={this.master} emitter={this.master.emitter}/>
                                 </Toolbar>
                             </AppBar>
                         </header>

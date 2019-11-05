@@ -2,7 +2,7 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
 import { withStyles } from '@material-ui/core/styles';
-import Button from '@material-ui/core/Button';
+import CloseRounded from '@material-ui/icons/CloseRounded';
 import IconButton from '@material-ui/core/IconButton';
 import CropFreeRounded from '@material-ui/icons/CropFreeRounded';
 
@@ -10,11 +10,11 @@ import Dialog from '@material-ui/core/Dialog';
 import DialogContent from '@material-ui/core/DialogContent';
 import DialogActions from '@material-ui/core/DialogActions';
 import QRCode from "qrcode.react";
-import Slide from '@material-ui/core/Slide';
+//import Slide from '@material-ui/core/Slide';
 
-function Transition(props) {
+/*function Transition(props) {
     return <Slide direction="down" {...props} />;
-}
+}*/
 
 const styles = theme => ({
 
@@ -62,9 +62,11 @@ class QRCodeView extends Component {
                         <QRCode value={url} />
                     </DialogContent>
                     <DialogActions>
-                        <Button onClick={this.show.bind(this, false)} color="primary">
-                            Close
-                        </Button>
+                        <IconButton
+                            onClick={this.show.bind(this, false)}
+                        >
+                            <CloseRounded />
+                        </IconButton>
                     </DialogActions>
                 </Dialog>
             </div>

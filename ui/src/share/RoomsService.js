@@ -158,7 +158,6 @@ export default class RoomsService {
 
     find() {
 
-        const scope = this;
         return fetch(this.url)
             .then(response => {
                 return response.json();

@@ -13,22 +13,25 @@ import Dialog from '@material-ui/core/Dialog';
 import DialogContent from '@material-ui/core/DialogContent';
 import DialogTitle from '@material-ui/core/DialogTitle';
 import DialogActions from '@material-ui/core/DialogActions';
-import Slide from '@material-ui/core/Slide';
+
+import Switch from '@material-ui/core/Switch';
+import FormGroup from '@material-ui/core/FormGroup';
+import FormControlLabel from '@material-ui/core/FormControlLabel';
 
 import RoomsService from '../RoomsService';
 import moment from "moment";
 import Typography from "@material-ui/core/Typography/Typography";
 import PeersView from "./PeersView";
 
-function Transition(props) {
+/*function Transition(props) {
     return <Slide direction="down" {...props} />;
-}
+}*/
 
 const styles = theme => ({
 
 });
 
-class LogView extends Component {
+class SettingsView extends Component {
 
     constructor(props) {
         super(props);
@@ -68,7 +71,7 @@ class LogView extends Component {
     }
 
     showLogs() {
-        LogView.getAll().then(dom => {
+        SettingsView.getAll().then(dom => {
             this.setState({
                 urls: dom
             });
@@ -220,6 +223,11 @@ class LogView extends Component {
         });
     }
 
+    handleChange(event) {
+        //this.setState({showTopology: event.target.checked})//
+        this.master.emitter.emit('showTopology', event.target.checked);
+    };
+
     render() {
         const messageContent = this.state.messages
             .map((value, index) => (
@@ -228,7 +236,7 @@ class LogView extends Component {
             </div>
             ))
             .concat(
-                <Button key='delete' onClick={LogView.handleReset.bind(this)} color="primary">
+                <Button key='delete' onClick={SettingsView.handleReset.bind(this)} color="primary">
                     Del server state
                 </Button>);
 
@@ -236,6 +244,8 @@ class LogView extends Component {
                 <Typography variant="subtitle2">{this.state.urls}</Typography>
                 <Typography variant="caption">{messageContent}</Typography>
             </div>;
+
+        const {showTopology} = this.state;
 
         return (
             <div>
@@ -273,6 +283,19 @@ class LogView extends Component {
                         </IconButton>
                     </DialogActions>
                     <DialogContent>
+                        <FormGroup row>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        onChange={this.handleChange.bind(this)}
+                                        checked={showTopology}
+                                        value="showTopology"
+                                        color="primary"
+                                    />
+                                }
+                                label="Topology"
+                            />
+                        </FormGroup>
                         <Typography variant={"caption"}>v2 {this.state.peerId}</Typography>
                         {messages}
                     </DialogContent>
@@ -282,10 +305,10 @@ class LogView extends Component {
     }
 }
 
-LogView.propTypes = {
+SettingsView.propTypes = {
     classes: PropTypes.object.isRequired,
     emitter: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,
 };
 
-export default withStyles(styles)(LogView);
+export default withStyles(styles)(SettingsView);

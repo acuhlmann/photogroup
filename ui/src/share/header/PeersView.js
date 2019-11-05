@@ -9,12 +9,12 @@ import Dialog from "@material-ui/core/Dialog/Dialog";
 import DialogContent from "@material-ui/core/DialogContent/DialogContent";
 import DialogActions from "@material-ui/core/DialogActions/DialogActions";
 import Button from "@material-ui/core/Button/Button";
-import Slide from '@material-ui/core/Slide';
+//import Slide from '@material-ui/core/Slide';
 import Typography from '@material-ui/core/Typography';
 
-function Transition(props) {
+/*function Transition(props) {
     return <Slide direction="down" {...props} />;
-}
+}*/
 
 export default class PeersView extends Component {
 

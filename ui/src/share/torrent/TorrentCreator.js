@@ -164,9 +164,9 @@ export default class TorrentCreator {
 
         this.peers = new Map();
 
-        const id = setInterval(() => {
+        /*const id = setInterval(() => {
             //this.listenToPCs(self, id, torrents);
-        }, 1000);
+        }, 1000);*/
     }
 
     listenToPCs(self, id, torrents) {
