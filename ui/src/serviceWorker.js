@@ -9,7 +9,6 @@
 
 // To learn more about the benefits of this model and instructions on how to
 // opt-in, read https://bit.ly/CRA-PWA
-
 const isLocalhost = Boolean(
   window.location.hostname === 'localhost' ||
     // [::1] is the IPv6 localhost address.
@@ -32,7 +31,7 @@ export function register(config) {
     }
 
     window.addEventListener('load', () => {
-      const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`;
+      const swUrl = `${process.env.PUBLIC_URL}/sw.js`;
 
       if (isLocalhost) {
         // This is running on localhost. Let's check if a service worker still exists or not.
@@ -78,6 +77,9 @@ function registerValidSW(swUrl, config) {
               if (config && config.onUpdate) {
                 config.onUpdate(registration);
               }
+
+              updateApp(installingWorker, registration);
+
             } else {
               // At this point, everything has been precached.
               // It's the perfect time to display a
@@ -92,9 +94,36 @@ function registerValidSW(swUrl, config) {
           }
         };
       };
+
     })
     .catch(error => {
       console.error('Error during service worker registration:', error);
+    });
+}
+
+let refreshing;
+function updateApp(installingWorker, registration) {
+
+    console.log('updateApp ');
+
+    let snackbar = document.getElementById('snackbar');
+    snackbar.className = 'show';
+
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+        console.log('controllerchange ' + refreshing);
+        if (refreshing) return;
+        snackbar.className = 'hide';
+        window.location.reload();
+        refreshing = true;
+    });
+
+    // The click event on the pop up notification
+    document.getElementById('reload').addEventListener('click', function(){
+        console.log('reload ' + installingWorker, registration.installing);
+        if(installingWorker) {
+            console.log('postMessage ');
+            installingWorker.postMessage({ action: 'skipWaiting' });
+        }
     });
 }
 

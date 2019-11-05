@@ -68,11 +68,6 @@ class ShareCanvas extends Component {
 
         this.topology = new TopologyHelper(this, emitter, props.master);
 
-        emitter.on('addPeerDone', () => {
-            //self.topology.start();
-            this.setState({peerId: this.master.client.peerId})
-        });
-
         let progressRunner;
         emitter.on('wtInitialized', client => {
             progressRunner = setInterval(() => {
@@ -161,8 +156,6 @@ class ShareCanvas extends Component {
             expandedInfo: true,
             eventStatus: '',
             selectedNodeLabel: '',
-            peerId: '',
-
             peers: this.topology.peers,
             graph: this.topology.graph,
             options: this.topology.options,
@@ -311,7 +304,6 @@ class ShareCanvas extends Component {
         return (
             <ThemeProvider theme={defaultTheme}>
                 <Typography variant="caption" align="center" className={classes.wordwrap}>
-                    <div>v3 {this.state.peerId}</div>
                     <div>{selectedNodeLabel}</div>
                     <div>{eventStatus}</div>
                     {/*<div>ratio: {client.ratio} progress: {client.progress} up: {client.uploadSpeed} down: {client.downloadSpeed}</div>*/}

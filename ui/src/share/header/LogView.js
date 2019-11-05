@@ -8,7 +8,7 @@ import Button from '@material-ui/core/Button';
 import IconButton from '@material-ui/core/IconButton';
 import Settings from '@material-ui/icons/Settings';
 import Bluetooth from '@material-ui/icons/BluetoothSearching';
-
+import CloseRounded from '@material-ui/icons/CloseRounded';
 import Dialog from '@material-ui/core/Dialog';
 import DialogContent from '@material-ui/core/DialogContent';
 import DialogTitle from '@material-ui/core/DialogTitle';
@@ -36,6 +36,7 @@ class LogView extends Component {
         this.state = {
             messages: [],
             open: false,
+            peerId: '',
         };
 
         const { classes, master } = props;
@@ -45,6 +46,11 @@ class LogView extends Component {
         Logger.setHandler((messages, context) => {
             const date = moment().format("HH:mm:ss:SSS");
             this.log(date + ' ' + messages[0], context.level.name);
+        });
+
+        this.master.emitter.on('addPeerDone', () => {
+            //self.topology.start();
+            this.setState({peerId: this.master.client.peerId})
         });
     }
 
@@ -260,11 +266,14 @@ class LogView extends Component {
                             wt track
                         </Button>
                         <PeersView emitter={this.master.emitter} />
-                        <Button onClick={this.handleClose.bind(this)} color="primary">
-                            Close
-                        </Button>
+                        <IconButton
+                            onClick={this.handleClose.bind(this)}
+                        >
+                            <CloseRounded />
+                        </IconButton>
                     </DialogActions>
                     <DialogContent>
+                        <Typography variant={"caption"}>v2 {this.state.peerId}</Typography>
                         {messages}
                     </DialogContent>
                 </Dialog>
