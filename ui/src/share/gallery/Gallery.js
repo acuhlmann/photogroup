@@ -20,6 +20,7 @@ import Paper from "@material-ui/core/Paper";
 import Logger from "js-logger";
 import {withSnackbar} from "notistack";
 import download from 'downloadjs';
+import FileUtil from "../util/FileUtil";
 
 const styles = theme => ({
     root: {
@@ -95,9 +96,19 @@ class Gallery extends Component {
 
         this.master.emitter.on('urls', urls => {
 
-            //this.state.tileData
             this.setState({
-                urls: urls
+                urls: urls,
+                tileData: this.state.tileData.map(tile => {
+
+                    const url = urls.find(item => item.url === tile.torrent.magnetURI);
+
+                    if(url && url.fileName && tile.allMetadata) {
+                        const allMetadata = this.model.parser.createMetadataSummary(tile.allMetadata);
+                        const suffix = FileUtil.getFileSuffix(tile.torrent.name);
+                        tile.summary = this.model.parser.createSummary(allMetadata, tile.dateTaken, url.fileName + suffix);
+                    }
+                    return tile;
+                })
             });
         });
 
@@ -106,7 +117,14 @@ class Gallery extends Component {
     }
 
     handleImageLoaded(tile, event) {
-        this.model.parser.readMetadata(tile, event);
+        this.model.parser.readMetadata(tile, event, tile => {
+
+            if(tile.seed) {
+                this.master.service.share(tile.torrent.infoHash, tile.torrent.magnetURI,
+                    tile.secure, tile.sharedBy, tile.size,
+                    tile.summary, tile.cameraSettings);
+            }
+        });
     }
 
     handleDelete(tile) {
@@ -118,6 +136,7 @@ class Gallery extends Component {
         this.setState({
             open: true,
             allMetadata: this.model.parser.createMetadataSummary(tile.allMetadata),
+            url: this.state.urls.find(item => item.url === tile.torrent.magnetURI),
             sharedBy: tile.sharedBy,
             fileSize: tile.size
         });
@@ -157,7 +176,9 @@ class Gallery extends Component {
 
     downloadFromServer(tile) {
         Logger.log('downloadFromServer ' + tile.name);
-        download(tile.img);
+        const url = this.state.urls.find(item => item.url === tile.torrent.magnetURI);
+        const name = url.fileName ? url.fileName + FileUtil.getFileSuffix(tile.name) : tile.name;
+        download(tile.elem, name);
     }
 
     buildTile(tile, index, classes) {
@@ -179,10 +200,10 @@ class Gallery extends Component {
         } else {
 
             const urlItem = this.state.urls.find(item => item.url === tile.torrent.magnetURI);
-            let downloadedBy;
+            /*let downloadedBy;
             if(urlItem) {
                 downloadedBy = <span>
-                    <Typography>downloaded by</Typography>
+                   <Typography>downloaded by</Typography>
                     <div>
                         {urlItem.owners
                         .map((owner, index) => {
@@ -201,7 +222,7 @@ class Gallery extends Component {
                             </div>})}
                     </div>
                 </span>
-            }
+            }*/
 
             return <div key={tile.img} cols={tile.cols || 1} className={classes.gridList}>
                 <img id={'img' + index}  src={tile.img} alt={tile.title}
@@ -230,7 +251,6 @@ class Gallery extends Component {
                                         className={classes.icon}>
                                 <DeleteIcon />
                             </IconButton>
-                            {downloadedBy}
                         </div>
                 </Paper>
             </div>;
@@ -252,6 +272,8 @@ class Gallery extends Component {
                               sharedBy={this.state.sharedBy}
                               fileSize={this.state.fileSize}
                               open={this.state.open}
+                              url={this.state.url}
+                              service={this.master.service}
                               handleClose={this.handleClose.bind(this)} />
             </div>
         );

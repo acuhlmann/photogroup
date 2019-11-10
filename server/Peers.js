@@ -129,12 +129,12 @@ module.exports = class Peers {
 
     static peerToAppPeer(peer) {
 
-        return {
+        return peer ? {
             peerId: peer.peerId,
             originPlatform: peer.originPlatform,
             //hostname: peer.networkChain[peer.networkChain.length-1].ip.hostname
-            hostname: peer.ips[0].hostname
-        }
+            hostname: peer.ips ? peer.ips[0].hostname : ''
+        } : {};
     }
 
     sendWebPeers() {

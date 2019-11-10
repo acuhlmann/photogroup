@@ -26,6 +26,7 @@ class PhotoDetails extends Component {
 
         const { classes } = props;
         this.classes = classes;
+        this.details = new PhotoDetailsRenderer(props.service);
     }
 
     handleClose() {
@@ -35,10 +36,11 @@ class PhotoDetails extends Component {
     render() {
         const classes = this.classes;
 
-        const metadataList = PhotoDetailsRenderer.render(
+        const metadataList = this.details.render(
             this.props.metadata,
             this.props.sharedBy,
-            this.props.fileSize);
+            this.props.fileSize,
+            this.props.url);
 
         return (
             <div className={classes.root}>

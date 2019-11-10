@@ -2,10 +2,11 @@ import moment from 'moment';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
 import _ from 'lodash';
+import FileUtil from "../util/FileUtil";
 
 export default class MetadataParser {
 
-    readMetadata(tile, event) {
+    readMetadata(tile, event, callback) {
 
         const scope = this;
 
@@ -18,6 +19,7 @@ export default class MetadataParser {
         EXIF.getData(img, function()  {
 
             scope.extractAndProcess(this, index, tile);
+            callback(tile);
         });
     }
 
@@ -58,17 +60,13 @@ export default class MetadataParser {
 
         const tileCopy = this.view.state.tileData.slice();
         if(tileCopy[index]) {
+            const tileItem = tileCopy[index];
             const dateTaken = MetadataParser.formatDateFromTimeStamp(timestamp);
-            tileCopy[index].dateTaken = dateTaken === 'Invalid date' ? '' : dateTaken;
-            tileCopy[index].dateTakenDate = timestamp.toDate();
+            tileItem.dateTaken = dateTaken === 'Invalid date' ? '' : dateTaken;
+            tileItem.dateTakenDate = timestamp.toDate();
 
-            const fileSuffix = tile.torrent.name.match(/\.[0-9a-z]+$/i)[0];
-            const fileNameNoSuffix = _.replace(tile.torrent.name, fileSuffix, '');
-            const title = allMetadata['Title XMP'] ? allMetadata['Title XMP'] + ' ' : '';
-            const desc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
-            tileCopy[index].summary = tileCopy[index].dateTaken + ' '
-                + title + desc
-                + _.truncate(fileNameNoSuffix, {length: 10}) + fileSuffix;
+
+            tileCopy[index].summary = this.createSummary(allMetadata, tileItem.dateTaken, tile.torrent.name);
             const cameraMake = allMetadata['Make'] ? allMetadata['Make']  + ' ': '';
             const cameraSettings = allMetadata['x-Settings'] ? allMetadata['x-Settings'] : '';
             tileCopy[index].cameraSettings = cameraMake + cameraSettings;
@@ -78,6 +76,14 @@ export default class MetadataParser {
             });
             this.view.setState({tileData: tileCopy});
         }
+    }
+
+    createSummary(allMetadata, dateTaken, name) {
+        const title = allMetadata['Title XMP'] ? allMetadata['Title XMP'] + ' ' : '';
+        const desc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
+        return dateTaken + ' '
+            + title + desc
+            + FileUtil.truncateFileName(name)
     }
 
     static toTimeStamp(date) {
@@ -97,6 +103,8 @@ export default class MetadataParser {
     }
 
     createMetadataSummary(rawMetadata) {
+
+        if(!rawMetadata) return;
 
         const metadata = Object.entries(rawMetadata)
             .filter(entry => entry[0] !== 'thumbnail')

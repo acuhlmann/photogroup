@@ -19,7 +19,6 @@ import ShareCanvas from './share/ShareCanvas';
 import SettingsView from "./share/header/SettingsView";
 import Logger from 'js-logger';
 import Uploader from "./share/loader/Uploader";
-import QRCodeView from "./share/header/QRCodeView";
 
 import { SnackbarProvider } from 'notistack';
 import Visibility from "visibilityjs";
@@ -134,7 +133,6 @@ class App extends Component {
                                             Zero Install, Peer-to-Peer Photo Group Collaboration.
                                         </Typography>
                                     </div>
-                                    <QRCodeView />
                                     <Uploader model={this.master.torrentAddition}
                                               loader={this.master.torrentAddition.loader} />
                                     <SettingsView master={this.master} emitter={this.master.emitter}/>

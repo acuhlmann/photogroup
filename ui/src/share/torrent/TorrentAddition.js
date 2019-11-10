@@ -1,9 +1,8 @@
 import Logger from 'js-logger';
 import Loader from "./Loader";
-
+import platform from 'platform';
 //import idb from 'indexeddb-chunk-store';
 import moment from "moment";
-import FileUtil from "../util/FileUtil";
 
 /**
  * @emits TorrentAddition.emitter#added
@@ -73,12 +72,12 @@ export default class TorrentAddition {
 
     listen(torrent) {
         return;
-        torrent.discovery.tracker._trackers.forEach(tracker => {
+        /*torrent.discovery.tracker._trackers.forEach(tracker => {
 
             Object.values(tracker.peers).forEach(peer => {
                 Logger.log('tracker.peers ' + peer);
             });
-        });
+        });*/
     }
 
     seed(files, secure, origFile, callback) {
@@ -89,23 +88,18 @@ export default class TorrentAddition {
 
         const torrent = this.master.addSeedOrGetTorrent('seed', files, torrent => {
 
-            const magnetUri = torrent.magnetURI;
             Logger.info('Client is seeding ' + torrent.infoHash);
 
             scope.listen(torrent);
 
             this.update(torrent.numPeers);
 
-            const sharedBy = {peerId: torrent.client.peerId};
-            const fileSize = FileUtil.formatBytes(torrent.files[0].length);
-            const size = fileSize.size + fileSize.type;
-            this.service.share(torrent.infoHash, magnetUri, secure, sharedBy, size)
-                .then(response => {
-                    Logger.debug('shared ' + JSON.stringify(response));
-
-                    this.emitter.emit('added', {file: origFile, torrent: torrent,
-                        seed: true, sharedBy: response.sharedBy});
-                });
+            const sharedBy = {
+                peerId: torrent.client.peerId,
+                originPlatform: platform.description
+            };
+            this.emitter.emit('added', {file: origFile, torrent: torrent,
+                seed: true, sharedBy: sharedBy});
 
             if(callback) {
                 callback(torrent);

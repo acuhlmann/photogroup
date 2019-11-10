@@ -1,4 +1,3 @@
-import {get} from 'lodash';
 import ListItem from "@material-ui/core/ListItem/ListItem";
 import ListItemText from "@material-ui/core/ListItemText/ListItemText";
 import React from "react";
@@ -7,10 +6,19 @@ import StarBorderOutlined from "@material-ui/icons/StarBorderOutlined";
 import Logger from "js-logger";
 import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
+import TextField from '@material-ui/core/TextField';
+import FileUtil from "../util/FileUtil";
+import _ from 'lodash';
 
 export default class PhotoDetailsRenderer {
 
-    static render(metadata, sharedBy, fileSize) {
+    constructor(service) {
+        this.service = service;
+    }
+
+    render(metadata, sharedBy, fileSize, url) {
+
+        this.url = url;
 
         if(metadata[0] && metadata[0].key !== 'Shared by ') {
             const shared = sharedBy ? sharedBy.originPlatform : '';
@@ -20,11 +28,13 @@ export default class PhotoDetailsRenderer {
         return metadata.map((item, index) => {
             let content = item.value;
             if(item.key === 'Rating XMP') {
-                content = PhotoDetailsRenderer.getRating(item.value);
+                content = this.getRating(item.value);
             } else if(item.key === 'x-Location') {
-                content = PhotoDetailsRenderer.getLocation(item.value);
+                content = this.getLocation(item.value);
             } else if(item.key === 'GPSAltitude') {
                 content = item.value + 'm'
+            } else if(item.key === 'x-file name') {
+                content = this.getFileNameEntry(url.fileName ? url.fileName : item.value, item.value);
             }
 
             return <ListItem key={index}
@@ -34,33 +44,60 @@ export default class PhotoDetailsRenderer {
         });
     }
 
-    static getRating(value) {
+    getFileNameEntry(name, fullName) {
+        const fileSuffix = FileUtil.getFileSuffix(fullName);
+        return <span style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center'
+        }}><TextField
+            //label="File Name"
+            margin="normal"
+            variant="outlined"
+            defaultValue={FileUtil.getFileNameWithoutSuffix(name)}
+            onChange={
+                _.debounce(this.batchChangeName.bind(this), 2000, { 'leading': true })
+            }
+        /><span>{fileSuffix}</span></span>
+    }
+
+    batchChangeName(event) {
+
+        if(!event.target) return;
+
+        console.log('change name ' + event.target.value);
+        this.service.update(this.url.hash, {
+            fileName: event.target.value
+        });
+    }
+
+    getRating(value) {
         const rating = Number(value);
 
-        const stars = PhotoDetailsRenderer.generateNumbers(rating)
+        const stars = this.generateNumbers(rating)
             .map(index => <StarOutlined key={index + 'rate'}/>);
-        const missingStars = PhotoDetailsRenderer.generateNumbers(5 - rating)
+        const missingStars = this.generateNumbers(5 - rating)
             .map(index => <StarBorderOutlined key={index + 'missing'}/>);
 
         return <span>{stars.concat(missingStars)}</span>
     }
 
-    static generateNumbers(rating) {
+    generateNumbers(rating) {
         return Array.from(Array(rating).keys());
     }
 
-    static showTooltipContent(value) {
+    showTooltipContent(value) {
         return <div>
             <Typography style= {{color: '#ffffff'}}>{'lat: '+ value.lat}</Typography>
             <Typography style= {{color: '#ffffff'}}>{'long: ' + value.long}</Typography>
         </div>
     }
 
-    static buildReverseGeocode(value) {
+    buildReverseGeocode(value) {
         return <div>
             {'lat: ' + value.lat + ', ' + 'long: ' + value.long}
             {/*<Async
-                promise={PhotoDetailsRenderer.reverseGeocode(value)}
+                promise={this.reverseGeocode(value)}
                 then={val => {
                     const msg = (val === 'Not found') ? ('lat: ' + value.lat + ', ' + 'long: ' + value.long) : val;
                     return <div>{msg}</div>
@@ -68,17 +105,17 @@ export default class PhotoDetailsRenderer {
         </div>
     }
 
-    static getLocation(value) {
+    getLocation(value) {
         const url = 'https://www.google.com/maps/@'+value.lat+','+value.long+',15z';
         return <span>
-                <Tooltip title={PhotoDetailsRenderer.showTooltipContent(value)}>
+                <Tooltip title={this.showTooltipContent(value)}>
                 <a href={url}
-                   target="_blank" rel="noopener noreferrer">{PhotoDetailsRenderer.buildReverseGeocode(value)}</a>
+                   target="_blank" rel="noopener noreferrer">{this.buildReverseGeocode(value)}</a>
             </Tooltip>
         </span>
     }
 
-    static reverseGeocode(value) {
+    reverseGeocode(value) {
         const url = 'https://maps.googleapis.com/maps/api/geocode/json?latlng='+value.lat+','+value.long;
         const noAddress = 'Not found';
         return fetch(url).then(response => {
@@ -86,7 +123,7 @@ export default class PhotoDetailsRenderer {
         }).then(json => {
             Logger.info('reverseGeocode ' + json);
             if(json.error_message) return {};
-            let address = get(json, 'results[0].formatted_address');
+            let address = _.get(json, 'results[0].formatted_address');
             if(!address) {
                 address = noAddress;
             }

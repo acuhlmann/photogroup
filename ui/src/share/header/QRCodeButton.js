@@ -10,6 +10,7 @@ import Dialog from '@material-ui/core/Dialog';
 import DialogContent from '@material-ui/core/DialogContent';
 import DialogActions from '@material-ui/core/DialogActions';
 import QRCode from "qrcode.react";
+
 //import Slide from '@material-ui/core/Slide';
 
 /*function Transition(props) {
@@ -20,7 +21,7 @@ const styles = theme => ({
 
 });
 
-class QRCodeView extends Component {
+class QRCodeButton extends Component {
 
     constructor(props) {
         super(props);
@@ -74,8 +75,8 @@ class QRCodeView extends Component {
     }
 }
 
-QRCodeView.propTypes = {
+QRCodeButton.propTypes = {
     classes: PropTypes.object.isRequired,
 };
 
-export default withStyles(styles)(QRCodeView);
+export default withStyles(styles)(QRCodeButton);

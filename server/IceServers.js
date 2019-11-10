@@ -30,7 +30,7 @@ module.exports = class IceServers {
 
         if (twilioClient) {
             this.twilioClient = twilioClient;
-            this.twillioInterval = setInterval(this.updateIceServers, 60 * 60 * 4 * 1000).unref();
+            this.twillioInterval = setInterval(this.updateIceServers.bind(this), 60 * 60 * 4 * 1000).unref();
             this.updateIceServers();
         }
 
@@ -63,6 +63,7 @@ module.exports = class IceServers {
 
         const self = this;
 
+        if(!this.twilioClient) return;
         this.twilioClient.tokens.create({}, function (err, token) {
             if (err) {
                 const msg = err.message || err;

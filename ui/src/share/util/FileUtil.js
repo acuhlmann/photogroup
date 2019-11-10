@@ -1,5 +1,21 @@
+import _ from "lodash";
 
 export default class FileUtil {
+
+    static getFileSuffix(name) {
+        const matched = name.match(/\.[0-9a-z]+$/i);
+        return matched ? matched[0] : '';
+    }
+
+    static  getFileNameWithoutSuffix(name) {
+        const suffix = FileUtil.getFileSuffix(name);
+        return _.replace(name, suffix, '');
+    }
+
+    static truncateFileName(name) {
+        const fileSuffix = FileUtil.getFileSuffix(name);
+        return _.truncate(FileUtil.getFileNameWithoutSuffix(name), {length: 30}) + fileSuffix
+    }
 
     //https://stackoverflow.com/a/34166265
     static formatBytes(bytes) {

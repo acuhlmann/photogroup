@@ -20,7 +20,21 @@ import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import { withSnackbar } from 'notistack';
 import TopologyHelper from './topology/TopologyHelper';
 
-const styles = theme => makeStyles({
+import Paper from "@material-ui/core/Paper";
+import CircularProgress from '@material-ui/core/CircularProgress';
+import { green } from '@material-ui/core/colors';
+import Fab from '@material-ui/core/Fab';
+import CheckIcon from '@material-ui/icons/CheckRounded';
+import ImageIcon from '@material-ui/icons/ImageRounded';
+import AccountCircleRounded from '@material-ui/icons/AccountCircleRounded';
+import List from '@material-ui/core/List';
+import ListItem from '@material-ui/core/ListItem';
+import Divider from '@material-ui/core/Divider';
+import IconButton from "@material-ui/core/IconButton";
+import ClearIcon from '@material-ui/icons/Delete';
+import QRCode from "./security/QRCode";
+
+const styles = theme => ({
     typography: {
         useNextVariants: true,
     },
@@ -43,6 +57,32 @@ const styles = theme => makeStyles({
     },
     wordwrap: {
         wordWrap: 'break-word'
+    },
+    fabProgress: {
+        position: 'absolute',
+        zIndex: 1,
+        left: '-7px',
+        top: '-5px'
+    },
+    imageIcon: {
+        position: 'relative',
+        //left: '-7px',
+        //top: '-5px'
+    },
+    vertical: {
+        display: 'flex',
+        flexDirection: 'column'
+    },
+    verticalAndWide: {
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%'
+    },
+    horizontal: {
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center'
     }
 });
 
@@ -91,6 +131,23 @@ class ShareCanvas extends Component {
             });
         });
 
+        this.master.emitter.on('networkTopology', data => {
+
+            if(!props.master.client) return;
+            this.setState({
+                otherPeers: data.nodes
+                    .filter(item => item.networkType === 'client'
+                        && item.peerId !== props.master.client.peerId)
+                    .filter(item => {
+                        if(item.originPlatform === 'photogroup.network'
+                            && item.network && item.network.type !== 'host')
+                            return false;
+                        else
+                            return true;
+                    })
+            });
+        });
+
         emitter.on('appEvent', event => {
 
             let msg = '';
@@ -98,6 +155,7 @@ class ShareCanvas extends Component {
 
             if(event.type === 'peerConnect' || event.type === 'peerDisconnect') {
 
+                return;
                 if(!props.master.client) return;
                 if(event.event.peerId === props.master.client.peerId) return;
                 action = event.type === 'peerConnect' ? 'connected' : 'disconnected';
@@ -105,6 +163,7 @@ class ShareCanvas extends Component {
 
             } else if(event.type === 'picAdd' || event.type === 'picRemove') {
 
+                return;
                 if(!props.master.client) return;
                 if(event.event.origin === props.master.client.peerId) return;
                 //if(event.event.peerId === props.master.client.peerId) return;
@@ -114,15 +173,17 @@ class ShareCanvas extends Component {
                 msg = 'Image ' + action + ': ' + event.event.file + origin;
 
             } else if(event.type === 'downloading') {
+
+                return;
                 msg = event.event.toAddr + ' is ' + event.type + ' ' + event.event.label + ' from ' + event.event.fromAddr;
             } else if(event.type === 'downloaded') {
-                //props.master.client.peerId
+
                 if(event.event.downloader === props.master.client.peerId) {
-                    //return;
+                    return;
                 }
                 const downHash = event.event.downloader;
                 let peer = self.topology.peers[downHash];
-                peer = peer ? peer : self.state.urls
+                peer = peer && self.state ? peer : self.state.urls
                     .map(item => item.owners)
                     .flatMap(item => item)
                     .filter(item => item)
@@ -131,7 +192,7 @@ class ShareCanvas extends Component {
                     });
                 const downloader = peer ? ' by ' + (peer.originPlatform || peer.platform) : '';
                 msg = 'Image ' + event.event.file + ' ' + event.type + downloader;
-                self.displayNotification(msg);
+                //self.displayNotification(msg);
             } else if(event.type === 'serverPeer') {
                 //if(event.event.peerId === props.master.client.peerId) return;
                 msg = 'Server peer photogroup.network seeds ' + event.event.action;
@@ -152,6 +213,7 @@ class ShareCanvas extends Component {
         this.state = {
             loader: {},
             expandedNetwork: true,
+            expandedPeers: true,
             expandedGallery: true,
             expandedInfo: true,
             eventStatus: '',
@@ -161,10 +223,16 @@ class ShareCanvas extends Component {
             options: this.topology.options,
             events: this.topology.events,
             showTopology: false,
+            showOtherPeers: true,
+            otherPeers: []
         };
 
         emitter.on('showTopology', value => {
             this.setState({showTopology: value});
+        });
+
+        emitter.on('showOtherPeers', value => {
+            this.setState({showOtherPeers: value});
         });
 
         emitter.on('pcEvent', (type, value) => {
@@ -298,25 +366,119 @@ class ShareCanvas extends Component {
         this.setState({network: network});
     };
 
+    createNetworkTopology(expandedNetwork, classes) {
+        return <ExpansionPanel expanded={expandedNetwork} onChange={this.handleExpand('expandedNetwork')}>
+            <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography className={classes.heading}>Network Topology</Typography>
+            </ExpansionPanelSummary>
+            <ExpansionPanelDetails className={classes.content}>
+                <Graph ref={node => this.graph = node} getNetwork={this.setNetworkInstance}
+                       graph={this.state.graph} options={this.state.options} events={this.state.events}
+                       style={{width: "100%", height: "400px"}}/>
+            </ExpansionPanelDetails>
+        </ExpansionPanel>;
+    }
+
+    removeServerPeer(hash, peerId) {
+        this.master.service.removeOwner(hash, peerId);
+    }
+
+    createWhatPeersHave(otherPeers, expandedPeers, classes) {
+
+        return <ExpansionPanel expanded={expandedPeers} onChange={this.handleExpand('expandedPeers')}>
+            <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography className={classes.heading}>Other Peers</Typography>
+            </ExpansionPanelSummary>
+            <ExpansionPanelDetails className={classes.content}>
+                <div className={classes.verticalAndWide}>
+                    <QRCodeButton/>
+            {
+                otherPeers.map((peer, index) => {
+
+                    const owns = this.state.urls ? this.state.urls
+                        .map(url => {
+                            return url.owners.map(item => {
+                                item.url = url;
+                                return item;
+                            })
+                        })
+                        .flatMap(item => item)
+                        .filter(item => item.peerId === peer.peerId)
+                        .map(item => item.url) : [];
+
+                    return <Paper key={index} style={{
+                                                margin: '10px',
+                                                padding: '10px'
+                                            }}>
+                        <span
+                            className={classes.horizontal}>
+                            <AccountCircleRounded/>
+                            <Typography variant="caption" style={{
+                                marginLeft: '5px'
+                            }}>{peer.label}</Typography>
+                        </span>
+                        {owns.length > 0 ? <Divider variant="middle" /> : ''}
+                        {owns.length > 0 ?
+                            <List>
+                                {
+                                owns.map((url, index) => {
+                                    const have = url.owners
+                                        .find(owner => owner.peerId === this.master.client.peerId);
+                                    const pgOwner = url.owners
+                                        .find(owner => owner.platform === 'photogroup.network');
+                                    return <ListItem key={index}>
+                                            <span style={{
+                                                position: 'relative',
+                                                textAlign: 'center',
+                                                marginRight: '10px'
+                                            }}>
+                                                {have ? <CheckIcon /> : <ImageIcon className={classes.imageIcon} />}
+                                                {!have && <CircularProgress
+                                                    color="secondary"
+                                                    size={36} className={classes.fabProgress} />}
+                                            </span>
+                                            {
+                                                pgOwner
+                                                ? <IconButton
+                                                        onClick={this.removeServerPeer.bind(this,
+                                                            pgOwner.url.hash, pgOwner.peerId)}>
+                                                <ClearIcon/>
+                                            </IconButton> : ''
+                                            }
+                                            <Typography variant="caption" className={classes.wordwrap}>
+                                            {url.picSummary} {url.fileSize} {url.cameraSettings}
+                                        </Typography>
+                                        </ListItem>;
+                                    })
+                                }
+                            </List>
+                            : ''}
+                    </Paper>
+                })
+            }
+                </div>
+            </ExpansionPanelDetails>
+        </ExpansionPanel>
+    }
+
     render() {
 
         const defaultTheme = createMuiTheme();
 
-        const { classes } = this.props;
-        const {eventStatus, selectedNodeLabel, expandedNetwork, showTopology} = this.state;
+        const { classes, master } = this.props;
+        const {eventStatus, selectedNodeLabel, expandedNetwork,
+            expandedPeers, showTopology, showOtherPeers, otherPeers} = this.state;
 
         const graphDom = showTopology ?
-            <ExpansionPanel expanded={expandedNetwork} onChange={this.handleExpand('expandedNetwork')}>
-                <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography className={classes.heading}>Network Topology</Typography>
-                </ExpansionPanelSummary>
-                <ExpansionPanelDetails className={classes.content}>
-                    <Graph ref={node => this.graph = node} getNetwork={this.setNetworkInstance}
-                           graph={this.state.graph} options={this.state.options} events={this.state.events}
-                           style={{width: "100%", height: "400px"}}/>
-                </ExpansionPanelDetails>
-            </ExpansionPanel>
+            this.createNetworkTopology(expandedNetwork, classes)
             : '';
+
+        let otherPeersView;
+        if(showOtherPeers) {
+            otherPeersView = otherPeers.length > 0
+                ? this.createWhatPeersHave(otherPeers, expandedPeers, classes)
+                : <Typography variant={"caption"}>No other peers</Typography>;
+        }
 
         return (
             <ThemeProvider theme={defaultTheme}>
@@ -327,7 +489,9 @@ class ShareCanvas extends Component {
                 </Typography>
 
                 {graphDom}
-                <Gallery className={classes.nooverflow} model={this.gallery} master={this.props.master} />
+                {otherPeersView}
+                <OtherPeersView />
+                <Gallery className={classes.nooverflow} model={this.gallery} master={master} />
 
             </ThemeProvider>
         );

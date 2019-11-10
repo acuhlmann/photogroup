@@ -1,8 +1,8 @@
 //----------------Domain - Content rooms
 const ServerPeer = require('./ServerPeer');
 const Peers = require('./Peers');
-const IpTranslator = require('./IpTranslator');
 const magnet = require('magnet-uri');
+const _ = require('lodash');
 
 module.exports = class Room {
 
@@ -32,10 +32,8 @@ module.exports = class Room {
 
     reset() {
         this.urls.length = 0;
-        //IpTranslator.reset();
         this.serverPeer.reset();
         this.peers.reset();
-        //this.initFunction(this.peers.pgServer);
     }
 
     registerRoomRoutes(app) {
@@ -78,10 +76,7 @@ module.exports = class Room {
                 });
 
                 if (found) {
-                    this.updateChannel.send({
-                        event: 'urls',
-                        data: { urls: urls }
-                    });
+                    this.sendUrls();
                 }
             }
             response.send([found]);
@@ -92,6 +87,7 @@ module.exports = class Room {
 
             const url = request.body.url;
             const hash = request.body.hash;
+
             const serverPeer = request.body.serverPeer;
 
             if(serverPeer && url) {
@@ -99,11 +95,8 @@ module.exports = class Room {
                 this.serverPeer.start(url, request, response);
 
             } else {
-                const hash = request.body.hash;
-                const secure = request.body.secure;
                 const peerId = request.body.peerId;
                 const origin = request.body.origin;
-                const fileSize = request.body.fileSize;
 
                 if(!peerId) {
                     response.status(400).send();
@@ -120,8 +113,9 @@ module.exports = class Room {
                             response.status(500).send();
                             return;
                         }
-                        urlItem = {hash: hash, url: url, secure: secure,
-                            sharedBy: peer, owners: [], fileSize: fileSize};
+                        urlItem = request.body;
+                        urlItem.owners = [];
+                        urlItem.sharedBy = peer;
                         urls.push(urlItem);
 
                         const parsed = magnet(url);
@@ -132,42 +126,21 @@ module.exports = class Room {
                     }
                 }
                 this.addOwner(urlItem.hash, peerId);
-                /*
-                this.updateChannel.send({
-                    event: 'urls',
-                    data: { urls: urls }
-                });
-                */
 
                 response.send(urlItem);
             }
         });
 
-        /*
-        app.get('/api/rooms/1/files/:index', (request, response) => {
+        app.put('/api/rooms/1/:hash', (request, response) => {
 
-            if(webtorrent.client && webtorrent.client.torrents.length > 0) {
+            const hash = request.params.hash;
+            const existingUrl = this.findUrl(hash);
+            const newUrl = request.body;
+            _.merge(existingUrl, newUrl);
 
-                const index = request.params.index;
-                if(webtorrent.client.torrents[index]) {
-                    const torrent = webtorrent.client.torrents[index];
-                    const file = torrent.files[0];
-                    const torrentFile = torrent.torrentFile;
-
-                    //response.set('Content-Type', 'image/png');
-                    //response.sendFile(torrentFile);
-
-                    const encodedBuffer = torrentFile.toString('base64');
-                    response.send(encodedBuffer);
-                } else {
-                    response.status(404).send();
-                }
-            } else {
-                response.status(404).send();
-            }
+            this.sendUrls();
+            response.send(existingUrl);
         });
-        */
-
     }
 
 
@@ -240,10 +213,7 @@ module.exports = class Room {
             }
         });
 
-        this.updateChannel.send({
-            event: 'urls',
-            data: { urls: this.urls }
-        });
+        this.sendUrls();
 
         return platform;
     }
@@ -260,10 +230,7 @@ module.exports = class Room {
             }
         });
 
-        this.updateChannel.send({
-            event: 'urls',
-            data: { urls: this.urls }
-        });
+        this.sendUrls();
     }
 
     registerConnectionRoutes(app) {
@@ -292,6 +259,13 @@ module.exports = class Room {
             this.emitter.emit('disconnectNode', hash);
 
             response.send(hash)
+        });
+    }
+
+    sendUrls() {
+        this.updateChannel.send({
+            event: 'urls',
+            data: { urls: this.urls }
         });
     }
 };

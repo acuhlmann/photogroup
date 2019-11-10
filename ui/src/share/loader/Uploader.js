@@ -56,7 +56,7 @@ class Uploader extends Component {
     }
 
     handleUpload(event) {
-        this.show(true);
+        //this.show(true);
 
         const files = event.target.files;
         if(!files[0]) {
@@ -67,6 +67,8 @@ class Uploader extends Component {
         Logger.info('handleUpload ' + file.name);
 
         this.uploaderDom = event.target || event.srcElement;
+
+        this.share(false);
     }
 
     share() {

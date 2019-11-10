@@ -1,5 +1,5 @@
 import Logger from 'js-logger';
-import platform from "platform";
+import platform from 'platform';
 import shortid  from 'shortid';
 
 /**
@@ -172,7 +172,7 @@ export default class RoomsService {
             });
     }
 
-    async share(infoHash, magnetUri, secure, sharedBy, fileSize) {
+    async share(infoHash, magnetUri, secure, sharedBy, fileSize, picSummary, cameraSettings) {
 
         const data = {
             hash: infoHash,
@@ -180,7 +180,8 @@ export default class RoomsService {
             secure: secure,
             peerId: sharedBy.peerId,
             origin: this.master.client.peerId,
-            fileSize: fileSize
+            fileSize: fileSize,
+            picSummary: picSummary, cameraSettings: cameraSettings
         };
 
         try {
@@ -226,6 +227,28 @@ export default class RoomsService {
             return await response.json();
         } catch(err) {
             Logger.log('addServerPeer ' + err);
+            throw err;
+        }
+    }
+
+    async update(hash, update) {
+
+        try {
+            let response = await fetch(this.url + '/' + hash, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(update)});
+
+            if (!response.ok) {
+                throw new Error(response.status); // 404
+            }
+
+            return await response.json();
+        } catch(err) {
+            Logger.log('update ' + err);
             throw err;
         }
     }

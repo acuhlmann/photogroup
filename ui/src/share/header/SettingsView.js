@@ -22,6 +22,7 @@ import RoomsService from '../RoomsService';
 import moment from "moment";
 import Typography from "@material-ui/core/Typography/Typography";
 import PeersView from "./PeersView";
+import QRCodeButton from "./QRCodeButton";
 
 /*function Transition(props) {
     return <Slide direction="down" {...props} />;
@@ -40,6 +41,8 @@ class SettingsView extends Component {
             messages: [],
             open: false,
             peerId: '',
+            //showTopology: false,
+            //showOtherPeers: true
         };
 
         const { classes, master } = props;
@@ -223,9 +226,12 @@ class SettingsView extends Component {
         });
     }
 
-    handleChange(event) {
-        //this.setState({showTopology: event.target.checked})//
+    handleTopologyChange(event) {
         this.master.emitter.emit('showTopology', event.target.checked);
+    };
+
+    handleOtherPeersChange(event) {
+        this.master.emitter.emit('showOtherPeers', event.target.checked);
     };
 
     render() {
@@ -245,7 +251,7 @@ class SettingsView extends Component {
                 <Typography variant="caption">{messageContent}</Typography>
             </div>;
 
-        const {showTopology} = this.state;
+        const {showTopology, showOtherPeers} = this.state;
 
         return (
             <div>
@@ -263,8 +269,9 @@ class SettingsView extends Component {
                     //TransitionComponent={Transition}
                     keepMounted
                 >
-                    <DialogTitle>Logs</DialogTitle>
+                    <DialogTitle>Settings</DialogTitle>
                     <DialogActions>
+                        <QRCodeButton />
                         <IconButton
                             aria-haspopup="true"
                             onClick={this.requestBLE.bind(this)}
@@ -287,13 +294,24 @@ class SettingsView extends Component {
                             <FormControlLabel
                                 control={
                                     <Switch
-                                        onChange={this.handleChange.bind(this)}
+                                        onChange={this.handleTopologyChange.bind(this)}
                                         checked={showTopology}
                                         value="showTopology"
                                         color="primary"
                                     />
                                 }
-                                label="Topology"
+                                label="Topology View"
+                            />
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        onChange={this.handleOtherPeersChange.bind(this)}
+                                        checked={showOtherPeers}
+                                        value="showOtherPeers"
+                                        color="primary"
+                                    />
+                                }
+                                label="Other Peers View"
                             />
                         </FormGroup>
                         <Typography variant={"caption"}>v2 {this.state.peerId}</Typography>

@@ -98,7 +98,8 @@ export default class GalleryModel {
             size: fileSize.size + fileSize.type,
             torrent: torrent,
             secure: secure,
-            sharedBy: sharedBy || {}
+            sharedBy: sharedBy || {},
+            seed: seed
         });
         this.updateTiles();
 
