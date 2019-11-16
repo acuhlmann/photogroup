@@ -11,6 +11,7 @@ export default class TopologyHelper {
     start() {
 
         this.master.service.getNetwork().then(graph => {
+            if(!graph) return;
             this.graph = graph;
 
             this.process(graph);
@@ -21,6 +22,7 @@ export default class TopologyHelper {
 
         //this.reset();
         this.master.service.getNetwork().then(graph => {
+            if(!graph) return;
             this.graph = graph;
 
             this.process(graph);

@@ -1,8 +1,7 @@
 //-------------------Web Peers
 
 const IpTranslator = require('./IpTranslator');
-const Tracker = require('./Tracker');
-const Topology = require('./Topology');
+const _ = require('lodash');
 
 module.exports = class Peers {
 
@@ -12,6 +11,7 @@ module.exports = class Peers {
         this.app = app;
         this.emitter = emitter;
 
+        this.clientsBySessionId = new Map();
         this.webPeers = new Map();
         this.peerIdBySessionId = new Map();
         IpTranslator.lookedUpIPs = new Map();
@@ -79,6 +79,23 @@ module.exports = class Peers {
                 response.status(400).send();
             }
         });
+
+        this.app.put('/api/peers/:id', (request, response) => {
+
+            const id = request.params.id;
+            const peer = this.webPeers.get(id);
+            if(!peer) {
+
+                return response.status(404).send('Peer not found');
+
+            } else {
+
+                const newItem = request.body;
+                _.merge(peer, newItem);
+                this.sendWebPeers();
+                response.send(peer);
+            }
+        });
     }
 
     setupSSE() {
@@ -108,6 +125,7 @@ module.exports = class Peers {
             }
 
             this.peerIdBySessionId.delete(sessionId);
+            this.clientsBySessionId.delete(sessionId);
 
             this.sendConnectionCount(channel.connectionCount);
         });
@@ -115,7 +133,11 @@ module.exports = class Peers {
         this.app.get('/api/updates/', (request, response) => {
 
             response.header('X-Accel-Buffering', 'no');
-            this.updateChannel.addClient(request, response);
+            const client = response;
+            this.updateChannel.addClient(request, response, (error, foo) => {
+                const sessionId = client.req.query.sessionId;
+                this.clientsBySessionId.set(sessionId, client);
+            });
         });
     }
 

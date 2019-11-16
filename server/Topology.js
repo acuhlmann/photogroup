@@ -2,7 +2,8 @@ const IpTranslator = require('./IpTranslator');
 
 module.exports = class Topology {
 
-    constructor(updateChannel, remoteLog, app, emitter, peersModel, tracker) {
+    constructor(rooms, updateChannel, remoteLog, app, emitter, peersModel, tracker) {
+        this.rooms = rooms;
         this.updateChannel = updateChannel;
         this.remoteLog = remoteLog;
         this.app = app;
@@ -121,37 +122,52 @@ module.exports = class Topology {
     }
 
     start() {
-        this.app.get('/api/rooms/1/network', (request, response) => {
+        this.app.get('/api/rooms/network', (request, response) => {
 
-            response.send(this.graph);
+            const room = true;//this.rooms.get(request.params.id);
+            if(!room) {
+
+                return response.status(404).send('Room not found');
+
+            } else {
+                response.send(this.graph);
+            }
         });
 
-        this.app.post('/api/rooms/1/network', (request, response) => {
+        this.app.post('/api/rooms/network', (request, response) => {
 
-            const peerId = request.body.peerId;
-            const network = request.body.networkChain;
+            const room = true;//this.rooms.get(request.params.id);
+            if(!room) {
 
-            if(!peerId) {
-                response.status(400).send();
-            }
+                return response.status(404).send('Room not found');
 
-            const notTranslatedIps = network.map(ip => {
-                ip.ip = IpTranslator.createEmptyIpObj(ip.ip);
-                return ip;
-            });
-            this.updateWebPeers(notTranslatedIps, peerId);
+            } else {
 
-            IpTranslator.enrichCandidateIPs(network).then(results => {
+                const peerId = request.body.peerId;
+                const network = request.body.networkChain;
 
-                if(this.peers[peerId]) {
-
-                    this.updateWebPeers(results, peerId);
-
-                    response.send();
-                } else {
+                if(!peerId) {
                     response.status(400).send();
                 }
-            });
+
+                const notTranslatedIps = network.map(ip => {
+                    ip.ip = IpTranslator.createEmptyIpObj(ip.ip);
+                    return ip;
+                });
+                this.updateWebPeers(notTranslatedIps, peerId);
+
+                IpTranslator.enrichCandidateIPs(network).then(results => {
+
+                    if(this.peers[peerId]) {
+
+                        this.updateWebPeers(results, peerId);
+
+                        response.send();
+                    } else {
+                        response.status(400).send();
+                    }
+                });
+            }
         });
     }
 
@@ -277,11 +293,9 @@ module.exports = class Topology {
         if(!pgNode || pgNode.id !== photogroup) {
 
             const hostNetwork = this.peersModel.pgServer;
-            const originServerLabel = hostNetwork.originServerHost + ':' + hostNetwork.originServerPort;
             const node = {
                 id: photogroup,
-                //originServerLabel + ' > ' +
-                label: photogroup + '\n' + hostNetwork.hostname +
+                label: photogroup + '\n' + hostNetwork ? hostNetwork.hostname : '' +
                     + '\n'
                     + this.addEmptySpaces(
                         [hostNetwork.ip.city,
@@ -370,7 +384,8 @@ module.exports = class Topology {
                             nodes = nodes.splice(clientIndex, 1);
                         }
                         indexObj.originPlatform = peer.originPlatform;
-                        node.label = this.slimPlatform(peer.originPlatform) + '\n' + this.createCandTitleHost(item);
+                        node.name = peer.name ? peer.name + ' - ' : '';
+                        node.label = node.name + this.slimPlatform(peer.originPlatform) + '\n' + this.createCandTitleHost(item);
                         this.createClient(node);
 
                     } else {
@@ -395,7 +410,6 @@ module.exports = class Topology {
                 }
             });
 
-
             const serverPeerNodes = nodes.filter(node => node.originPlatform === 'photogroup.network');
             if(serverPeerNodes && serverPeerNodes.length > 1) {
 
@@ -406,7 +420,7 @@ module.exports = class Topology {
                         this.createSingleEdge(edges,
                             node.id,
                             nextNode.id,
-                            peerId)
+                            peerId, nextNode.networkType)
                     }
                 });
 
@@ -431,7 +445,7 @@ module.exports = class Topology {
                         .forEach(nat => this.createSingleEdge(edges,
                             nat.id,
                             node.id,
-                            peerId));
+                            peerId, node.networkType));
                 } else if(node.networkType === 'client' && node.originPlatform !== 'photogroup.network') {
 
                     let nats = nodes.filter(node2 => node2.networkType === 'nat' && node2.peers.includes(node.peerId));
@@ -443,7 +457,7 @@ module.exports = class Topology {
                         this.createSingleEdge(edges,
                             node.id,
                             firstNat.id,
-                            peerId);
+                            peerId, firstNat.networkType);
                     }
                 } else if(node.networkType === 'relay') {
 
@@ -452,7 +466,7 @@ module.exports = class Topology {
                         this.createSingleEdge(edges,
                             idNode.id,
                             node.id,
-                            peerId);
+                            peerId, node.networkType);
                     } else {
                         console.warn('No nat node type found')
                     }
@@ -474,7 +488,7 @@ module.exports = class Topology {
         return type === 'srflx' || type === 'prflx'
     }
 
-    createSingleEdge(edges, from, to, peerId) {
+    createSingleEdge(edges, from, to, peerId, networkType) {
         const key = from + '/' + to;
         if(!this.edgesByFromTo.has(key)) {
             const edge = {
@@ -483,7 +497,8 @@ module.exports = class Topology {
                 from: from,
                 to: to,
                 arrows: '',
-                peerId: peerId
+                peerId: peerId,
+                networkType: networkType
             };
             edges.push(edge);
             this.edgesByFromTo.set(key, edge);

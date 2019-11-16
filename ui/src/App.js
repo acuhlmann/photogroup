@@ -22,6 +22,7 @@ import Uploader from "./share/loader/Uploader";
 
 import { SnackbarProvider } from 'notistack';
 import Visibility from "visibilityjs";
+import QRCodeButton from "./share/header/QRCodeButton";
 
 const styles = {
     typography: {
@@ -133,6 +134,7 @@ class App extends Component {
                                             Zero Install, Peer-to-Peer Photo Group Collaboration.
                                         </Typography>
                                     </div>
+                                    <QRCodeButton master={this.master}/>
                                     <Uploader model={this.master.torrentAddition}
                                               loader={this.master.torrentAddition.loader} />
                                     <SettingsView master={this.master} emitter={this.master.emitter}/>

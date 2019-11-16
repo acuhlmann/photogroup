@@ -12,14 +12,16 @@ module.exports = class Room {
         this.app = app;
         this.emitter = emitter;
         this.peers = peers;
+        this.ice = ice;
 
-        this.serverPeer = new ServerPeer(updateChannel, remoteLog, app, peers, this, ice, emitter);
+        this.rooms = new Map();
 
-        this.urls = [];
-
-        //dispatched by Peer
+        //dispatched by Peers when someone disconnects, need to remove all ownerships.
         emitter.on('removeOwner', (peerId) => {
-            this.removeOwner(peerId);
+
+            Object.values(this.rooms).forEach(room => {
+                this.removeOwner(room, peerId);
+            });
         });
     }
 
@@ -31,171 +33,248 @@ module.exports = class Room {
     }
 
     reset() {
-        this.urls.length = 0;
-        this.serverPeer.reset();
+        this.rooms.clear();
         this.peers.reset();
     }
 
     registerRoomRoutes(app) {
-        let urls = this.urls;
-
-        app.get('/api/rooms', (request, response) => {
-            response.send({'1': urls});
-        });
+        const rooms = this.rooms;
 
         app.delete('/api/rooms', (request, response) => {
             this.reset();
             response.send({message: 'success'});
         });
 
-        app.get('/api/rooms/1', (request, response) => {
+        app.post('/api/rooms/', (request, response) => {
 
-            response.send(urls);
+            const id = request.body.id;
+            const room = {
+                id: id,
+                clientsByRooms: new Map(),
+                urls: [],
+                serverPeer: new ServerPeer(this.remoteLog, this.peers, this, this.ice, this.emitter)
+            };
+            room.clientsByRooms.set(id, []);
+
+            rooms.set(id, room);
+            response.send({
+                urls: room.urls
+            });
         });
 
-        app.delete('/api/rooms/1', (request, response) => {
-            const hash = request.body.hash;
-            const origin = request.body.origin;
+        app.get('/api/rooms/:id', (request, response) => {
 
-            let found = undefined;
-            if (hash) {
-                this.serverPeer.removeTorrent(hash);
-                found = urls.find((item, index) => {
-                    if (item.hash === hash) {
-
-                        const parsed = magnet(item.url);
-                        const event = Peers.peerToAppPeer(item.sharedBy);
-                        event.file = parsed.dn;
-                        event.origin = origin;
-                        this.emitter.emit('event', 'warning', 'picRemove', event);
-
-                        urls.splice(index, 1);
-                        return true;
+            const id = request.params.id;
+            const room = rooms.get(id);
+            if(room) {
+                const sessionId = request.query.sessionId;
+                if(sessionId) {
+                    const client = this.peers.clientsBySessionId.get(sessionId);
+                    const clients = room.clientsByRooms.get(id);
+                    if(!clients.find(item => item.req.query.sessionId === client.req.query.sessionId)) {
+                        clients.push(client);
                     }
-                    return false;
+                }
+
+                response.send({
+                    urls: room.urls
                 });
 
-                if (found) {
-                    this.sendUrls();
-                }
+            } else {
+
+                response.status(404).send('Room not found');
             }
-            response.send([found]);
         });
 
-        //let wtServer;
-        app.post('/api/rooms/1', (request, response) => {
+        app.delete('/api/rooms/:id', (request, response) => {
 
-            const url = request.body.url;
-            const hash = request.body.hash;
+            const id = request.params.id;
+            const room = rooms.get(id);
+            if(room) {
 
-            const serverPeer = request.body.serverPeer;
-
-            if(serverPeer && url) {
-
-                this.serverPeer.start(url, request, response);
-
-            } else {
-                const peerId = request.body.peerId;
+                const hash = request.body.hash;
                 const origin = request.body.origin;
 
-                if(!peerId) {
-                    response.status(400).send();
-                    return;
-                }
+                let found = undefined;
+                if (hash) {
+                    room.serverPeer.removeTorrent(hash);
+                    found = room.urls.find((item, index) => {
+                        if (item.hash === hash) {
 
-                let urlItem;
-                if (url) {
-                    urlItem = this.findUrl(hash);
-                    if (!urlItem) {
-                        const peer = this.peers.webPeers.get(peerId);
-                        if(!peer) {
-                            this.remoteLog('add url: no webPeer for ' + hash);
-                            response.status(500).send();
-                            return;
+                            const parsed = magnet(item.url);
+                            const event = Peers.peerToAppPeer(item.sharedBy);
+                            event.file = parsed.dn;
+                            event.origin = origin;
+                            this.emitter.emit('event', 'warning', 'picRemove', event);
+
+                            room.urls.splice(index, 1);
+                            return true;
                         }
-                        urlItem = request.body;
-                        urlItem.owners = [];
-                        urlItem.sharedBy = peer;
-                        urls.push(urlItem);
+                        return false;
+                    });
 
-                        const parsed = magnet(url);
-                        const event = Peers.peerToAppPeer(peer);
-                        event.file = parsed.dn;
-                        event.origin = origin;
-                        this.emitter.emit('event', 'info', 'picAdd', event);
+                    if (found) {
+                        this.sendUrls(room);
                     }
                 }
-                this.addOwner(urlItem.hash, peerId);
+                response.send([found]);
 
-                response.send(urlItem);
+            } else {
+                response.status(404).send('Room not found');
             }
         });
 
-        app.put('/api/rooms/1/:hash', (request, response) => {
+        app.post('/api/rooms/:id/photos', (request, response) => {
 
-            const hash = request.params.hash;
-            const existingUrl = this.findUrl(hash);
-            const newUrl = request.body;
-            _.merge(existingUrl, newUrl);
+            const id = request.params.id;
+            const room = rooms.get(id);
+            if(!room) {
 
-            this.sendUrls();
-            response.send(existingUrl);
+                return response.status(404).send('Room not found');
+
+            } else {
+
+                const url = request.body.url;
+                const hash = request.body.hash;
+
+                const serverPeer = request.body.serverPeer;
+
+                if(serverPeer && url) {
+
+                    this.room.serverPeer.start(room, url, request, response);
+
+                } else {
+                    const peerId = request.body.peerId;
+                    const origin = request.body.origin;
+
+                    if(!peerId) {
+                        response.status(400).send();
+                        return;
+                    }
+
+                    let urlItem;
+                    if (url) {
+                        urlItem = this.findUrl(room.urls, hash);
+                        if (!urlItem) {
+                            const peer = this.peers.webPeers.get(peerId);
+                            if(!peer) {
+                                this.remoteLog('add url: no webPeer for ' + hash);
+                                response.status(500).send();
+                                return;
+                            }
+                            urlItem = request.body;
+                            urlItem.owners = [];
+                            urlItem.sharedBy = peer;
+
+                            room.urls.push(urlItem);
+
+                            const parsed = magnet(url);
+                            const event = Peers.peerToAppPeer(peer);
+                            event.file = parsed.dn;
+                            event.origin = origin;
+                            this.emitter.emit('event', 'info', 'picAdd', event);
+                        }
+                    }
+                    this.addOwner(room, urlItem.hash, peerId);
+
+                    response.send(urlItem);
+                }
+            }
+        });
+
+        app.put('/api/rooms/:id/photos/', (request, response) => {
+
+            const id = request.params.id;
+            const room = rooms.get(id);
+            if(!room) {
+
+                return response.status(404).send('Room not found');
+
+            } else {
+
+                const hash = request.body.hash;
+                const existingUrl = this.findUrl(room.urls, hash);
+                const newUrl = request.body;
+                _.merge(existingUrl, newUrl);
+                existingUrl.picSummary = this.createPicSummary(existingUrl);
+                this.sendUrls(room);
+                response.send(existingUrl);
+            }
         });
     }
 
-
-    findUrl(url) {
-        return this.findByField('hash', url);
+    createPicSummary(url) {
+        return url.picDateTaken + ' ' + url.picTitle
+            + ' ' + url.picDesc + url.fileName;
     }
 
-    findByField(field, value) {
-        const index = this.urls.findIndex(item => item[field] === value);
+    findUrl(urls, hash) {
+        return this.findByField(urls, 'hash', hash);
+    }
+
+    findByField(urls, field, value) {
+        const index = urls.findIndex(item => item[field] === value);
         let foundItem = null;
         if(index => 0) {
-            foundItem = this.urls[index];
+            foundItem = urls[index];
         }
         return foundItem;
     }
 
     registerOwnerRoutes(app) {
-        app.post('/api/rooms/1/owners', (request, response) => {
+        app.post('/api/rooms/:id/photos/owners', (request, response) => {
 
-            const owner = {
-                channel: '1',
-                infoHash: request.body.infoHash,
-                peerId: request.body.peerId
-            };
+            const id = request.params.id;
+            const room = this.rooms.get(id);
+            if(!room) {
 
-            owner.platform = this.addOwner(owner.infoHash, owner.peerId);
+                return response.status(404).send('Room not found');
 
-            response.send(owner);
+            } else {
+
+                const owner = {
+                    infoHash: request.body.infoHash,
+                    peerId: request.body.peerId
+                };
+
+                owner.platform = this.addOwner(room, owner.infoHash, owner.peerId);
+
+                response.send(owner);
+            }
         });
 
-        app.delete('/api/rooms/1/owners', (request, response) => {
+        app.delete('/api/rooms/:id/photos/owners', (request, response) => {
 
-            const owner = {
-                channel: '1',
-                infoHash: request.body.infoHash,
-                peerId: request.body.peerId
-            };
+            const room = this.rooms.get(request.params.id);
+            if(!room) {
 
-            this.urls.find(item => {
-                if(item.hash === owner.infoHash) {
-                    this.removeOwner(owner.peerId);
-                    return true;
-                } else {
-                    return false;
-                }
-            });
+                return response.status(404).send('Room not found');
 
-            response.send(owner)
+            } else {
+
+                const owner = {
+                    infoHash: request.body.infoHash,
+                    peerId: request.body.peerId
+                };
+
+                room.urls.find(item => {
+                    if(item.hash === owner.infoHash) {
+                        this.removeOwner(room, owner.peerId);
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
+
+                response.send(owner)
+            }
         });
     }
 
-    addOwner(infoHash, peerId) {
+    addOwner(room, infoHash, peerId) {
 
         let platform = '';
-        this.urls.find(item => {
+        room.urls.find(item => {
             if(item.hash === infoHash) {
                 const peer = this.peers.webPeers.get(peerId);
                 //TODO, add pg to peer.
@@ -213,31 +292,30 @@ module.exports = class Room {
             }
         });
 
-        this.sendUrls();
+        this.sendUrls(room);
 
         return platform;
     }
 
-    removeOwner(peerId) {
-        this.urls.forEach(item => {
+    removeOwner(room, peerId) {
+        room.urls.forEach(item => {
             const index = item.owners.findIndex(owner => owner.peerId === peerId);
             if(index >= 0) {
                 item.owners.splice(index, 1);
 
-                if(this.serverPeer.hasPeerId(peerId)) {
-                    this.serverPeer.removeTorrent(item.hash);
+                if(room.serverPeer.hasPeerId(peerId)) {
+                    room.serverPeer.removeTorrent(item.hash);
                 }
             }
         });
 
-        this.sendUrls();
+        this.sendUrls(room);
     }
 
     registerConnectionRoutes(app) {
-        app.post('/api/rooms/1/connections', (request, response) => {
+        app.post('/api/rooms/:id/photos/connections', (request, response) => {
 
             const connection = {
-                channel: '1',
                 from: request.body.from,
                 to: request.body.to,
                 arrows: request.body.arrows,
@@ -252,7 +330,7 @@ module.exports = class Room {
             response.send(connection)
         });
 
-        app.delete('/api/rooms/1/connections', (request, response) => {
+        app.delete('/api/rooms/:id/photos/connections', (request, response) => {
 
             const hash = request.body.hash;
 
@@ -262,10 +340,11 @@ module.exports = class Room {
         });
     }
 
-    sendUrls() {
+    sendUrls(room) {
+        const clients = room.clientsByRooms.get(room.id);
         this.updateChannel.send({
             event: 'urls',
-            data: { urls: this.urls }
-        });
+            data: { urls: room.urls }
+        }, clients);
     }
 };

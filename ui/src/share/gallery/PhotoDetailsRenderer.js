@@ -51,7 +51,7 @@ export default class PhotoDetailsRenderer {
             flexDirection: 'row',
             alignItems: 'center'
         }}><TextField
-            //label="File Name"
+            placeholder="File Name"
             margin="normal"
             variant="outlined"
             defaultValue={FileUtil.getFileNameWithoutSuffix(name)}

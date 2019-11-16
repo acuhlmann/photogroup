@@ -9,11 +9,11 @@ module.exports = class ServerSetup {
         const SseChannel = require('sse-channel');
         this.updateChannel = new SseChannel({
             retryTimeout: 1000,
-            historySize: 300,
+            historySize: 500,
             pingInterval: 4000,
             jsonEncode: true,
             cors: {
-                origins: ['*'] // Defaults to []
+                origins: [] // Defaults to []
             }
         });
 

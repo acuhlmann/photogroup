@@ -23,13 +23,25 @@ import moment from "moment";
 import Typography from "@material-ui/core/Typography/Typography";
 import PeersView from "./PeersView";
 import QRCodeButton from "./QRCodeButton";
+import FileUtil from "../util/FileUtil";
+import TextField from "@material-ui/core/TextField";
+import _ from "lodash";
 
 /*function Transition(props) {
     return <Slide direction="down" {...props} />;
 }*/
 
 const styles = theme => ({
-
+    horizontal: {
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    vertical: {
+        display: 'flex',
+        flexDirection: 'column'
+    },
 });
 
 class SettingsView extends Component {
@@ -74,14 +86,25 @@ class SettingsView extends Component {
     }
 
     showLogs() {
-        SettingsView.getAll().then(dom => {
-            this.setState({
-                urls: dom
+        if(!this.master) {
+            this.master.emitter.on('addPeerDone', () => {
+
+                this.getLogs();
             });
-        });
+        } else {
+            this.getLogs();
+        }
 
         this.setState({
             open: true
+        });
+    }
+
+    getLogs() {
+        this.getAll().then(dom => {
+            this.setState({
+                urls: dom
+            });
         });
     }
 
@@ -89,12 +112,12 @@ class SettingsView extends Component {
         this.setState({ open: false });
     }
 
-    static handleReset() {
+    handleReset() {
         RoomsService.deleteAll();
     }
 
-    static getAll() {
-        return RoomsService.getAll().then(result => {
+    getAll() {
+        return this.master.service.find(this.master.service.id).then(result => {
             let msg = '';
             for (let key in result) {
                 //msg += 'Room: ' + key + '\n\n';
@@ -234,7 +257,40 @@ class SettingsView extends Component {
         this.master.emitter.emit('showOtherPeers', event.target.checked);
     };
 
+    handleShowMeChange(event) {
+        this.master.emitter.emit('showMe', event.target.checked);
+    };
+
+    batchChangeName(event) {
+
+        if(!event.target) return;
+
+        console.log('change name ' + event.target.value);
+        this.master.service.updatePeer(this.master.client.peerId, {
+            name: event.target.value
+        });
+    }
+
+    buildNameEntry() {
+        const init = this.master && this.master.client && this.master.client.peerId && this.master.me;
+        return init ? <span style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center'
+        }}><TextField
+            placeholder="Your Name"
+            margin="normal"
+            variant="outlined"
+            defaultValue={this.master.me.name}
+            onChange={
+                _.debounce(this.batchChangeName.bind(this), 2000, { 'leading': true })
+            }
+        /></span> : '';
+    }
+
     render() {
+        const {classes} = this.props;
+
         const messageContent = this.state.messages
             .map((value, index) => (
             <div key={index}>
@@ -242,7 +298,7 @@ class SettingsView extends Component {
             </div>
             ))
             .concat(
-                <Button key='delete' onClick={SettingsView.handleReset.bind(this)} color="primary">
+                <Button key='delete' onClick={this.handleReset.bind(this)} color="primary">
                     Del server state
                 </Button>);
 
@@ -251,7 +307,7 @@ class SettingsView extends Component {
                 <Typography variant="caption">{messageContent}</Typography>
             </div>;
 
-        const {showTopology, showOtherPeers} = this.state;
+        const {showTopology, showOtherPeers, showMe} = this.state;
 
         return (
             <div>
@@ -270,26 +326,7 @@ class SettingsView extends Component {
                     keepMounted
                 >
                     <DialogTitle>Settings</DialogTitle>
-                    <DialogActions>
-                        <QRCodeButton />
-                        <IconButton
-                            aria-haspopup="true"
-                            onClick={this.requestBLE.bind(this)}
-                            color="inherit"
-                        >
-                            <Bluetooth />
-                        </IconButton>
-                        <Button onClick={this.restartTrackers.bind(this)} color="secondary">
-                            wt track
-                        </Button>
-                        <PeersView emitter={this.master.emitter} />
-                        <IconButton
-                            onClick={this.handleClose.bind(this)}
-                        >
-                            <CloseRounded />
-                        </IconButton>
-                    </DialogActions>
-                    <DialogContent>
+                    <DialogActions className={classes.vertical}>
                         <FormGroup row>
                             <FormControlLabel
                                 control={
@@ -313,8 +350,38 @@ class SettingsView extends Component {
                                 }
                                 label="Other Peers View"
                             />
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        onChange={this.handleShowMeChange.bind(this)}
+                                        checked={showMe}
+                                        value="showMe"
+                                        color="primary"
+                                    />
+                                }
+                                label="Me View"
+                            />
                         </FormGroup>
-                        <Typography variant={"caption"}>v2 {this.state.peerId}</Typography>
+                        <span className={classes.horizontal}>
+                            <IconButton
+                                aria-haspopup="true"
+                                onClick={this.requestBLE.bind(this)}
+                                color="inherit"
+                            >
+                                <Bluetooth />
+                            </IconButton>
+                            <Button onClick={this.restartTrackers.bind(this)} color="secondary">
+                                wt track
+                            </Button>
+                            <PeersView emitter={this.master.emitter} />
+                            <IconButton
+                                onClick={this.handleClose.bind(this)}>
+                                <CloseRounded />
+                            </IconButton>
+                        </span>
+                    </DialogActions>
+                    <DialogContent>
+                        <Typography variant={"caption"}>v3 {this.state.peerId}</Typography>
                         {messages}
                     </DialogContent>
                 </Dialog>

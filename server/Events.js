@@ -14,7 +14,7 @@ module.exports = class Events {
 
     start() {
 
-        this.app.post('/api/events', (request, response) => {
+        this.app.post('/api/rooms/:id/photos/events', (request, response) => {
 
             const level = request.body.level;
             const type = request.body.type;

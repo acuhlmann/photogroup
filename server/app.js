@@ -40,7 +40,7 @@ function init(pgServer) {
     const tracker = new Tracker(updateChannel, remoteLog, app, emitter, peers);
     tracker.start();
 
-    const network = new Topology(updateChannel, remoteLog, app, emitter, peers, tracker);
+    const network = new Topology(room.rooms, updateChannel, remoteLog, app, emitter, peers, tracker);
     network.start();
 
     if(pgServer) {

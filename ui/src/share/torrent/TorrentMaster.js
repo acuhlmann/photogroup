@@ -23,6 +23,13 @@ export default class TorrentMaster {
         this.service.emitter.on('urls', urls => {
             scope.syncUiWithServerUrls(urls);
         });
+        emitter.on('webPeers', peers => {
+
+            if(!this.client || !this.client.peerId || !peers) return;
+
+            const peerId = this.client.peerId;
+            this.me = peers[peerId];
+        });
         this.emitter = emitter;
 
         this.torrentsDb = new IdbKvStore('torrents');
@@ -71,24 +78,26 @@ export default class TorrentMaster {
         return this.service.find()
             .then(response => {
 
-            let foundAnyMissing;
-            let msg = response.length + '\n';
-            response.forEach(item => {
-                item.sharedBy = item.sharedBy || {};
+                if(!response) return;
 
-                if(this.fillMissingOwners(item)) {
-                    foundAnyMissing = true;
+                let foundAnyMissing;
+                let msg = response.urls.length + '\n';
+                response.urls.forEach(item => {
+                    item.sharedBy = item.sharedBy || {};
+
+                    if(this.fillMissingOwners(item)) {
+                        foundAnyMissing = true;
+                    }
+
+                    msg += item.hash + ' '  + item.secure + ' ' + item.sharedBy.originPlatform + ' ' + item.sharedBy.ips + '\n';
+                });
+                Logger.info('current server sent Urls: ' + msg);
+
+                this.hasPeer = true;
+
+                if(!foundAnyMissing) {
+                    self.emitter.emit('urls', response.urls);
                 }
-
-                msg += item.hash + ' '  + item.secure + ' ' + item.sharedBy.originPlatform + ' ' + item.sharedBy.ips + '\n';
-            });
-            Logger.info('current server sent Urls: ' + msg);
-
-            this.hasPeer = true;
-
-            if(!foundAnyMissing) {
-                self.emitter.emit('urls', response);
-            }
         });
     }
 

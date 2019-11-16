@@ -13,6 +13,8 @@ import Dialog from "@material-ui/core/Dialog/Dialog";
 import DialogContent from "@material-ui/core/DialogContent/DialogContent";
 import DialogActions from "@material-ui/core/DialogActions/DialogActions";
 import Button from "@material-ui/core/Button/Button";
+import CloseRounded from "@material-ui/core/SvgIcon/SvgIcon";
+import QRCodeView from "../security/QRCodeView";
 
 //import Slide from '@material-ui/core/Slide';
 //import PasswordInput from "../security/PasswordInput";
@@ -43,8 +45,9 @@ class Uploader extends Component {
         this.loader = loader;
 
         this.state = {
+            visible: false,
             open: false,
-            disabled: true
+            disabled: true,
         };
 
         model.emitter.on('webPeers', () => {
@@ -53,10 +56,15 @@ class Uploader extends Component {
                 this.setState({disabled: false})
             }
         });
+
+        model.emitter.on('openRoomEnd', () => {
+            this.setState({
+                visible: true
+            });
+        });
     }
 
     handleUpload(event) {
-        //this.show(true);
 
         const files = event.target.files;
         if(!files[0]) {
@@ -67,25 +75,20 @@ class Uploader extends Component {
         Logger.info('handleUpload ' + file.name);
 
         this.uploaderDom = event.target || event.srcElement;
-
-        this.share(false);
-    }
-
-    share() {
+        //this.uploaderDom.value = '';
 
         this.seed(false);
-        this.show(false);
-    }
-
-    secureShare() {
-
-        this.seed(true);
-        this.show(false);
     }
 
     cancel() {
         this.show(false);
         this.uploaderDom.value = '';
+    }
+
+    show(open) {
+        this.setState({
+            open: open
+        });
     }
 
     seed(secure) {
@@ -99,31 +102,35 @@ class Uploader extends Component {
         });
     }
 
-    show(open) {
-        this.setState({
-            open: open
-        });
+    hasRoom() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.has('room');
     }
 
     render() {
         const {classes} = this.props;
+        const {visible, disabled} = this.state;
+        const hasRoom = this.hasRoom();
 
         return (
-            <div>
+            visible || hasRoom ? <div>
                 <input
                     accept="image/*"
                     className={classes.input}
-                    id="contained-button-file" disabled={this.state.disabled}
+                    id="contained-button-file" disabled={disabled}
                     type="file" onChange={this.handleUpload.bind(this)}
                 />
                 <label htmlFor="contained-button-file">
                     <IconButton
                         aria-haspopup="true"
-                        color="inherit" variant="contained" component="span" disabled={this.state.disabled}
+                        color="inherit" variant="contained"
+                        component="span"
+                        disabled={disabled}
                     >
                         <CloudUploadRounded />
                     </IconButton>
                 </label>
+
                 <LoaderView loader={this.loader}/>
 
                 <Dialog
@@ -134,9 +141,6 @@ class Uploader extends Component {
                 >
                     <DialogContent>
                         <div>
-                            <Button variant="contained" onClick={this.share.bind(this, false)} color="secondary">
-                                Share
-                            </Button>
                             {/*<div>or encrypt with</div>
                             <span style={{display: 'flex'}}>
                                 <PasswordInput onChange={value => this.setState({password: value})} />
@@ -147,12 +151,14 @@ class Uploader extends Component {
                         </div>
                     </DialogContent>
                     <DialogActions>
-                        <Button onClick={this.cancel.bind(this, false)} color="primary">
-                            Cancel
-                        </Button>
+                        <IconButton
+                            onClick={this.show.bind(this, false)}
+                        >
+                            <CloseRounded />
+                        </IconButton>
                     </DialogActions>
                 </Dialog>
-            </div>
+            </div> : <div></div>
         );
     }
 }

@@ -5,27 +5,20 @@ const util = require('util');
 
 module.exports = class ServerPeer {
 
-    constructor(updateChannel, remoteLog, app, peers, room, ice, emitter) {
+    constructor(remoteLog, peers, roomManager, ice, emitter) {
 
-        this.updateChannel = updateChannel;
         this.remoteLog = remoteLog;
-        this.app = app;
 
         this.peers = peers;
-        this.room = room;
+        this.roomManager = roomManager;
         this.ice = ice;
         this.emitter = emitter;
 
         this.webtorrent = {};
     }
 
-    reset() {
-        //if(this.webtorrent.client)
-        //    this.webtorrent.client.destroy();
-        //delete this.webtorrent.client;
-    }
-
-    start(url, request, response) {
+    start(room, url, request, response) {
+        this.room = room;
         const webtorrent = this.webtorrent;
 
         if(!webtorrent.client) {
@@ -129,7 +122,7 @@ module.exports = class ServerPeer {
                 if(!response.headersSent) {
 
                     //this.connect(torrent);
-                    this.room.addOwner(torrent.infoHash, this.webtorrent.client.peerId);
+                    this.roomManager.addOwner(this.room, torrent.infoHash, this.webtorrent.client.peerId);
                     this.peers.sendWebPeers();
                     response.send(request.body);
                 }

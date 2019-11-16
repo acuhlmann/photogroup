@@ -6,7 +6,6 @@ import ReactDOM from 'react-dom';
 import './index.css';
 import App from './App';
 import { NativeEventSource, EventSourcePolyfill } from 'event-source-polyfill';
-//import adapter from 'webrtc-adapter';
 
 const EventSource = NativeEventSource || EventSourcePolyfill;
 // OR: may also need to set as global property

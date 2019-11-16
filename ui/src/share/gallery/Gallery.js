@@ -117,12 +117,27 @@ class Gallery extends Component {
     }
 
     handleImageLoaded(tile, event) {
-        this.model.parser.readMetadata(tile, event, tile => {
+        this.model.parser.readMetadata(tile, event, async tile => {
 
             if(tile.seed) {
-                this.master.service.share(tile.torrent.infoHash, tile.torrent.magnetURI,
-                    tile.secure, tile.sharedBy, tile.size,
-                    tile.summary, tile.cameraSettings);
+
+                const url = {
+                    hash: tile.torrent.infoHash,
+                    url: tile.torrent.magnetURI,
+                    secure: tile.secure,
+                    peerId: tile.sharedBy.peerId,
+                    fileSize: tile.size,
+                    fileName: tile.fileName,
+                    picDateTaken: tile.dateTaken,
+                    picTitle: tile.title,
+                    picDesc: tile.desc,
+                    picSummary: tile.summary,
+                    cameraSettings: tile.cameraSettings,
+                };
+
+                await this.master.service.share(url);
+                //console.log('shared ' + shared);
+                await this.master.findExistingContent();
             }
         });
     }

@@ -2,15 +2,12 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import Gallery from "./gallery/Gallery";
 
-import { makeStyles } from '@material-ui/styles';
 import Button from '@material-ui/core/Button';
 
 import {withStyles, createMuiTheme } from '@material-ui/core/styles';
 import { ThemeProvider } from '@material-ui/styles';
 
 import Graph from 'vis-react';
-
-
 import Logger from 'js-logger';
 import ExpansionPanel from '@material-ui/core/ExpansionPanel';
 import ExpansionPanelSummary from '@material-ui/core/ExpansionPanelSummary';
@@ -19,20 +16,9 @@ import Typography from '@material-ui/core/Typography';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import { withSnackbar } from 'notistack';
 import TopologyHelper from './topology/TopologyHelper';
-
-import Paper from "@material-ui/core/Paper";
-import CircularProgress from '@material-ui/core/CircularProgress';
-import { green } from '@material-ui/core/colors';
-import Fab from '@material-ui/core/Fab';
-import CheckIcon from '@material-ui/icons/CheckRounded';
-import ImageIcon from '@material-ui/icons/ImageRounded';
-import AccountCircleRounded from '@material-ui/icons/AccountCircleRounded';
-import List from '@material-ui/core/List';
-import ListItem from '@material-ui/core/ListItem';
-import Divider from '@material-ui/core/Divider';
-import IconButton from "@material-ui/core/IconButton";
-import ClearIcon from '@material-ui/icons/Delete';
-import QRCode from "./security/QRCode";
+import OtherPeersView from "./OtherPeersView";
+import QRCodeView from "./security/QRCodeView";
+import MeView from "./MeView";
 
 const styles = theme => ({
     typography: {
@@ -58,32 +44,6 @@ const styles = theme => ({
     wordwrap: {
         wordWrap: 'break-word'
     },
-    fabProgress: {
-        position: 'absolute',
-        zIndex: 1,
-        left: '-7px',
-        top: '-5px'
-    },
-    imageIcon: {
-        position: 'relative',
-        //left: '-7px',
-        //top: '-5px'
-    },
-    vertical: {
-        display: 'flex',
-        flexDirection: 'column'
-    },
-    verticalAndWide: {
-        display: 'flex',
-        flexDirection: 'column',
-        width: '100%'
-    },
-    horizontal: {
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center'
-    }
 });
 
 class ShareCanvas extends Component {
@@ -124,27 +84,10 @@ class ShareCanvas extends Component {
             }, 1000);
         });*/
 
-        this.master.emitter.on('urls', urls => {
+        emitter.on('urls', urls => {
 
             this.setState({
                 urls: urls
-            });
-        });
-
-        this.master.emitter.on('networkTopology', data => {
-
-            if(!props.master.client) return;
-            this.setState({
-                otherPeers: data.nodes
-                    .filter(item => item.networkType === 'client'
-                        && item.peerId !== props.master.client.peerId)
-                    .filter(item => {
-                        if(item.originPlatform === 'photogroup.network'
-                            && item.network && item.network.type !== 'host')
-                            return false;
-                        else
-                            return true;
-                    })
             });
         });
 
@@ -178,7 +121,7 @@ class ShareCanvas extends Component {
                 msg = event.event.toAddr + ' is ' + event.type + ' ' + event.event.label + ' from ' + event.event.fromAddr;
             } else if(event.type === 'downloaded') {
 
-                if(event.event.downloader === props.master.client.peerId) {
+                if(event.event.downloader === props.master.client.peerId || !self.state.urls) {
                     return;
                 }
                 const downHash = event.event.downloader;
@@ -213,7 +156,6 @@ class ShareCanvas extends Component {
         this.state = {
             loader: {},
             expandedNetwork: true,
-            expandedPeers: true,
             expandedGallery: true,
             expandedInfo: true,
             eventStatus: '',
@@ -223,27 +165,32 @@ class ShareCanvas extends Component {
             options: this.topology.options,
             events: this.topology.events,
             showTopology: false,
-            showOtherPeers: true,
-            otherPeers: []
         };
 
         emitter.on('showTopology', value => {
             this.setState({showTopology: value});
         });
 
-        emitter.on('showOtherPeers', value => {
-            this.setState({showOtherPeers: value});
-        });
-
         emitter.on('pcEvent', (type, value) => {
 
             this[type] = value;
+
+            //scope.emitter.emit('pcEvent', 'icegatheringstatechange', '');
+            //scope.emitter.emit('pcEvent', 'iceconnectionstatechange', '');
+            //scope.emitter.emit('pcEvent', 'signalingstatechange', '');
 
             this.setState({
                 eventStatus: this.icegatheringstatechange
                     + ' ' + this.iceconnectionstatechange
                     + ' ' + this.signalingstatechange
             });
+        });
+
+        emitter.on('webPeers', () => {
+
+            emitter.emit('pcEvent', 'icegatheringstatechange', '');
+            emitter.emit('pcEvent', 'iceconnectionstatechange', '');
+            emitter.emit('pcEvent', 'signalingstatechange', '');
         });
 
         emitter.on('topStateMessage', msg => {
@@ -267,7 +214,7 @@ class ShareCanvas extends Component {
             console.log('matches display-mode:standalone PWA');
         }
 
-        if('Notification' in window && navigator.serviceWorker) {
+        /*if('Notification' in window && navigator.serviceWorker) {
             console.info('Notification.permission ' + Notification.permission);
             if(Notification.permission === 'granted') {
 
@@ -278,7 +225,7 @@ class ShareCanvas extends Component {
 
                 this.askForPush();
             }
-        }
+        }*/
     }
 
     displayNotification(payload) {
@@ -366,12 +313,16 @@ class ShareCanvas extends Component {
         this.setState({network: network});
     };
 
-    createNetworkTopology(expandedNetwork, classes) {
+    createNetworkTopology(expandedNetwork, classes, eventStatus, selectedNodeLabel) {
         return <ExpansionPanel expanded={expandedNetwork} onChange={this.handleExpand('expandedNetwork')}>
             <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography className={classes.heading}>Network Topology</Typography>
             </ExpansionPanelSummary>
-            <ExpansionPanelDetails className={classes.content}>
+            <ExpansionPanelDetails className={classes.content} style={{
+                display: 'flex',
+                flexDirection: 'column'
+            }}>
+                {this.showStatusMessage(eventStatus, selectedNodeLabel, classes)}
                 <Graph ref={node => this.graph = node} getNetwork={this.setNetworkInstance}
                        graph={this.state.graph} options={this.state.options} events={this.state.events}
                        style={{width: "100%", height: "400px"}}/>
@@ -379,86 +330,13 @@ class ShareCanvas extends Component {
         </ExpansionPanel>;
     }
 
-    removeServerPeer(hash, peerId) {
-        this.master.service.removeOwner(hash, peerId);
-    }
+    showStatusMessage(eventStatus, selectedNodeLabel, classes) {
 
-    createWhatPeersHave(otherPeers, expandedPeers, classes) {
-
-        return <ExpansionPanel expanded={expandedPeers} onChange={this.handleExpand('expandedPeers')}>
-            <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography className={classes.heading}>Other Peers</Typography>
-            </ExpansionPanelSummary>
-            <ExpansionPanelDetails className={classes.content}>
-                <div className={classes.verticalAndWide}>
-                    <QRCodeButton/>
-            {
-                otherPeers.map((peer, index) => {
-
-                    const owns = this.state.urls ? this.state.urls
-                        .map(url => {
-                            return url.owners.map(item => {
-                                item.url = url;
-                                return item;
-                            })
-                        })
-                        .flatMap(item => item)
-                        .filter(item => item.peerId === peer.peerId)
-                        .map(item => item.url) : [];
-
-                    return <Paper key={index} style={{
-                                                margin: '10px',
-                                                padding: '10px'
-                                            }}>
-                        <span
-                            className={classes.horizontal}>
-                            <AccountCircleRounded/>
-                            <Typography variant="caption" style={{
-                                marginLeft: '5px'
-                            }}>{peer.label}</Typography>
-                        </span>
-                        {owns.length > 0 ? <Divider variant="middle" /> : ''}
-                        {owns.length > 0 ?
-                            <List>
-                                {
-                                owns.map((url, index) => {
-                                    const have = url.owners
-                                        .find(owner => owner.peerId === this.master.client.peerId);
-                                    const pgOwner = url.owners
-                                        .find(owner => owner.platform === 'photogroup.network');
-                                    return <ListItem key={index}>
-                                            <span style={{
-                                                position: 'relative',
-                                                textAlign: 'center',
-                                                marginRight: '10px'
-                                            }}>
-                                                {have ? <CheckIcon /> : <ImageIcon className={classes.imageIcon} />}
-                                                {!have && <CircularProgress
-                                                    color="secondary"
-                                                    size={36} className={classes.fabProgress} />}
-                                            </span>
-                                            {
-                                                pgOwner
-                                                ? <IconButton
-                                                        onClick={this.removeServerPeer.bind(this,
-                                                            pgOwner.url.hash, pgOwner.peerId)}>
-                                                <ClearIcon/>
-                                            </IconButton> : ''
-                                            }
-                                            <Typography variant="caption" className={classes.wordwrap}>
-                                            {url.picSummary} {url.fileSize} {url.cameraSettings}
-                                        </Typography>
-                                        </ListItem>;
-                                    })
-                                }
-                            </List>
-                            : ''}
-                    </Paper>
-                })
-            }
-                </div>
-            </ExpansionPanelDetails>
-        </ExpansionPanel>
+        return <Typography variant="caption" align="center" className={classes.wordwrap}>
+            <div>{selectedNodeLabel}</div>
+            <div>{eventStatus}</div>
+            {/*<div>ratio: {client.ratio} progress: {client.progress} up: {client.uploadSpeed} down: {client.downloadSpeed}</div>*/}
+        </Typography>
     }
 
     render() {
@@ -467,30 +345,20 @@ class ShareCanvas extends Component {
 
         const { classes, master } = this.props;
         const {eventStatus, selectedNodeLabel, expandedNetwork,
-            expandedPeers, showTopology, showOtherPeers, otherPeers} = this.state;
+            showTopology} = this.state;
 
         const graphDom = showTopology ?
-            this.createNetworkTopology(expandedNetwork, classes)
+            this.createNetworkTopology(expandedNetwork, classes, eventStatus, selectedNodeLabel)
             : '';
 
-        let otherPeersView;
-        if(showOtherPeers) {
-            otherPeersView = otherPeers.length > 0
-                ? this.createWhatPeersHave(otherPeers, expandedPeers, classes)
-                : <Typography variant={"caption"}>No other peers</Typography>;
-        }
-
+        //{this.showStatusMessage(eventStatus, selectedNodeLabel, classes)}
         return (
             <ThemeProvider theme={defaultTheme}>
-                <Typography variant="caption" align="center" className={classes.wordwrap}>
-                    <div>{selectedNodeLabel}</div>
-                    <div>{eventStatus}</div>
-                    {/*<div>ratio: {client.ratio} progress: {client.progress} up: {client.uploadSpeed} down: {client.downloadSpeed}</div>*/}
-                </Typography>
 
+                {<QRCodeView master={master}/>}
                 {graphDom}
-                {otherPeersView}
-                <OtherPeersView />
+                <OtherPeersView master={master} />
+                <MeView master={master} />
                 <Gallery className={classes.nooverflow} model={this.gallery} master={master} />
 
             </ThemeProvider>
