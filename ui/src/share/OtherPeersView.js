@@ -20,7 +20,7 @@ import ListItem from '@material-ui/core/ListItem';
 import Divider from '@material-ui/core/Divider';
 import IconButton from "@material-ui/core/IconButton";
 import ClearIcon from '@material-ui/icons/Delete';
-import QRCodeView from "./security/QRCodeView";
+import _ from "lodash";
 
 const styles = theme => ({
 
@@ -104,7 +104,7 @@ class OtherPeersView extends Component {
             this.setState({
                 allNats: allNats,
                 allEdges: allEdges,
-                otherPeers: otherPeers
+                otherPeers: _.uniqBy(otherPeers, 'peerId')
             });
         });
 
@@ -132,6 +132,8 @@ class OtherPeersView extends Component {
 
     createWhatPeersHave(otherPeers, allNats, allEdges, expandedPeers, classes) {
 
+        this.props.master.emitter.emit('numPeersChange', otherPeers.length + 1, otherPeers);
+
         return <ExpansionPanel expanded={expandedPeers} onChange={this.handleExpand('expandedPeers')}>
             <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography className={classes.heading}>Other Peers</Typography>
@@ -152,7 +154,11 @@ class OtherPeersView extends Component {
                         .filter(item => item.peerId === peer.peerId)
                         .map(item => item.url) : [];
 
-                    const myEdgeNat = allEdges.find(item => item.networkType === 'nat');
+                    const myEdgeNat = allEdges
+                        .find(item => {
+                            const edgePeer = item.from.split('/')[1];
+                            return item.networkType === 'nat' && edgePeer === peer.peerId;
+                        });
                     const nat = myEdgeNat ? allNats.find(node => node.id === myEdgeNat.to) : null;
                     return <Paper key={index} style={{
                                                 margin: '10px',
@@ -172,7 +178,7 @@ class OtherPeersView extends Component {
                             }}/>
                             <Typography variant="caption" style={{
                                 marginLeft: '5px'
-                            }}>{nat.label}</Typography>
+                            }}>{nat.label} {nat.network.ip.city}</Typography>
                         </span> : ''}
                         {owns.length > 0 ? <Divider variant="middle" /> : ''}
                         {owns.length > 0 ?
@@ -220,7 +226,7 @@ class OtherPeersView extends Component {
 
     render() {
 
-        const { classes } = this.props;
+        const { classes, master } = this.props;
         const {expandedPeers, showOtherPeers, otherPeers, allNats, allEdges} = this.state;
 
 
@@ -228,7 +234,7 @@ class OtherPeersView extends Component {
         if(showOtherPeers) {
             otherPeersView = otherPeers.length > 0
                 ? this.createWhatPeersHave(otherPeers, allNats, allEdges, expandedPeers, classes)
-                : <Typography variant={"body2"}>Currently, there are no other peers.</Typography>;
+                : master.service.hasRoom ? <Typography variant={"body2"}>Currently, there are no other peers.</Typography> : '';
         }
 
         return (

@@ -137,7 +137,7 @@ class Gallery extends Component {
 
                 await this.master.service.share(url);
                 //console.log('shared ' + shared);
-                await this.master.findExistingContent();
+                await this.master.findExistingContent(this.master.service.find);
             }
         });
     }

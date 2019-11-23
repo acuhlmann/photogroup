@@ -115,11 +115,6 @@ class App extends Component {
                         vertical: 'bottom',
                         horizontal: 'left',
                     }}
-                    /*action={(
-                        <Button key={'foobar'} className={classes.white} size="small">
-                            Dismiss
-                        </Button>
-                    )}*/
                     maxSnack={3}>
                     <div className="App">
 

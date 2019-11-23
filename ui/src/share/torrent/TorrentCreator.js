@@ -1,6 +1,7 @@
 import NetworkTopologyFinder from "../topology/NetworkTopologyFinder";
 import Logger from 'js-logger';
 import createTorrent from 'create-torrent';
+import WebTorrent from 'webtorrent';
 
 export default class TorrentCreator {
 
@@ -24,22 +25,12 @@ export default class TorrentCreator {
             .filter(function (url) {
                 return url.indexOf('wss://') === 0 || url.indexOf('ws://') === 0
             })
-            //.concat('wss://' + window.location.hostname + '/tracker');
             .concat(wsUrl);
-            //.concat('ws://' + window.location.hostname + ':9000');
-            //.concat('wss://' + window.location.hostname + '/ws');
-
-        //window.WEBTORRENT_ANNOUNCE = ['ws://' + window.location.hostname + ':9000'];
 
         Logger.info('window.WEBTORRENT_ANNOUNCE '+window.WEBTORRENT_ANNOUNCE);
     }
 
     start() {
-
-        //after NetworkTopologyFinder start is done, this will be called.
-        this.emitter.on('addPeerDone', () => {
-            this.parent.findExistingContent();
-        });
 
         this.service.getRtcConfig().then(iceServers => {
 
@@ -55,10 +46,12 @@ export default class TorrentCreator {
             this.iceServers = iceServers;
             this.createWT();
             //this.emitter.emit('topStateMessage', msg + '\nRegistering Peer');
-            this.service.addPeer().then(() => {
+            this.service.addPeer().then(peer => {
                 //this is now in Uploader
-                //scope.emitter.emit('topStateMessage', '');
-                self.emitter.emit('addPeerDone');
+                //self.emitter.emit('topStateMessage', '');
+
+                self.parent.me = peer;
+                self.emitter.emit('addPeerDone', peer);
             });
 
             this.buildTopology();
@@ -72,7 +65,7 @@ export default class TorrentCreator {
     }
 
     createWT() {
-        const WebTorrent = window.WebTorrent;
+        //const WebTorrent = window.WebTorrent;
         const client = new WebTorrent({
             tracker: {
                 rtcConfig: this.iceServers

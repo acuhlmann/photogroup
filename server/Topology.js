@@ -2,8 +2,8 @@ const IpTranslator = require('./IpTranslator');
 
 module.exports = class Topology {
 
-    constructor(rooms, updateChannel, remoteLog, app, emitter, peersModel, tracker) {
-        this.rooms = rooms;
+    constructor(clients, updateChannel, remoteLog, app, emitter, peersModel, tracker) {
+        this.clients = clients;
         this.updateChannel = updateChannel;
         this.remoteLog = remoteLog;
         this.app = app;
@@ -18,72 +18,110 @@ module.exports = class Topology {
         this.typeDetails = new Map();
         this.graph = { nodes: [], edges: []};
 
-        emitter.on('webPeers', peers => {
-
-            this.peers = peers;
-
-            this.sendUpdate();
-        });
-
         emitter.on('iceEvent', event => {
 
-            //return;
             this.buildIceEvent(event);
         });
+    }
 
-        emitter.on('addServerPeer', event => {
+    addServerPeer(event) {
+        this.remoteLog('addServerPeer ' + event.myPeerId + ' ' + event.localAddr + ' ' + event.remoteAddress);
 
-            this.remoteLog('addServerPeer ' + event.myPeerId + ' ' + event.localAddr + ' ' + event.remoteAddress);
+        const peer = this.peers[event.myPeerId];
+        const conn = event.conn;
+        if(peer) {
 
-            const peer = this.peers[event.myPeerId];
-            const conn = event.conn;
-            if(peer) {
-                this.updateChainNode(peer.networkChain, conn.localAddress, conn.localPort);
-                this.updateChainNode(peer.networkChain, conn.remoteAddress, conn.remotePort);
-            } else {
-                this.peers[event.myPeerId] = {
-                    peerId: event.myPeerId,
-                    originPlatform: 'photogroup.network',
-                    networkChain: [
-                        this.createChainNode(conn.localAddress, conn.localPort),
-                        this.createChainNode(conn.remoteAddress, conn.remotePort),
-                    ]
-                };
-                this.sendUpdate();
+            this.updateChainNode(peer.networkChain, conn.localAddress, conn.localPort);
+            this.updateChainNode(peer.networkChain, conn.remoteAddress, conn.remotePort);
+        } else {
+
+            this.peers[event.myPeerId] = {
+                peerId: event.myPeerId,
+                originPlatform: 'photogroup.network',
+                networkChain: [
+                    this.createChainNode(conn.localAddress, conn.localPort),
+                    this.createChainNode(conn.remoteAddress, conn.remotePort),
+                ]
+            };
+            this.sendUpdate();
+        }
+    }
+
+    connect(connection) {
+
+        connection.shadow = true;
+        connection.width = 2;
+        connection.font = {align: 'bottom'};
+
+        this.connections.set(connection.to + '-' + connection.from, connection);
+        this.graph.edges.push(connection);
+
+        this.sendNetworkTopology(this.graph);
+    }
+
+    disconnect(infoHash) {
+
+        const edges = this.graph.edges;
+        edges.forEach((edge, index) => {
+            if(edge.infoHash === infoHash) {
+                edges.splice(index, 1);
+                this.connections.delete(edge.to + '-' + edge.from);
+                //console.info('disconnectNode ' + edge.label);
             }
         });
 
-        emitter.on('connectNode', connection => {
+        this.sendNetworkTopology(this.graph);
+    }
 
-            connection.shadow = true;
-            connection.width = 2;
-            connection.font = {align: 'bottom'};
+    addNetwork(response, peerId, network) {
+        if(!peerId) {
+            response.status(400).send();
+        }
 
-            this.connections.set(connection.to + '-' + connection.from, connection);
-            this.graph.edges.push(connection);
-
-            this.updateChannel.send({
-                event: 'networkTopology',
-                data: this.graph
-            });
+        const notTranslatedIps = network.map(ip => {
+            ip.ip = IpTranslator.createEmptyIpObj(ip.ip);
+            return ip;
         });
+        this.updateWebPeers(notTranslatedIps, peerId);
 
-        emitter.on('disconnectNode', infoHash => {
+        IpTranslator.enrichCandidateIPs(network).then(results => {
 
-            const edges = this.graph.edges;
-            edges.forEach((edge, index) => {
-                if(edge.infoHash === infoHash) {
-                    edges.splice(index, 1);
-                    this.connections.delete(edge.to + '-' + edge.from);
-                    //console.info('disconnectNode ' + edge.label);
-                }
-            });
+            if(this.peers[peerId]) {
 
-            this.updateChannel.send({
-                event: 'networkTopology',
-                data: this.graph
-            });
+                this.updateWebPeers(results, peerId);
+
+                response.send(results);
+            } else {
+                response.status(400).send();
+            }
         });
+    }
+
+    updateWebPeers(chain, peerId) {
+        if(!peerId) return;
+        if(!this.peers[peerId]) return;
+
+        this.peers[peerId].networkChain = chain;
+
+        let peer;
+        if(this.peersModel.webPeers.has(peerId)) {
+            peer = this.peersModel.webPeers.get(peerId);
+        } else {
+            peer = {peerId: peerId};
+        }
+
+        peer.networkChain = chain;
+        this.peersModel.webPeers.set(peer.peerId, peer);
+
+        this.peersModel.sendWebPeers();
+    }
+
+    sendNetworkTopology(graph) {
+
+        this.updateChannel.send({
+            event: 'networkTopology',
+            data: graph
+        }, this.clients);
     }
 
     reset() {
@@ -114,80 +152,7 @@ module.exports = class Topology {
 
     sendUpdate() {
         this.rebuildPeers(this.peers);
-
-        this.updateChannel.send({
-            event: 'networkTopology',
-            data: this.graph
-        });
-    }
-
-    start() {
-        this.app.get('/api/rooms/network', (request, response) => {
-
-            const room = true;//this.rooms.get(request.params.id);
-            if(!room) {
-
-                return response.status(404).send('Room not found');
-
-            } else {
-                response.send(this.graph);
-            }
-        });
-
-        this.app.post('/api/rooms/network', (request, response) => {
-
-            const room = true;//this.rooms.get(request.params.id);
-            if(!room) {
-
-                return response.status(404).send('Room not found');
-
-            } else {
-
-                const peerId = request.body.peerId;
-                const network = request.body.networkChain;
-
-                if(!peerId) {
-                    response.status(400).send();
-                }
-
-                const notTranslatedIps = network.map(ip => {
-                    ip.ip = IpTranslator.createEmptyIpObj(ip.ip);
-                    return ip;
-                });
-                this.updateWebPeers(notTranslatedIps, peerId);
-
-                IpTranslator.enrichCandidateIPs(network).then(results => {
-
-                    if(this.peers[peerId]) {
-
-                        this.updateWebPeers(results, peerId);
-
-                        response.send();
-                    } else {
-                        response.status(400).send();
-                    }
-                });
-            }
-        });
-    }
-
-    updateWebPeers(chain, peerId) {
-        if(!peerId) return;
-        if(!this.peers[peerId]) return;
-
-        this.peers[peerId].networkChain = chain;
-
-        let peer;
-        if(this.peersModel.webPeers.has(peerId)) {
-            peer = this.peersModel.webPeers.get(peerId);
-        } else {
-            peer = {peerId: peerId};
-        }
-
-        peer.networkChain = chain;
-        this.peersModel.webPeers.set(peer.peerId, peer);
-
-        this.peersModel.sendWebPeers();
+        this.sendNetworkTopology(this.graph);
     }
 
     buildIceEvent(event) {
@@ -405,7 +370,9 @@ module.exports = class Topology {
 
                     if(this.isNat(item.typeDetail)) {
                         const existingNode = nodesByIp.has(peerIpkey);
-                        existingNode.peers.push(peerId);
+                        if(existingNode.peers) {
+                            existingNode.peers.push(peerId);
+                        }
                     }
                 }
             });

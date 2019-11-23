@@ -51,8 +51,8 @@ export default class TorrentDeletion {
                 resolve(torrent.infoHash);
             }
         }).then(() => {
-            return torrent.infoHash;
-            //return this.deleteTorrentDbEntry(torrent);
+            //return torrent.infoHash;
+            return this.deleteTorrentDbEntry(torrent);
         });
     }
 
@@ -66,7 +66,7 @@ export default class TorrentDeletion {
                     reject(err);
                 }
 
-                resolve(torrent.magnetURI);
+                resolve(torrent.infoHash);
             });
         });
     }

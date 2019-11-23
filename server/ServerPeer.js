@@ -5,8 +5,9 @@ const util = require('util');
 
 module.exports = class ServerPeer {
 
-    constructor(remoteLog, peers, roomManager, ice, emitter) {
+    constructor(topology, remoteLog, peers, roomManager, ice, emitter) {
 
+        this.topology = topology;
         this.remoteLog = remoteLog;
 
         this.peers = peers;
@@ -180,7 +181,7 @@ module.exports = class ServerPeer {
                     console.log('iceconnectionstatechange ' + event);
                 });*/
 
-                scope.emitter.emit('addServerPeer', result);
+                scope.topology.addServerPeer(result);
                 return result;
             }
         });

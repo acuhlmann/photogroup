@@ -3,9 +3,10 @@ import PropTypes from 'prop-types';
 
 import { withStyles } from '@material-ui/core/styles';
 import CloseRounded from '@material-ui/icons/CloseRounded';
+import ExitToAppOutlined from '@material-ui/icons/ExitToAppOutlined';
 import IconButton from '@material-ui/core/IconButton';
-import CropFreeRounded from '@material-ui/icons/CropFreeRounded';
-
+import GroupAddRounded from '@material-ui/icons/GroupAddRounded';
+import Badge from '@material-ui/core/Badge';
 import Dialog from '@material-ui/core/Dialog';
 import DialogContent from '@material-ui/core/DialogContent';
 import DialogActions from '@material-ui/core/DialogActions';
@@ -16,6 +17,7 @@ import LinkRounded from '@material-ui/icons/LinkRounded';
 import copy from "clipboard-copy";
 import QrReader from 'react-qr-reader'
 import PlayCircleFilledWhiteRoundedIcon from '@material-ui/icons/PlayCircleFilledWhiteRounded';
+import CropFreeRounded from '@material-ui/icons/CropFreeRounded';
 //import Slide from '@material-ui/core/Slide';
 
 /*function Transition(props) {
@@ -66,6 +68,12 @@ class QRCodeButton extends Component {
             });
         });
 
+        props.master.emitter.on('numPeersChange', numPeers => {
+            this.setState({
+                numPeers: numPeers,
+            });
+        });
+
         this.handleScan = this.handleScan.bind(this)
     }
 
@@ -83,13 +91,15 @@ class QRCodeButton extends Component {
 
             const master = this.props.master;
             master.service.id = urlParams.get('room');
-            await master.findExistingContent();
+            master.service.hasRoom = true;
+            await master.findExistingContent(master.service.joinRoom);
             master.emitter.emit('openRoomStart');
             master.emitter.emit('openRoomEnd');
 
             this.show(false);
         }
     }
+
     handleScanError(err){
         console.error(err)
     }
@@ -112,14 +122,20 @@ class QRCodeButton extends Component {
         return urlParams.has('room');
     }
 
+    leaveRoom() {
+        const location = window.location;
+        window.history.replaceState({}, '', decodeURIComponent(`${location.pathname}`));
+        location.reload();
+    }
+
     render() {
         const {classes, master} = this.props;
-        const {visible, createdRoom, openQr} = this.state;
-        const url = window.location.href + '?room=' + master.service.id;
+        const {visible, createdRoom, openQr, numPeers} = this.state;
+        const url = window.location.origin + '?room=' + master.service.id;
         const hasRoom = this.hasRoom();
 
         const scannerStyle = {
-            height: 300,
+            height: 280,
             width: 300,
         };
 
@@ -130,7 +146,9 @@ class QRCodeButton extends Component {
                     onClick={this.show.bind(this, true)}
                     color="inherit"
                 >
-                    <CropFreeRounded />
+                    <Badge badgeContent={numPeers} color="primary" >
+                        <GroupAddRounded />
+                    </Badge>
                 </IconButton>
 
                 <Dialog
@@ -147,7 +165,7 @@ class QRCodeButton extends Component {
                             hasRoom || createdRoom ? <span style={{
                                 marginBottom: '20px'
                             }}>
-                                <Typography variant="body1">Room created, share this with your peers...</Typography>
+                                <Typography variant="body1">Add more peers...</Typography>
                                 <span className={classes.vertical} style={{
                                     marginTop: '10px'
                                 }}>
@@ -171,16 +189,16 @@ class QRCodeButton extends Component {
                             }
                         {
                             !openQr ?
-                                <Button onClick={() => {
-                                    this.setState({openQr: true})
-                                }}
-                                        variant="contained"
-                                        color="primary"
-                                        className={classes.button}
-                                        endIcon={<PlayCircleFilledWhiteRoundedIcon/>}
-                                >
-                                    Join other Room with QR-Reader
-                                </Button> :
+                                    <Button onClick={() => {
+                                        this.setState({openQr: true})
+                                    }}
+                                            variant="contained"
+                                            color="primary"
+                                            className={classes.button}
+                                            endIcon={<CropFreeRounded/>}
+                                    >
+                                        Join other Room
+                                    </Button> :
                                 <div>
                                     <QrReader
                                         delay={this.state.scannerDelay}
@@ -194,11 +212,22 @@ class QRCodeButton extends Component {
                         }
                     </DialogContent>
                     <DialogActions>
+
+                        {hasRoom ? <Button onClick={this.leaveRoom.bind(this)}
+                                variant="contained"
+                                color="secondary"
+                                className={classes.button}
+                                endIcon={<ExitToAppOutlined/>}
+                        >
+                            Leave Room
+                        </Button> : ''}
+
                         <IconButton
                             onClick={this.show.bind(this, false)}
                         >
                             <CloseRounded />
                         </IconButton>
+
                     </DialogActions>
                 </Dialog>
             </div> : <div></div>

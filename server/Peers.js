@@ -43,7 +43,6 @@ module.exports = class Peers {
             const sessionId = request.body.sessionId;
             const peerId = request.body.peerId;
 
-
             if(this.peerIdBySessionId.has(sessionId)) {
 
                 this.peerIdBySessionId.set(sessionId, peerId);
@@ -55,6 +54,8 @@ module.exports = class Peers {
                     peer = {peerId: peerId};
                 }
 
+                peer.name = request.body.name;
+                peer.sessionId = sessionId;
                 peer.originPlatform = request.body.originPlatform;
                 peer.ips = ips.map(ip => IpTranslator.createEmptyIpObj(ip))
 
@@ -63,7 +64,7 @@ module.exports = class Peers {
                 Promise.all(ips
                     .map(ip => IpTranslator.getLookupIp(ip)))
                     .then(results => peer.ips = results)
-                    .then(results => {
+                    .then(() => {
 
                         this.emitter.emit('event', 'info', 'peerConnect', Peers.peerToAppPeer(peer));
 
@@ -119,13 +120,15 @@ module.exports = class Peers {
 
                 this.emitter.emit('removeOwner', peerId);
 
-                this.emitter.emit('event', 'warning', 'peerDisconnect', Peers.peerToAppPeer(this.webPeers.get(peerId)));
+                this.emitter.emit('event', 'warning', 'peerDisconnect',
+                    Peers.peerToAppPeer(this.webPeers.get(peerId)));
                 this.webPeers.delete(peerId);
                 this.sendWebPeers();
             }
 
             this.peerIdBySessionId.delete(sessionId);
             this.clientsBySessionId.delete(sessionId);
+            this.emitter.emit('disconnectPeer', sessionId);
 
             this.sendConnectionCount(channel.connectionCount);
         });
@@ -162,13 +165,7 @@ module.exports = class Peers {
     sendWebPeers() {
 
         const obj = Peers.strMapToObj(this.webPeers);
-
         this.emitter.emit('webPeers', obj);
-
-        this.updateChannel.send({
-            event: 'webPeers',
-            data: obj
-        });
     }
 
     static strMapToObj(strMap) {

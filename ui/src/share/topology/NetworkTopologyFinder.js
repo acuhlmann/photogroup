@@ -72,10 +72,17 @@ export default class NetworkTopologyFinder {
             const firstChain = NetworkTopologyFinder.translateSdp(sdp);
             if(!calledNetwork && firstChain.length >= 3) {
                 calledNetwork = true;
-                scope.service.addNetwork(firstChain).then(() => {
 
-                    Logger.info('addNetwork no 1');
-                });
+                if(scope.service.hasRoom) {
+
+                    scope.service.addNetwork(firstChain).then(() => {
+
+                        Logger.info('addNetwork no 1');
+                    });
+
+                } else {
+                    scope.service.saveNetwork(firstChain);
+                }
             }
 
             if (e.candidate && e.candidate.candidate.indexOf('srflx') !== -1) {
@@ -96,17 +103,22 @@ export default class NetworkTopologyFinder {
                     Logger.info('natType ' + natType);
 
                     const networkChain = NetworkTopologyFinder.translateSdp(pc.localDescription.sdp, natType);
-                    scope.service.addNetwork(networkChain).then(() => {
 
-                        Logger.info('addNetwork no 2');
+                    if(scope.service.hasRoom) {
+                        scope.service.addNetwork(networkChain).then(() => {
 
-                        scope.emitter.emit('pcEvent', 'icegatheringstatechange', '');
-                        scope.emitter.emit('pcEvent', 'iceconnectionstatechange', '');
-                        scope.emitter.emit('pcEvent', 'signalingstatechange', '');
+                            Logger.info('addNetwork no 2');
 
-                        //this is now in Uploader
-                        scope.emitter.emit('topStateMessage', '');
-                    });
+                            scope.emitter.emit('pcEvent', 'icegatheringstatechange', '');
+                            scope.emitter.emit('pcEvent', 'iceconnectionstatechange', '');
+                            scope.emitter.emit('pcEvent', 'signalingstatechange', '');
+
+                            //this is now in Uploader
+                            scope.emitter.emit('topStateMessage', '');
+                        });
+                    } else {
+                        scope.service.saveNetwork(networkChain);
+                    }
 
                     //pc.close();
                     peer.destroy();

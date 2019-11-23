@@ -53,7 +53,7 @@ class MeView extends Component {
         this.state = {
             expandedMe: true,
             showMe: true,
-            me: {}, myNat: {}
+            me: {}, myNat: null
         };
 
         props.master.emitter.on('networkTopology', data => {
@@ -65,12 +65,22 @@ class MeView extends Component {
                     && item.peerId === props.master.client.peerId);
 
             const myEdgeNat = data.edges
-                .find(item => item.networkType === 'nat');
+                .find(item => {
+                    const edgePeer = item.from.split('/')[1];
+                    return item.networkType === 'nat' && edgePeer === props.master.client.peerId;
+                });
             const myNat = myEdgeNat ? data.nodes.find(node => node.id === myEdgeNat.to) : null;
 
             this.setState({
                 me: me ? me : {},
-                myNat: myNat ? myNat : {}
+                myNat: myNat
+            });
+        });
+
+        props.master.emitter.on('addPeerDone', peer => {
+
+            this.setState({
+                me: {label: peer.originPlatform}
             });
         });
 
@@ -102,12 +112,16 @@ class MeView extends Component {
             flexDirection: 'row',
             alignItems: 'center'
         }}><TextField
-            placeholder="Your Name"
+            placeholder="Your Nickname"
             margin="normal"
             variant="outlined"
             defaultValue={this.master.me.name}
+            onClick={event => {
+                event.stopPropagation();
+            }}
             onChange={
-                _.debounce(this.batchChangeName.bind(this), 2000, { 'leading': true })
+                this.batchChangeName.bind(this)
+                //_.debounce(this.batchChangeName.bind(this), 2000)
             }
         /></span> : '';
     }
@@ -130,15 +144,15 @@ class MeView extends Component {
                                 padding: '10px'}}>
                                 <div
                                     className={classes.vertical}>
-                                    <span
+                                    {myNat ? <span
                                         className={classes.horizontal}>
                                         <img src={"./firewall.png"} style={{
                                             width: '20px'
                                         }}/>
                                         <Typography variant="caption" style={{
                                             marginLeft: '5px'
-                                        }}>{myNat.label}</Typography>
-                                    </span>
+                                        }}>{myNat.label} {myNat.network.ip.city}</Typography>
+                                    </span> : ''}
                                     <span
                                         className={classes.horizontal}>
                                         <AccountCircleRounded/>

@@ -56,7 +56,8 @@ export default class PhotoDetailsRenderer {
             variant="outlined"
             defaultValue={FileUtil.getFileNameWithoutSuffix(name)}
             onChange={
-                _.debounce(this.batchChangeName.bind(this), 2000, { 'leading': true })
+                //_.debounce(this.batchChangeName.bind(this), 2000, { 'leading': true })
+                this.batchChangeName.bind(this)
             }
         /><span>{fileSuffix}</span></span>
     }

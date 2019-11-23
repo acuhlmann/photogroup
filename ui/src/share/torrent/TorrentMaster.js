@@ -3,7 +3,7 @@ import Logger from 'js-logger';
 import IdbKvStore from 'idb-kv-store';
 //TODO: fails in create-create-app build
 //import parsetorrent from 'parse-torrent';
-
+import idb from 'indexeddb-chunk-store';
 import TorrentAddition from "./TorrentAddition";
 import TorrentDeletion from "./TorrentDeletion";
 import TorrentCreator from "./TorrentCreator";
@@ -20,15 +20,17 @@ export default class TorrentMaster {
         this.numPeers = 0;
 
         this.service = service;
+        this.service.master = this;
         this.service.emitter.on('urls', urls => {
             scope.syncUiWithServerUrls(urls);
+            //scope.urls = urls;
         });
         emitter.on('webPeers', peers => {
 
-            if(!this.client || !this.client.peerId || !peers) return;
+            if(!scope.client || !scope.client.peerId || !peers) return;
 
-            const peerId = this.client.peerId;
-            this.me = peers[peerId];
+            const peerId = scope.client.peerId;
+            scope.me = peers.find(peer => peer.peerId === peerId);
         });
         this.emitter = emitter;
 
@@ -47,7 +49,7 @@ export default class TorrentMaster {
 
     addSeedOrGetTorrent(addOrSeed, uri, callback) {
 
-        const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE }, callback);
+        const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE, 'store': idb }, callback);
         Logger.info('addSeedOrGetTorrent ' + torrent.infoHash);
 
         const scope = this;
@@ -62,20 +64,20 @@ export default class TorrentMaster {
         return torrent;
     }
 
-    findExistingContent() {
+    findExistingContent(roomPromise) {
 
-        /*
-        const scope = this;
-        return this.resurrectLocallySavedTorrents().then(values => {
+
+        const self = this;
+
+        /*return this.resurrectLocallySavedTorrents(this.urls).then(values => {
             Logger.info('done with resurrectAllTorrents ' + values);
             //if(values) {
             //    Logger.info('done with resurrectAllTorrents ' + values);
             //}
-            return scope.service.find();
-        })
-        */
-        const self = this;
-        return this.service.find()
+            return roomPromise.call(self.service);
+        });*/
+
+        return roomPromise.call(this.service)
             .then(response => {
 
                 if(!response) return;
@@ -98,7 +100,14 @@ export default class TorrentMaster {
                 if(!foundAnyMissing) {
                     self.emitter.emit('urls', response.urls);
                 }
-        });
+                return response.urls;
+            })
+        //TODO: make caching of local images work again, so that a refresh resurrects an image from client,
+        // not reliant on other peers
+            /*.then(urls => this.resurrectLocallySavedTorrents(urls))
+            .then(values => {
+                Logger.info('done with resurrectAllTorrents ' + values);
+            });*/
     }
 
     fillMissingOwners(item) {
@@ -159,7 +168,7 @@ export default class TorrentMaster {
     }
 
     //more on the approach: https://github.com/SilentBot1/webtorrent-examples/blob/master/resurrection/index.js
-    resurrectLocallySavedTorrents() {
+    resurrectLocallySavedTorrents(urls) {
         //Iterates through all metadata from metadata store and attempts to resurrect them!
         const scope = this;
 
@@ -175,12 +184,12 @@ export default class TorrentMaster {
                 }
                 if(cursor) {
                     if(typeof cursor.value === 'object'){
-                        allPendingTorrents.push(scope.resurrectTorrent(cursor.value));
+                        allPendingTorrents.push(scope.resurrectTorrent(cursor.value, urls));
                         loopResolver(true);
                     }
                     cursor.continue()
                 } else {
-                    resolve();
+                    resolve(allPendingTorrents);
                 }
             });
 
@@ -192,18 +201,21 @@ export default class TorrentMaster {
         });
     }
 
-    resurrectTorrent(metadata){
+    resurrectTorrent(metadata, urls){
         const scope = this;
 
         return new Promise((resolve, reject) => {
 
-            if(typeof metadata === 'object' && metadata != null){
+            if(typeof metadata === 'object' && metadata != null) {
                 if(scope.client.get(metadata.infoHash)) {
-                    Logger.info('resurrectTorrent.client.get ' + metadata);
+
+                    Logger.info('resurrectTorrent.client.get ' + metadata.name);
                     resolve(metadata);
 
                 } else {
-                    scope.torrentAddition.add(metadata).then(torrent => {
+
+                    const url = urls.find(item => item.hash === metadata.infoHash);
+                    scope.torrentAddition.add(metadata, false, url.sharedBy).then(torrent => {
 
                         Logger.info('resurrectTorrent.add ' + torrent.infoHash);
                         resolve(torrent);

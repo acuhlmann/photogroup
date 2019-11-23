@@ -28,20 +28,20 @@ function init(pgServer) {
     const ice = new IceServers(updateChannel, remoteLog, app);
     ice.start();
 
-    const events = new Events(updateChannel, remoteLog, app, emitter);
-    events.start();
-
     const peers = new Peers(updateChannel, remoteLog, app, emitter);
     peers.start();
-
-    const room = new Room(updateChannel, remoteLog, app, emitter, peers, ice);
-    room.start(init);
 
     const tracker = new Tracker(updateChannel, remoteLog, app, emitter, peers);
     tracker.start();
 
-    const network = new Topology(room.rooms, updateChannel, remoteLog, app, emitter, peers, tracker);
-    network.start();
+    const room = new Room(updateChannel, remoteLog, app, emitter, peers, ice, tracker);
+    room.start(init);
+
+    const events = new Events(room.rooms, updateChannel, remoteLog, app, emitter);
+    events.start();
+
+    //const network = new Topology(room.rooms, updateChannel, remoteLog, app, emitter, peers, tracker);
+    //network.start();
 
     if(pgServer) {
 

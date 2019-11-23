@@ -19,6 +19,7 @@ import TopologyHelper from './topology/TopologyHelper';
 import OtherPeersView from "./OtherPeersView";
 import QRCodeView from "./security/QRCodeView";
 import MeView from "./MeView";
+import WebTorrent from 'webtorrent';
 
 const styles = theme => ({
     typography: {
@@ -53,7 +54,7 @@ class ShareCanvas extends Component {
 
         const {enqueueSnackbar} = props;
 
-        if(!window.WebTorrent.WEBRTC_SUPPORT) {
+        if(!WebTorrent.WEBRTC_SUPPORT) {
             const msg = 'Your browser does not support WebRTC';
             Logger.error(msg);
             enqueueSnackbar(msg, {

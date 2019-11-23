@@ -271,23 +271,6 @@ class SettingsView extends Component {
         });
     }
 
-    buildNameEntry() {
-        const init = this.master && this.master.client && this.master.client.peerId && this.master.me;
-        return init ? <span style={{
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center'
-        }}><TextField
-            placeholder="Your Name"
-            margin="normal"
-            variant="outlined"
-            defaultValue={this.master.me.name}
-            onChange={
-                _.debounce(this.batchChangeName.bind(this), 2000, { 'leading': true })
-            }
-        /></span> : '';
-    }
-
     render() {
         const {classes} = this.props;
 
@@ -381,7 +364,7 @@ class SettingsView extends Component {
                         </span>
                     </DialogActions>
                     <DialogContent>
-                        <Typography variant={"caption"}>v3 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v1 {this.state.peerId}</Typography>
                         {messages}
                     </DialogContent>
                 </Dialog>

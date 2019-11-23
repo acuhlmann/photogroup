@@ -4,7 +4,8 @@ const Peers = require('./Peers');
 
 module.exports = class Events {
 
-    constructor(updateChannel, remoteLog, app, emitter) {
+    constructor(rooms, updateChannel, remoteLog, app, emitter) {
+        this.rooms = rooms;
         this.updateChannel = updateChannel;
         this.remoteLog = remoteLog;
         this.app = app;
@@ -24,18 +25,24 @@ module.exports = class Events {
             event.downloader = downloader;
             event.action = request.body.event.action;
 
-            this.sendAppEvent(level, type, event);
+            const id = request.params.id;
+            this.sendAppEvent(level, type, event, id);
 
             response.send(true);
         });
     }
 
     //types: peerConnect, peerDisconnect, picAdd, picRemove
-    sendAppEvent(level, type, event) {
+    sendAppEvent(level, type, event, id) {
 
-        this.updateChannel.send({
-            event: 'appEvent',
-            data: {level: level, type: type, event: event}
-        });
+        if(id) {
+            const room = this.rooms.get(id);
+            if(room && room.clients) {
+                this.updateChannel.send({
+                    event: 'appEvent',
+                    data: {level: level, type: type, event: event}
+                }, room.clients);
+            }
+        }
     }
 };

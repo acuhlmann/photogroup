@@ -1,7 +1,7 @@
 import Logger from 'js-logger';
 import Loader from "./Loader";
 import platform from 'platform';
-//import idb from 'indexeddb-chunk-store';
+import idb from 'indexeddb-chunk-store';
 import moment from "moment";
 
 /**
@@ -41,7 +41,7 @@ export default class TorrentAddition {
         const torrent = this.master.addSeedOrGetTorrent('add', torrentId, torrent => {
 
             //console.timeEnd('adding ' + torrent.infoHash);
-            const date = new Date().getTime() - this.stopWatch.get(torrent.infoHash)
+            const date = new Date().getTime() - this.stopWatch.get(torrent.infoHash);
             const passed = moment(date).format("mm:ss");
             Logger.info('this.client.add ' + torrent.infoHash + ' ' + passed);
 
@@ -53,9 +53,7 @@ export default class TorrentAddition {
 
         //TODO: try kicking off ws tracker if we can't get over this torrent..._openSocket
         Logger.info('torrent created ' + torrent.infoHash);
-
-        return;
-
+        //return;
         return new Promise((resolve, reject) => {
 
             torrent.on('error', err => {
@@ -114,7 +112,7 @@ export default class TorrentAddition {
 
         this.emitter.on('torrentError', err => {
 
-            console.log('torrent');
+            console.error('torrent ' + err.message);
 
             const msg = err.message;
             const isDuplicateError = msg.indexOf('Cannot add duplicate') !== -1;
@@ -206,20 +204,18 @@ export default class TorrentAddition {
 
         this.update(torrent.numPeers);
 
-        //const scope = this;
-        /*
+        const self = this;
         this.torrentsDb.get(key, (err, value) => {
             if (err) {
                 return;
             }
 
             if(!value) {
-                scope.torrentsDb.add(key, parsed);
+                self.torrentsDb.add(key, parsed);
             } else {
                 Logger.warn('already added ' + key + ' with value ' + value);
             }
         });
-        */
     }
 
     infoHash(t, hash) {

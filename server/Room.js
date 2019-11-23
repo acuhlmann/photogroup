@@ -1,18 +1,20 @@
 //----------------Domain - Content rooms
 const ServerPeer = require('./ServerPeer');
+const Topology = require('./Topology');
 const Peers = require('./Peers');
 const magnet = require('magnet-uri');
 const _ = require('lodash');
 
 module.exports = class Room {
 
-    constructor(updateChannel, remoteLog, app, emitter, peers, ice) {
+    constructor(updateChannel, remoteLog, app, emitter, peers, ice, tracker) {
         this.updateChannel = updateChannel;
         this.remoteLog = remoteLog;
         this.app = app;
         this.emitter = emitter;
         this.peers = peers;
         this.ice = ice;
+        this.tracker = tracker;
 
         this.rooms = new Map();
 
@@ -23,6 +25,40 @@ module.exports = class Room {
                 this.removeOwner(room, peerId);
             });
         });
+
+        emitter.on('disconnectPeer', (sessionId) => {
+
+            //const values = Array.from(this.rooms.values());
+            Object.values(this.rooms).forEach(room => {
+                room.clients = room.clients.filter(client => sessionId !== client.req.query.sessionId)
+            });
+        });
+
+        emitter.on('webPeers', peers => {
+
+            this.updatePeers(peers);
+        });
+    }
+
+    updatePeers(peers) {
+        const values = Array.from(this.rooms.values());
+        values.forEach(room => {
+
+            const roomPeers = Object
+                .values(peers)
+                .filter(peer => room.clients.find(client => client.req.query.sessionId === peer.sessionId));
+
+            room.topology.peers = roomPeers.reduce((map, obj) => {
+                map[obj.peerId] = obj;
+                return map;
+            }, {});
+            room.topology.sendUpdate();
+
+            this.updateChannel.send({
+                event: 'webPeers',
+                data: roomPeers
+            }, room.clients);
+        });
     }
 
     start(initFunction) {
@@ -30,11 +66,27 @@ module.exports = class Room {
         this.registerRoomRoutes(this.app);
         this.registerOwnerRoutes(this.app);
         this.registerConnectionRoutes(this.app);
+        this.registerNetworkRoutes(this.app);
     }
 
     reset() {
         this.rooms.clear();
         this.peers.reset();
+    }
+
+    joinRoom(sessionId, room) {
+        if(sessionId) {
+            const client = this.peers.clientsBySessionId.get(sessionId);
+            const clients = room.clients;
+            if(client && !clients.find(item => item.req.query.sessionId === client.req.query.sessionId)) {
+                clients.push(client);
+                this.peers.sendWebPeers();
+                return true;
+            } else {
+                this.peers.sendWebPeers();
+                return false;
+            }
+        }
     }
 
     registerRoomRoutes(app) {
@@ -50,16 +102,40 @@ module.exports = class Room {
             const id = request.body.id;
             const room = {
                 id: id,
-                clientsByRooms: new Map(),
-                urls: [],
-                serverPeer: new ServerPeer(this.remoteLog, this.peers, this, this.ice, this.emitter)
+                clients: [],
+                urls: []
             };
-            room.clientsByRooms.set(id, []);
+            room.topology = new Topology(room.clients, this.updateChannel, this.remoteLog, this.app,
+                this.emitter, this.peers, this.tracker);
+            room.serverPeer = new ServerPeer(room.topology, this.remoteLog, this.peers, this, this.ice, this.emitter);
 
             rooms.set(id, room);
+
+            this.joinRoom(request.body.sessionId, room);
+
             response.send({
                 urls: room.urls
             });
+        });
+
+        app.post('/api/rooms/:id', (request, response) => {
+
+            const id = request.params.id;
+            const room = rooms.get(id);
+            if(room) {
+
+                if(this.joinRoom(request.body.sessionId, room)) {
+                    response.send({
+                        urls: room.urls
+                    });
+                } else {
+                    response.status(400).send('Could not join room');
+                }
+
+            } else {
+
+                response.status(404).send('Room not found');
+            }
         });
 
         app.get('/api/rooms/:id', (request, response) => {
@@ -67,14 +143,6 @@ module.exports = class Room {
             const id = request.params.id;
             const room = rooms.get(id);
             if(room) {
-                const sessionId = request.query.sessionId;
-                if(sessionId) {
-                    const client = this.peers.clientsBySessionId.get(sessionId);
-                    const clients = room.clientsByRooms.get(id);
-                    if(!clients.find(item => item.req.query.sessionId === client.req.query.sessionId)) {
-                        clients.push(client);
-                    }
-                }
 
                 response.send({
                     urls: room.urls
@@ -105,7 +173,7 @@ module.exports = class Room {
                             const event = Peers.peerToAppPeer(item.sharedBy);
                             event.file = parsed.dn;
                             event.origin = origin;
-                            this.emitter.emit('event', 'warning', 'picRemove', event);
+                            this.emitter.emit('event', 'warning', 'picRemove', event, id);
 
                             room.urls.splice(index, 1);
                             return true;
@@ -172,7 +240,7 @@ module.exports = class Room {
                             const event = Peers.peerToAppPeer(peer);
                             event.file = parsed.dn;
                             event.origin = origin;
-                            this.emitter.emit('event', 'info', 'picAdd', event);
+                            this.emitter.emit('event', 'info', 'picAdd', event, id);
                         }
                     }
                     this.addOwner(room, urlItem.hash, peerId);
@@ -315,33 +383,78 @@ module.exports = class Room {
     registerConnectionRoutes(app) {
         app.post('/api/rooms/:id/photos/connections', (request, response) => {
 
-            const connection = {
-                from: request.body.from,
-                to: request.body.to,
-                arrows: request.body.arrows,
-                label: request.body.label,
-                infoHash: request.body.infoHash,
-                fromAddr: request.body.fromAddr,
-                toAddr: request.body.toAddr
-            };
+            const room = this.rooms.get(request.params.id);
+            if(!room) {
 
-            this.emitter.emit('connectNode', connection);
+                return response.status(404).send('Room not found');
 
-            response.send(connection)
+            } else {
+
+                const connection = {
+                    from: request.body.from,
+                    to: request.body.to,
+                    arrows: request.body.arrows,
+                    label: request.body.label,
+                    infoHash: request.body.infoHash,
+                    fromAddr: request.body.fromAddr,
+                    toAddr: request.body.toAddr
+                };
+                room.topology.connect(connection);
+
+                response.send(connection)
+            }
         });
 
         app.delete('/api/rooms/:id/photos/connections', (request, response) => {
 
-            const hash = request.body.hash;
+            const room = this.rooms.get(request.params.id);
+            if(!room) {
 
-            this.emitter.emit('disconnectNode', hash);
+                return response.status(404).send('Room not found');
 
-            response.send(hash)
+            } else {
+
+                const hash = request.body.hash;
+                room.topology.disconnect(hash);
+
+                response.send(hash)
+            }
+        });
+    }
+
+    registerNetworkRoutes(app) {
+        app.get('/api/rooms/:id/network', (request, response) => {
+
+            const room = this.rooms.get(request.params.id);
+            if(!room) {
+
+                return response.status(404).send('Room not found');
+
+            } else {
+
+                response.send(room.topology.graph);
+            }
+        });
+
+        app.post('/api/rooms/:id/network', (request, response) => {
+
+            const room = this.rooms.get(request.params.id);
+            if(!room) {
+
+                return response.status(404).send('Room not found');
+
+            } else {
+
+                const peerId = request.body.peerId;
+                const network = request.body.networkChain;
+
+                room.topology.addNetwork(response, peerId, network);
+            }
         });
     }
 
     sendUrls(room) {
-        const clients = room.clientsByRooms.get(room.id);
+        const clients = room.clients;
         this.updateChannel.send({
             event: 'urls',
             data: { urls: room.urls }
