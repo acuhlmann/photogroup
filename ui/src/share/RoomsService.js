@@ -35,6 +35,13 @@ export default class RoomsService {
         });
     }
 
+    changeUrl(name, value) {
+        const location = window.location;
+        const params = new URLSearchParams(location.search);
+        params.set(name, value);
+        window.history.replaceState({}, '', decodeURIComponent(`${location.pathname}?${params}`));
+    }
+
     async start() {
         const urlParams = new URLSearchParams(window.location.search);
         if(urlParams.has('room')) {

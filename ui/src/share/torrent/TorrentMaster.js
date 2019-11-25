@@ -22,8 +22,8 @@ export default class TorrentMaster {
         this.service = service;
         this.service.master = this;
         this.service.emitter.on('urls', urls => {
+            scope.urls = urls;
             scope.syncUiWithServerUrls(urls);
-            //scope.urls = urls;
         });
         emitter.on('webPeers', peers => {
 
@@ -64,7 +64,7 @@ export default class TorrentMaster {
         return torrent;
     }
 
-    findExistingContent(roomPromise) {
+    async findExistingContent(roomPromise) {
 
 
         const self = this;
@@ -77,7 +77,22 @@ export default class TorrentMaster {
             return roomPromise.call(self.service);
         });*/
 
+        //TODO: make caching of local images work again, so that a refresh resurrects an image from client,
+        // not reliant on other peers
+        const values = await this.resurrectLocallySavedTorrents(self.urls);
+        Logger.info('done with resurrectAllTorrents ' + values);
+        //const done = await Promise.all(values);
+        //Logger.info('done with all resurrectAllTorrents ' + done);
+
         return roomPromise.call(this.service)
+            /*//TODO: make caching of local images work again, so that a refresh resurrects an image from client,
+            // not reliant on other peers
+            .then((urls) => this.resurrectLocallySavedTorrents(self.urls))
+            .then(async values => {
+                Logger.info('done with resurrectAllTorrents ' + values);
+                const done = await Promise.all(values);
+                Logger.info('done with all resurrectAllTorrents ' + done);
+            })*/
             .then(response => {
 
                 if(!response) return;
@@ -101,13 +116,7 @@ export default class TorrentMaster {
                     self.emitter.emit('urls', response.urls);
                 }
                 return response.urls;
-            })
-        //TODO: make caching of local images work again, so that a refresh resurrects an image from client,
-        // not reliant on other peers
-            /*.then(urls => this.resurrectLocallySavedTorrents(urls))
-            .then(values => {
-                Logger.info('done with resurrectAllTorrents ' + values);
-            });*/
+            });
     }
 
     fillMissingOwners(item) {
@@ -214,8 +223,8 @@ export default class TorrentMaster {
 
                 } else {
 
-                    const url = urls.find(item => item.hash === metadata.infoHash);
-                    scope.torrentAddition.add(metadata, false, url.sharedBy).then(torrent => {
+                    const sharedBy = urls ? urls.find(item => item.hash === metadata.infoHash) : {};
+                    scope.torrentAddition.add(metadata, false, sharedBy).then(torrent => {
 
                         Logger.info('resurrectTorrent.add ' + torrent.infoHash);
                         resolve(torrent);

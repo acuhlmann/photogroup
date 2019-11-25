@@ -209,7 +209,7 @@ module.exports = class Room {
 
                 if(serverPeer && url) {
 
-                    this.room.serverPeer.start(room, url, request, response);
+                    room.serverPeer.start(room, url, request, response);
 
                 } else {
                     const peerId = request.body.peerId;

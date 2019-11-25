@@ -178,11 +178,13 @@ module.exports = class Topology {
             chain = this.mergeByIp(event.sharedBy.peerId, event.sdp);
             console.log('chain ' + chain.length);
 
-            if(chain.length >= this.peers[peerId].networkChain.length) {
-                event.sharedBy.networkChain = chain;
-                this.peers[peerId] = event.sharedBy;
+            if(this.peers[peerId]) {
+                if(chain.length >= this.peers[peerId].networkChain.length) {
+                    event.sharedBy.networkChain = chain;
+                    this.peers[peerId] = event.sharedBy;
 
-                this.sendUpdate();
+                    this.sendUpdate();
+                }
             }
 
         } else if(event.event === 'completed' || event.event === 'stopped') {

@@ -96,6 +96,7 @@ class ShareCanvas extends Component {
 
             let msg = '';
             let action = '';
+            let peer;
 
             if(event.type === 'peerConnect' || event.type === 'peerDisconnect') {
 
@@ -112,7 +113,7 @@ class ShareCanvas extends Component {
                 if(event.event.origin === props.master.client.peerId) return;
                 //if(event.event.peerId === props.master.client.peerId) return;
                 action = event.type === 'picAdd' ? 'added' : 'removed';
-                const peer = self.topology.peers[event.event.origin];
+                peer = self.topology.peers[event.event.origin];
                 const origin = peer ? ' by ' + peer.originPlatform : '';
                 msg = 'Image ' + action + ': ' + event.event.file + origin;
 
@@ -126,7 +127,7 @@ class ShareCanvas extends Component {
                     return;
                 }
                 const downHash = event.event.downloader;
-                let peer = self.topology.peers[downHash];
+                peer = self.peers.find(item => item.peerId === downHash);
                 peer = peer && self.state ? peer : self.state.urls
                     .map(item => item.owners)
                     .flatMap(item => item)
@@ -134,7 +135,7 @@ class ShareCanvas extends Component {
                     .find(owner => {
                         return owner.peerId === downHash
                     });
-                const downloader = peer ? ' by ' + (peer.originPlatform || peer.platform) : '';
+                const downloader = peer ? ' by ' + (peer.name || peer.originPlatform || peer.platform) : '';
                 msg = 'Image ' + event.event.file + ' ' + event.type + downloader;
                 //self.displayNotification(msg);
             } else if(event.type === 'serverPeer') {
@@ -187,8 +188,9 @@ class ShareCanvas extends Component {
             });
         });
 
-        emitter.on('webPeers', () => {
+        emitter.on('webPeers', peers => {
 
+            this.peers = peers;
             emitter.emit('pcEvent', 'icegatheringstatechange', '');
             emitter.emit('pcEvent', 'iceconnectionstatechange', '');
             emitter.emit('pcEvent', 'signalingstatechange', '');

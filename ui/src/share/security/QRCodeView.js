@@ -44,16 +44,9 @@ class QRCodeView extends Component {
         master.emitter.emit('openRoomStart');
 
         await master.findExistingContent(master.service.createRoom);
-        this.changeUrl('room', master.service.id);
+        master.service.changeUrl('room', master.service.id);
 
         master.emitter.emit('openRoomEnd');
-    }
-
-    changeUrl(name, value) {
-        const location = window.location;
-        const params = new URLSearchParams(location.search);
-        params.set(name, value);
-        window.history.replaceState({}, '', decodeURIComponent(`${location.pathname}?${params}`));
     }
 
     buildQRView(master, showQR, classes) {

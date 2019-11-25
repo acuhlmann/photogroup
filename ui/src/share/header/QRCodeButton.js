@@ -93,6 +93,7 @@ class QRCodeButton extends Component {
             master.service.id = urlParams.get('room');
             master.service.hasRoom = true;
             await master.findExistingContent(master.service.joinRoom);
+            master.service.changeUrl('room', master.service.id);
             master.emitter.emit('openRoomStart');
             master.emitter.emit('openRoomEnd');
 
