@@ -76,7 +76,6 @@ app.get('index.*', (req, res) => {
     res.sendFile(path.join(__dirname, 'ui/index.html'));
 });
 
-app.get('/.well-known/pki-validation/C0058F76E8481F8C207781B1834C9B0C.txt', (req, res) => {
-    res.sendFile(path.join(__dirname, 'config/C0058F76E8481F8C207781B1834C9B0C.txt'));
-    //res.download('config/filename.txt')
+app.get('/.well-known/pki-validation/AC5282DE1EF367EB3D1FCCD30628F8D9.txt', (req, res) => {
+    res.sendFile(path.join(__dirname, 'secret/AC5282DE1EF367EB3D1FCCD30628F8D9.txt'));
 });

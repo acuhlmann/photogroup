@@ -5,17 +5,17 @@ import FileUtil from "../util/FileUtil";
 
 export default class MetadataParser {
 
-    readMetadata(tile, event, callback) {
+    readMetadata(tile, index, img, callback) {
 
         const scope = this;
 
-        const id = event.currentTarget.id;
-        const img = document.getElementById(id);
+        //const id = event.currentTarget.id;
+        //const img = document.getElementById(id);
 
-        const index = id.substring(3, id.length);
+        //const index = id.substring(3, id.length);
         const EXIF = window.EXIF;
         EXIF.enableXmp();
-        EXIF.getData(img, function()  {
+        EXIF.getData(tile.elem, function()  {
 
             scope.extractAndProcess(this, index, tile);
             callback(tile);

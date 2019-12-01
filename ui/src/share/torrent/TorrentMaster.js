@@ -66,33 +66,12 @@ export default class TorrentMaster {
 
     async findExistingContent(roomPromise) {
 
-
         const self = this;
 
-        /*return this.resurrectLocallySavedTorrents(this.urls).then(values => {
-            Logger.info('done with resurrectAllTorrents ' + values);
-            //if(values) {
-            //    Logger.info('done with resurrectAllTorrents ' + values);
-            //}
-            return roomPromise.call(self.service);
-        });*/
-
-        //TODO: make caching of local images work again, so that a refresh resurrects an image from client,
-        // not reliant on other peers
         const values = await this.resurrectLocallySavedTorrents(self.urls);
         Logger.info('done with resurrectAllTorrents ' + values);
-        //const done = await Promise.all(values);
-        //Logger.info('done with all resurrectAllTorrents ' + done);
 
         return roomPromise.call(this.service)
-            /*//TODO: make caching of local images work again, so that a refresh resurrects an image from client,
-            // not reliant on other peers
-            .then((urls) => this.resurrectLocallySavedTorrents(self.urls))
-            .then(async values => {
-                Logger.info('done with resurrectAllTorrents ' + values);
-                const done = await Promise.all(values);
-                Logger.info('done with all resurrectAllTorrents ' + done);
-            })*/
             .then(response => {
 
                 if(!response) return;

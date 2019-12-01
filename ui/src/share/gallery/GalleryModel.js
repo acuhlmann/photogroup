@@ -90,7 +90,9 @@ export default class GalleryModel {
 
     addTile(file, elem, torrent, secure, sharedBy, seed) {
         const fileSize = FileUtil.formatBytes(file.size || file.length);
+        const isVideo = elem.type.includes('video');
         this.view.state.tileData.push({
+            isVideo: isVideo,
             elem: elem,
             img: window.URL.createObjectURL(elem),
             name: file.name,

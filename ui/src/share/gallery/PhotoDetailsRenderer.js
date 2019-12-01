@@ -20,6 +20,8 @@ export default class PhotoDetailsRenderer {
 
         this.url = url;
 
+        if(!metadata || (metadata && metadata.length < 1)) return;
+
         if(metadata[0] && metadata[0].key !== 'Shared by ') {
             const shared = sharedBy ? sharedBy.originPlatform : '';
             metadata.unshift({key: 'Shared by ', value: shared + ' ' + fileSize});
@@ -34,7 +36,7 @@ export default class PhotoDetailsRenderer {
             } else if(item.key === 'GPSAltitude') {
                 content = item.value + 'm'
             } else if(item.key === 'x-file name') {
-                content = this.getFileNameEntry(url.fileName ? url.fileName : item.value, item.value);
+                content = this.getFileNameEntry(url && url.fileName ? url.fileName : item.value, item.value);
             }
 
             return <ListItem key={index}

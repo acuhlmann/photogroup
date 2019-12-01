@@ -115,7 +115,7 @@ class Uploader extends Component {
         return (
             visible || hasRoom ? <div>
                 <input
-                    accept="image/*"
+                    //accept="image/*,video/*,.pdf"
                     className={classes.input}
                     id="contained-button-file" disabled={disabled}
                     type="file" onChange={this.handleUpload.bind(this)}

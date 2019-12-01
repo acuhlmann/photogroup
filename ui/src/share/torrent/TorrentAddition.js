@@ -204,6 +204,7 @@ export default class TorrentAddition {
 
         this.update(torrent.numPeers);
 
+        //return;
         const self = this;
         this.torrentsDb.get(key, (err, value) => {
             if (err) {
