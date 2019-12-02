@@ -26,8 +26,8 @@ export default class Loader {
         // Progress
         const completed = Math.round(torrent.progress * 100 * 100) / 100;
         //const percent = completed + '%';
-        const downloaded = FileUtil.prettyBytes(torrent.downloaded);
-        const total = FileUtil.prettyBytes(torrent.length);
+        const downloaded = FileUtil.formatBytes(torrent.downloaded);
+        const total = FileUtil.formatBytes(torrent.length);
 
         // Remaining time
         let remaining;
@@ -40,8 +40,8 @@ export default class Loader {
         }
 
         // Speed rates
-        const downloadSpeed = FileUtil.prettyBytes(torrent.downloadSpeed) + '/s';
-        const uploadSpeed = FileUtil.prettyBytes(torrent.uploadSpeed) + '/s';
+        const downloadSpeed = FileUtil.formatBytes(torrent.downloadSpeed) + '/s';
+        const uploadSpeed = FileUtil.formatBytes(torrent.uploadSpeed) + '/s';
 
         this.parent.setState({
             peers: peers, completed: completed,
