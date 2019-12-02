@@ -52,18 +52,22 @@ class GalleryMedia extends Component {
         this.master = props.master;
         this.model = props.model;
 
-        this.ref = React.createRef();
+        //this.ref = React.createRef();
 
         this.state = {
             open: false,
             allMetadata: [],
             sharedBy: {},
             fileSize: '',
+            //tile: props.tile,
+            ref: React.createRef(),
+            elem: null,
+            tile: props.tile
         };
     }
 
-    handleImageLoaded(tile, index, img) {
-        this.model.parser.readMetadata(tile, index, img, async tile => {
+    handleImageLoaded(tile, img) {
+        this.model.parser.readMetadata(tile, img, async tile => {
 
             if(tile.seed) {
 
@@ -89,13 +93,14 @@ class GalleryMedia extends Component {
     }
 
     handleOpen(tile) {
-        this.setState({
+        const state = {
             open: true,
             url: this.master.urls.find(item => item.url === tile.torrent.magnetURI),
             allMetadata: this.model.parser.createMetadataSummary(tile.allMetadata),
             sharedBy: tile.sharedBy,
             fileSize: tile.size
-        });
+        };
+        this.setState(state);
     }
 
     handleClose() {
@@ -133,25 +138,53 @@ class GalleryMedia extends Component {
         });
     }
 
-    handleDelete(tile) {
-        this.model.deleteTile(tile);
-        //this.master.service.delete(url.hash);
+    async handleDelete(tile) {
+        //this.componentWillUnmount();
+        const hash = await this.model.deleteTile(tile);
+        Logger.log('handleDelete ' + tile.torrent.name + ' ' + hash + ' ' + tile.torrent.infoHash);
+        //this.master.service.delete(tile.torrent.infoHash);
     }
 
     componentDidMount() {
-        this.handleContainerLoaded(this.props.tile, this.ref.current);
+        //this.ref = React.createRef();
+        this.handleContainerLoaded(this.props.tile, this.state.ref.current);
+        //this.forceUpdate();
+    }
+
+    componentWillUnmount() {
+        //this.forceUpdate();
+        const node = this.state.ref.current;
+        if(!node || !node.firstChild) return;
+        Logger.info('componentWillUnmount ' + node.firstChild.alt);
+        /*while (node.firstChild) {
+            node.removeChild(node.firstChild);
+        }*/
+        //this.forceUpdate();
+        //this.ref = React.createRef();
+
+        //node.removeChild(this.state.elem);
     }
 
     handleContainerLoaded(tile, node) {
-        if(!tile || !node) return;
+        if(!tile || !node || !tile.torrent.files[0] || node.hasChildNodes()) return;
 
+        Logger.info('handleContainerLoaded ' + tile.torrent.name);
         const opts = {
             autoplay: true,
             muted: true, loop: true
         };
         const self = this;
         tile.torrent.files[0].appendTo(node, opts, (err, elem) => {
-            if (err) Logger.error('webtorrent.appendTo ' + err.message); // file failed to download or display in the DOM
+            // file failed to download or display in the DOM
+            if (err) {
+                Logger.error('webtorrent.appendTo ' + err.message);
+                self.props.enqueueSnackbar(err.message, {
+                    variant: 'error',
+                    autoHideDuration: 6000,
+                    action: <Button className={self.props.classes.white} size="small">x</Button>
+                });
+            }
+
             console.log('New DOM node with the content', elem);
             if(elem && elem.style) {
                 elem.style.width = '100%';
@@ -161,17 +194,20 @@ class GalleryMedia extends Component {
             if(tile.isVideo) {
                 elem.loop = true;
             }
-            self.handleImageLoaded(tile, self.props.index, elem);
+            self.handleImageLoaded(tile, elem);
+            self.setState({elem: elem});
         });
     }
 
     render() {
-        const {classes, tile, label} = this.props;
-
+        const {classes, label} = this.props;
+        const {open, url, ref, tile} = this.state;
+        //{this.handleContainerLoaded(tile, this.ref.current)}
         return (
             <div>
                 <div cols={tile.cols || 1} className={classes.gridList}>
-                    <div className={classes.wide} ref={this.ref}>
+                    <div className={classes.wide} ref={ref}>
+
                     </div>
                     <Paper className={classes.toolbar}>
 
@@ -189,9 +225,9 @@ class GalleryMedia extends Component {
                         </div>
                         <div className={classes.cardContent}>
                             <Typography variant={"caption"}>first shared by {tile.sharedBy.originPlatform}</Typography>
-                            <IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
+                            {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
                                 <CloudUploadIcon/>
-                            </IconButton>
+                            </IconButton>*/}
                             <IconButton onClick={this.handleDelete.bind(this, tile)}
                                         className={classes.icon}>
                                 <DeleteIcon />
@@ -202,8 +238,8 @@ class GalleryMedia extends Component {
                 <PhotoDetails metadata={this.state.allMetadata}
                                 sharedBy={this.state.sharedBy}
                                 fileSize={this.state.fileSize}
-                                open={this.state.open}
-                                url={this.master.urls.find(item => item.url === tile.torrent.magnetURI)}
+                                open={open}
+                                url={url}
                                 service={this.master.service}
                                 handleClose={this.handleClose.bind(this)} />
             </div>
@@ -213,7 +249,6 @@ class GalleryMedia extends Component {
 
 GalleryMedia.propTypes = {
     tile: PropTypes.object.isRequired,
-    index: PropTypes.number.isRequired,
     label: PropTypes.string.isRequired,
     model: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,

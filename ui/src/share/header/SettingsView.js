@@ -364,7 +364,7 @@ class SettingsView extends Component {
                         </span>
                     </DialogActions>
                     <DialogContent>
-                        <Typography variant={"caption"}>v2 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v3 {this.state.peerId}</Typography>
                         {messages}
                     </DialogContent>
                 </Dialog>

@@ -43,7 +43,7 @@ class QRCodeView extends Component {
         const master = this.props.master;
         master.emitter.emit('openRoomStart');
 
-        await master.findExistingContent(master.service.createRoom);
+        await master.findExistingContent(master.service.createRoom, true);
         master.service.changeUrl('room', master.service.id);
 
         master.emitter.emit('openRoomEnd');

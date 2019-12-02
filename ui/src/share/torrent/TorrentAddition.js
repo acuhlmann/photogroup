@@ -249,7 +249,7 @@ export default class TorrentAddition {
     done(torrent) {
         this.update(torrent.numPeers);
         //Checks to make sure that ImmediateChunkStore has finished writing to store before destroying the torrent!
-        const isMemStoreEmpty = setInterval(()=>{
+        /*const isMemStoreEmpty = setInterval(()=>{
             //Since client.seed is sequential, this is okay here.
             const empty = torrent.store && torrent.store.mem && !torrent.store.mem[torrent.store.mem.length-1];
             if(empty){
@@ -257,6 +257,6 @@ export default class TorrentAddition {
                 //torrent.destroy();
                 clearInterval(isMemStoreEmpty)
             }
-        },500)
+        }, 500)*/
     }
 }

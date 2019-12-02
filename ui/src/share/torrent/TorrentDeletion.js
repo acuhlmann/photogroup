@@ -22,19 +22,22 @@ export default class TorrentDeletion {
         return this.service.delete(torrent.infoHash)
             .then(() => {
                 Logger.info('deleted ' + torrent.infoHash);
+                //localStorage.deleteItem('fileName-' + torrent.infoHash);
                 return torrent.infoHash;
             });
     }
 
-    deleteTorrent(torrent) {
+    async deleteTorrent(torrent) {
 
         this.update(torrent.numPeers);
         this.emitter.emit('disconnectNode', torrent.infoHash);
 
+        await this.deleteTorrentDbEntry(torrent);
+
         return new Promise((resolve, reject) => {
 
             if(torrent.client) {
-                if(torrent.infoHash) {
+                if(torrent.infoHash && torrent.client.get(torrent.infoHash)) {
                     torrent.client.remove(torrent.infoHash, () => {
                         Logger.info('torrent removed ' + torrent.infoHash);
                         this.update(torrent.numPeers);
@@ -51,8 +54,8 @@ export default class TorrentDeletion {
                 resolve(torrent.infoHash);
             }
         }).then(() => {
-            //return torrent.infoHash;
-            return this.deleteTorrentDbEntry(torrent);
+            return torrent.infoHash;
+            //return this.deleteTorrentDbEntry(torrent);
         });
     }
 
@@ -61,13 +64,17 @@ export default class TorrentDeletion {
         const key = torrent.infoHash;
         return new Promise((resolve, reject) => {
 
-            scope.torrentsDb.remove(key, (err, value) => {
-                if (err) {
-                    reject(err);
-                }
+            if(!key) {
+                reject();
+            } else {
+                scope.torrentsDb.remove(key, (err, value) => {
+                    if (err) {
+                        reject(err);
+                    }
 
-                resolve(torrent.infoHash);
-            });
+                    resolve(torrent.infoHash);
+                });
+            }
         });
     }
 }

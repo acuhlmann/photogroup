@@ -1,4 +1,5 @@
 import _ from "lodash";
+import prettyBytes from 'pretty-bytes';
 
 export default class FileUtil {
 
@@ -17,26 +18,8 @@ export default class FileUtil {
         return _.truncate(FileUtil.getFileNameWithoutSuffix(name), {length: 30}) + fileSuffix
     }
 
-    //https://stackoverflow.com/a/34166265
     static formatBytes(bytes) {
-        const kb = 1024;
-        const ndx = Math.floor( Math.log(bytes) / Math.log(kb) );
-        const fileSizeTypes = ["bytes", "kb", "mb", "gb", "tb", "pb", "eb", "zb", "yb"];
-
-        return {
-            size: +(bytes / kb / kb).toFixed(2),
-            type: fileSizeTypes[ndx]
-        };
-    }
-
-    static prettyBytes(num) {
-        let exponent, unit, neg = num < 0, units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-        if (neg) num = -num;
-        if (num < 1) return (neg ? '-' : '') + num + ' B';
-        exponent = Math.min(Math.floor(Math.log(num) / Math.log(1000)), units.length - 1);
-        num = Number((num / Math.pow(1000, exponent)).toFixed(2));
-        unit = units[exponent];
-        return (neg ? '-' : '') + num + ' ' + unit
+        return prettyBytes(bytes);
     }
 
     //credits to https://gist.github.com/wuchengwei/b7e1820d39445f431aeaa9c786753d8e

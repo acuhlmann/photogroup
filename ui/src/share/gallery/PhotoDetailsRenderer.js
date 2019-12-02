@@ -23,7 +23,7 @@ export default class PhotoDetailsRenderer {
         if(!metadata || (metadata && metadata.length < 1)) return;
 
         if(metadata[0] && metadata[0].key !== 'Shared by ') {
-            const shared = sharedBy ? sharedBy.originPlatform : '';
+            const shared = sharedBy ? (sharedBy.name ? sharedBy.name : sharedBy.originPlatform) : '';
             metadata.unshift({key: 'Shared by ', value: shared + ' ' + fileSize});
         }
 
@@ -70,7 +70,7 @@ export default class PhotoDetailsRenderer {
 
         console.log('change name ' + event.target.value);
         this.service.update(this.url.hash, {
-            fileName: event.target.value
+            fileName: FileUtil.truncateFileName(event.target.value)
         });
     }
 

@@ -14,7 +14,7 @@ export default class TorrentCreator {
     }
 
     static setupAnnounceUrls() {
-        const isLocal = window.location.href.indexOf('localhost');
+        const isLocal = window.location.href.includes('localhost');
         console.log('window.location.href ' + window.location.href);
         const wsUrl = isLocal ? 'ws://' + window.location.hostname + ':9000' : 'wss://' + window.location.hostname + '/ws';
         console.log('WEBTORRENT_ANNOUNCE wsUrl ' + wsUrl);

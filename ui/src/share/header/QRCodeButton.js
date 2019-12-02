@@ -14,10 +14,13 @@ import QRCode from "qrcode.react";
 import {Typography} from "@material-ui/core";
 import Button from "@material-ui/core/Button";
 import LinkRounded from '@material-ui/icons/LinkRounded';
+import ShareRounded from '@material-ui/icons/ShareRounded';
 import copy from "clipboard-copy";
 import QrReader from 'react-qr-reader'
 import PlayCircleFilledWhiteRoundedIcon from '@material-ui/icons/PlayCircleFilledWhiteRounded';
 import CropFreeRounded from '@material-ui/icons/CropFreeRounded';
+import Logger from 'js-logger';
+
 //import Slide from '@material-ui/core/Slide';
 
 /*function Transition(props) {
@@ -113,9 +116,18 @@ class QRCodeButton extends Component {
         });
     }
 
-    async shareLink(url) {
+    copyLink(url) {
 
         copy(url);
+    }
+
+    async shareLink(shareData) {
+
+        try {
+            await navigator.share(shareData)
+        } catch(err) {
+            Logger.error('navigator.share failed ' + err);
+        }
     }
 
     hasRoom() {
@@ -139,6 +151,13 @@ class QRCodeButton extends Component {
             height: 280,
             width: 300,
         };
+
+        const shareData = {
+            title: 'PhotoGroup',
+            text: 'Get this picture',
+            url: url
+        };
+        const canShare = navigator.canShare ? navigator.canShare(shareData) : true;
 
         return (
             visible || hasRoom ? <div>
@@ -176,15 +195,26 @@ class QRCodeButton extends Component {
                                 <span className={classes.vertical} style={{
                                     marginTop: '10px'
                                 }}>
-                                    <Typography variant={"body1"}>or</Typography>
-                                    <Button onClick={this.shareLink.bind(this, url)}
-                                            variant="contained"
-                                            color="primary"
-                                            className={classes.button}
-                                            endIcon={<LinkRounded/>}
-                                    >
-                                    copy link
-                                    </Button>
+                                    <span className={classes.horizontal}>
+                                        <Button onClick={this.copyLink.bind(this, url)}
+                                                variant="contained"
+                                                color="primary"
+                                                className={classes.button}
+                                                endIcon={<LinkRounded/>}
+                                        >
+                                        copy link
+                                        </Button>
+                                        {canShare ? <Button
+                                                style={{marginLeft: '10px'}}
+                                                onClick={(event) => {this.shareLink(shareData)}}
+                                                variant="contained"
+                                                color="primary"
+                                                className={classes.button}
+                                                endIcon={<ShareRounded/>}
+                                        >
+                                        share
+                                        </Button> : ''}
+                                    </span>
                                 </span>
                                 </span> : <span></span>
                             }

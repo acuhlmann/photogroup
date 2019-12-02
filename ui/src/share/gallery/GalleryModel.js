@@ -19,15 +19,31 @@ export default class GalleryModel {
 
     deleteTile(tile) {
         const scope = this;
+        //return scope.performDeleteTile(tile.torrent.infoHash);
         return this.torrentMaster.torrentDeletion.deleteItem(tile.torrent).then(infoHash => {
             return scope.performDeleteTile(infoHash);
         });
     }
 
-    performDeleteTile(infoHash) {
-        const tiles = this.view.state.tileData;
+    reload() {
+        window.location.reload();
+    }
 
-        const found = tiles.find((tile, index) => {
+    performDeleteTile(infoHash) {
+
+        const tiles = this.view.state.tileData.filter(tile => tile.torrent.infoHash !== infoHash);
+        this.view.setState({
+            tileData: tiles
+        });
+
+        //this.view.forceUpdate();
+        this.reload();
+
+        /*this.view.setState(prevState => ({
+            tileData: prevState.tileData.filter(tile => tile.torrent.infoHash !== infoHash)
+        }));*/
+
+        /*const found = tiles.find((tile, index) => {
             if(tile.torrent.infoHash === infoHash) {
                 tiles.splice(index, 1);
                 return true;
@@ -37,9 +53,9 @@ export default class GalleryModel {
 
         if(found) {
             this.updateTiles();
-        }
+        }*/
 
-        return found;
+        return infoHash;
     }
 
     getTileByUri(uri) {
@@ -97,7 +113,7 @@ export default class GalleryModel {
             img: window.URL.createObjectURL(elem),
             name: file.name,
             file: file,
-            size: fileSize.size + fileSize.type,
+            size: fileSize,
             torrent: torrent,
             secure: secure,
             sharedBy: sharedBy || {},

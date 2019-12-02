@@ -232,6 +232,8 @@ export default class RoomsService {
             sessionId: this.sessionId
         };
 
+        //await this.master.torrentsDb.clear();
+
         try {
             let response = await fetch(this.url, {
                 method: 'POST',
@@ -271,6 +273,8 @@ export default class RoomsService {
         const data = {
             sessionId: this.sessionId
         };
+
+        //await this.master.torrentsDb.clear();
 
         try {
             let response = await fetch(this.url + '/' + this.id, {
@@ -375,6 +379,10 @@ export default class RoomsService {
     }
 
     async update(hash, update) {
+
+        //if(update.fileName) {
+        //    localStorage.setItem('fileName-' + hash, update.fileName);
+        //}
 
         update.hash = hash;
         try {

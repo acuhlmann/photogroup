@@ -46,7 +46,9 @@ class Gallery extends Component {
                     if(url && url.fileName && tile.allMetadata) {
                         const allMetadata = this.model.parser.createMetadataSummary(tile.allMetadata);
                         const suffix = FileUtil.getFileSuffix(tile.torrent.name);
-                        tile.summary = this.model.parser.createSummary(allMetadata, tile.dateTaken, url.fileName + suffix);
+                        const fileName = FileUtil.truncateFileName(url.fileName);
+                        tile.summary = this.model.parser.createSummary(allMetadata, tile.dateTaken, fileName + suffix);
+                        tile.name = url.fileName;
                     }
                     return tile;
                 })
@@ -75,14 +77,14 @@ class Gallery extends Component {
             </GridListTile>;
         } else {
 
-            return <GalleryMedia key={index} index={index} tile={tile} label={label}
+            return <GalleryMedia key={index} tile={tile} label={label}
                                  master={this.master} model={this.model}/>;
         }
     }
 
     render() {
         const classes = this.props.classes;
-        const tileData = this.state.tileData;
+        const tileData = Array.from(this.state.tileData);
 
         return (
             <div className={classes.root}>

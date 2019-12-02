@@ -25,12 +25,23 @@ export default class TorrentMaster {
             scope.urls = urls;
             scope.syncUiWithServerUrls(urls);
         });
+
         emitter.on('webPeers', peers => {
 
             if(!scope.client || !scope.client.peerId || !peers) return;
 
             const peerId = scope.client.peerId;
             scope.me = peers.find(peer => peer.peerId === peerId);
+
+            if(peers && scope.urls) {
+                peers.forEach(peer => {
+                    scope.urls.forEach(url => {
+                        if(url.sharedBy.peerId === peer.peerId) {
+                            url.sharedBy.name = peer.name;
+                        }
+                    })
+                });
+            }
         });
         this.emitter = emitter;
 
@@ -64,21 +75,22 @@ export default class TorrentMaster {
         return torrent;
     }
 
-    async findExistingContent(roomPromise) {
+    async findExistingContent(roomPromise, newRoom) {
 
         const self = this;
 
-        const values = await this.resurrectLocallySavedTorrents(self.urls);
-        Logger.info('done with resurrectAllTorrents ' + values);
-
         return roomPromise.call(this.service)
-            .then(response => {
+            .then(async response => {
 
                 if(!response) return;
 
+                const urls = this.urls = response.urls;
+                const values = await this.resurrectLocallySavedTorrents(this.urls);
+                Logger.info('done with resurrectAllTorrents ' + values);
+
                 let foundAnyMissing;
                 let msg = response.urls.length + '\n';
-                response.urls.forEach(item => {
+                urls.forEach(item => {
                     item.sharedBy = item.sharedBy || {};
 
                     if(this.fillMissingOwners(item)) {
@@ -94,6 +106,7 @@ export default class TorrentMaster {
                 if(!foundAnyMissing) {
                     self.emitter.emit('urls', response.urls);
                 }
+
                 return response.urls;
             });
     }
@@ -202,7 +215,11 @@ export default class TorrentMaster {
 
                 } else {
 
-                    const sharedBy = urls ? urls.find(item => item.hash === metadata.infoHash) : {};
+                    let sharedBy = {};
+                    if(urls) {
+                        const url = urls.find(item => item.hash === metadata.infoHash);
+                        sharedBy = url ? url.sharedBy : sharedBy;
+                    }
                     scope.torrentAddition.add(metadata, false, sharedBy).then(torrent => {
 
                         Logger.info('resurrectTorrent.add ' + torrent.infoHash);

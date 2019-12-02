@@ -5,7 +5,7 @@ import FileUtil from "../util/FileUtil";
 
 export default class MetadataParser {
 
-    readMetadata(tile, index, img, callback) {
+    readMetadata(tile, img, callback) {
 
         const scope = this;
 
@@ -17,12 +17,12 @@ export default class MetadataParser {
         EXIF.enableXmp();
         EXIF.getData(tile.elem, function()  {
 
-            scope.extractAndProcess(this, index, tile);
+            scope.extractAndProcess(this, tile);
             callback(tile);
         });
     }
 
-    extractAndProcess(img, index, tile) {
+    extractAndProcess(img, tile) {
 
         const EXIF = window.EXIF;
         const allMetadata = EXIF.getAllTags(img);
@@ -31,10 +31,12 @@ export default class MetadataParser {
         ExifParser.parse(allMetadata);
 
         allMetadata['x-file name'] = tile.torrent.name;
-        allMetadata['x-Description'] = MetadataParser.findBestDesc(allMetadata);
+        const desc = MetadataParser.findBestDesc(allMetadata);
+        if(desc)
+            allMetadata['x-Description'] = desc;
 
         tile.allMetadata = allMetadata;
-        this.sortByDate(tile, index, allMetadata);
+        this.sortByDate(tile, allMetadata);
     }
 
     static findBestDesc(allMetadata) {
@@ -52,14 +54,14 @@ export default class MetadataParser {
         }
     }
 
-    sortByDate(tile, index, allMetadata) {
+    sortByDate(tile, allMetadata) {
 
         const DateTimeOriginal = allMetadata['DateTimeOriginal'];
         const timestamp = MetadataParser.toTimeStamp(DateTimeOriginal);
 
-        const tileCopy = this.view.state.tileData.slice();
-        if(tileCopy[index]) {
-            const tileItem = tileCopy[index];
+        const tiles = this.view.state.tileData;
+        const tileItem = tiles.find(item => item.torrent.infoHash === tile.torrent.infoHash);
+        if(tileItem) {
             const dateTaken = MetadataParser.formatDateFromTimeStamp(timestamp);
             tileItem.dateTaken = dateTaken === 'Invalid date' ? '' : dateTaken;
             tileItem.dateTakenDate = timestamp.toDate();
@@ -68,15 +70,15 @@ export default class MetadataParser {
             tileItem.desc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
             tileItem.fileName = FileUtil.truncateFileName(tile.torrent.name);
 
-            tileCopy[index].summary = this.createSummary(allMetadata, tileItem.dateTaken, tile.torrent.name);
+            tileItem.summary = this.createSummary(allMetadata, tileItem.dateTaken, tile.torrent.name);
             const cameraMake = allMetadata['Make'] ? allMetadata['Make']  + ' ': '';
             const cameraSettings = allMetadata['x-Settings'] ? allMetadata['x-Settings'] : '';
-            tileCopy[index].cameraSettings = cameraMake + cameraSettings;
+            tileItem.cameraSettings = cameraMake + cameraSettings;
 
-            tileCopy.sort(function(a,b){
+            tiles.sort(function(a,b){
                 return new Date(b.dateTakenDate) - new Date(a.dateTakenDate);
             });
-            this.view.setState({tileData: tileCopy});
+            this.view.setState({tileData: tiles});
         }
     }
 

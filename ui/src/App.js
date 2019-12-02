@@ -66,7 +66,10 @@ class App extends Component {
         //This may happen if client state is lost
         //i.e. due to removal of browser (indexeddb cache)
         this.master.emitter.on('duplicate', (duplicated) => {
-            if(!this.gallery.getTileByUri(duplicated.torrentId).item) {
+
+            const tileItem = scope.gallery.getTileByUri(duplicated.torrentId);
+            console.log('duplicate ' + tileItem.item);
+            if(!tileItem.item) {
                 duplicated.torrent.client.remove(duplicated.torrentId, () => {
                     if(duplicated.files) {
                         //TODO: temporarily disable due to files disapearing bug in seed.torrent
