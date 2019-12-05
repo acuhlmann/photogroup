@@ -2,6 +2,7 @@ import Logger from 'js-logger';
 import MetadataParser from "./MetadataParser";
 import Encrypter from "../security/Encrypter";
 import FileUtil from "../util/FileUtil";
+import update from 'immutability-helper';
 
 export default class GalleryModel {
 
@@ -18,10 +19,9 @@ export default class GalleryModel {
     }
 
     deleteTile(tile) {
-        const scope = this;
-        //return scope.performDeleteTile(tile.torrent.infoHash);
+        const self = this;
         return this.torrentMaster.torrentDeletion.deleteItem(tile.torrent).then(infoHash => {
-            return scope.performDeleteTile(infoHash);
+            return self.performDeleteTile(infoHash);
         });
     }
 
@@ -31,29 +31,14 @@ export default class GalleryModel {
 
     performDeleteTile(infoHash) {
 
-        const tiles = this.view.state.tileData.filter(tile => tile.torrent.infoHash !== infoHash);
-        this.view.setState({
-            tileData: tiles
-        });
-
-        //this.view.forceUpdate();
-        this.reload();
-
-        /*this.view.setState(prevState => ({
-            tileData: prevState.tileData.filter(tile => tile.torrent.infoHash !== infoHash)
-        }));*/
-
-        /*const found = tiles.find((tile, index) => {
-            if(tile.torrent.infoHash === infoHash) {
-                tiles.splice(index, 1);
-                return true;
-            }
-            return false;
-        });
-
-        if(found) {
-            this.updateTiles();
-        }*/
+        const currentTiles = this.view.state.tileData;
+        const index = currentTiles.findIndex(item => item.torrent.infoHash === infoHash);
+        if(index > -1 ) {
+            const tiles = update(currentTiles, {$splice: [[index, 1]]});
+            this.view.setState({
+                tileData: tiles
+            });
+        }
 
         return infoHash;
     }
@@ -107,7 +92,7 @@ export default class GalleryModel {
     addTile(file, elem, torrent, secure, sharedBy, seed) {
         const fileSize = FileUtil.formatBytes(file.size || file.length);
         const isVideo = elem.type.includes('video');
-        this.view.state.tileData.push({
+        const tile = {
             isVideo: isVideo,
             elem: elem,
             img: window.URL.createObjectURL(elem),
@@ -118,8 +103,11 @@ export default class GalleryModel {
             secure: secure,
             sharedBy: sharedBy || {},
             seed: seed
+        };
+        const tiles = update(this.view.state.tileData, {$push: [tile]});
+        this.view.setState({
+            tileData: tiles
         });
-        this.updateTiles();
 
         if(!seed) {
 
@@ -139,13 +127,12 @@ export default class GalleryModel {
         const scope = this;
 
         Encrypter.decryptPic(elem, password, (blob) => {
-            scope.view.state.tileData.splice(index, 1);
+            //scope.view.state.tileData.splice(index, 1);
+            const tiles = update(scope.view.state.tileData, {$splice: [[index, 1]]});
+            scope.view.setState({
+                tileData: tiles
+            });
             scope.renderTo(file, blob, torrent, false);
         });
-    }
-
-    updateTiles() {
-        const copy = this.view.state.tileData.slice();
-        this.view.setState({tileData: copy});
     }
 }

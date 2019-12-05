@@ -93,14 +93,14 @@ class GalleryMedia extends Component {
     }
 
     handleOpen(tile) {
-        const state = {
+
+        this.setState((state, props) => ({
             open: true,
-            url: this.master.urls.find(item => item.url === tile.torrent.magnetURI),
-            allMetadata: this.model.parser.createMetadataSummary(tile.allMetadata),
+            url: props.master.urls.find(item => item.url === tile.torrent.magnetURI),
+            allMetadata: props.model.parser.createMetadataSummary(tile.allMetadata),
             sharedBy: tile.sharedBy,
             fileSize: tile.size
-        };
-        this.setState(state);
+        }));
     }
 
     handleClose() {
@@ -146,27 +146,30 @@ class GalleryMedia extends Component {
     }
 
     componentDidMount() {
+
+        //this.handleImageLoaded(this.state.tile, null);
+
         //this.ref = React.createRef();
-        this.handleContainerLoaded(this.props.tile, this.state.ref.current);
+        this.handleContainerLoaded(this.props.tile, this.state.ref.current, this.props.file);
         //this.forceUpdate();
     }
-
+    /*
     componentWillUnmount() {
         //this.forceUpdate();
         const node = this.state.ref.current;
         if(!node || !node.firstChild) return;
         Logger.info('componentWillUnmount ' + node.firstChild.alt);
-        /*while (node.firstChild) {
-            node.removeChild(node.firstChild);
-        }*/
+        //while (node.firstChild) {
+        //    node.removeChild(node.firstChild);
+        //}
         //this.forceUpdate();
         //this.ref = React.createRef();
 
         //node.removeChild(this.state.elem);
-    }
+    }*/
 
-    handleContainerLoaded(tile, node) {
-        if(!tile || !node || !tile.torrent.files[0] || node.hasChildNodes()) return;
+    handleContainerLoaded(tile, node, file) {
+        if(!tile || !node || !file || node.hasChildNodes()) return;
 
         Logger.info('handleContainerLoaded ' + tile.torrent.name);
         const opts = {
@@ -174,7 +177,7 @@ class GalleryMedia extends Component {
             muted: true, loop: true
         };
         const self = this;
-        tile.torrent.files[0].appendTo(node, opts, (err, elem) => {
+        file.appendTo(node, opts, (err, elem) => {
             // file failed to download or display in the DOM
             if (err) {
                 Logger.error('webtorrent.appendTo ' + err.message);
@@ -200,9 +203,10 @@ class GalleryMedia extends Component {
     }
 
     render() {
-        const {classes, label} = this.props;
+        const {classes, label, name} = this.props;
         const {open, url, ref, tile} = this.state;
         //{this.handleContainerLoaded(tile, this.ref.current)}
+
         return (
             <div>
                 <div cols={tile.cols || 1} className={classes.gridList}>
@@ -220,14 +224,14 @@ class GalleryMedia extends Component {
                             </IconButton>
                             <Typography onClick={this.handleOpen.bind(this, tile)} className={classes.wordwrap}
                                         title={tile.summary}
-                                        variant="caption">{tile.summary} {tile.size} {tile.cameraSettings}
+                                        variant="caption">{name}
                             </Typography>
                         </div>
                         <div className={classes.cardContent}>
                             <Typography variant={"caption"}>first shared by {tile.sharedBy.originPlatform}</Typography>
-                            {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
+                            <IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
                                 <CloudUploadIcon/>
-                            </IconButton>*/}
+                            </IconButton>
                             <IconButton onClick={this.handleDelete.bind(this, tile)}
                                         className={classes.icon}>
                                 <DeleteIcon />
@@ -236,12 +240,12 @@ class GalleryMedia extends Component {
                     </Paper>
                 </div>
                 <PhotoDetails metadata={this.state.allMetadata}
-                                sharedBy={this.state.sharedBy}
-                                fileSize={this.state.fileSize}
-                                open={open}
-                                url={url}
-                                service={this.master.service}
-                                handleClose={this.handleClose.bind(this)} />
+                              sharedBy={this.state.sharedBy}
+                              fileSize={this.state.fileSize}
+                              open={open}
+                              url={url}
+                              service={this.master.service}
+                              handleClose={this.handleClose.bind(this)} />
             </div>
         );
     }

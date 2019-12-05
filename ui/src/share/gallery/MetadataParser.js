@@ -59,7 +59,7 @@ export default class MetadataParser {
         const DateTimeOriginal = allMetadata['DateTimeOriginal'];
         const timestamp = MetadataParser.toTimeStamp(DateTimeOriginal);
 
-        const tiles = this.view.state.tileData;
+        const tiles = this.view.state.tileData.slice();
         const tileItem = tiles.find(item => item.torrent.infoHash === tile.torrent.infoHash);
         if(tileItem) {
             const dateTaken = MetadataParser.formatDateFromTimeStamp(timestamp);

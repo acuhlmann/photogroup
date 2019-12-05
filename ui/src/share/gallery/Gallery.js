@@ -36,18 +36,19 @@ class Gallery extends Component {
             tileData: [],
         };
 
+        const self = this;
         this.master.emitter.on('urls', urls => {
 
             this.setState({
-                tileData: this.state.tileData.map(tile => {
+                tileData: self.state.tileData.map(tile => {
 
                     const url = urls.find(item => item.url === tile.torrent.magnetURI);
 
                     if(url && url.fileName && tile.allMetadata) {
-                        const allMetadata = this.model.parser.createMetadataSummary(tile.allMetadata);
+                        const allMetadata = self.model.parser.createMetadataSummary(tile.allMetadata);
                         const suffix = FileUtil.getFileSuffix(tile.torrent.name);
                         const fileName = FileUtil.truncateFileName(url.fileName);
-                        tile.summary = this.model.parser.createSummary(allMetadata, tile.dateTaken, fileName + suffix);
+                        tile.summary = self.model.parser.createSummary(allMetadata, tile.dateTaken, fileName + suffix);
                         tile.name = url.fileName;
                     }
                     return tile;
@@ -64,6 +65,7 @@ class Gallery extends Component {
         const master = this.master;
 
         const label = tile.name + ' of ' + tile.size + ' first shared by ' + tile.sharedBy.originPlatform;
+        const name = `${tile.summary} ${tile.size} ${tile.cameraSettings}`;
 
         if(tile.secure) {
 
@@ -78,13 +80,14 @@ class Gallery extends Component {
         } else {
 
             return <GalleryMedia key={index} tile={tile} label={label}
+                                 name={name} file={tile.torrent.files[0]}
                                  master={this.master} model={this.model}/>;
         }
     }
 
     render() {
         const classes = this.props.classes;
-        const tileData = Array.from(this.state.tileData);
+        const {tileData} = this.state;//Array.from(this.state.tileData);
 
         return (
             <div className={classes.root}>
