@@ -1,4 +1,5 @@
 import Logger from "js-logger";
+import update from "immutability-helper";
 
 export default class TopologyHelper {
 
@@ -87,6 +88,7 @@ export default class TopologyHelper {
     }
 
     setState(state) {
+        //this.setState({urls: update(this.state.urls, {$set: urls})});
         this.parent.setState(state);
     }
 

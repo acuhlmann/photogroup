@@ -134,6 +134,7 @@ class App extends Component {
                                     </div>
                                     <QRCodeButton master={this.master}/>
                                     <Uploader model={this.master.torrentAddition}
+                                              emitter={this.master.emitter}
                                               loader={this.master.torrentAddition.loader} />
                                     <SettingsView master={this.master} emitter={this.master.emitter}/>
                                 </Toolbar>

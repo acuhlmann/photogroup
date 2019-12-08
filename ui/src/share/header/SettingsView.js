@@ -49,14 +49,6 @@ class SettingsView extends Component {
     constructor(props) {
         super(props);
 
-        this.state = {
-            messages: [],
-            open: false,
-            peerId: '',
-            //showTopology: false,
-            //showOtherPeers: true
-        };
-
         const { classes, master } = props;
         this.classes = classes;
         this.master = master;
@@ -66,10 +58,34 @@ class SettingsView extends Component {
             this.log(date + ' ' + messages[0], context.level.name);
         });
 
+        this.state = {
+            messages: [],
+            open: false,
+            peerId: '',
+            //showTopology: false,
+            //showOtherPeers: true
+        };
+
+        Logger.info('platform ' + navigator.platform);
+        this.checkConnection();
+
         this.master.emitter.on('addPeerDone', () => {
             //self.topology.start();
             this.setState({peerId: this.master.client.peerId})
         });
+    }
+
+    checkConnection() {
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        const type = connection.effectiveType;
+        Logger.info("Connection type is " + type);
+
+        function updateConnectionStatus() {
+            Logger.info("Connection type changed from " + type + " to " + connection.effectiveType);
+            type = connection.effectiveType;
+        }
+
+        connection.addEventListener('change', updateConnectionStatus);
     }
 
     componentDidMount() {
@@ -364,7 +380,7 @@ class SettingsView extends Component {
                         </span>
                     </DialogActions>
                     <DialogContent>
-                        <Typography variant={"caption"}>v3 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v2 {this.state.peerId}</Typography>
                         {messages}
                     </DialogContent>
                 </Dialog>

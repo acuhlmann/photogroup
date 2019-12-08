@@ -259,10 +259,13 @@ module.exports = class Topology {
         const pgNode = nodes[0];
         if(!pgNode || pgNode.id !== photogroup) {
 
-            const hostNetwork = this.peersModel.pgServer;
+            let hostNetwork = this.peersModel.pgServer;
+            if(!hostNetwork) {
+                hostNetwork = IpTranslator.createEmptyIpObj(photogroup);
+            }
             const node = {
                 id: photogroup,
-                label: photogroup + '\n' + hostNetwork ? hostNetwork.hostname : '' +
+                label: photogroup + '\n' + (hostNetwork ? hostNetwork.hostname : '') +
                     + '\n'
                     + this.addEmptySpaces(
                         [hostNetwork.ip.city,

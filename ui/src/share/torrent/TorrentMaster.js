@@ -64,11 +64,24 @@ export default class TorrentMaster {
         Logger.info('addSeedOrGetTorrent ' + torrent.infoHash);
 
         const scope = this;
+        torrent.on('download', bytes => {
+            Logger.log('just downloaded: ' + bytes)
+            Logger.log('total downloaded: ' + torrent.downloaded)
+            Logger.log('download speed: ' + torrent.downloadSpeed)
+            Logger.log('progress: ' + torrent.progress)
+        });
+        torrent.on('upload', bytes => {
+            Logger.log('just uploaded: ' + bytes)
+            Logger.log('total uploaded: ' + torrent.downloaded)
+            Logger.log('uploaded speed: ' + torrent.downloadSpeed)
+            Logger.log('progress: ' + torrent.progress)
+        });
         torrent.on('metadata', () => scope.torrentAddition.metadata(torrent));
         torrent.on('infoHash', hash => scope.torrentAddition.infoHash(torrent, hash));
         torrent.on('noPeers', announceType => scope.torrentAddition.noPeers(torrent, announceType));
         torrent.on('warning', err => scope.torrentAddition.warning(torrent, err));
         torrent.on('wire', (wire, addr) => scope.torrentAddition.wire(wire, addr));
+
 
         this.emitter.emit('update', torrent);
 

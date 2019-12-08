@@ -40,19 +40,26 @@ module.exports = class IpTranslator {
 
             } else {
 
-                const key = '8f125144341210254a52ef8d24bcc4dc';
-                return rp('http://api.ipstack.com/' + ip + '?access_key=' + key
-                    + '&hostname=1&security=1&output=json&fields=ip,hostname,country_code,city,region_name,location.country_flag_emoji')
-                    .then(function (result) {
-                        const json = JSON.parse(result);
-                        IpTranslator.lookedUpIPs.set(ip, json);
-                        return resolve(json);
-                    })
-                    .catch(function (err) {
-                        // Crawling failed...
-                        console.error('api.ipstack err' + err);
-                        reject(err)
-                    });
+                const isOnline = true;
+                if(isOnline) {
+
+                    const key = '8f125144341210254a52ef8d24bcc4dc';
+                    return rp('http://api.ipstack.com/' + ip + '?access_key=' + key
+                        + '&hostname=1&security=1&output=json&fields=ip,hostname,country_code,city,region_name,location.country_flag_emoji')
+                        .then(function (result) {
+                            const json = JSON.parse(result);
+                            IpTranslator.lookedUpIPs.set(ip, json);
+                            return resolve(json);
+                        })
+                        .catch(function (err) {
+                            // Crawling failed...
+                            console.error('api.ipstack err' + err);
+                            reject(err)
+                        });
+                } else {
+
+                    Promise.resolve(IpTranslator.createEmptyIpObj(ip));
+                }
             }
         });
     }

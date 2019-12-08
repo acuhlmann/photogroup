@@ -112,13 +112,12 @@ export default class TorrentCreator {
             torrent.discovery.on('warn', (err) => scope.torrentAddition.warning(torrent, err));
             torrent.discovery.on('error', (err) => scope.torrentAddition.warning(torrent, err));
 
-
             torrent.discovery.tracker._trackers.forEach(tracker => {
 
                 if(!tracker.socket) {
                     return;
                 }
-                tracker.socket.on('data', (data) => {
+                tracker.socket.on('data', data => {
 
                     try {
                         data = JSON.parse(data)

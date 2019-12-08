@@ -2,6 +2,7 @@ import moment from 'moment';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
 import FileUtil from "../util/FileUtil";
+import update from 'immutability-helper';
 
 export default class MetadataParser {
 
@@ -75,10 +76,16 @@ export default class MetadataParser {
             const cameraSettings = allMetadata['x-Settings'] ? allMetadata['x-Settings'] : '';
             tileItem.cameraSettings = cameraMake + cameraSettings;
 
-            tiles.sort(function(a,b){
+            tiles.sort((a,b) => {
                 return new Date(b.dateTakenDate) - new Date(a.dateTakenDate);
             });
-            this.view.setState({tileData: tiles});
+
+            const tileIndex = tiles.findIndex(item => item.torrent.infoHash === tile.torrent.infoHash);
+            //tiles[tileIndex] = update(tiles[tileIndex], {$set: tileItem});
+            const newTiles = update(tiles, {[tileIndex]: {$set: tileItem}});
+            this.view.setState({
+                tileData: newTiles
+            });
         }
     }
 

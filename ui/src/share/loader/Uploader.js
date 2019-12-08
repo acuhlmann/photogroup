@@ -108,7 +108,7 @@ class Uploader extends Component {
     }
 
     render() {
-        const {classes} = this.props;
+        const {classes, emitter} = this.props;
         const {visible, disabled} = this.state;
         const hasRoom = this.hasRoom();
 
@@ -131,7 +131,7 @@ class Uploader extends Component {
                     </IconButton>
                 </label>
 
-                <LoaderView loader={this.loader}/>
+                <LoaderView loader={this.loader} emitter={emitter}/>
 
                 <Dialog
                     open={this.state.open}

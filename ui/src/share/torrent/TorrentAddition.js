@@ -93,7 +93,7 @@ export default class TorrentAddition {
             this.update(torrent.numPeers);
 
             const sharedBy = {
-                peerId: torrent.client.peerId,
+                peerId: torrent.client ? torrent.client.peerId : null,
                 originPlatform: platform.description
             };
             this.emitter.emit('added', {file: origFile, torrent: torrent,
