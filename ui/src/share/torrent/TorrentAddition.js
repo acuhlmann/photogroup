@@ -212,7 +212,13 @@ export default class TorrentAddition {
             }
 
             if(!value) {
-                self.torrentsDb.add(key, parsed);
+
+                try {
+                    self.torrentsDb.add(key, parsed);
+                } catch(e) {
+                    Logger.warn('IndexedDB error saving ' + e.message);
+                }
+
             } else {
                 Logger.warn('already added ' + key + ' with value ' + value);
             }
@@ -248,6 +254,7 @@ export default class TorrentAddition {
 
     done(torrent) {
         this.update(torrent.numPeers);
+        this.loader.onDone();
         //Checks to make sure that ImmediateChunkStore has finished writing to store before destroying the torrent!
         /*const isMemStoreEmpty = setInterval(()=>{
             //Since client.seed is sequential, this is okay here.

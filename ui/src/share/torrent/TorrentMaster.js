@@ -7,6 +7,7 @@ import idb from 'indexeddb-chunk-store';
 import TorrentAddition from "./TorrentAddition";
 import TorrentDeletion from "./TorrentDeletion";
 import TorrentCreator from "./TorrentCreator";
+import FileUtil from '../util/FileUtil';
 
 /**
  * @emits TorrentMaster#deleted
@@ -64,17 +65,42 @@ export default class TorrentMaster {
         Logger.info('addSeedOrGetTorrent ' + torrent.infoHash);
 
         const scope = this;
+        let lastProgress = 0;
+        let lastDownloadSpeed = 0;
         torrent.on('download', bytes => {
-            Logger.log('just downloaded: ' + bytes)
-            Logger.log('total downloaded: ' + torrent.downloaded)
-            Logger.log('download speed: ' + torrent.downloadSpeed)
-            Logger.log('progress: ' + torrent.progress)
+            //Logger.log('just downloaded: ' + bytes)
+            //Logger.log('total downloaded: ' + torrent.downloaded)
+            const progress = torrent.progress * 100;
+            const downloadSpeed = torrent.downloadSpeed;
+            if(progress !== lastProgress || downloadSpeed !== lastDownloadSpeed) {
+                lastProgress = progress;
+                lastDownloadSpeed = downloadSpeed;
+                const downloadSpeedLabel = FileUtil.formatBytes(downloadSpeed) + '/sec';
+                Logger.log('torrent.download speed: ' + downloadSpeedLabel + ' ' + progress);
+                scope.emitter.emit('downloadProgress', {
+                    speed: downloadSpeedLabel,
+                    progress: progress
+                });
+            }
         });
+        let lastUpProgress = 0;
+        let lastUploadSpeed = 0;
         torrent.on('upload', bytes => {
-            Logger.log('just uploaded: ' + bytes)
-            Logger.log('total uploaded: ' + torrent.downloaded)
-            Logger.log('uploaded speed: ' + torrent.downloadSpeed)
-            Logger.log('progress: ' + torrent.progress)
+            //Logger.log('just uploaded: ' + bytes)
+            //Logger.log('total uploaded: ' + torrent.uploaded)
+
+            const progressUp = torrent.uploaded / torrent.length * 100;//torrent.progress * 100;
+            const uploadSpeed = torrent.uploadSpeed;
+            if(progressUp !== lastUpProgress || uploadSpeed !== lastUploadSpeed) {
+                lastUpProgress = progressUp;
+                lastUploadSpeed = uploadSpeed;
+                const uploadSpeedLabel = FileUtil.formatBytes(uploadSpeed) + '/sec';
+                Logger.log('torrent.upload speed: ' + uploadSpeedLabel + ' ' + progressUp + ' t ' + torrent.progress + ' u ' + torrent.uploaded);
+                scope.emitter.emit('uploadProgress', {
+                    speed: uploadSpeedLabel,
+                    progress: progressUp
+                });
+            }
         });
         torrent.on('metadata', () => scope.torrentAddition.metadata(torrent));
         torrent.on('infoHash', hash => scope.torrentAddition.infoHash(torrent, hash));

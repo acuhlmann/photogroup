@@ -114,8 +114,14 @@ class Uploader extends Component {
 
         return (
             visible || hasRoom ? <div>
+
+                <LoaderView loader={this.loader} emitter={emitter}/>
                 <input
-                    //accept="image/*,video/*,.pdf"
+                    accept="image/*,video/*"
+                    style={{
+                        position: 'absolute',
+                        top: '-15px'
+                    }}
                     className={classes.input}
                     id="contained-button-file" disabled={disabled}
                     type="file" onChange={this.handleUpload.bind(this)}
@@ -125,13 +131,15 @@ class Uploader extends Component {
                         aria-haspopup="true"
                         color="inherit" variant="contained"
                         component="span"
+                        style={{
+                            position: 'relative',
+                            top: '-15px',
+                        }}
                         disabled={disabled}
                     >
                         <CloudUploadRounded />
                     </IconButton>
                 </label>
-
-                <LoaderView loader={this.loader} emitter={emitter}/>
 
                 <Dialog
                     open={this.state.open}

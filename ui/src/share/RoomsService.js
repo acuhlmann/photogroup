@@ -164,7 +164,9 @@ export default class RoomsService {
         const data = {
             sessionId: this.sessionId,
             peerId: window.client.peerId,
-            originPlatform: platform.description,
+            originPlatform: (platform.description
+                + (navigator.platform ? ' ' + navigator.platform + ' ' : '' )
+                + (navigator.oscpu ? navigator.oscpu : '')),
             name: localStorage.getItem('nickname')
             //networkChain: networkChain ? networkChain.reverse() : []
         };

@@ -111,6 +111,7 @@ class ShareCanvas extends Component {
                 Logger.info('Connected!')
             } else {
                 Logger.warn('Disconnected!')
+                this.snack('Disconnected', 'warn', false, 'top');
             }
         }
         statusChecker.onUpdateStatus(onlineCallback)
@@ -175,7 +176,7 @@ class ShareCanvas extends Component {
         });
     }
 
-    snack(payload, type = 'info', persist = false) {
+    snack(payload, type = 'info', persist = false, vertical = 'bottom') {
 
         const {enqueueSnackbar, closeSnackbar} = this.props;
 
@@ -185,7 +186,7 @@ class ShareCanvas extends Component {
             autoHideDuration: 4000,
             action: (key) => (<Button className={this.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
             anchorOrigin: {
-                vertical: 'bottom',
+                vertical: vertical,
                 horizontal: 'right'
             }
         });

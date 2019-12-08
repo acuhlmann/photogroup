@@ -5,17 +5,19 @@ export default class Loader {
 
     start(torrent) {
         //torrent.on('done', this.onDone.bind(this, torrent));
-        if(this.parent) {
-            this.timer = setInterval(this.onProgress.bind(this), 500, torrent);
-            this.parent.setState({show: true});
-            this.onProgress(torrent);
-        }
+        //if(this.parent) {
+            //this.timer = setInterval(this.onProgress.bind(this), 200, torrent);
+            //this.parent.setState({show: true});
+            //this.onProgress(torrent);
+        //}
     }
 
     onDone (torrent) {
         //this.onProgress(torrent);
-        this.parent.setState({show: false});
-        clearInterval(this.timer);
+        //if(this.parent) {
+            //this.parent.setState({show: false});
+        //}
+        //clearInterval(this.timer);
     }
 
     onProgress (torrent) {

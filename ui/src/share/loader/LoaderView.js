@@ -16,15 +16,14 @@ const styles = theme => ({
         display: 'none',
     },
     progressContainer: {
-        zIndex: 1001,
         display: 'flex',
-        position: 'inherit'
+        //position: 'inherit'
     },
     progress: {
         margin: theme.spacing(2),
         position: 'absolute',
-        top: '25px',
-        right: '50px',
+        //top: '-7px',
+        right: '78px',
     },
     vertical: {
         display: 'flex',
@@ -34,8 +33,8 @@ const styles = theme => ({
         position: 'relative',
         fontSize: '0.5rem',
         wordBreak: 'break-word',
-        width: '40px',
-        left: '8px',
+        width: '100px',
+        top: '50px',
     }
 });
 
@@ -49,28 +48,42 @@ class LoaderView extends Component {
 
         this.state = {
             show: false,
-            completed: 0,
-            down: 0, up: 0
+            progress: 0,
+            down: '', up: '', downSpeed: '', upSpeed: ''
         };
 
-        const { classes } = props;
+        const { classes, emitter } = props;
         this.classes = classes;
 
         const self = this;
 
+        emitter.on('downloadProgress', event => {
+            const progress = event.progress;
+            const show = (progress > 0 && progress < 100);
+            self.setState({show: show, progress: progress, downSpeed: event.speed});
+        });
+        emitter.on('uploadProgress', event => {
+            const progress = event.progress;
+            const show = (progress > 0 && progress < 100);
+            self.setState({show: show, progress: progress, upSpeed: event.speed});
+        });
+
         let progressRunner;
-        props.emitter.on('wtInitialized', client => {
+        emitter.on('wtInitialized', client => {
             let lastDownload = 0;
             let lastUpload = 0;
+            let lastProgress = 0;
             progressRunner = setInterval(() => {
 
-                const loader = {
-                    progress: client.progress.toFixed(1) * 100,
-                    ratio: client.ratio,
-                    downloadSpeed: (client.downloadSpeed / 1024).toFixed(1) + 'kb/s',
-                    uploadSpeed: (client.uploadSpeed / 1024).toFixed(1) + 'kb/s'
-                };
                 if(client.torrents && client.torrents.length > 0) {
+
+                    const progress = client.progress.toFixed(1) * 100;
+                    const show = (progress > 0 && progress < 100);
+                    lastProgress = progress;
+                    //Logger.log('client.progress ' + progress
+                    //    + ' show ' + show);
+                    //self.setState({progress: progress, show: show});
+
                     const totalDownloaded = client.torrents.map(item => item.downloaded).reduce((a, b) => a + b, 0);
                     const totalUploaded = client.torrents.map(item => item.uploaded).reduce((a, b) => a + b, 0);
                     if(totalDownloaded !== lastDownload || totalUploaded !== lastUpload) {
@@ -78,9 +91,17 @@ class LoaderView extends Component {
                         const up = FileUtil.formatBytes(totalUploaded);
                         Logger.log('downloaded ' + down
                             + ' uploaded ' + up);
+                        Logger.log('client.progress ' + progress
+                            + ' show ' + show);
                         lastDownload = totalDownloaded;
                         lastUpload = totalUploaded;
-                        self.setState({ down: down, up: up })
+                        //const progress = client.progress.toFixed(1) * 100;
+                        //const downSpeed = FileUtil.formatBytes(client.downloadSpeed) + '/sec';
+                        //const upSpeed = FileUtil.formatBytes(client.uploadSpeed) + '/sec';
+                        self.setState({ down: 'down ' + down, up: 'up ' + up});
+                        //self.setState({ down: down, up: up,
+                        //    downSpeed: downSpeed, upSpeed: upSpeed,
+                        //    progress: progress });
                     }
                 }
 
@@ -90,35 +111,28 @@ class LoaderView extends Component {
 
     render() {
         const {classes} = this.props;
-        const {down, up, completed} = this.state;
-
-        /*
-        {this.state.show ? <div className={classes.progressContainer}>
-                    <CircularProgress id="progressBar"
-                                      className={classes.progress}
-                                      variant="static"
-                                      value={completed}
-                    />
-                    <Typography className={classes.progressText}
-                                variant={"caption"}>{down}/{up}</Typography>
-                </div> : ''}
-         */
+        const {show, down, up, downSpeed, upSpeed, progress} = this.state;
 
         return (
             <div>
-                {this.state.show ? <div className={classes.progressContainer}>
+                {show ? <div className={classes.progressContainer}>
                     <CircularProgress id="progressBar"
                                       className={classes.progress}
                                       variant="static"
-                                      value={completed}
+                                      value={progress}
                     />
                     <div className={classes.vertical}>
                         <Typography className={classes.progressText}
-                                    variant={"caption"}>{down}</Typography>
+                                    variant={"caption"}>{down} {downSpeed}</Typography>
                         <Typography className={classes.progressText}
-                                    variant={"caption"}>{up}</Typography>
+                                    variant={"caption"}>{up} {upSpeed}</Typography>
                     </div>
-                </div> : ''}
+                </div> : <div className={classes.vertical}>
+                    <Typography className={classes.progressText}
+                                variant={"caption"}>{down}</Typography>
+                    <Typography className={classes.progressText}
+                                variant={"caption"}>{up}</Typography>
+                </div>}
             </div>
         );
     }

@@ -248,7 +248,8 @@ class Gallery extends Component {
             }
 
             if(tile.isVideo) {
-                elem.loop = true;
+                if(elem)
+                    elem.loop = true;
             }
             self.handleImageLoaded(tile, elem);
         });
@@ -305,9 +306,9 @@ class Gallery extends Component {
                         </div>
                         <div className={classes.cardContent}>
                             <Typography variant={"caption"}>first shared by {tile.sharedBy.originPlatform}</Typography>
-                            <IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
+                            {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
                                 <CloudUploadIcon/>
-                            </IconButton>
+                            </IconButton>*/}
                             <IconButton onClick={this.handleDelete.bind(this, tile)}
                                         className={classes.icon}>
                                 <DeleteIcon />

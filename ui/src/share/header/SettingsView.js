@@ -26,6 +26,7 @@ import QRCodeButton from "./QRCodeButton";
 import FileUtil from "../util/FileUtil";
 import TextField from "@material-ui/core/TextField";
 import _ from "lodash";
+import {withSnackbar} from "notistack";
 
 /*function Transition(props) {
     return <Slide direction="down" {...props} />;
@@ -66,7 +67,7 @@ class SettingsView extends Component {
             //showOtherPeers: true
         };
 
-        Logger.info('platform ' + navigator.platform);
+        Logger.info('platform ' + navigator.platform + ' cpu ' + navigator.oscpu);
         this.checkConnection();
 
         this.master.emitter.on('addPeerDone', () => {
@@ -77,15 +78,33 @@ class SettingsView extends Component {
 
     checkConnection() {
         const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-        const type = connection.effectiveType;
-        Logger.info("Connection type is " + type);
+        if(connection) {
+            let type = connection.effectiveType;
+            Logger.info("Connection type is " + type);
 
-        function updateConnectionStatus() {
-            Logger.info("Connection type changed from " + type + " to " + connection.effectiveType);
-            type = connection.effectiveType;
+            function updateConnectionStatus() {
+                Logger.info("Connection type changed from " + type + " to " + connection.effectiveType);
+                type = connection.effectiveType;
+            }
+
+            connection.addEventListener('change', updateConnectionStatus.bind(this));
         }
+    }
 
-        connection.addEventListener('change', updateConnectionStatus);
+    snack(payload, type = 'info', persist = false) {
+
+        const {enqueueSnackbar, closeSnackbar} = this.props;
+
+        enqueueSnackbar(payload, {
+            variant: type,
+            persist: persist,
+            autoHideDuration: 4000,
+            action: (key) => (<Button className={this.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
+            anchorOrigin: {
+                vertical: 'bottom',
+                horizontal: 'right'
+            }
+        });
     }
 
     componentDidMount() {
@@ -380,7 +399,7 @@ class SettingsView extends Component {
                         </span>
                     </DialogActions>
                     <DialogContent>
-                        <Typography variant={"caption"}>v2 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v6 {this.state.peerId}</Typography>
                         {messages}
                     </DialogContent>
                 </Dialog>
@@ -395,4 +414,4 @@ SettingsView.propTypes = {
     master: PropTypes.object.isRequired,
 };
 
-export default withStyles(styles)(SettingsView);
+export default withSnackbar(withStyles(styles)(SettingsView));
