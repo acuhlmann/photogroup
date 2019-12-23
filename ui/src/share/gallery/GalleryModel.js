@@ -95,7 +95,7 @@ export default class GalleryModel {
         const tile = {
             isVideo: isVideo,
             elem: elem,
-            img: window.URL.createObjectURL(elem),
+            //img: window.URL.createObjectURL(elem),
             name: file.name,
             file: file,
             size: fileSize,

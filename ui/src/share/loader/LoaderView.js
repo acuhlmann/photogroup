@@ -33,7 +33,7 @@ const styles = theme => ({
         position: 'relative',
         fontSize: '0.5rem',
         wordBreak: 'break-word',
-        width: '100px',
+        width: '120px',
         top: '50px',
     }
 });
@@ -89,10 +89,10 @@ class LoaderView extends Component {
                     if(totalDownloaded !== lastDownload || totalUploaded !== lastUpload) {
                         const down = FileUtil.formatBytes(totalDownloaded);
                         const up = FileUtil.formatBytes(totalUploaded);
-                        Logger.log('downloaded ' + down
-                            + ' uploaded ' + up);
-                        Logger.log('client.progress ' + progress
-                            + ' show ' + show);
+                        //Logger.log('downloaded ' + down
+                        //    + ' uploaded ' + up);
+                        //Logger.log('client.progress ' + progress
+                        //    + ' show ' + show);
                         lastDownload = totalDownloaded;
                         lastUpload = totalUploaded;
                         //const progress = client.progress.toFixed(1) * 100;

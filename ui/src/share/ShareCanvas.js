@@ -109,6 +109,7 @@ class ShareCanvas extends Component {
         const onlineCallback = (status) => {
             if (status === true) {
                 Logger.info('Connected!')
+                //this.snack('Connected', 'warn', false, 'top');
             } else {
                 Logger.warn('Disconnected!')
                 this.snack('Disconnected', 'warn', false, 'top');

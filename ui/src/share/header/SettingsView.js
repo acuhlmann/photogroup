@@ -14,6 +14,10 @@ import DialogContent from '@material-ui/core/DialogContent';
 import DialogTitle from '@material-ui/core/DialogTitle';
 import DialogActions from '@material-ui/core/DialogActions';
 
+import ListItem from '@material-ui/core/ListItem';
+import ListItemText from '@material-ui/core/ListItemText';
+import { FixedSizeList } from 'react-window';
+
 import Switch from '@material-ui/core/Switch';
 import FormGroup from '@material-ui/core/FormGroup';
 import FormControlLabel from '@material-ui/core/FormControlLabel';
@@ -27,6 +31,8 @@ import FileUtil from "../util/FileUtil";
 import TextField from "@material-ui/core/TextField";
 import _ from "lodash";
 import {withSnackbar} from "notistack";
+import update from "immutability-helper";
+
 
 /*function Transition(props) {
     return <Slide direction="down" {...props} />;
@@ -114,9 +120,13 @@ class SettingsView extends Component {
     log(message, level) {
         const msg = level + ': ' + message;
         console.log(msg);
-        this.state.messages.unshift(msg);
+
+        const messages = update(this.state.messages, {$unshift: [msg]});
+
+        //this.state.messages.unshift(msg);
         if(this.mounted) {
-            this.setState({messages: this.state.messages});
+            //this.setState({messages: this.state.messages});
+            this.setState({messages: messages});
         }
     }
 
@@ -399,7 +409,7 @@ class SettingsView extends Component {
                         </span>
                     </DialogActions>
                     <DialogContent>
-                        <Typography variant={"caption"}>v6 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v1 {this.state.peerId}</Typography>
                         {messages}
                     </DialogContent>
                 </Dialog>

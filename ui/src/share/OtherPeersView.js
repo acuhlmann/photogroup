@@ -88,7 +88,12 @@ class OtherPeersView extends Component {
             if(!props.master.client) return;
 
             const allEdges = data.edges;
-            const allNats = data.nodes
+            const allNodes = data.nodes;
+            const connections = allEdges.filter(item => item.type === 'connection');
+            if(connections.length > 0) {
+                console.log('sdfjk')
+            }
+            const allNats = allNodes
                 .filter(item => item.networkType === 'nat');
             const otherPeers = data.nodes
                 .filter(item => item.networkType === 'client'

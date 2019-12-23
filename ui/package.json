@@ -35,6 +35,7 @@
     "react-promise": "^3.0.2",
     "react-qr-reader": "^2.2.1",
     "react-scripts": "^3.3.0",
+    "react-window": "^1.8.5",
     "sdp-transform": "^2.13.0",
     "shortid": "^2.2.15",
     "thunky": "^1.1.0",

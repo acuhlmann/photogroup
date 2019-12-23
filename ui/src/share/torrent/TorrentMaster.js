@@ -62,6 +62,8 @@ export default class TorrentMaster {
     addSeedOrGetTorrent(addOrSeed, uri, callback) {
 
         const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE, 'store': idb }, callback);
+        //const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE}, callback);
+
         Logger.info('addSeedOrGetTorrent ' + torrent.infoHash);
 
         const scope = this;
@@ -76,7 +78,7 @@ export default class TorrentMaster {
                 lastProgress = progress;
                 lastDownloadSpeed = downloadSpeed;
                 const downloadSpeedLabel = FileUtil.formatBytes(downloadSpeed) + '/sec';
-                Logger.log('torrent.download speed: ' + downloadSpeedLabel + ' ' + progress);
+                //Logger.log('torrent.download speed: ' + downloadSpeedLabel + ' ' + progress);
                 scope.emitter.emit('downloadProgress', {
                     speed: downloadSpeedLabel,
                     progress: progress
@@ -95,7 +97,7 @@ export default class TorrentMaster {
                 lastUpProgress = progressUp;
                 lastUploadSpeed = uploadSpeed;
                 const uploadSpeedLabel = FileUtil.formatBytes(uploadSpeed) + '/sec';
-                Logger.log('torrent.upload speed: ' + uploadSpeedLabel + ' ' + progressUp + ' t ' + torrent.progress + ' u ' + torrent.uploaded);
+                //Logger.log('torrent.upload speed: ' + uploadSpeedLabel + ' ' + progressUp + ' t ' + torrent.progress + ' u ' + torrent.uploaded);
                 scope.emitter.emit('uploadProgress', {
                     speed: uploadSpeedLabel,
                     progress: progressUp

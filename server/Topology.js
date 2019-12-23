@@ -52,6 +52,7 @@ module.exports = class Topology {
         connection.shadow = true;
         connection.width = 2;
         connection.font = {align: 'bottom'};
+        connection.type = 'connection';
 
         this.connections.set(connection.to + '-' + connection.from, connection);
         this.graph.edges.push(connection);
