@@ -14,6 +14,7 @@ import DialogContent from '@material-ui/core/DialogContent';
 import DialogTitle from '@material-ui/core/DialogTitle';
 import DialogActions from '@material-ui/core/DialogActions';
 
+import List from '@material-ui/core/List';
 import ListItem from '@material-ui/core/ListItem';
 import ListItemText from '@material-ui/core/ListItemText';
 import { FixedSizeList } from 'react-window';
@@ -74,11 +75,11 @@ class SettingsView extends Component {
         };
 
         Logger.info('platform ' + navigator.platform + ' cpu ' + navigator.oscpu);
-        this.checkConnection();
 
         this.master.emitter.on('addPeerDone', () => {
             //self.topology.start();
-            this.setState({peerId: this.master.client.peerId})
+            this.setState({peerId: this.master.client.peerId});
+            this.checkConnection();
         });
     }
 
@@ -87,10 +88,11 @@ class SettingsView extends Component {
         if(connection) {
             let type = connection.effectiveType;
             Logger.info("Connection type is " + type);
-
+            this.master.emitter.emit('connectionType', type);
             function updateConnectionStatus() {
                 Logger.info("Connection type changed from " + type + " to " + connection.effectiveType);
                 type = connection.effectiveType;
+                this.master.emitter.emit('connectionType', type);
             }
 
             connection.addEventListener('change', updateConnectionStatus.bind(this));
@@ -123,10 +125,14 @@ class SettingsView extends Component {
 
         const messages = update(this.state.messages, {$unshift: [msg]});
 
+
         //this.state.messages.unshift(msg);
         if(this.mounted) {
             //this.setState({messages: this.state.messages});
-            this.setState({messages: messages});
+            this.setState({messages: messages
+                    .map((item,  index) => <div key={index}>
+                    <Typography variant="caption">{item}</Typography>
+                </div>)});
         }
     }
 
@@ -319,24 +325,22 @@ class SettingsView extends Component {
     render() {
         const {classes} = this.props;
 
-        const messageContent = this.state.messages
-            .map((value, index) => (
-            <div key={index}>
-                {value}
-            </div>
-            ))
-            .concat(
-                <Button key='delete' onClick={this.handleReset.bind(this)} color="primary">
-                    Del server state
-                </Button>);
+        /*const Row = ({ index, style }) => (
+            <ListItem>
+                <Typography variant="caption" key={index}>{this.state.messages[index]}</Typography>
+            </ListItem>
+        );*/
 
-        const messages = <div>
-                <Typography variant="subtitle2">{this.state.urls}</Typography>
-                <Typography variant="caption">{messageContent}</Typography>
-            </div>;
+        //const messages = <FixedSizeList height={200} width={300} itemSize={10} itemCount={100}>
+        //    {Row}
+        //</FixedSizeList>;
+
+        const messages = <List>
+            {this.state.messages}
+        </List>;
 
         const {showTopology, showOtherPeers, showMe} = this.state;
-
+        //{messages}
         return (
             <div>
                 <IconButton
@@ -409,8 +413,12 @@ class SettingsView extends Component {
                         </span>
                     </DialogActions>
                     <DialogContent>
-                        <Typography variant={"caption"}>v1 {this.state.peerId}</Typography>
-                        {messages}
+                        <Typography variant="subtitle2">{this.state.urls}</Typography>
+                        <Typography variant={"caption"}>v4 {this.state.peerId}</Typography>
+
+                        <Button key='delete' onClick={this.handleReset.bind(this)} color="primary">
+                            Del server state
+                        </Button>
                     </DialogContent>
                 </Dialog>
             </div>

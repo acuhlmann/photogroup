@@ -51,9 +51,9 @@ class MeView extends Component {
         const emitter = this.master.emitter;
 
         this.state = {
-            expandedMe: true,
+            expandedMe: false,
             showMe: true,
-            me: {}, myNat: null
+            me: {}, myNat: null, connectionType: ''
         };
 
         props.master.emitter.on('networkTopology', data => {
@@ -77,16 +77,65 @@ class MeView extends Component {
             });
         });
 
+        props.master.emitter.on('localNetwork', chain => {
+
+            const me = chain
+                .find(item => item.typeDetail === 'host');
+
+            if(me) {
+                me.label = this.state.originPlatform + ' ' + me.ip;
+            }
+            const myNat = chain
+                .find(item => item.typeDetail.includes('srflx') || item.typeDetail.includes('prflx'));
+            if(myNat) {
+                myNat.label = myNat.typeDetail + ' ' + myNat.ip;
+                myNat.network = {
+                    ip: {
+                        city: ''
+                    }
+                }
+            }
+
+            this.setState({
+                me: me ? me : {},
+                myNat: myNat
+            });
+        });
+
+        props.master.emitter.on('connectionType', type => {
+            this.setState({
+                connectionType: type + ' '
+            });
+        });
+
         props.master.emitter.on('addPeerDone', peer => {
 
             this.setState({
-                me: {label: peer.originPlatform}
+                originPlatform: this.slimPlatform(peer.originPlatform),
+                me: {label: this.slimPlatform(peer.originPlatform)}
             });
         });
 
         emitter.on('showMe', value => {
             this.setState({showMe: value});
         });
+    }
+
+    slimPlatform(platform) {
+        let slimmed = platform.replace(' Windows ', ' Win ');
+
+        let index, extract;
+        index = slimmed.indexOf('Chrome Mobile');
+        if(index > -1) {
+            extract = slimmed.slice(index + 16, index + 26);
+            slimmed = platform.replace(extract, '');
+        } else if(slimmed.indexOf('Chrome ') > -1) {
+            index = slimmed.indexOf('Chrome ');
+            extract = slimmed.slice(index + 9, index + 19);
+            slimmed = platform.replace(extract, '');
+        }
+
+        return slimmed;
     }
 
     handleExpand = panel => (event, expanded) => {
@@ -129,7 +178,7 @@ class MeView extends Component {
     render() {
 
         const { classes } = this.props;
-        const {expandedMe, showMe, me, myNat} = this.state;
+        const {expandedMe, showMe, me, myNat, connectionType} = this.state;
 
         return (
             showMe ? <span>
@@ -158,7 +207,7 @@ class MeView extends Component {
                                         <AccountCircleRounded/>
                                         <Typography variant="caption" style={{
                                             marginLeft: '5px'
-                                        }}>{me.label}</Typography>
+                                        }}>{connectionType}{me.label}</Typography>
                                     </span>
                                 </div>
                             </Paper>

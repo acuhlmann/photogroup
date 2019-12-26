@@ -268,6 +268,7 @@ export default class TopologyHelper {
 
             if(fromNode && toNode) {
                 const edge = {
+                    fromPeerId: peerId, toPeerId: myPeerId,
                     from: fromNode.id, to: toNode.id,
                     arrows: 'to',
                     label: fileName,

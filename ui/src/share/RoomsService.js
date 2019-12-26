@@ -101,7 +101,7 @@ export default class RoomsService {
                 Logger.info('sse urls: '+key + ' ' + item.secure, item.originPlatform, item.ips);
             });
 
-            scope.emitter.emit('urls', data.urls);
+            scope.emitter.emit('urls', data.urls, data.connections);
         }, false);
 
         source.addEventListener("discoveryMessage", event => {
@@ -503,6 +503,8 @@ export default class RoomsService {
     addNetwork(networkChain, shallTranslateIPs) {
 
         //TODO if wtInitialized not received yet, batch request and resend after peerId is available.
+
+        if(!window.client) return;
 
         const data = {
             peerId: window.client.peerId,

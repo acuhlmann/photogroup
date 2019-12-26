@@ -103,7 +103,8 @@ module.exports = class Room {
             const room = {
                 id: id,
                 clients: [],
-                urls: []
+                urls: [],
+                connections: []
             };
             room.topology = new Topology(room.clients, this.updateChannel, this.remoteLog, this.app,
                 this.emitter, this.peers, this.tracker);
@@ -390,16 +391,10 @@ module.exports = class Room {
 
             } else {
 
-                const connection = {
-                    from: request.body.from,
-                    to: request.body.to,
-                    arrows: request.body.arrows,
-                    label: request.body.label,
-                    infoHash: request.body.infoHash,
-                    fromAddr: request.body.fromAddr,
-                    toAddr: request.body.toAddr
-                };
+                const connection = request.body;
                 room.topology.connect(connection);
+                room.connections = Array.from(room.topology.connections).map(item => item[1]);
+                this.sendUrls(room);
 
                 response.send(connection)
             }
@@ -416,6 +411,8 @@ module.exports = class Room {
 
                 const hash = request.body.hash;
                 room.topology.disconnect(hash);
+                room.connections = Array.from(room.topology.connections).map(item => item[1]);
+                this.sendUrls(room);
 
                 response.send(hash)
             }
@@ -457,7 +454,10 @@ module.exports = class Room {
         const clients = room.clients;
         this.updateChannel.send({
             event: 'urls',
-            data: { urls: room.urls }
+            data: {
+                urls: room.urls,
+                connections: room.connections
+            }
         }, clients);
     }
 };

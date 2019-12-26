@@ -54,7 +54,20 @@ module.exports = class Topology {
         connection.font = {align: 'bottom'};
         connection.type = 'connection';
 
-        this.connections.set(connection.to + '-' + connection.from, connection);
+        const typeFrom = this.graph.nodes.find(item => connection.from === item.id);
+        const typeTo = this.graph.nodes.find(item => connection.to === item.id);
+        if(typeFrom && typeTo) {
+            if(typeFrom.networkType === 'client' && typeTo.networkType === 'client') {
+                connection.connectionType = 'p2p';
+            } else if(typeFrom.networkType === 'relay' || typeTo.networkType === 'relay') {
+                connection.connectionType = 'relay' + this.addEmptySpaces(
+                    [typeFrom.network.ip.location ? typeFrom.network.ip.location.country_flag_emoji : '']);
+            } else {
+                connection.connectionType = 'p2p nat';
+            }
+        }
+
+        this.connections.set(connection.to + '-' + connection.from + '-' + connection.infoHash, connection);
         this.graph.edges.push(connection);
 
         this.sendNetworkTopology(this.graph);
@@ -66,7 +79,7 @@ module.exports = class Topology {
         edges.forEach((edge, index) => {
             if(edge.infoHash === infoHash) {
                 edges.splice(index, 1);
-                this.connections.delete(edge.to + '-' + edge.from);
+                this.connections.delete(edge.to + '-' + edge.from + '-' + infoHash);
                 //console.info('disconnectNode ' + edge.label);
             }
         });
@@ -483,7 +496,7 @@ module.exports = class Topology {
             if(this.nodesByIndex.has(value.from) && this.nodesByIndex.has(value.to)) {
                 edges.push(value);
             } else {
-                map.delete(key)
+                //map.delete(key)
             }
         });
     }
@@ -552,7 +565,6 @@ module.exports = class Topology {
             extract = slimmed.slice(index + 9, index + 19);
             slimmed = platform.replace(extract, '');
         }
-
 
         return slimmed;
     }

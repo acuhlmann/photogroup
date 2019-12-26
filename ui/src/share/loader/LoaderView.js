@@ -33,7 +33,7 @@ const styles = theme => ({
         position: 'relative',
         fontSize: '0.5rem',
         wordBreak: 'break-word',
-        width: '120px',
+        width: '110px',
         top: '50px',
     }
 });

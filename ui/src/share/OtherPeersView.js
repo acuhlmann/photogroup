@@ -89,10 +89,7 @@ class OtherPeersView extends Component {
 
             const allEdges = data.edges;
             const allNodes = data.nodes;
-            const connections = allEdges.filter(item => item.type === 'connection');
-            if(connections.length > 0) {
-                console.log('sdfjk')
-            }
+
             const allNats = allNodes
                 .filter(item => item.networkType === 'nat');
             const otherPeers = data.nodes
@@ -105,6 +102,7 @@ class OtherPeersView extends Component {
                     else
                         return true;
                 });
+            //const connections = allEdges.filter(item => item.type === 'connection');
 
             this.setState({
                 allNats: allNats,
@@ -113,10 +111,11 @@ class OtherPeersView extends Component {
             });
         });
 
-        emitter.on('urls', urls => {
+        emitter.on('urls', (urls, connections) => {
 
             this.setState({
-                urls: urls
+                urls: urls,
+                connections: connections
             });
         });
 
@@ -135,7 +134,7 @@ class OtherPeersView extends Component {
         this.master.service.removeOwner(hash, peerId);
     }
 
-    createWhatPeersHave(otherPeers, allNats, allEdges, expandedPeers, classes) {
+    createWhatPeersHave(otherPeers, allNats, allEdges, connections, expandedPeers, classes) {
 
         this.props.master.emitter.emit('numPeersChange', otherPeers.length + 1, otherPeers);
 
@@ -194,16 +193,25 @@ class OtherPeersView extends Component {
                                         .find(owner => owner.peerId === this.master.client.peerId);
                                     const pgOwner = url.owners
                                         .find(owner => owner.platform === 'photogroup.network');
+                                    let connection;
+                                    if(connections && connections.length > 0) {
+                                        const firstConnection = connections.filter(item => item.infoHash === url.hash);
+                                        connection = firstConnection.find(item => item.fromPeerId === peer.peerId
+                                            || item.toPeerId === peer.peerId);
+                                    }
                                     return <ListItem key={index}>
                                             <span style={{
                                                 position: 'relative',
                                                 textAlign: 'center',
                                                 marginRight: '10px'
                                             }}>
-                                                {have ? <CheckIcon /> : <ImageIcon className={classes.imageIcon} />}
-                                                {!have && <CircularProgress
-                                                    color="secondary"
-                                                    size={36} className={classes.fabProgress} />}
+                                                <span className={classes.vertical}>
+                                                    {have ? <CheckIcon /> : <ImageIcon className={classes.imageIcon} />}
+                                                    {!have && <CircularProgress
+                                                        color="secondary"
+                                                        size={36} className={classes.fabProgress} />}
+                                                    {connection ? <Typography variant="caption">{connection.connectionType}</Typography> : ''}
+                                                </span>
                                             </span>
                                             {
                                                 pgOwner
@@ -232,13 +240,13 @@ class OtherPeersView extends Component {
     render() {
 
         const { classes, master } = this.props;
-        const {expandedPeers, showOtherPeers, otherPeers, allNats, allEdges} = this.state;
+        const {expandedPeers, showOtherPeers, otherPeers, allNats, allEdges, connections} = this.state;
 
 
         let otherPeersView;
         if(showOtherPeers) {
             otherPeersView = otherPeers.length > 0
-                ? this.createWhatPeersHave(otherPeers, allNats, allEdges, expandedPeers, classes)
+                ? this.createWhatPeersHave(otherPeers, allNats, allEdges, connections, expandedPeers, classes)
                 : master.service.hasRoom ? <Typography variant={"body2"}>Currently, there are no other peers.</Typography> : '';
         }
 

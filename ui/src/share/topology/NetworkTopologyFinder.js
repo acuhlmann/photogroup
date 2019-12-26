@@ -70,6 +70,7 @@ export default class NetworkTopologyFinder {
             scope.emitter.emit('topStateMessage', msg);
 
             const firstChain = NetworkTopologyFinder.translateSdp(sdp);
+            scope.emitter.emit('localNetwork', firstChain);
             if(!calledNetwork && firstChain.length >= 3) {
                 calledNetwork = true;
 
@@ -103,7 +104,7 @@ export default class NetworkTopologyFinder {
                     Logger.info('natType ' + natType);
 
                     const networkChain = NetworkTopologyFinder.translateSdp(pc.localDescription.sdp, natType);
-
+                    scope.emitter.emit('localNetwork', networkChain);
                     if(scope.service.hasRoom) {
                         scope.service.addNetwork(networkChain).then(() => {
 

@@ -118,6 +118,7 @@ class Uploader extends Component {
                 <LoaderView loader={this.loader} emitter={emitter}/>
                 <input
                     accept="image/*,video/*"
+                    capture="filesystem"
                     style={{
                         position: 'absolute',
                         top: '-15px'
