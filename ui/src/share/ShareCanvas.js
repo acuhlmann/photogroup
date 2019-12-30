@@ -211,9 +211,9 @@ class ShareCanvas extends Component {
 
                 {<QRCodeView master={master}/>}
                 <TopologyView master={master} />
-                <OtherPeersView master={master} />
                 <MeView master={master} />
                 <Gallery className={classes.nooverflow} model={this.gallery} master={master} />
+                <OtherPeersView master={master} />
 
             </ThemeProvider>
         );

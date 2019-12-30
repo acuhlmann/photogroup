@@ -193,6 +193,13 @@ class MeView extends Component {
                                 padding: '10px'}}>
                                 <div
                                     className={classes.vertical}>
+                                    <span
+                                        className={classes.horizontal}>
+                                        <AccountCircleRounded/>
+                                        <Typography variant="caption" style={{
+                                            marginLeft: '5px'
+                                        }}>{connectionType}{me.label}</Typography>
+                                    </span>
                                     {myNat ? <span
                                         className={classes.horizontal}>
                                         <img src={"./firewall.png"} style={{
@@ -202,13 +209,6 @@ class MeView extends Component {
                                             marginLeft: '5px'
                                         }}>{myNat.label} {myNat.network.ip.city}</Typography>
                                     </span> : ''}
-                                    <span
-                                        className={classes.horizontal}>
-                                        <AccountCircleRounded/>
-                                        <Typography variant="caption" style={{
-                                            marginLeft: '5px'
-                                        }}>{connectionType}{me.label}</Typography>
-                                    </span>
                                 </div>
                             </Paper>
                         </div>

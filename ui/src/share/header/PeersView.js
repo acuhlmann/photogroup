@@ -56,7 +56,7 @@ export default class PeersView extends Component {
             });
         });
 
-        emitter.on('deleted', infoHash => {
+        emitter.on('deletedTorrent', infoHash => {
             this.setState({
                 p2p: this.extractPeers(window.client)
             });

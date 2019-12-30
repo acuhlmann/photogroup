@@ -54,12 +54,12 @@ class App extends Component {
         this.master.service.master = this.master;
         this.gallery = new GalleryModel(this.master);
 
-        this.master.emitter.on('deleted', infoHash => {
+        this.master.emitter.on('deletedTorrent', infoHash => {
             this.gallery.performDeleteTile(infoHash);
         }, this);
 
         this.master.emitter.on('added', toAdd => {
-            this.gallery.addMediaToDom(toAdd.file, toAdd.torrent, toAdd.secure, toAdd.seed, toAdd.sharedBy);
+            this.gallery.addMediaToDom(toAdd);
         }, this);
 
         //When webtorrent errors on a duplicated add, try to remove and re-seed.
@@ -68,8 +68,8 @@ class App extends Component {
         this.master.emitter.on('duplicate', (duplicated) => {
 
             const tileItem = scope.gallery.getTileByUri(duplicated.torrentId);
-            console.log('duplicate ' + tileItem.item);
-            if(!tileItem.item) {
+            console.log('duplicate ' + tileItem.item.torrent.infoHash);
+            if(!tileItem.item || (tileItem.item && tileItem.item.loading)) {
                 duplicated.torrent.client.remove(duplicated.torrentId, () => {
                     if(duplicated.files) {
                         //TODO: temporarily disable due to files disapearing bug in seed.torrent

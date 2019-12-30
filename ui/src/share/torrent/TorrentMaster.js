@@ -180,7 +180,7 @@ export default class TorrentMaster {
             const urlItem = this.findUrl(urls, torrent.infoHash);
             if(!urlItem) {
                 scope.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
-                    return this.emitter.emit('deleted', infoHash);
+                    return this.emitter.emit('deletedTorrent', infoHash);
                 });
             }
         });
@@ -192,6 +192,7 @@ export default class TorrentMaster {
                 Logger.debug('new url found on server');
 
                 scope.torrentAddition.add(item.url, item.secure, item.sharedBy ? item.sharedBy : {});
+                this.emitter.emit('addedTorrent', item);
             }
 
             if(torrent && torrent.files && torrent.files.length < 1 && item.owners.find(owner => owner.peerId === this.client.peerId)) {
@@ -257,8 +258,9 @@ export default class TorrentMaster {
                 } else {
 
                     let sharedBy = {};
+                    let url;
                     if(urls) {
-                        const url = urls.find(item => item.hash === metadata.infoHash);
+                        url = urls.find(item => item.hash === metadata.infoHash);
                         sharedBy = url ? url.sharedBy : sharedBy;
                     }
                     scope.torrentAddition.add(metadata, false, sharedBy).then(torrent => {
@@ -271,6 +273,9 @@ export default class TorrentMaster {
                         Logger.error(msg);
                         reject(msg);
                     });
+                    if(url) {
+                        //this.emitter.emit('addedTorrent', url);
+                    }
                 }
 
             } else {

@@ -21,6 +21,12 @@ import FileUtil from '../util/FileUtil';
 import PhotoDetails from './PhotoDetails';
 import {withSnackbar} from "notistack";
 import update from "immutability-helper";
+import _ from "lodash";
+import Divider from "@material-ui/core/Divider";
+import CheckIcon from "@material-ui/icons/CheckRounded";
+import ImageIcon from "@material-ui/icons/ImageRounded";
+import CircularProgress from "@material-ui/core/CircularProgress";
+import OwnersList from "./OwnersList";
 
 const styles = theme => ({
     root: {
@@ -56,6 +62,33 @@ const styles = theme => ({
     wide: {
         width: '100%',
     },
+
+    fabProgress: {
+        position: 'absolute',
+        zIndex: 1,
+        left: '-7px',
+        top: '-12px'
+    },
+    imageIcon: {
+        position: 'relative',
+        //left: '-7px',
+        //top: '-5px'
+    },
+    vertical: {
+        display: 'flex',
+        flexDirection: 'column'
+    },
+    verticalAndWide: {
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%'
+    },
+    horizontal: {
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center'
+    }
 });
 
 class Gallery extends Component {
@@ -76,7 +109,64 @@ class Gallery extends Component {
         };
 
         const self = this;
-        this.master.emitter.on('urls', urls => {
+
+        props.master.emitter.on('networkTopology', data => {
+
+            if(!props.master.client) return;
+
+            const allEdges = data.edges;
+            const allNodes = data.nodes;
+
+            const allNats = allNodes
+                .filter(item => item.networkType === 'nat');
+            const otherPeers = data.nodes
+                .filter(item => item.networkType === 'client'
+                    && item.peerId !== props.master.client.peerId)
+                .filter(item => {
+                    if(item.originPlatform === 'photogroup.network'
+                        && item.network && item.network.type !== 'host')
+                        return false;
+                    else
+                        return true;
+                });
+
+            const uniqueOtherPeers = _.uniqBy(otherPeers, 'peerId');
+            this.setState({
+                allNats: allNats,
+                allEdges: allEdges,
+                otherPeers: uniqueOtherPeers
+            });
+        });
+
+        props.master.emitter.on('addedTorrent', item => {
+
+            const tile = {
+                loading: true,
+                item: item,
+                torrent: {
+                    infoHash: item.hash
+                }
+            };
+            const tiles = self.state.tileData;
+            const newTiles = update(tiles, {$unshift: [tile]});
+            this.setState({
+                tileData: newTiles
+            });
+        });
+
+        props.master.emitter.on('deletedTorrent', hash => {
+
+            const oldTiles = self.state.tileData;
+            const index = oldTiles.findIndex(item => item.torrent.infoHash === hash);
+            if(index > -1) {
+                const tiles = update(oldTiles, {$splice: [[index, 1]]});
+                this.setState({
+                    tileData: tiles
+                });
+            }
+        });
+
+        props.master.emitter.on('urls', (urls, connections) => {
 
             const tiles = self.state.tileData;
             const changedTiles = [];
@@ -105,9 +195,21 @@ class Gallery extends Component {
             changedTiles.forEach(item => {
 
                 this.setState({
+                    urls: urls,
                     tileData: update(tiles, {[item.index]: {$set: item.tile}})
                 });
-            })
+            });
+
+            const state = {
+                urls: urls,
+                connections: connections
+            };
+
+            /*if(wantedTiles && wantedTiles.length > 0) {
+                const newTiles = update(tiles, {$unshift: wantedTiles});
+                state.tileData = newTiles;
+            }*/
+            this.setState(state);
         });
 
         const { classes } = props;
@@ -261,25 +363,59 @@ class Gallery extends Component {
         }
     }
 
-    buildTile(tile, index, classes) {
+    buildTile(tile, index, classes, connections, otherPeers, allNats, allEdges, urls) {
 
-        const master = this.master;
-
-        const label = tile.name + ' of ' + tile.size + ' first shared by ' + tile.sharedBy.originPlatform;
         const name = `${tile.summary} ${tile.size} ${tile.cameraSettings}`;
-
+        let owners = [];
+        if(tile.item) {
+            owners = tile.item.owners;
+        } else {
+            const url = urls.find(item => item.hash === tile.torrent.infoHash);
+            if(url) {
+                owners = url.owners;
+            }
+        }
         if(tile.secure) {
 
             return <GridListTile key={index} cols={tile.cols || 1}>
                 <div>Decrypt with</div>
-                <PasswordInput onChange={value => this.setState({password: value})} />
+                <PasswordInput onChange={value => this.setState({password: value})}/>
                 <Button onClick={this.model.decrypt.bind(this.model, tile, this.state.password, index)}
                         color="primary">
                     Submit
                 </Button>
             </GridListTile>;
+        } else if(tile.loading) {
+            const have = owners.find(owner => owner.peerId === this.master.client.peerId);
+            return <Paper key={index} style={{
+                    margin: '10px',
+                    padding: '10px'
+                }}>
+                    <span style={{
+                        position: 'relative',
+                        textAlign: 'center',
+                        marginRight: '10px'
+                    }}>
+                                                    {have ? <CheckIcon /> : <ImageIcon className={classes.imageIcon} />}
+                        {!have && <CircularProgress
+                            color="secondary"
+                            size={36} className={classes.fabProgress} />}
+                        <Typography variant="caption" className={classes.wordwrap}>
+                            {tile.item.picSummary} {tile.item.fileSize} {tile.item.cameraSettings}
+                        </Typography>
+                    </span>
+                    <Divider variant="middle" />
+                    <OwnersList
+                        owners={owners}
+                        connections={connections}
+                        allEdges={allEdges}
+                        allNats={allNats}
+                        otherPeers={otherPeers}
+                        item={tile.item}
+                    />
+                </Paper>
+
         } else {
-            const ref = React.createRef();
             const {open, url} = this.state;
 
             return <div key={index}>
@@ -303,16 +439,24 @@ class Gallery extends Component {
                                         title={tile.summary}
                                         variant="caption">{name}
                             </Typography>
-                        </div>
-                        <div className={classes.cardContent}>
-                            <Typography variant={"caption"}>first shared by {tile.sharedBy.originPlatform}</Typography>
-                            {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
-                                <CloudUploadIcon/>
-                            </IconButton>*/}
                             <IconButton onClick={this.handleDelete.bind(this, tile)}
                                         className={classes.icon}>
                                 <DeleteIcon />
                             </IconButton>
+                            {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
+                                <CloudUploadIcon/>
+                            </IconButton>*/}
+                        </div>
+                        <div className={classes.cardContent}>
+                            <Typography variant={"caption"}>first shared by {tile.sharedBy.originPlatform}</Typography>
+                            <OwnersList
+                                owners={owners}
+                                connections={connections}
+                                allEdges={allEdges}
+                                allNats={allNats}
+                                otherPeers={otherPeers}
+                                item={tile.item}
+                            />
                         </div>
                     </Paper>
                 </div>
@@ -329,13 +473,14 @@ class Gallery extends Component {
 
     render() {
         const classes = this.props.classes;
-        const {tileData} = this.state;//Array.from(this.state.tileData);
+        const {tileData, connections, otherPeers, allNats, allEdges, urls} = this.state;
 
         return (
             <div className={classes.root}>
 
                 <div className={classes.gridList}>
-                    {tileData.map((tile, index) => this.buildTile(tile, index, classes))}
+                    {tileData.map((tile, index) => this.buildTile(tile, index, classes,
+                        connections, otherPeers, allNats, allEdges, urls))}
                 </div>
             </div>
         );

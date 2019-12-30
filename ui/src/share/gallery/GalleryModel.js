@@ -57,64 +57,68 @@ export default class GalleryModel {
         return {item: found, index: foundAtIndex};
     }
 
-    addMediaToDom(file, torrent, secure, seed, sharedBy) {
+    addMediaToDom(item) {
 
-        if(seed) {
-            this.renderTo(file, file, torrent, secure, sharedBy, seed);
+        if(item.seed) {
+            this.renderTo(item, item.file);
         } else {
-            file.getBlob((err, elem) => {
+            item.file.getBlob((err, elem) => {
                 if (err) {
                     Logger.error(err.message);
 
                     throw err
                 }
 
-                this.renderTo(file, elem, torrent, secure, sharedBy, seed);
+                this.renderTo(item, elem);
             });
         }
     }
 
-    renderTo(file, elem, torrent, secure, sharedBy, seed) {
-        Logger.debug('New DOM node of file: ' + file.name);
+    renderTo(item, elem) {
+        item.elem = elem;
+        Logger.debug('New DOM node of file: ' + item.file.name);
 
-        const scope = this;
-        //secure is undefined when content is added via local storage; hence the need to inspect if it's encrypted.
-        if(secure === undefined) {
+        //const scope = this;
+        this.addTile(item);
+        /*//secure is undefined when content is added via local storage; hence the need to inspect if it's encrypted.
+        if(item.secure === undefined) {
             Encrypter.isSecure(elem, isSecure => {
-                secure = isSecure;
-                scope.addTile(file, elem, torrent, secure, sharedBy, seed);
+                item.secure = isSecure;
+                scope.addTile(item);
             });
         } else {
-            this.addTile(file, elem, torrent, secure, sharedBy, seed);
-        }
+            this.addTile(item);
+        }*/
     }
 
-    addTile(file, elem, torrent, secure, sharedBy, seed) {
-        const fileSize = FileUtil.formatBytes(file.size || file.length);
-        const isVideo = elem.type.includes('video');
-        const tile = {
-            isVideo: isVideo,
-            elem: elem,
-            //img: window.URL.createObjectURL(elem),
-            name: file.name,
-            file: file,
-            size: fileSize,
-            torrent: torrent,
-            secure: secure,
-            sharedBy: sharedBy || {},
-            seed: seed
-        };
-        const tiles = update(this.view.state.tileData, {$push: [tile]});
+    addTile(item) {
+        const fileSize = FileUtil.formatBytes(item.file.size || item.file.length);
+        const isVideo = item.elem.type.includes('video');
+        const tile = item;
+        tile.isVideo = isVideo;
+        tile.name = item.file.name;
+        tile.size = fileSize;
+        tile.fileName = item.file.name;
+        tile.sharedBy =  item.sharedBy || {};
+
+        let tiles;
+        const oldTiles = this.view.state.tileData;
+        const index = oldTiles.findIndex(item => item.torrent.infoHash === tile.torrent.infoHash);
+        if(index > -1) {
+            tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
+        } else {
+            tiles = update(oldTiles, {$push: [tile]});
+        }
         this.view.setState({
             tileData: tiles
         });
 
-        if(!seed) {
+        if(!item.seed) {
 
-            this.torrentMaster.emitter.emit('torrentDone', torrent);
-            this.torrentMaster.service.addOwner(torrent.infoHash, this.torrentMaster.client.peerId).then(() => {
+            this.torrentMaster.emitter.emit('torrentDone', item.torrent);
+            this.torrentMaster.service.addOwner(item.torrent.infoHash, this.torrentMaster.client.peerId).then(() => {
                 this.torrentMaster.emitter.emit('appEventRequest', {level: 'success', type: 'downloaded',
-                    event: {file: torrent.name, sharedBy: sharedBy, downloader: this.torrentMaster.client.peerId}
+                    event: {file: item.torrent.name, sharedBy: item.sharedBy, downloader: this.torrentMaster.client.peerId}
                 });
             });
         }

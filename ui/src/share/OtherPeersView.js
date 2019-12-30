@@ -77,7 +77,7 @@ class OtherPeersView extends Component {
         const emitter = this.master.emitter;
 
         this.state = {
-            expandedPeers: true,
+            expandedPeers: false,
             showTopology: false,
             showOtherPeers: true,
             otherPeers: []
@@ -168,13 +168,6 @@ class OtherPeersView extends Component {
                                                 margin: '10px',
                                                 padding: '10px'
                                             }}>
-                        <span
-                            className={classes.horizontal}>
-                            <AccountCircleRounded/>
-                            <Typography variant="caption" style={{
-                                marginLeft: '5px'
-                            }}>{peer.label}</Typography>
-                        </span>
                         {nat ? <span
                             className={classes.horizontal}>
                             <img src={"./firewall.png"} style={{
@@ -184,6 +177,13 @@ class OtherPeersView extends Component {
                                 marginLeft: '5px'
                             }}>{nat.label} {nat.network.ip.city}</Typography>
                         </span> : ''}
+                        <span
+                            className={classes.horizontal}>
+                            <AccountCircleRounded/>
+                            <Typography variant="caption" style={{
+                                marginLeft: '5px'
+                            }}>{peer.label}</Typography>
+                        </span>
                         {owns.length > 0 ? <Divider variant="middle" /> : ''}
                         {owns.length > 0 ?
                             <List>

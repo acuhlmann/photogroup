@@ -21,7 +21,7 @@ module.exports = class Room {
         //dispatched by Peers when someone disconnects, need to remove all ownerships.
         emitter.on('removeOwner', (peerId) => {
 
-            Object.values(this.rooms).forEach(room => {
+            [...this.rooms.values()].forEach(room => {
                 this.removeOwner(room, peerId);
             });
         });
