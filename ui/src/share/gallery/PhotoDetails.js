@@ -36,11 +36,7 @@ class PhotoDetails extends Component {
     render() {
         const classes = this.classes;
 
-        const metadataList = this.details.render(
-            this.props.metadata,
-            this.props.sharedBy,
-            this.props.fileSize,
-            this.props.url);
+        const metadataList = this.details.render(this.props.metadata, this.props.tile);
 
         return (
             <div className={classes.root}>

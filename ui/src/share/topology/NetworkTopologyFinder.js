@@ -14,22 +14,6 @@ export default class NetworkTopologyFinder {
         this.emitter = emitter;
     }
 
-    listenToPcEvents(pc) {
-        const self = this;
-        pc.addEventListener('icegatheringstatechange', event => {
-            const state = event.target.iceGatheringState;
-            self.emitter.emit('pcEvent', event.type, state);
-        });
-        pc.addEventListener('signalingstatechange', event => {
-            const state = event.target.signalingState;
-            self.emitter.emit('pcEvent', event.type, state);
-        });
-        pc.addEventListener('iceconnectionstatechange', event => {
-            const state = event.target.iceConnectionState;
-            self.emitter.emit('pcEvent', event.type, state);
-        });
-    }
-
     static buildSdpNetworkChainString(sdp) {
         const jsonSdp = parse(sdp);
         if(jsonSdp.media[0] && jsonSdp.media[0].candidates) {
@@ -55,18 +39,18 @@ export default class NetworkTopologyFinder {
         let msg;
         peer.on('signal', function (e) {
             msg = NetworkTopologyFinder.buildSdpNetworkChainString(e.sdp);
-            Logger.info('Peer.signal ' + msg);
+            Logger.debug('Peer.signal ' + msg);
             scope.emitter.emit('topStateMessage', msg);
         });
 
         pc.onicecandidate = function (e) {
             if(e.candidate) {
-                Logger.info('Peer.onicecandidate.candidate ' + e.candidate.candidate);
+                Logger.debug('Peer.onicecandidate.candidate ' + e.candidate.candidate);
             }
 
             const sdp = e.target.localDescription.sdp;
             msg = NetworkTopologyFinder.buildSdpNetworkChainString(sdp);
-            Logger.info('Peer.onicecandidate.sdp ' + msg);
+            Logger.debug('Peer.onicecandidate.sdp ' + msg);
             scope.emitter.emit('topStateMessage', msg);
 
             const firstChain = NetworkTopologyFinder.translateSdp(sdp);
@@ -76,7 +60,7 @@ export default class NetworkTopologyFinder {
 
                 if(scope.service.hasRoom) {
 
-                    scope.service.addNetwork(firstChain).then(() => {
+                    scope.service.updatePeer({networkChain: firstChain}).then(() => {
 
                         Logger.info('addNetwork no 1');
                     });
@@ -90,23 +74,23 @@ export default class NetworkTopologyFinder {
                 const cand = parseCandidate(e.candidate.candidate);
                 const route = cand.relatedAddress + ':' + cand.relatedPort + ' >> '
                     +cand.type + ' ' + cand.ip + ':' + cand.port;
-                Logger.info('route ' + route);
+                Logger.debug('route ' + route);
                 scope.emitter.emit('topStateMessage', route);
                 if (!candidates[cand.relatedPort]) candidates[cand.relatedPort] = [];
                 candidates[cand.relatedPort].push(cand.port);
             } else if (!e.candidate) {
-                Logger.info('candidates ' + JSON.stringify(candidates));
+                Logger.debug('candidates ' + JSON.stringify(candidates));
                 if (Object.keys(candidates).length >= 1) {
 
-                    Logger.info('candidates ' + candidates[Object.keys(candidates)[0]]);
+                    Logger.debug('candidates ' + candidates[Object.keys(candidates)[0]]);
                     const ports = candidates[Object.keys(candidates)[0]];
                     const natType = ports.length === 1 ? 'Normal NAT' : 'Symmetric NAT';
-                    Logger.info('natType ' + natType);
+                    Logger.debug('natType ' + natType);
 
                     const networkChain = NetworkTopologyFinder.translateSdp(pc.localDescription.sdp, natType);
                     scope.emitter.emit('localNetwork', networkChain);
                     if(scope.service.hasRoom) {
-                        scope.service.addNetwork(networkChain).then(() => {
+                        scope.service.updatePeer({networkChain: networkChain}).then(() => {
 
                             Logger.info('addNetwork no 2');
 
@@ -174,6 +158,23 @@ export default class NetworkTopologyFinder {
             return candidate;
         }
     }
+
+    listenToPcEvents(pc) {
+        const self = this;
+        pc.addEventListener('icegatheringstatechange', event => {
+            const state = event.target.iceGatheringState;
+            self.emitter.emit('pcEvent', event.type, state);
+        });
+        pc.addEventListener('signalingstatechange', event => {
+            const state = event.target.signalingState;
+            self.emitter.emit('pcEvent', event.type, state);
+        });
+        pc.addEventListener('iceconnectionstatechange', event => {
+            const state = event.target.iceConnectionState;
+            self.emitter.emit('pcEvent', event.type, state);
+        });
+    }
+
 
     static translateSdp(sdp, natType) {
 

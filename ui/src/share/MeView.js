@@ -53,10 +53,10 @@ class MeView extends Component {
         this.state = {
             expandedMe: false,
             showMe: true,
-            me: {}, myNat: null, connectionType: ''
+            me: {}, myNat: null, connectionSpeedType: ''
         };
 
-        props.master.emitter.on('networkTopology', data => {
+        /*props.master.emitter.on('networkTopology', data => {
 
             if(!props.master.client) return;
 
@@ -75,7 +75,7 @@ class MeView extends Component {
                 me: me ? me : {},
                 myNat: myNat
             });
-        });
+        });*/
 
         props.master.emitter.on('localNetwork', chain => {
 
@@ -102,9 +102,9 @@ class MeView extends Component {
             });
         });
 
-        props.master.emitter.on('connectionType', type => {
+        props.master.emitter.on('connectionSpeedType', type => {
             this.setState({
-                connectionType: type + ' '
+                connectionSpeedType: type + ' '
             });
         });
 
@@ -112,7 +112,7 @@ class MeView extends Component {
 
             this.setState({
                 originPlatform: this.slimPlatform(peer.originPlatform),
-                me: {label: this.slimPlatform(peer.originPlatform)}
+                me: {label: this.slimPlatform(peer.originPlatform)},
             });
         });
 
@@ -178,7 +178,7 @@ class MeView extends Component {
     render() {
 
         const { classes } = this.props;
-        const {expandedMe, showMe, me, myNat, connectionType} = this.state;
+        const {expandedMe, showMe, me, myNat, connectionSpeedType} = this.state;
 
         return (
             showMe ? <span>
@@ -198,7 +198,7 @@ class MeView extends Component {
                                         <AccountCircleRounded/>
                                         <Typography variant="caption" style={{
                                             marginLeft: '5px'
-                                        }}>{connectionType}{me.label}</Typography>
+                                        }}>{connectionSpeedType}{me.label}</Typography>
                                     </span>
                                     {myNat ? <span
                                         className={classes.horizontal}>

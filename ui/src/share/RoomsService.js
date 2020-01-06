@@ -20,7 +20,22 @@ export default class RoomsService {
         //this.id = cryptoRandomString({length: 20, type: 'url-safe'});
         this.id = cryptoRandomString({length: 20, characters: '1234567890abcdefghijklmnopqrstuvwxyzzyxwvutsrqponmlkjihgfedcbaabcdefghijklmnopqrstuvwxyz'});
 
-        this.listenToUrlChanges();
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.has('room')) {
+            this.id = urlParams.get('room');
+            //this.emitter.emit('openRoomStart');
+            this.hasRoom = true;
+        }
+
+        emitter.on('addPeerDone', async () => {
+
+            const urlParams = new URLSearchParams(window.location.search);
+            if(urlParams.has('room')) {
+                this.id = urlParams.get('room');
+                await this.master.findExistingContent(this.joinRoom);
+                this.emitter.emit('readyToUpload');
+            }
+        });
 
         emitter.on('appEventRequest', event => {
 
@@ -42,66 +57,37 @@ export default class RoomsService {
         window.history.replaceState({}, '', decodeURIComponent(`${location.pathname}?${params}`));
     }
 
-    async start() {
-        const urlParams = new URLSearchParams(window.location.search);
-        if(urlParams.has('room')) {
-            this.id = urlParams.get('room');
-
-            await this.master.findExistingContent(this.joinRoom);
-            this.hasRoom = true;
-        }
-    }
-
     listenToUrlChanges() {
         const scope = this;
 
-        const urlParams = new URLSearchParams(window.location.search);
-        if(urlParams.has('room')) {
-            this.id = urlParams.get('room');
+        const source = new window.EventSource('/api/rooms/' + this.id + '/updates/?sessionId=' + this.sessionId);
 
-            this.emitter.emit('openRoomStart');
-            this.emitter.emit('openRoomEnd');
-        }
-
-        const source = new window.EventSource("/api/updates/?sessionId=" + this.sessionId);
-
-        source.addEventListener("webPeers", event => {
+        source.addEventListener("photos", event => {
 
             const data = JSON.parse(event.data);
 
-            Logger.info('webPeers: '+Object.keys(data).length);
+            Logger.info(`photos: ${data.type} ${data.item.fileName || ''} infoHash ${data.item.infoHash} peerId ${data.item.peerId}`);
 
-            scope.emitter.emit('webPeers', data);
+            scope.emitter.emit('photos', data);
+
         }, false);
 
-        source.addEventListener("sseConnections", event => {
+        source.addEventListener("peers", event => {
 
             const data = JSON.parse(event.data);
-            Logger.info('sse sseConnections: '+JSON.stringify(data));
 
-            scope.emitter.emit('sseConnections', data.sseConnections, data.ips);
+            Logger.info(`peers: ${data.type} ${data.item.name} ${data.item.sessionId}`);
+
+            scope.emitter.emit('peers', data);
         }, false);
 
-        source.addEventListener("iceEvent", event => {
+        /*source.addEventListener("iceEvent", event => {
 
             const data = JSON.parse(event.data);
             const sdp = data.sdp ? data.sdp.length : '';
             Logger.info('iceEvent: '+ data.type + ' ' + data.event + ' sdp ' + sdp);
 
             scope.emitter.emit('iceEvent', data);
-        }, false);
-
-        source.addEventListener("urls", event => {
-
-            const data = JSON.parse(event.data);
-
-            data.urls.forEach(item => {
-                const parsed = window.parsetorrent(item.url);
-                const key = parsed.infoHash;
-                Logger.info('sse urls: '+key + ' ' + item.secure, item.originPlatform, item.ips);
-            });
-
-            scope.emitter.emit('urls', data.urls, data.connections);
         }, false);
 
         source.addEventListener("discoveryMessage", event => {
@@ -126,10 +112,9 @@ export default class RoomsService {
             scope.emitter.emit('networkTopology', data);
         }, false);
 
-
         source.addEventListener('open', e => {
             Logger.info('Connection was opened');
-        }, false);
+        }, false);*/
 
         source.addEventListener('error', e => {
             Logger.error('sse error: ' + JSON.stringify(e))
@@ -159,71 +144,13 @@ export default class RoomsService {
             });
     }
 
-    async addPeer() {
-
-        const data = {
+    get peerData() {
+        return {
             sessionId: this.sessionId,
-            peerId: window.client.peerId,
-            originPlatform: (platform.description
-                + (navigator.platform ? ' ' + navigator.platform + ' ' : '' )
-                + (navigator.oscpu ? navigator.oscpu : '')),
+            peerId: this.master.client.peerId,
+            originPlatform: this.master.originPlatform,
             name: localStorage.getItem('nickname')
-            //networkChain: networkChain ? networkChain.reverse() : []
         };
-        let response = await fetch('/api/peers', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
-
-        if (!response.ok) {
-            throw new Error(response.status); // 404
-        } else {
-            this.start();
-        }
-
-        return await response.json();
-    }
-
-    async updatePeer(id, update) {
-
-        if(update.name) {
-            localStorage.setItem('nickname', update.name);
-        }
-
-        update.peerId = id;
-        try {
-            let response = await fetch('/api/peers/' + id, {
-                method: 'PUT',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(update)});
-
-            if (!response.ok) {
-                throw new Error(response.status); // 404
-            }
-
-            return await response.json();
-        } catch(err) {
-            Logger.log('update peer ' + err);
-            throw err;
-        }
-    }
-
-    async getPeer(peerId) {
-
-        let response = await fetch('/api/peers?peerId=' + peerId);
-
-        if (!response.ok) {
-            throw new Error(response.status); // 404
-        }
-
-        return await response.json();
     }
 
     async createRoom() {
@@ -231,10 +158,8 @@ export default class RoomsService {
         this.hasRoom = true;
         const data = {
             id: this.id,
-            sessionId: this.sessionId
+            peer: this.peerData
         };
-
-        //await this.master.torrentsDb.clear();
 
         try {
             let response = await fetch(this.url, {
@@ -248,9 +173,10 @@ export default class RoomsService {
             if (!response.ok) {
 
                 throw new Error(response.status); // 404
+
             } else {
 
-                this.addNetwork(this.networkChain).then(() => {
+                /*this.addNetwork(this.networkChain).then(() => {
 
                     Logger.info('addNetwork no 2');
 
@@ -259,12 +185,15 @@ export default class RoomsService {
                     this.emitter.emit('pcEvent', 'signalingstatechange', '');
                     //this is now in Uploader
                     this.emitter.emit('topStateMessage', '');
-                });
+                });*/
             }
 
-            return await response.json();
+            const room = await response.json();
+            this.listenToUrlChanges();
+            return room;
+
         } catch(err) {
-            Logger.log('create room ' + err);
+            Logger.debug('create room ' + err);
             throw err;
         }
     }
@@ -273,7 +202,7 @@ export default class RoomsService {
 
         this.hasRoom = true;
         const data = {
-            sessionId: this.sessionId
+            peer: this.peerData
         };
 
         //await this.master.torrentsDb.clear();
@@ -290,17 +219,49 @@ export default class RoomsService {
             if (!response.ok) {
                 console.error(response.status);
             } else {
-                return response.json();
+                const room = await response.json();
+                this.listenToUrlChanges();
+                return room;
             }
 
-            return await response.json();
         } catch(err) {
-            Logger.log('join room ' + err);
+            Logger.error('join room ' + err);
             throw err;
         }
     }
 
-    find() {
+    async updatePeer(update) {
+
+        if(!this.hasRoom) return;
+
+        const peerId = this.master.client.peerId;
+        if(update.name) {
+            localStorage.setItem('nickname', update.name);
+        }
+
+        update.peerId = peerId;
+        try {
+            let response = await fetch('/api/rooms/' + this.id + '/peers/' + peerId, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(update)});
+
+            if (!response.ok) {
+                Logger.error(response.url + ' ' + response.status);
+            } else {
+                return await response.json();
+            }
+
+        } catch(err) {
+            Logger.error('update peer ' + err);
+            throw err;
+        }
+    }
+
+    /*find() {
 
         if(!this.hasRoom) {
 
@@ -325,14 +286,14 @@ export default class RoomsService {
                     return data;
                 });
         }
-    }
+    }*/
 
     async share(data) {
 
         data.origin = this.master.client.peerId;
 
         try {
-            let response = await fetch(this.url + '/' + this.id + '/photos', {
+            let response = await fetch(this.url + '/' + this.id + '/photos/' + data.infoHash, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -341,19 +302,18 @@ export default class RoomsService {
                 body: JSON.stringify(data)});
 
             if (!response.ok) {
-                //throw new Error(response.status); // 404
-                console.error(response.status);
+                Logger.error(response.url + ' ' + response.status);
             } else {
                 return await response.json();
             }
 
         } catch(err) {
-            Logger.log('share pic ' + err);
+            Logger.error('share pic ' + err);
             throw err;
         }
     }
 
-    async addServerPeer(url) {
+    /*async addServerPeer(url) {
 
         const data = {
             url: url,
@@ -370,25 +330,25 @@ export default class RoomsService {
                 body: JSON.stringify(data)});
 
             if (!response.ok) {
-                console.error(response.status); // 404
+                Logger.error(response.url + ' ' + response.status);
             } else {
                 return await response.json();
             }
         } catch(err) {
-            Logger.log('addServerPeer ' + err);
+            Logger.error('addServerPeer ' + err);
             throw err;
         }
-    }
+    }*/
 
-    async update(hash, update) {
+    async update(infoHash, update) {
 
         //if(update.fileName) {
-        //    localStorage.setItem('fileName-' + hash, update.fileName);
+        //    localStorage.setItem('fileName-' + infoHash, update.fileName);
         //}
 
-        update.hash = hash;
+        update.infoHash = infoHash;
         try {
-            let response = await fetch(this.url + '/' + this.id + '/photos/', {
+            let response = await fetch(this.url + '/' + this.id + '/photos/' + infoHash, {
                 method: 'PUT',
                 headers: {
                     'Accept': 'application/json',
@@ -397,35 +357,30 @@ export default class RoomsService {
                 body: JSON.stringify(update)});
 
             if (!response.ok) {
-                throw new Error(response.status); // 404
+                Logger.error(response.url + ' ' + response.status);
             }
 
             return await response.json();
         } catch(err) {
-            Logger.log('update ' + err);
+            Logger.error('update ' + err);
             throw err;
         }
     }
 
-    delete(hash) {
+    delete(infoHash) {
 
-        const data = {
-            hash: hash,
-            origin: this.master.client.peerId
-        };
-        return fetch(this.url + '/' + this.id, {
+        return fetch(this.url + '/' + this.id + '/photos/' + infoHash, {
             method: 'DELETE',
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
+            }
         }).then(response => {
             return response.json();
         });
     }
 
-    connect(edge) {
+    connect(connection) {
 
         return fetch(this.url + '/' + this.id + '/photos/connections', {
             method: 'POST',
@@ -433,16 +388,16 @@ export default class RoomsService {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(edge)
+            body: JSON.stringify(connection)
         }).then(response => {
             return response.json();
         });
     }
 
-    disconnect(hash) {
+    disconnect(infoHash) {
 
         const data = {
-            hash: hash,
+            infoHash: infoHash,
         };
 
         return fetch(this.url + '/' + this.id + '/photos/connections', {
@@ -457,22 +412,26 @@ export default class RoomsService {
 
     addOwner(infoHash, peerId) {
 
-        return fetch(this.url + '/' + this.id + '/photos/owners', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                infoHash: infoHash,
-                peerId: peerId
-            })
-        });
+        try {
+            return fetch(this.url + '/' + this.id + '/photos/owners/' + peerId, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    infoHash: infoHash,
+                    peerId: peerId
+                })
+            });
+        } catch(e) {
+            Logger.error(infoHash + ' addOwner ' + e);
+        }
     }
 
     removeOwner(infoHash, peerId) {
 
-        return fetch(this.url + '/' + this.id + '/photos/owners', {
+        return fetch(this.url + '/' + this.id + '/photos/owners/' + peerId, {
             method: 'DELETE',
             headers: {
                 'Accept': 'application/json',
@@ -485,40 +444,8 @@ export default class RoomsService {
         });
     }
 
-    async getNetwork() {
-
-        let response = await fetch(this.url + '/' + this.id + '/network');
-
-        if (!response.ok) {
-            console.error(response.status); // 404
-        } else {
-            return await response.json();
-        }
-    }
-
     saveNetwork(chain) {
         this.networkChain = chain
-    }
-
-    addNetwork(networkChain, shallTranslateIPs) {
-
-        //TODO if wtInitialized not received yet, batch request and resend after peerId is available.
-
-        if(!window.client) return;
-
-        const data = {
-            peerId: window.client.peerId,
-            networkChain: networkChain ? networkChain.reverse() : [],
-            shallTranslateIPs: shallTranslateIPs
-        };
-        return fetch(this.url + '/' + this.id + '/network', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
     }
 
     static deleteAll() {

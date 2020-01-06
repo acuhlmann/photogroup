@@ -88,11 +88,17 @@ class SettingsView extends Component {
         if(connection) {
             let type = connection.effectiveType;
             Logger.info("Connection type is " + type);
-            this.master.emitter.emit('connectionType', type);
+            this.master.emitter.emit('connectionSpeedType', type);
+            this.master.service.updatePeer({
+                connectionSpeedType: type
+            });
             function updateConnectionStatus() {
                 Logger.info("Connection type changed from " + type + " to " + connection.effectiveType);
                 type = connection.effectiveType;
-                this.master.emitter.emit('connectionType', type);
+                this.master.emitter.emit('connectionSpeedType', type);
+                this.master.service.updatePeer({
+                    connectionSpeedType: type
+                });
             }
 
             connection.addEventListener('change', updateConnectionStatus.bind(this));
@@ -152,11 +158,11 @@ class SettingsView extends Component {
     }
 
     getLogs() {
-        this.getAll().then(dom => {
+        /*this.getAll().then(dom => {
             this.setState({
                 urls: dom
             });
-        });
+        });*/
     }
 
     handleClose() {
@@ -187,7 +193,7 @@ class SettingsView extends Component {
     requestBLE() {
 
         if(!navigator.bluetooth) {
-            Logger.log('navigator.bluetooth not available');
+            Logger.info('navigator.bluetooth not available');
         } else {
             if(navigator.bluetooth.getAvailability && typeof navigator.bluetooth.getAvailability === 'function') {
                 navigator.bluetooth.getAvailability()
@@ -195,13 +201,13 @@ class SettingsView extends Component {
                         // availability.value may be kept up-to-date by the UA as long as the availability
                         // object is alive. It is advised for web developers to discard the object as soon
                         // as it's not needed.
-                        Logger.log('bluetooth.availability ' + availability);
+                        Logger.info('bluetooth.availability ' + availability);
                     })
                     .catch((e) => {
-                        Logger.log('bluetooth.availability.e ' + JSON.stringify(e));
+                        Logger.info('bluetooth.availability.e ' + JSON.stringify(e));
                     });
             } else {
-                Logger.log('bluetooth.getAvailability() not available');
+                Logger.info('bluetooth.getAvailability() not available');
             }
 
             this.requestLES();
@@ -211,7 +217,7 @@ class SettingsView extends Component {
                 //optionalServices: ['battery_service']
             })
                 .then(device => {
-                    Logger.log('bluetooth.device ' + device.name + ' ' + device.id);
+                    Logger.info('bluetooth.device ' + device.name + ' ' + device.id);
 
                     // Set up event listener for when device gets disconnected.
                     device.addEventListener('gattserverdisconnected', this.onDisconnected);
@@ -234,10 +240,10 @@ class SettingsView extends Component {
                     return characteristic.readValue();
                 })
                 .then(value => {
-                    Logger.log('Battery percentage is ' + value.getUint8(0));
+                    Logger.info('Battery percentage is ' + value.getUint8(0));
                 })
                 .catch(error => {
-                    Logger.log('bluetooth.error ' + error.name + ' ' + error.message);
+                    Logger.error('bluetooth.error ' + error.name + ' ' + error.message);
                 });
         }
     }
@@ -264,20 +270,20 @@ class SettingsView extends Component {
                 let txPowerAt1m = -appleData.getInt8(22);
                 let pathLossVs1m = txPowerAt1m - event.rssi;
 
-                Logger.log(major, minor, pathLossVs1m);
+                Logger.info(major, minor, pathLossVs1m);
             });
         })
     }
 
     onDisconnected(event) {
         let device = event.target;
-        Logger.log('Device ' + device.name + ' is disconnected.');
+        Logger.info('Device ' + device.name + ' is disconnected.');
     }
 
     handleBatteryLevelChanged(event) {
         let value = event.target.value.getUint8(0);
-        Logger.log('handleBatteryLevelChanges ' + JSON.stringify(event));
-        Logger.log('handleBatteryLevelChanges value ' + value);
+        Logger.info('handleBatteryLevelChanges ' + JSON.stringify(event));
+        Logger.info('handleBatteryLevelChanges value ' + value);
     }
 
     restartTrackers() {
@@ -293,7 +299,7 @@ class SettingsView extends Component {
 
                 trackers.forEach(tracker => {
                     const announceUrl = tracker.announceUrl;
-                    Logger.log('restartTrackers ' + announceUrl);
+                    Logger.info('restartTrackers ' + announceUrl);
                     tracker._openSocket();
                 });
             }
@@ -317,7 +323,7 @@ class SettingsView extends Component {
         if(!event.target) return;
 
         console.log('change name ' + event.target.value);
-        this.master.service.updatePeer(this.master.client.peerId, {
+        this.master.service.updatePeer( {
             name: event.target.value
         });
     }
@@ -360,7 +366,7 @@ class SettingsView extends Component {
                     <DialogTitle>Settings</DialogTitle>
                     <DialogActions className={classes.vertical}>
                         <FormGroup row>
-                            <FormControlLabel
+                            {/*<FormControlLabel
                                 control={
                                     <Switch
                                         onChange={this.handleTopologyChange.bind(this)}
@@ -381,7 +387,7 @@ class SettingsView extends Component {
                                     />
                                 }
                                 label="Other Peers View"
-                            />
+                            />*/}
                             <FormControlLabel
                                 control={
                                     <Switch
@@ -405,7 +411,6 @@ class SettingsView extends Component {
                             <Button onClick={this.restartTrackers.bind(this)} color="secondary">
                                 wt track
                             </Button>
-                            <PeersView emitter={this.master.emitter} />
                             <IconButton
                                 onClick={this.handleClose.bind(this)}>
                                 <CloseRounded />
@@ -414,8 +419,8 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v4 {this.state.peerId}</Typography>
-
+                        <Typography variant={"caption"}>v1 {this.state.peerId}</Typography>
+                        {messages}
                         <Button key='delete' onClick={this.handleReset.bind(this)} color="primary">
                             Del server state
                         </Button>

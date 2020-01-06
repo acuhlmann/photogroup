@@ -80,7 +80,7 @@ class LoaderView extends Component {
                     const progress = client.progress.toFixed(1) * 100;
                     const show = (progress > 0 && progress < 100);
                     lastProgress = progress;
-                    //Logger.log('client.progress ' + progress
+                    //Logger.debug('client.progress ' + progress
                     //    + ' show ' + show);
                     //self.setState({progress: progress, show: show});
 
@@ -89,9 +89,9 @@ class LoaderView extends Component {
                     if(totalDownloaded !== lastDownload || totalUploaded !== lastUpload) {
                         const down = FileUtil.formatBytes(totalDownloaded);
                         const up = FileUtil.formatBytes(totalUploaded);
-                        //Logger.log('downloaded ' + down
+                        //Logger.debug('downloaded ' + down
                         //    + ' uploaded ' + up);
-                        //Logger.log('client.progress ' + progress
+                        //Logger.debug('client.progress ' + progress
                         //    + ' show ' + show);
                         lastDownload = totalDownloaded;
                         lastUpload = totalUploaded;

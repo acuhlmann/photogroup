@@ -18,59 +18,39 @@ const emitter = new EventEmitter();
 
 const IceServers = require('./IceServers');
 const Events = require('./Events');
-const Peers = require('./Peers');
 const IpTranslator = require('./IpTranslator');
 const Tracker = require('./Tracker');
-const Room = require('./Room');
-const Topology = require('./Topology');
+const Rooms = require('./Rooms');
 
-function init(pgServer) {
+function init() {
     const ice = new IceServers(updateChannel, remoteLog, app);
     ice.start();
 
-    const peers = new Peers(updateChannel, remoteLog, app, emitter);
-    peers.start();
-
-    const tracker = new Tracker(updateChannel, remoteLog, app, emitter, peers);
+    const tracker = new Tracker(updateChannel, remoteLog, app, emitter);
     tracker.start();
 
-    const room = new Room(updateChannel, remoteLog, app, emitter, peers, ice, tracker);
-    room.start(init);
+    const rooms = new Rooms(updateChannel, remoteLog, app, emitter, ice, tracker);
+    rooms.start();
 
-    const events = new Events(room.rooms, updateChannel, remoteLog, app, emitter);
+    const events = new Events(rooms.rooms, updateChannel, remoteLog, app, emitter);
     events.start();
 
     //const network = new Topology(room.rooms, updateChannel, remoteLog, app, emitter, peers, tracker);
     //network.start();
+}
 
-    if(pgServer) {
+init();
 
-        //peers.pgServer = pgServer;
-        IpTranslator.getLookupIp('photogroup.network').then(result => {
-            console.log('photogroup.network is at ' + result.ip + ' hosted at ' + result.hostname);
-            peers.pgServer = result;
+const started = new Promise((resolve, reject) => {
+
+    if (module === require.main) {
+        const server = app.listen(webPort, () => {
+            const host = server.address().address;
+            const actualPort = server.address().port;
+            console.log(`App started at ${host}:${actualPort}`);
         });
     }
-
-    return peers;
-}
-
-const peers = init();
-
-
-if (module === require.main) {
-    const server = app.listen(webPort, () => {
-        const host = server.address().address;
-        const actualPort = server.address().port;
-        console.log(`App started at ${host}:${actualPort}`);
-
-        IpTranslator.getLookupIp('photogroup.network').then(result => {
-            console.log('photogroup.network is at ' + result.ip + ' hosted at ' + result.hostname);
-            peers.pgServer = result;
-        });
-    });
-}
-
+});
 
 app.get('index.*', (req, res) => {
     res.sendFile(path.join(__dirname, 'ui/index.html'));
@@ -79,3 +59,5 @@ app.get('index.*', (req, res) => {
 app.get('/.well-known/pki-validation/AC5282DE1EF367EB3D1FCCD30628F8D9.txt', (req, res) => {
     res.sendFile(path.join(__dirname, 'secret/AC5282DE1EF367EB3D1FCCD30628F8D9.txt'));
 });
+
+module.exports = {app, started};

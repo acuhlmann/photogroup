@@ -156,7 +156,7 @@ export default class PeersView extends Component {
 
             return <li key={index}>
                     <Typography variant="caption">
-                        {url.ips} {url.originPlatform} peerId {url.sharedBy.originPlatform} infoHash {url.hash}
+                        {url.ips} {url.originPlatform} peerId {url.sharedBy.originPlatform} infoHash {url.infoHash}
                     </Typography>
                 </li>
         });

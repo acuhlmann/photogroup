@@ -9,6 +9,31 @@ export default class GalleryModel {
     constructor(torrentMaster) {
         this.torrentMaster = torrentMaster;
         this.parser = new MetadataParser();
+
+        /*this.torrentMaster.emitter.on('added', toAdd => {
+            this.addMediaToDom(toAdd);
+        }, this);*/
+
+        /*this.items = items;
+        this.torrentMaster.emitter.on('photos', event => {
+
+            if(event.type === 'add') {
+                this.items = update(this.items, {$push: [event.item]});
+                this.view.setState({tiles: this.items});
+            } else if(event.type === 'delete') {
+                const index = this.items.findIndex(item => item.peerId === event.item);
+                if(index > -1) {
+                    this.items = update(this.items, {$splice: [[index, 1]]});
+                    this.view.setState({tiles: this.items});
+                }
+            } else if(event.type === 'update') {
+                const index = this.items.findIndex(item => item.peerId === event.item.peerId);
+                if(index > -1) {
+                    this.items = update(this.items, {$splice: [[index, 1, event.item]]});
+                    this.view.setState({tiles: this.items});
+                }
+            }
+        });*/
     }
 
     get view() {
@@ -31,12 +56,12 @@ export default class GalleryModel {
 
     performDeleteTile(infoHash) {
 
-        const currentTiles = this.view.state.tileData;
+        const currentTiles = this.view.state.tiles;
         const index = currentTiles.findIndex(item => item.torrent.infoHash === infoHash);
         if(index > -1 ) {
             const tiles = update(currentTiles, {$splice: [[index, 1]]});
             this.view.setState({
-                tileData: tiles
+                tiles: tiles
             });
         }
 
@@ -44,7 +69,7 @@ export default class GalleryModel {
     }
 
     getTileByUri(uri) {
-        const tiles = this.view.state.tileData;
+        const tiles = this.view.state.tiles;
 
         let foundAtIndex = 0;
         const found = tiles.find((tile, index) => {
@@ -102,7 +127,7 @@ export default class GalleryModel {
         tile.sharedBy =  item.sharedBy || {};
 
         let tiles;
-        const oldTiles = this.view.state.tileData;
+        const oldTiles = this.view.state.tiles;
         const index = oldTiles.findIndex(item => item.torrent.infoHash === tile.torrent.infoHash);
         if(index > -1) {
             tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
@@ -110,16 +135,17 @@ export default class GalleryModel {
             tiles = update(oldTiles, {$push: [tile]});
         }
         this.view.setState({
-            tileData: tiles
+            tiles: tiles
         });
 
         if(!item.seed) {
 
             this.torrentMaster.emitter.emit('torrentDone', item.torrent);
             this.torrentMaster.service.addOwner(item.torrent.infoHash, this.torrentMaster.client.peerId).then(() => {
-                this.torrentMaster.emitter.emit('appEventRequest', {level: 'success', type: 'downloaded',
+                Logger.info('added owner and downloaded ' + item.torrent.name);
+                /*this.torrentMaster.emitter.emit('appEventRequest', {level: 'success', type: 'downloaded',
                     event: {file: item.torrent.name, sharedBy: item.sharedBy, downloader: this.torrentMaster.client.peerId}
-                });
+                });*/
             });
         }
     }
@@ -131,10 +157,10 @@ export default class GalleryModel {
         const scope = this;
 
         Encrypter.decryptPic(elem, password, (blob) => {
-            //scope.view.state.tileData.splice(index, 1);
-            const tiles = update(scope.view.state.tileData, {$splice: [[index, 1]]});
+            //scope.view.state.tiles.splice(index, 1);
+            const tiles = update(scope.view.state.tiles, {$splice: [[index, 1]]});
             scope.view.setState({
-                tileData: tiles
+                tiles: tiles
             });
             scope.renderTo(file, blob, torrent, false);
         });

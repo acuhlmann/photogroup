@@ -189,12 +189,12 @@ module.exports = class ServerPeer {
         return peers;
     }
 
-    removeTorrent(hash) {
+    removeTorrent(infoHash) {
         const remoteLog = this.remoteLog;
         const webtorrent = this.webtorrent;
 
-        if(webtorrent.client && webtorrent.client.get(hash)) {
-            webtorrent.client.remove(hash, () => {
+        if(webtorrent.client && webtorrent.client.get(infoHash)) {
+            webtorrent.client.remove(infoHash, () => {
                 remoteLog('wt.remove ');
                 if(webtorrent.client.torrents.length === 0) {
                     this.peers.webPeers.delete(webtorrent.client.peerId);

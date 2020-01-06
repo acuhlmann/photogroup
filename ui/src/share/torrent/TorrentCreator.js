@@ -18,21 +18,22 @@ export default class TorrentCreator {
         console.log('window.location.href ' + window.location.href);
         const wsUrl = isLocal ? 'ws://' + window.location.hostname + ':9000' : 'wss://' + window.location.hostname + '/ws';
         console.log('WEBTORRENT_ANNOUNCE wsUrl ' + wsUrl);
-        window.WEBTORRENT_ANNOUNCE = createTorrent.announceList
-            .map(function (arr) {
+        //window.WEBTORRENT_ANNOUNCE = createTorrent.announceList
+        window.WEBTORRENT_ANNOUNCE = []
+            .map(arr => {
                 return arr[0]
             })
-            .filter(function (url) {
+            .filter(url => {
                 return url.indexOf('wss://') === 0 || url.indexOf('ws://') === 0
             })
             .concat(wsUrl);
 
-        Logger.info('window.WEBTORRENT_ANNOUNCE '+window.WEBTORRENT_ANNOUNCE);
+        Logger.info('window.WEBTORRENT_ANNOUNCE ' + window.WEBTORRENT_ANNOUNCE);
     }
 
     start() {
 
-        this.service.getRtcConfig().then(iceServers => {
+        return this.service.getRtcConfig().then(iceServers => {
 
             if(iceServers && Array.isArray(iceServers.iceServers)) {
                 //TODO: does below make sense to add in addition to Twillio STUN?
@@ -45,15 +46,8 @@ export default class TorrentCreator {
             const self = this;
             this.iceServers = iceServers;
             this.createWT();
-            //this.emitter.emit('topStateMessage', msg + '\nRegistering Peer');
-            this.service.addPeer().then(peer => {
-                //this is now in Uploader
-                //self.emitter.emit('topStateMessage', '');
 
-                self.parent.me = peer;
-                self.emitter.emit('addPeerDone', peer);
-            });
-
+            this.emitter.emit('iceDone');
             this.buildTopology();
         });
     }
@@ -65,6 +59,8 @@ export default class TorrentCreator {
     }
 
     createWT() {
+
+        TorrentCreator.setupAnnounceUrls();
         //const WebTorrent = window.WebTorrent;
         const client = new WebTorrent({
             tracker: {
@@ -73,6 +69,7 @@ export default class TorrentCreator {
         });
         Logger.error('client.peerId '+client.peerId);
         window.client = client; // for easier debugging
+        TorrentCreator.setupAnnounceUrls();
         this.client = client;
         this.emitter.emit('wtInitialized', client);
 
@@ -126,17 +123,17 @@ export default class TorrentCreator {
                     }
                     if(data.peer_id) {
                         data.peer_id = this.binaryToHex(data.peer_id);
-                        Logger.log('socket.peerId ' + data.peer_id);
+                        Logger.debug('socket.peerId ' + data.peer_id);
                     }
                     if(data.info_hash) {
                         data.info_hash = this.binaryToHex(data.info_hash);
-                        Logger.log('socket.info_hash ' + data.info_hash);
+                        Logger.debug('socket.info_hash ' + data.info_hash);
                     }
                     if(data.answer) {
-                        Logger.log('socket.answer ' + data.answer);
+                        Logger.debug('socket.answer ' + data.answer);
                     }
                     if(data.offer) {
-                        Logger.log('socket.offer ' + data.offer);
+                        Logger.debug('socket.offer ' + data.offer);
                     }
                 });
             });

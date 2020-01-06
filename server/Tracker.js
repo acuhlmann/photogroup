@@ -8,12 +8,11 @@ const hostname = '0.0.0.0';
 
 module.exports = class Tracker {
 
-    constructor(updateChannel, remoteLog, app, emitter, peers) {
+    constructor(updateChannel, remoteLog, app, emitter) {
         this.updateChannel = updateChannel;
         this.remoteLog = remoteLog;
         this.app = app;
         this.emitter = emitter;
-        this.peers = peers;
     }
 
     start() {
@@ -157,7 +156,7 @@ module.exports = class Tracker {
     }
 
     sendIceEvent(iceEvent, peerId, event, sdp, addr, infoHash) {
-        const sharedBy = this.peers.webPeers.get(peerId);
+        const sharedBy = peerId; //this.peers.webPeers.get(peerId);
         const newEvent = {
             event: 'iceEvent',
             data: {

@@ -72,7 +72,7 @@ class ShareCanvas extends Component {
             });
         }
 
-        this.checkOnline();
+        //this.checkOnline();
 
         window.addEventListener('beforeinstallprompt', e => {
             console.info('beforeinstallprompt');
@@ -208,12 +208,12 @@ class ShareCanvas extends Component {
 
         return (
             <ThemeProvider theme={defaultTheme}>
-
-                {<QRCodeView master={master}/>}
-                <TopologyView master={master} />
                 <MeView master={master} />
+                {<QRCodeView master={master}/>}
+                {/*<TopologyView master={master} />*/}
+
                 <Gallery className={classes.nooverflow} model={this.gallery} master={master} />
-                <OtherPeersView master={master} />
+                {/*<OtherPeersView master={master} />*/}
 
             </ThemeProvider>
         );

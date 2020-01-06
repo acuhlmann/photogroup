@@ -16,15 +16,15 @@ export default class PhotoDetailsRenderer {
         this.service = service;
     }
 
-    render(metadata, sharedBy, fileSize, url) {
+    render(metadata, tile) {
 
-        this.url = url;
+        this.tile = tile;
 
         if(!metadata || (metadata && metadata.length < 1)) return;
 
         if(metadata[0] && metadata[0].key !== 'Shared by ') {
-            const shared = sharedBy ? (sharedBy.name ? sharedBy.name : sharedBy.originPlatform) : '';
-            metadata.unshift({key: 'Shared by ', value: shared + ' ' + fileSize});
+            //const shared = sharedBy ? (sharedBy.name ? sharedBy.name : sharedBy.originPlatform) : '';
+            //metadata.unshift({key: 'Shared by ', value: shared + ' ' + fileSize});
         }
 
         return metadata.map((item, index) => {
@@ -36,7 +36,7 @@ export default class PhotoDetailsRenderer {
             } else if(item.key === 'GPSAltitude') {
                 content = item.value + 'm'
             } else if(item.key === 'x-file name') {
-                content = this.getFileNameEntry(url && url.fileName ? url.fileName : item.value, item.value);
+                content = this.getFileNameEntry(tile && tile.fileName ? tile.fileName : item.value, item.value);
             }
 
             return <ListItem key={index}
@@ -69,7 +69,7 @@ export default class PhotoDetailsRenderer {
         if(!event.target) return;
 
         console.log('change name ' + event.target.value);
-        this.service.update(this.url.hash, {
+        this.service.update(this.tile.infoHash, {
             fileName: FileUtil.truncateFileName(event.target.value)
         });
     }

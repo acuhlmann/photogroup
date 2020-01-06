@@ -130,8 +130,8 @@ class OtherPeersView extends Component {
         });
     };
 
-    removeServerPeer(hash, peerId) {
-        this.master.service.removeOwner(hash, peerId);
+    removeServerPeer(infoHash, peerId) {
+        this.master.service.removeOwner(infoHash, peerId);
     }
 
     createWhatPeersHave(otherPeers, allNats, allEdges, connections, expandedPeers, classes) {
@@ -195,7 +195,7 @@ class OtherPeersView extends Component {
                                         .find(owner => owner.platform === 'photogroup.network');
                                     let connection;
                                     if(connections && connections.length > 0) {
-                                        const firstConnection = connections.filter(item => item.infoHash === url.hash);
+                                        const firstConnection = connections.filter(item => item.infoHash === url.infoHash);
                                         connection = firstConnection.find(item => item.fromPeerId === peer.peerId
                                             || item.toPeerId === peer.peerId);
                                     }
@@ -217,7 +217,7 @@ class OtherPeersView extends Component {
                                                 pgOwner
                                                 ? <IconButton
                                                         onClick={this.removeServerPeer.bind(this,
-                                                            pgOwner.url.hash, pgOwner.peerId)}>
+                                                            pgOwner.url.infoHash, pgOwner.peerId)}>
                                                 <ClearIcon/>
                                             </IconButton> : ''
                                             }

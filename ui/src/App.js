@@ -46,8 +46,8 @@ class App extends Component {
 
         const scope = this;
 
-        Logger.useDefaults();
-        //Logger.setLevel(Logger.INFO);
+        //Logger.useDefaults();
+        Logger.setLevel(Logger.INFO);
 
         const emitter = new EventEmitter();
         this.master = new TorrentMaster(new RoomsService(emitter), emitter);
@@ -58,51 +58,26 @@ class App extends Component {
             this.gallery.performDeleteTile(infoHash);
         }, this);
 
-        this.master.emitter.on('added', toAdd => {
-            this.gallery.addMediaToDom(toAdd);
-        }, this);
-
-        //When webtorrent errors on a duplicated add, try to remove and re-seed.
-        //This may happen if client state is lost
-        //i.e. due to removal of browser (indexeddb cache)
-        this.master.emitter.on('duplicate', (duplicated) => {
-
-            const tileItem = scope.gallery.getTileByUri(duplicated.torrentId);
-            console.log('duplicate ' + tileItem.item.torrent.infoHash);
-            if(!tileItem.item || (tileItem.item && tileItem.item.loading)) {
-                duplicated.torrent.client.remove(duplicated.torrentId, () => {
-                    if(duplicated.files) {
-                        //TODO: temporarily disable due to files disapearing bug in seed.torrent
-                        //return;
-                        scope.master.torrentAddition.seed(duplicated.files, undefined, duplicated.files, () => {
-                            Logger.info('seeded duplicate');
-                        });
-                    }
-                });
-            }
-        }, this);
-
-
         if(Visibility.isSupported() ) {
-            Logger.log('Visibility.isSupported');
+            Logger.debug('Visibility.isSupported');
         } else {
-            Logger.log('Visibility NOT supported');
+            Logger.debug('Visibility NOT supported');
         }
 
         Visibility.change((e, state) => {
             //Statistics.visibilityChange(state);
-            Logger.log('Visibility.change ' + state);
+            Logger.debug('Visibility.change ' + state);
             if(state === 'visible') {
                 const peerId = this.master.client && this.master.client.peerId;
-                if(peerId) {
+                /*if(peerId) {
                     this.master.service.getPeer(peerId)
                         .catch((err) => {
-                            Logger.log('reconnect ');
+                            Logger.info('reconnect ');
                             if(Number(err.message) === 404) {
                                 this.master.creator.buildTopology();
                             }
                         });
-                }
+                }*/
             }
         });
     }
@@ -129,7 +104,7 @@ class App extends Component {
                                             PhotoGroup
                                         </Typography>
                                         <Typography variant="caption">
-                                            Zero Install, Peer-to-Peer Photo Group Collaboration.
+                                            Zero Install, Peer-to-Peer Photo Collaboration.
                                         </Typography>
                                     </div>
                                     <QRCodeButton master={this.master}/>

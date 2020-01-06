@@ -50,16 +50,10 @@ class Uploader extends Component {
             disabled: true,
         };
 
-        model.emitter.on('webPeers', () => {
-
-            if(this.state.disabled) {
-                this.setState({disabled: false})
-            }
-        });
-
-        model.emitter.on('openRoomEnd', () => {
+        model.emitter.on('readyToUpload', () => {
             this.setState({
-                visible: true
+                visible: true,
+                disabled: false
             });
         });
     }
@@ -94,12 +88,17 @@ class Uploader extends Component {
     seed(secure) {
 
         const scope = this;
+        this.model.seed(this.file, false, this.file, () => {
+            scope.uploaderDom.value = '';
+        });
+
+        /*const scope = this;
         Encrypter.encryptPic(this.file, secure, this.state.password, (file) => {
 
             scope.model.seed(file, secure, scope.file, () => {
                 scope.uploaderDom.value = '';
             });
-        });
+        });*/
     }
 
     hasRoom() {

@@ -17,7 +17,7 @@ cp ./server/Events.js ./bin/
 cp ./server/IceServers.js ./bin/
 cp ./server/IpTranslator.js ./bin/
 cp ./server/Peers.js ./bin/
-cp ./server/Room.js ./bin/
+cp ./server/Rooms.js ./bin/
 cp ./server/ServerPeer.js ./bin/
 cp ./server/ServerSetup.js ./bin/
 cp ./server/Tracker.js ./bin/

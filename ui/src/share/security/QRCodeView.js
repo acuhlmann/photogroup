@@ -30,12 +30,16 @@ class QRCodeView extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            showQR: false
+            showQR: false,
+            visible: false
         };
 
         props.master.emitter.on('openRoomEnd', () => {
             this.setState({showQR: true});
-        })
+        });
+        props.master.emitter.on('iceDone', () => {
+            this.setState({visible: true});
+        });
     }
 
     async openRoom() {
@@ -47,6 +51,7 @@ class QRCodeView extends Component {
         master.service.changeUrl('room', master.service.id);
 
         master.emitter.emit('openRoomEnd');
+        master.emitter.emit('readyToUpload');
     }
 
     buildQRView(master, showQR, classes) {
@@ -81,12 +86,12 @@ class QRCodeView extends Component {
     render() {
 
         const {classes, master} = this.props;
-        const {showQR} = this.state;
+        const {showQR, visible} = this.state;
 
         const hasRoom = this.hasRoom();
 
         return (
-            !hasRoom ? <div>
+            !hasRoom && visible ? <div>
 
                 {this.buildQRView(master, showQR, classes)}
 

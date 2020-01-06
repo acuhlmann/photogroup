@@ -32,23 +32,23 @@ export default class MetadataParser {
         ExifParser.parse(allMetadata);
 
         allMetadata['x-file name'] = tile.torrent.name;
-        const desc = MetadataParser.findBestDesc(allMetadata);
-        if(desc)
-            allMetadata['x-Description'] = desc;
+        const picDesc = MetadataParser.findBestDesc(allMetadata);
+        if(picDesc)
+            allMetadata['x-Description'] = picDesc;
 
         tile.allMetadata = allMetadata;
         this.sortByDate(tile, allMetadata);
     }
 
     static findBestDesc(allMetadata) {
-        const descXmp = allMetadata['Description XMP'];
-        const desc = allMetadata['ImageDescription'];
-        if((descXmp && desc) && descXmp === desc) {
-            return desc;
-        } else if((descXmp && desc) && descXmp !== desc) {
-            return descXmp + ' ' + desc;
-        } else if(descXmp || desc) {
-            return descXmp || desc;
+        const picDescXmp = allMetadata['Description XMP'];
+        const picDesc = allMetadata['ImageDescription'];
+        if((picDescXmp && picDesc) && picDescXmp === picDesc) {
+            return picDesc;
+        } else if((picDescXmp && picDesc) && picDescXmp !== picDesc) {
+            return picDescXmp + ' ' + picDesc;
+        } else if(picDescXmp || picDesc) {
+            return picDescXmp || picDesc;
         }
         else {
             return '';
@@ -60,40 +60,40 @@ export default class MetadataParser {
         const DateTimeOriginal = allMetadata['DateTimeOriginal'];
         const timestamp = MetadataParser.toTimeStamp(DateTimeOriginal);
 
-        const tiles = this.view.state.tileData.slice();
+        const tiles = this.view.state.tiles.slice();
         const tileItem = tiles.find(item => item.torrent.infoHash === tile.torrent.infoHash);
         if(tileItem) {
-            const dateTaken = MetadataParser.formatDateFromTimeStamp(timestamp);
-            tileItem.dateTaken = dateTaken === 'Invalid date' ? '' : dateTaken;
-            tileItem.dateTakenDate = timestamp.toDate();
+            const picDateTaken = MetadataParser.formatDateFromTimeStamp(timestamp);
+            tileItem.picDateTaken = picDateTaken === 'Invalid date' ? '' : picDateTaken;
+            tileItem.picDateTakenDate = timestamp.toDate();
 
-            tileItem.title = allMetadata['Title XMP'] ? allMetadata['Title XMP'] + ' ' : '';
-            tileItem.desc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
+            tileItem.picTitle = allMetadata['Title XMP'] ? allMetadata['Title XMP'] + ' ' : '';
+            tileItem.picDesc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
             tileItem.fileName = FileUtil.truncateFileName(tile.torrent.name);
 
-            tileItem.summary = this.createSummary(allMetadata, tileItem.dateTaken, tile.torrent.name);
+            tileItem.picSummary = this.createSummary(allMetadata, tileItem.picDateTaken, tile.torrent.name);
             const cameraMake = allMetadata['Make'] ? allMetadata['Make']  + ' ': '';
             const cameraSettings = allMetadata['x-Settings'] ? allMetadata['x-Settings'] : '';
             tileItem.cameraSettings = cameraMake + cameraSettings;
 
             tiles.sort((a,b) => {
-                return new Date(b.dateTakenDate) - new Date(a.dateTakenDate);
+                return new Date(b.picDateTakenDate) - new Date(a.picDateTakenDate);
             });
 
             const tileIndex = tiles.findIndex(item => item.torrent.infoHash === tile.torrent.infoHash);
             //tiles[tileIndex] = update(tiles[tileIndex], {$set: tileItem});
             const newTiles = update(tiles, {[tileIndex]: {$set: tileItem}});
             this.view.setState({
-                tileData: newTiles
+                tiles: newTiles
             });
         }
     }
 
-    createSummary(allMetadata, dateTaken, name) {
-        const title = allMetadata['Title XMP'] ? allMetadata['Title XMP'] + ' ' : '';
-        const desc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
-        return dateTaken + ' '
-            + title + desc
+    createSummary(allMetadata, picDateTaken, name) {
+        const picTitle = allMetadata['Title XMP'] ? allMetadata['Title XMP'] + ' ' : '';
+        const picDesc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
+        return picDateTaken + ' '
+            + picTitle + picDesc
             + FileUtil.truncateFileName(name)
     }
 

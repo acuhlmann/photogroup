@@ -25,15 +25,16 @@ class OwnersList extends Component {
     }
 
     render() {
-        const {classes, owners, connections, allEdges, allNats, otherPeers, item} = this.props;
+        const {classes, owners, master, tile} = this.props;
 
+        const connections = [];
         return (
             <List>
                 {
                     owners.length > 0 ? owners.map((owner, index) => {
                         let connection;
                         if(connections && connections.length > 0) {
-                            const firstConnection = connections.filter(item => item.infoHash === item.hash);
+                            const firstConnection = connections.filter(item => item.infoHash === item.infoHash);
                             connection = firstConnection.find(item => item.fromPeerId === owner.peerId
                                 || item.toPeerId === owner.peerId);
                         }

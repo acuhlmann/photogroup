@@ -32,7 +32,7 @@ export default class TopologyHelper {
 
     process(graph) {
         if(!graph.nodes[0]) {
-            Logger.log('no nodes? ' + graph.nodes);
+            Logger.warn('no nodes? ' + graph.nodes);
             return;
         }
 
