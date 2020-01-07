@@ -209,12 +209,8 @@ class ShareCanvas extends Component {
         return (
             <ThemeProvider theme={defaultTheme}>
                 <MeView master={master} />
-                {<QRCodeView master={master}/>}
-                {/*<TopologyView master={master} />*/}
-
-                <Gallery className={classes.nooverflow} model={this.gallery} master={master} />
-                {/*<OtherPeersView master={master} />*/}
-
+                <QRCodeView master={master}/>
+                <Gallery className={classes.nooverflow} master={master} />
             </ThemeProvider>
         );
     }
@@ -222,7 +218,6 @@ class ShareCanvas extends Component {
 
 ShareCanvas.propTypes = {
     classes: PropTypes.object.isRequired,
-    gallery: PropTypes.object.isRequired,
 };
 
 export default withSnackbar(withStyles(styles)(ShareCanvas));

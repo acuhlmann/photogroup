@@ -38,9 +38,7 @@ export default class TorrentAddition {
         Logger.info('add ' + parsed.name + ' ' + key);
         //Logger.time('add ' + parsed.name + ' ' + key);
         const photo = {
-            torrent: {
-                infoHash: shortid.generate()
-            },
+            infoHash: shortid.generate(),
             rendering: true, secure: secure, fromCache: fromCache, peerId: this.master.client.peerId
         };
 
@@ -57,6 +55,8 @@ export default class TorrentAddition {
             this.update(torrent.numPeers);
             photo.loading = photo.rendering = false;
             photo.torrent = torrent;
+            photo.url = torrent.magnetURI;
+            photo.infoHash = torrent.infoHash;
             this.addToDom(photo);
         });
 
@@ -94,10 +94,8 @@ export default class TorrentAddition {
         Logger.info('TorrendAddition.seed ' + JSON.stringify(file));
 
         const photo = {
-            torrent: {
-                infoHash: shortid.generate(),
-            },
-            seed: true, rendering: true, file: origFile, secure: secure, peerId: this.master.client.peerId
+            infoHash: shortid.generate(),
+            seed: true, rendering: true, file: origFile, origFile: origFile, secure: secure, peerId: this.master.client.peerId
         };
         this.master.emitter.emit('photos', {
             type: 'add', item: photo
@@ -113,6 +111,8 @@ export default class TorrentAddition {
 
             photo.loading = photo.rendering = false;
             photo.torrent = torrent;
+            photo.infoHash = torrent.infoHash;
+            photo.url = torrent.magnetURI;
             this.addToDom(photo);
 
             if(callback) {
@@ -216,7 +216,7 @@ export default class TorrentAddition {
         //return;
 
         //Once generated, stores the metadata for later use when re-adding the torrent!
-        const parsed = window.parsetorrent(torrent.magnetURI);
+        const parsed = window.parsetorrent(torrent.torrentFile);
         const key = parsed.infoHash;
         Logger.debug('metadata ' + parsed.name + ' ' + key);
 

@@ -159,7 +159,7 @@ module.exports = class Rooms {
 
             } else {
 
-                const infoHash = request.param.infoHash;
+                const infoHash = request.params.infoHash;
                 const existing = this.findPhoto(room.photos, infoHash);
                 const newUrl = request.body;
                 _.merge(existing, newUrl);
@@ -175,7 +175,7 @@ module.exports = class Rooms {
             const room = rooms.get(id);
             if(room) {
 
-                const infoHash = request.param.infoHash;
+                const infoHash = request.params.infoHash;
 
                 let found = undefined;
                 if (infoHash) {

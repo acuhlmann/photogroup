@@ -58,10 +58,9 @@ export default class TorrentMaster {
                 Logger.info(`photos: ${response.photos.length} peers ${response.peers.length}`);
                 const values = await this.resurrectLocallySavedTorrents(this.photos);
                 Logger.info('done with resurrectAllTorrents ' + values);
-
-                Promise.all(values).then(results => {
+                /*Promise.all(values).then(results => {
                     Logger.info('all done with resurrectAllTorrents ' + results);
-                });
+                });*/
 
                 this.hasPeer = true;
 
@@ -154,7 +153,6 @@ export default class TorrentMaster {
                     let photo;
                     if(photos) {
                         photo = photos.find(item => item.infoHash === metadata.infoHash);
-                        sharedBy = photo ? photo.sharedBy : sharedBy;
                     }
                     scope.torrentAddition.add(metadata, false, true).then(torrent => {
 
@@ -186,7 +184,7 @@ export default class TorrentMaster {
         const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE, 'store': idb }, callback);
         //const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE}, callback);
 
-        Logger.info('addSeedOrGetTorrent ' + torrent.infoHash + ' ' + window.WEBTORRENT_ANNOUNCE);
+        Logger.info('addSeedOrGetTorrent ' + torrent.infoHash + ' ' + torrent.name);
 
         const scope = this;
         let lastProgress = 0;
@@ -253,11 +251,13 @@ export default class TorrentMaster {
 
                 const index = this.photos.findIndex(item => item.infoHash === event.item);
                 if(index > -1) {
+                    const torrent = this.client.torrents.find(item => item.infoHash === event.item);
+                    if(torrent) {
+                        this.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
+                            Logger.info('deleteTorrent done ' + infoHash);
+                        });
+                    }
                     this.photos = update(this.photos, {$splice: [[index, 1]]});
-
-                    this.torrentDeletion.deleteTorrent(this.photos[index].torrent).then(infoHash => {
-                        Logger.info('deleteTorrent done ' + infoHash);
-                    });
                 }
             } else if(event.type === 'update') {
 

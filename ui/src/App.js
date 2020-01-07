@@ -13,7 +13,6 @@ import EventEmitter from 'eventemitter3';
 
 import TorrentMaster from "./share/torrent/TorrentMaster";
 import RoomsService from "./share/RoomsService";
-import GalleryModel from "./share/gallery/GalleryModel";
 
 import ShareCanvas from './share/ShareCanvas';
 import SettingsView from "./share/header/SettingsView";
@@ -52,11 +51,6 @@ class App extends Component {
         const emitter = new EventEmitter();
         this.master = new TorrentMaster(new RoomsService(emitter), emitter);
         this.master.service.master = this.master;
-        this.gallery = new GalleryModel(this.master);
-
-        this.master.emitter.on('deletedTorrent', infoHash => {
-            this.gallery.performDeleteTile(infoHash);
-        }, this);
 
         if(Visibility.isSupported() ) {
             Logger.debug('Visibility.isSupported');
@@ -118,7 +112,7 @@ class App extends Component {
 
                         <div className="App-intro">
                           <ShareCanvas
-                              master={this.master} gallery={this.gallery}/>
+                              master={this.master} />
                         </div>
                     </div>
                 </SnackbarProvider>

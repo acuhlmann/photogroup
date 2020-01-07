@@ -60,7 +60,7 @@ export default class TorrentCreator {
 
     createWT() {
 
-        TorrentCreator.setupAnnounceUrls();
+        //TorrentCreator.setupAnnounceUrls();
         //const WebTorrent = window.WebTorrent;
         const client = new WebTorrent({
             tracker: {

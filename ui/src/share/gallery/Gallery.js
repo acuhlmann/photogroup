@@ -26,6 +26,8 @@ import Divider from "@material-ui/core/Divider";
 import CheckIcon from "@material-ui/icons/CheckRounded";
 import ImageIcon from "@material-ui/icons/ImageRounded";
 import CircularProgress from "@material-ui/core/CircularProgress";
+import MetadataParser from "./MetadataParser";
+import Encrypter from "../security/Encrypter";
 //import OwnersList from "./OwnersList";
 
 const styles = theme => ({
@@ -97,8 +99,7 @@ class Gallery extends Component {
         super(props);
 
         this.master = props.master;
-        this.model = props.model;
-        this.model.view = this;
+        this.parser = new MetadataParser();
         this.state = {
             tiles: [],
             open: false,
@@ -118,11 +119,11 @@ class Gallery extends Component {
         this.master.emitter.on('duplicate', duplicated => {
             const tiles = this.state.tiles;
             const tile = tiles.find(item => item.infoHash === duplicated.torrentId);
-            if(tile && tile.torrent) {
-                Logger.info('duplicate ' + tile.torrent.infoHash);
+            if(tile) {
+                Logger.info('duplicate ' + tile.infoHash);
                 duplicated.torrent.client.remove(duplicated.torrentId, () => {
-                    if(duplicated.files) {
-                        self.master.torrentAddition.seed(duplicated.file, undefined, duplicated.origFile, () => {
+                    if(duplicated.file) {
+                        self.master.torrentAddition.seed(duplicated.file, undefined, duplicated.file, () => {
                             Logger.info('seeded duplicate');
                         });
                     }
@@ -152,23 +153,24 @@ class Gallery extends Component {
     }
 
     renderTile(newTile) {
-        newTile.fileSize = FileUtil.formatBytes(newTile.seed ? newTile.torrentFile.length : newTile.file.size);
+        newTile.fileSize = FileUtil.formatBytes(newTile.elem.size);
         newTile.isVideo = newTile.elem.type.includes('video');
-        newTile.fileName = newTile.file.name;
+        newTile.fileName = newTile.torrent.name;
 
         let tiles;
         const oldTiles = this.state.tiles;
-        const index = oldTiles.findIndex(item => item.torrent.infoHash === newTile.torrent.infoHash);
+        const index = oldTiles.findIndex(item => item.infoHash === newTile.infoHash);
         if(index > -1) {
-
             tiles = update(oldTiles, {$splice: [[index, 1, newTile]]});
+        } else {
+            tiles = update(oldTiles, {$unshift: [newTile]});
         }
         this.setState({tiles: tiles});
 
         if(!newTile.seed) {
 
             this.master.emitter.emit('torrentDone', newTile.torrent);
-            this.master.service.addOwner(newTile.torrent.infoHash, this.master.client.peerId).then(() => {
+            this.master.service.addOwner(newTile.infoHash, this.master.client.peerId).then(() => {
                 Logger.info('added owner and downloaded ' + newTile.torrent.name);
                 /*this.master.emitter.emit('appEventRequest', {level: 'success', type: 'downloaded',
                     event: {file: item.torrent.name, sharedBy: item.sharedBy, downloader: this.master.client.peerId}
@@ -189,9 +191,7 @@ class Gallery extends Component {
                 if(index < 0) {
 
                     const tile = event.item;
-                    tile.torrent = {
-                        infoHash: null
-                    };
+                    //tile.infoHash = null;
                     tile.loading = true;
                     tiles = update(oldTiles, {$unshift: [tile]});
                     this.setState({tiles: tiles});
@@ -219,7 +219,7 @@ class Gallery extends Component {
         this.setState((state, props) => ({
             open: true,
             tile: tile,
-            allMetadata: props.model.parser.createMetadataSummary(tile.allMetadata)
+            allMetadata: this.parser.createMetadataSummary(tile.allMetadata)
         }));
     }
 
@@ -259,12 +259,14 @@ class Gallery extends Component {
     }
 
     async handleDelete(tile) {
-        const infoHash = await this.model.deleteTile(tile);
+        //const infoHash = await this.master.torrentDeletion.deleteTorrent(tile.torrent);
+        const infoHash = await this.master.torrentDeletion.deleteItem(tile.torrent);
         Logger.info('handleDelete ' + tile.torrent.name + ' ' + infoHash + ' ' + tile.torrent.infoHash);
     }
 
     handleImageLoaded(tile, img) {
-        this.model.parser.readMetadata(tile, img, async tile => {
+        this.parser.view = this;
+        this.parser.readMetadata(tile, img, async tile => {
 
             if(tile.seed) {
 
@@ -359,9 +361,25 @@ class Gallery extends Component {
         }
     }
 
+    decrypt(tile, password, index) {
+        const file = tile.file;
+        const elem = tile.elem;
+        const torrent = tile.torrent;
+        const scope = this;
+
+        Encrypter.decryptPic(elem, password, (blob) => {
+            //scope.view.state.tiles.splice(index, 1);
+            const tiles = update(scope.view.state.tiles, {$splice: [[index, 1]]});
+            scope.view.setState({
+                tiles: tiles
+            });
+            scope.renderTo(file, blob, torrent, false);
+        });
+    }
+
     buildTile(tile, index, classes) {
 
-        const name = `${tile.summary} ${tile.size} ${tile.cameraSettings}`;
+        const name = `${tile.picSummary} ${tile.fileSize} ${tile.cameraSettings}`;
         let owners = tile.owners ? tile.owners : [];
         /*if(tile.item) {
             owners = tile.item.owners;
@@ -376,7 +394,7 @@ class Gallery extends Component {
             return <GridListTile key={index} cols={tile.cols || 1}>
                 <div>Decrypt with</div>
                 <PasswordInput onChange={value => this.setState({password: value})}/>
-                <Button onClick={this.model.decrypt.bind(this.model, tile, this.state.password, index)}
+                <Button onClick={this.decrypt.bind(this, tile, this.state.password, index)}
                         color="primary">
                     Submit
                 </Button>
@@ -429,7 +447,7 @@ class Gallery extends Component {
                                 <InfoIcon />
                             </IconButton>
                             <Typography onClick={this.handleOpen.bind(this, tile)} className={classes.wordwrap}
-                                        title={tile.summary}
+                                        title={tile.picSummary}
                                         variant="caption">{name}
                             </Typography>
                             <IconButton onClick={this.handleDelete.bind(this, tile)}
@@ -476,7 +494,6 @@ class Gallery extends Component {
 
 Gallery.propTypes = {
     classes: PropTypes.object.isRequired,
-    model: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,
 };
 export default withSnackbar(withStyles(styles)(Gallery));

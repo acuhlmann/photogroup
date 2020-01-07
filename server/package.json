@@ -23,15 +23,15 @@
     "magnet-uri": "^5.2.4",
     "mocha": "^6.2.2",
     "path": "^0.12.7",
-    "request-promise": "^4.2.4",
+    "request-promise": "^4.2.5",
     "sdp-transform": "^2.13.0",
     "sse-channel": "^3.1.1",
     "supertest": "^4.0.2",
-    "twilio": "^3.36.0",
+    "twilio": "^3.39.1",
     "url": "^0.11.0",
     "util": "^0.12.1",
     "webtorrent-hybrid": "^4.0.1",
-    "wrtc": "^0.4.2"
+    "wrtc": "^0.4.3"
   },
   "engines": {
     "node": ">=4.3.2"

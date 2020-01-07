@@ -290,8 +290,6 @@ export default class RoomsService {
 
     async share(data) {
 
-        data.origin = this.master.client.peerId;
-
         try {
             let response = await fetch(this.url + '/' + this.id + '/photos/' + data.infoHash, {
                 method: 'POST',

@@ -61,7 +61,7 @@ export default class MetadataParser {
         const timestamp = MetadataParser.toTimeStamp(DateTimeOriginal);
 
         const tiles = this.view.state.tiles.slice();
-        const tileItem = tiles.find(item => item.torrent.infoHash === tile.torrent.infoHash);
+        const tileItem = tiles.find(item => item.infoHash === tile.infoHash);
         if(tileItem) {
             const picDateTaken = MetadataParser.formatDateFromTimeStamp(timestamp);
             tileItem.picDateTaken = picDateTaken === 'Invalid date' ? '' : picDateTaken;
