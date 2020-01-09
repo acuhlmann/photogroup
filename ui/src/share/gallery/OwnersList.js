@@ -4,6 +4,7 @@ import Typography from "@material-ui/core/Typography";
 import List from "@material-ui/core/List";
 import ListItem from "@material-ui/core/ListItem";
 import AccountCircleRounded from "@material-ui/icons/AccountCircleRounded";
+import update from "immutability-helper";
 
 const styles = theme => ({
     vertical: {
@@ -22,30 +23,51 @@ class OwnersList extends Component {
 
     constructor(props) {
         super(props);
+
+        const {emitter, myPeerId, peers} = props;
+
+        this.state = {
+            peerItems: peers.items
+        };
+
+        emitter.on('peers', event => {
+
+            if(event.type === 'update' && event.item.peerId === myPeerId) {
+                const index = peers.items.findIndex(item => item.peerId === event.item.peerId);
+                if(index > -1) {
+                    peers.items = update(peers.items, {$splice: [[index, 1, event.item]]});
+                    this.setState({peerItems: peers.items});
+                }
+            }
+        });
     }
 
     render() {
-        const {classes, owners, master, tile} = this.props;
+        const {classes, owners, myPeerId} = this.props;
+        const {peerItems} = this.state;
+        //const owners = tile.owners;
 
         const connections = [];
         return (
             <List>
                 {
-                    owners.length > 0 ? owners.map((owner, index) => {
+                    owners && owners.length > 0 ? owners
+                        .filter(item => item.peerId !== myPeerId)
+                        .map((owner, index) => {
+
                         let connection;
                         if(connections && connections.length > 0) {
                             const firstConnection = connections.filter(item => item.infoHash === item.infoHash);
                             connection = firstConnection.find(item => item.fromPeerId === owner.peerId
                                 || item.toPeerId === owner.peerId);
                         }
-                        const myEdgeNat = allEdges
-                            .find(item => {
-                                const edgePeer = item.from.split('/')[1];
-                                return item.networkType === 'nat' && edgePeer === owner.peerId;
-                            });
-                        const nat = myEdgeNat ? allNats.find(node => node.id === myEdgeNat.to) : null;
-                        const peer = otherPeers.find(item => item.peerId === owner.peerId);
-                        return peer ? <ListItem key={index}>
+
+                        const peer = peerItems.find(item => item.peerId === owner.peerId);
+                        if(!peer) return '';
+                        const nat = peer.networkChain
+                            ? peer.networkChain.find(item => item.type === 'srflx' || item.type === 'prflx') : null;
+
+                        return <ListItem key={index}>
                                         <span style={{
                                             position: 'relative',
                                             textAlign: 'center',
@@ -70,10 +92,10 @@ class OwnersList extends Component {
                                                 <AccountCircleRounded/>
                                                 <Typography variant="caption" style={{
                                                     marginLeft: '5px'
-                                                }}>{peer.label}</Typography>
+                                                }}>{peer.connectionSpeedType} {peer.name} {peer.originPlatform}</Typography>
                                             </span>
                                         </span>
-                        </ListItem> : '';
+                        </ListItem>;
                     }) : <Typography variant="caption">No peer has this image</Typography>
                 }
             </List>

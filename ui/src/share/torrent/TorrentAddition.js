@@ -39,7 +39,8 @@ export default class TorrentAddition {
         //Logger.time('add ' + parsed.name + ' ' + key);
         const photo = {
             infoHash: shortid.generate(),
-            rendering: true, secure: secure, fromCache: fromCache, peerId: this.master.client.peerId
+            rendering: true, secure: secure, fromCache: fromCache,
+            peerId: this.master.client.peerId, owners: []
         };
 
         const self = this;
@@ -95,7 +96,8 @@ export default class TorrentAddition {
 
         const photo = {
             infoHash: shortid.generate(),
-            seed: true, rendering: true, file: origFile, origFile: origFile, secure: secure, peerId: this.master.client.peerId
+            seed: true, rendering: true, file: origFile, origFile: origFile, secure: secure,
+            peerId: this.master.client.peerId, owners: []
         };
         this.master.emitter.emit('photos', {
             type: 'add', item: photo
@@ -142,6 +144,7 @@ export default class TorrentAddition {
                 self.emitter.emit('duplicate', {
                     torrent: torrent,
                     torrentId: torrentId,
+                    photo: photo,
                     file: file});
             } else {
                 //self.master.torrentAddition.seed(file, undefined, file, () => {
@@ -218,7 +221,7 @@ export default class TorrentAddition {
         //Once generated, stores the metadata for later use when re-adding the torrent!
         const parsed = window.parsetorrent(torrent.torrentFile);
         const key = parsed.infoHash;
-        Logger.debug('metadata ' + parsed.name + ' ' + key);
+        Logger.info('metadata ' + parsed.name + ' ' + key);
 
         this.update(torrent.numPeers);
 

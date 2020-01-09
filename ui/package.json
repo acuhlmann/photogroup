@@ -19,6 +19,7 @@
     "end-of-stream": "1.4.1",
     "event-source-polyfill": "^1.0.11",
     "eventemitter3": "^4.0.0",
+    "exif-js": "^2.3.0",
     "idb-kv-store": "^4.4.0",
     "immutability-helper": "^3.0.1",
     "indexeddb-chunk-store": "^2.2.1",

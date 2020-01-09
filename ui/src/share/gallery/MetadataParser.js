@@ -3,8 +3,13 @@ import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
 import FileUtil from "../util/FileUtil";
 import update from 'immutability-helper';
+import EXIF from 'exif-js';
 
 export default class MetadataParser {
+
+    constructor() {
+        window.EXIF = EXIF;
+    }
 
     readMetadata(tile, img, callback) {
 
@@ -80,7 +85,7 @@ export default class MetadataParser {
                 return new Date(b.picDateTakenDate) - new Date(a.picDateTakenDate);
             });
 
-            const tileIndex = tiles.findIndex(item => item.torrent.infoHash === tile.torrent.infoHash);
+            const tileIndex = tiles.findIndex(item => item.infoHash === tile.infoHash);
             //tiles[tileIndex] = update(tiles[tileIndex], {$set: tileItem});
             const newTiles = update(tiles, {[tileIndex]: {$set: tileItem}});
             this.view.setState({

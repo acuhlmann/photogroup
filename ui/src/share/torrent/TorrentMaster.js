@@ -240,8 +240,8 @@ export default class TorrentMaster {
         this.emitter.on('photos', event => {
 
             if(event.type === 'add' && !event.item.seed) {
-
-                const index = this.photos.findIndex(item => item.infoHash === event.item.infoHash);
+                //this.client.torrents
+                const index = this.client.torrents.findIndex(item => item.infoHash === event.item.infoHash);
                 if(index < 0) {
 
                     this.photos = update(this.photos, {$unshift: [event.item]});
@@ -249,15 +249,16 @@ export default class TorrentMaster {
                 }
             } else if(event.type === 'delete') {
 
-                const index = this.photos.findIndex(item => item.infoHash === event.item);
+                const index = this.client.torrents.findIndex(item => item.infoHash === event.item);
                 if(index > -1) {
-                    const torrent = this.client.torrents.find(item => item.infoHash === event.item);
+                    const torrent = this.client.torrents[index];
                     if(torrent) {
                         this.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
                             Logger.info('deleteTorrent done ' + infoHash);
                         });
                     }
-                    this.photos = update(this.photos, {$splice: [[index, 1]]});
+                    const photosIndex = this.photos.findIndex(item => item.infoHash === event.item);
+                    this.photos = update(this.photos, {$splice: [[photosIndex, 1]]});
                 }
             } else if(event.type === 'update') {
 
