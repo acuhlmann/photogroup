@@ -17,7 +17,6 @@ import LinkRounded from '@material-ui/icons/LinkRounded';
 import ShareRounded from '@material-ui/icons/ShareRounded';
 import copy from "clipboard-copy";
 import QrReader from 'react-qr-reader'
-import PlayCircleFilledWhiteRoundedIcon from '@material-ui/icons/PlayCircleFilledWhiteRounded';
 import CropFreeRounded from '@material-ui/icons/CropFreeRounded';
 import Logger from 'js-logger';
 
@@ -84,6 +83,7 @@ class QRCodeButton extends Component {
 
         if(!data) return;
 
+        Logger.info('handleScan data ' + data);
         const url = new URL(data);
         const urlParams = new URLSearchParams(url.search);
         if(urlParams.has('room')) {
@@ -95,11 +95,10 @@ class QRCodeButton extends Component {
             const master = this.props.master;
             master.service.id = urlParams.get('room');
             master.service.hasRoom = true;
+            Logger.info('handleScan id ' + master.service.id);
             await master.findExistingContent(master.service.joinRoom);
             master.service.changeUrl('room', master.service.id);
-            this.emitter.emit('readyToUpload');
-            //master.emitter.emit('openRoomStart');
-            //master.emitter.emit('openRoomEnd');
+            master.emitter.emit('readyToUpload');
 
             this.show(false);
         }
@@ -144,7 +143,7 @@ class QRCodeButton extends Component {
 
     render() {
         const {classes, master} = this.props;
-        const {visible, createdRoom, openQr, numPeers} = this.state;
+        const {visible, createdRoom, openQr, numPeers, open} = this.state;
         const url = window.location.origin + '?room=' + master.service.id;
         const hasRoom = this.hasRoom();
 
@@ -173,7 +172,7 @@ class QRCodeButton extends Component {
                 </IconButton>
 
                 <Dialog
-                    open={this.state.open}
+                    open={open}
                     onClose={this.show.bind(this, false)}
                     //TransitionComponent={Transition}
                     keepMounted
@@ -223,6 +222,7 @@ class QRCodeButton extends Component {
                             !openQr ?
                                     <Button onClick={() => {
                                         this.setState({openQr: true})
+                                        //this.handleScan('http://localhost:3000/?room=atpxycsw660e6raotej3')
                                     }}
                                             variant="contained"
                                             color="primary"

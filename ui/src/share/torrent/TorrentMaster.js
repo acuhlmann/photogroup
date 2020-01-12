@@ -10,7 +10,6 @@ import TorrentDeletion from "./TorrentDeletion";
 import TorrentCreator from "./TorrentCreator";
 import FileUtil from '../util/FileUtil';
 import platform from "platform";
-import update from "immutability-helper";
 
 export default class TorrentMaster {
 
@@ -22,10 +21,10 @@ export default class TorrentMaster {
         this.service = service;
         this.service.master = this;
         this.emitter = emitter;
-        this.peers = new Peers(emitter, []);
+        this.peers = new Peers(emitter, [], service);
         this.torrentsDb = new IdbKvStore('torrents');
         this.torrentAddition = new TorrentAddition(this.service, this.torrentsDb, this.emitter, this);
-        this.torrentDeletion = new TorrentDeletion(this.service, this.torrentsDb, this.emitter);
+        this.torrentDeletion = new TorrentDeletion(this.service, this.torrentsDb, this.emitter, this);
 
         this.creator = new TorrentCreator(service, emitter, this, this.torrentAddition);
         this.creator.start();
@@ -54,19 +53,22 @@ export default class TorrentMaster {
                 if(!response) return;
 
                 this.peers.items = response.peers;
-                const photos = this.photos = response.photos;
+                this.peers.connections = response.connections;
+                const photos = response.photos;
                 Logger.info(`photos: ${response.photos.length} peers ${response.peers.length}`);
-                const values = await this.resurrectLocallySavedTorrents(this.photos);
+                const values = await this.resurrectLocallySavedTorrents(photos);
                 Logger.info('done with resurrectAllTorrents ' + values);
                 /*Promise.all(values).then(results => {
                     Logger.info('all done with resurrectAllTorrents ' + results);
                 });*/
 
-                this.hasPeer = true;
+                //this.hasPeer = true;
 
                 this.syncUiWithServerUrls(photos);
+                this.emitter.emit('photos', {type: 'all', item: photos});
 
-                let foundAnyMissing;
+
+                /*let foundAnyMissing;
                 let msg = '';
                 photos.forEach(item => {
 
@@ -80,13 +82,13 @@ export default class TorrentMaster {
 
                 if(!foundAnyMissing) {
                     //this.emitter.emit('photos', response.photos);
-                }
+                }*/
 
                 return response.photos;
             });
     }
 
-    fillMissingOwners(item) {
+    /*fillMissingOwners(item) {
         let foundAnyMissing;
         //check for missing owners - can happen after re-connections.
         const peerId = this.client.peerId;
@@ -100,7 +102,7 @@ export default class TorrentMaster {
             }
         }
         return foundAnyMissing
-    }
+    }*/
 
     //more on the approach: https://github.com/SilentBot1/webtorrent-examples/blob/master/resurrection/index.js
     resurrectLocallySavedTorrents(photos) {
@@ -149,7 +151,6 @@ export default class TorrentMaster {
 
                 } else {
 
-                    let sharedBy = {};
                     let photo;
                     if(photos) {
                         photo = photos.find(item => item.infoHash === metadata.infoHash);
@@ -200,6 +201,7 @@ export default class TorrentMaster {
                 const downloadSpeedLabel = FileUtil.formatBytes(downloadSpeed) + '/sec';
                 //Logger.trace('torrent.download speed: ' + downloadSpeedLabel + ' ' + progress);
                 scope.emitter.emit('downloadProgress', {
+                    torrent: torrent,
                     speed: downloadSpeedLabel,
                     progress: progress
                 });
@@ -219,6 +221,7 @@ export default class TorrentMaster {
                 const uploadSpeedLabel = FileUtil.formatBytes(uploadSpeed) + '/sec';
                 //Logger.trace('torrent.upload speed: ' + uploadSpeedLabel + ' ' + progressUp + ' t ' + torrent.progress + ' u ' + torrent.uploaded);
                 scope.emitter.emit('uploadProgress', {
+                    torrent: torrent,
                     speed: uploadSpeedLabel,
                     progress: progressUp
                 });
@@ -236,15 +239,14 @@ export default class TorrentMaster {
         return torrent;
     }
 
+
     syncWithPhotoEvents() {
         this.emitter.on('photos', event => {
 
             if(event.type === 'add' && !event.item.seed) {
-                //this.client.torrents
                 const index = this.client.torrents.findIndex(item => item.infoHash === event.item.infoHash);
                 if(index < 0) {
 
-                    this.photos = update(this.photos, {$unshift: [event.item]});
                     this.torrentAddition.add(event.item.url, event.item.secure, false);
                 }
             } else if(event.type === 'delete') {
@@ -257,66 +259,45 @@ export default class TorrentMaster {
                             Logger.info('deleteTorrent done ' + infoHash);
                         });
                     }
-                    const photosIndex = this.photos.findIndex(item => item.infoHash === event.item);
-                    this.photos = update(this.photos, {$splice: [[photosIndex, 1]]});
-                }
-            } else if(event.type === 'update') {
-
-                const index = this.photos.findIndex(item => item.infoHash === event.item.peerId);
-                if(index > -1) {
-                    this.photos = update(this.photos, {$splice: [[index, 1, event.item]]});
                 }
             }
         });
     }
 
     syncUiWithServerUrls(photos) {
-        const scope = this;
-        Logger.debug('photos.length: '+photos.length);
+            const scope = this;
+            Logger.debug('photos.length: '+photos.length);
 
-        if(!this.hasPeer) {
-            return;
+            this.client.torrents.forEach(torrent => {
+                const urlItem = this.findUrl(photos, torrent.infoHash);
+                if(!urlItem) {
+                    scope.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
+                        Logger.info('deleteTorrent done ' + infoHash);
+                    });
+                }
+            });
+
+            photos.forEach(item => {
+                const torrent = scope.client.get(item.infoHash);
+                if(!torrent) {
+                    Logger.debug('new photo found on server');
+
+                    scope.torrentAddition.add(item.url, item.secure, item.sharedBy ? item.sharedBy : {});
+                }
+
+                /*if(torrent && torrent.files && torrent.files.length < 1 && item.owners.find(owner => owner.peerId === this.client.peerId)) {
+                    this.service.removeOwner(item.infoHash, this.client.peerId)
+                }*/
+            });
         }
 
-        this.client.torrents.forEach(torrent => {
-            const urlItem = this.findUrl(photos, torrent.infoHash);
-            if(!urlItem) {
-                scope.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
-                    //return this.emitter.emit('deletedTorrent', infoHash);
-                    Logger.info('deleteTorrent done ' + infoHash);
-                });
-
-                this.emitter.emit('photos', {
-                    type: 'delete', item: torrent.infoHash
-                });
+        findUrl(photos, infoHash) {
+            const index = photos.findIndex(item => item.infoHash === infoHash);
+            let foundItem = null;
+            if(index => 0) {
+                foundItem = photos[index];
             }
-        });
-
-        photos.forEach(item => {
-            //const metadata = window.parsetorrent(item.photo);
-            const torrent = scope.client.get(item.infoHash);
-            if(!torrent) {
-                Logger.debug('new photo found on server');
-
-                scope.torrentAddition.add(item.url, item.secure, item.sharedBy ? item.sharedBy : {});
-                //this.emitter.emit('addedTorrent', item);
-                this.emitter.emit('photos', {
-                    type: 'add', item: item
-                });
-            }
-
-            if(torrent && torrent.files && torrent.files.length < 1 && item.owners.find(owner => owner.peerId === this.client.peerId)) {
-                this.service.removeOwner(item.infoHash, this.client.peerId)
-            }
-        });
-    }
-
-    findUrl(photos, infoHash) {
-        const index = photos.findIndex(item => item.infoHash === infoHash);
-        let foundItem = null;
-        if(index => 0) {
-            foundItem = photos[index];
+            return foundItem;
         }
-        return foundItem;
-    }
+
 }

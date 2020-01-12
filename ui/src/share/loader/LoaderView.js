@@ -5,7 +5,7 @@ import { withStyles } from '@material-ui/core/styles';
 
 import CircularProgress from '@material-ui/core/CircularProgress';
 import FileUtil from '../util/FileUtil';
-import Logger from "js-logger";
+//import Logger from "js-logger";
 import Typography from '@material-ui/core/Typography';
 
 const styles = theme => ({
@@ -35,6 +35,13 @@ const styles = theme => ({
         wordBreak: 'break-word',
         width: '110px',
         top: '50px',
+    },
+    progressTextTop: {
+        position: 'relative',
+        fontSize: '0.5rem',
+        wordBreak: 'break-word',
+        width: '110px',
+        top: '20px',
     }
 });
 
@@ -60,25 +67,33 @@ class LoaderView extends Component {
         emitter.on('downloadProgress', event => {
             const progress = event.progress;
             const show = (progress > 0 && progress < 100);
-            self.setState({show: show, progress: progress, downSpeed: event.speed});
+            //self.setState({show: show, progress: progress, downSpeed: event.speed});
         });
         emitter.on('uploadProgress', event => {
             const progress = event.progress;
             const show = (progress > 0 && progress < 100);
-            self.setState({show: show, progress: progress, upSpeed: event.speed});
+            //self.setState({show: show, progress: progress, upSpeed: event.speed});
         });
 
-        let progressRunner;
+        //let progressRunner;
         emitter.on('wtInitialized', client => {
             let lastDownload = 0;
             let lastUpload = 0;
             let lastProgress = 0;
-            progressRunner = setInterval(() => {
+            setInterval(() => {
+
+                const progress = client.progress * 100;
+                const show = (progress > 0 && progress < 100);
+                const uploadSpeedLabel = FileUtil.formatBytes(client.uploadSpeed) + '/sec';
+                const downloadSpeedLabel = FileUtil.formatBytes(client.downloadSpeed) + '/sec';
+                const ratio = client.ratio === 0 ? '' : client.ratio;
+                self.setState({show: show, progress: progress,
+                    upSpeed: uploadSpeedLabel, downSpeed: downloadSpeedLabel, ratio: ratio});
 
                 if(client.torrents && client.torrents.length > 0) {
 
-                    const progress = client.progress.toFixed(1) * 100;
-                    const show = (progress > 0 && progress < 100);
+                    //const progress = client.progress.toFixed(1) * 100;
+                    //const show = (progress > 0 && progress < 100);
                     lastProgress = progress;
                     //Logger.debug('client.progress ' + progress
                     //    + ' show ' + show);
@@ -111,7 +126,7 @@ class LoaderView extends Component {
 
     render() {
         const {classes} = this.props;
-        const {show, down, up, downSpeed, upSpeed, progress} = this.state;
+        const {show, down, up, downSpeed, upSpeed, progress, ratio} = this.state;
 
         return (
             <div>
@@ -128,6 +143,8 @@ class LoaderView extends Component {
                                     variant={"caption"}>{up} {upSpeed}</Typography>
                     </div>
                 </div> : <div className={classes.vertical}>
+                    <Typography className={classes.progressTextTop}
+                                variant={"caption"}>{ratio}</Typography>
                     <Typography className={classes.progressText}
                                 variant={"caption"}>{down}</Typography>
                     <Typography className={classes.progressText}

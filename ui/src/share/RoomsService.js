@@ -1,5 +1,4 @@
 import Logger from 'js-logger';
-import platform from 'platform';
 import shortid  from 'shortid';
 import cryptoRandomString from "crypto-random-string";
 
@@ -62,59 +61,52 @@ export default class RoomsService {
 
         const source = new window.EventSource('/api/rooms/' + this.id + '/updates/?sessionId=' + this.sessionId);
 
-        source.addEventListener("photos", event => {
+        source.addEventListener('photos', event => {
 
             const data = JSON.parse(event.data);
 
-            Logger.info(`photos: ${data.type} ${data.item.fileName || ''} infoHash ${data.item.infoHash} peerId ${data.item.peerId}`);
+            if(data.item) {
+                if(data.type === 'add' || data.type === 'update') {
+                    Logger.info(`photos: ${data.type} ${data.item.fileName || ''} infoHash ${data.item.infoHash} peerId ${data.item.peerId}`);
+                } else if(data.type.includes('Owner')) {
+                    Logger.info(`photos: ${data.type} ${JSON.stringify(data.item, null, ' ')}`);
+                } else {
+                    Logger.info(`photos: ${data.type} ${JSON.stringify(data.item, null, ' ')}`);
+                }
+            } else {
+                Logger.info(`photos: ${JSON.stringify(data, null, ' ')}`);
+            }
 
             scope.emitter.emit('photos', data);
 
         }, false);
 
-        source.addEventListener("peers", event => {
+        source.addEventListener('peers', event => {
 
             const data = JSON.parse(event.data);
 
+            //Logger.info(`peers: ${data.type} ${JSON.stringify(data.item, null, ' ')}`);
             Logger.info(`peers: ${data.type} ${data.item.name} ${data.item.sessionId}`);
+
+            const peer = data.item;
+            const nat = peer.networkChain
+                ? peer.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))
+                    && item.label) : null;
+            if(nat) {
+                Logger.info(`peers nat: ${nat.label}`);
+            }
 
             scope.emitter.emit('peers', data);
         }, false);
 
-        /*source.addEventListener("iceEvent", event => {
-
-            const data = JSON.parse(event.data);
-            const sdp = data.sdp ? data.sdp.length : '';
-            Logger.info('iceEvent: '+ data.type + ' ' + data.event + ' sdp ' + sdp);
-
-            scope.emitter.emit('iceEvent', data);
-        }, false);
-
-        source.addEventListener("discoveryMessage", event => {
+        source.addEventListener('peerConnections', event => {
 
             const data = JSON.parse(event.data);
 
-            Logger.warn('discoveryMessage: '+data);
+            Logger.info(`peerConnections: ${data.length} ${JSON.stringify(data, null, ' ')}`);
+
+            scope.emitter.emit('peerConnections', data);
         }, false);
-
-        source.addEventListener("appEvent", event => {
-
-            const data = JSON.parse(event.data);
-            Logger.info('appEvent: '+ data.level + ' ' + data.type + ' ' + JSON.stringify(data.event));
-
-            scope.emitter.emit('appEvent', data);
-        }, false);
-
-        source.addEventListener("networkTopology", event => {
-
-            const data = JSON.parse(event.data);
-            Logger.info('networkTopology: '+ data.nodes.length);
-            scope.emitter.emit('networkTopology', data);
-        }, false);
-
-        source.addEventListener('open', e => {
-            Logger.info('Connection was opened');
-        }, false);*/
 
         source.addEventListener('error', e => {
             Logger.error('sse error: ' + JSON.stringify(e))
@@ -149,7 +141,8 @@ export default class RoomsService {
             sessionId: this.sessionId,
             peerId: this.master.client.peerId,
             originPlatform: this.master.originPlatform,
-            name: localStorage.getItem('nickname')
+            name: localStorage.getItem('nickname'),
+            networkChain: this.networkChain
         };
     }
 
@@ -219,6 +212,7 @@ export default class RoomsService {
             if (!response.ok) {
                 console.error(response.status);
             } else {
+                Logger.info('joined room');
                 const room = await response.json();
                 this.listenToUrlChanges();
                 return room;
@@ -237,6 +231,13 @@ export default class RoomsService {
         const peerId = this.master.client.peerId;
         if(update.name) {
             localStorage.setItem('nickname', update.name);
+        }
+
+        const nat = update.networkChain
+            ? update.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))
+                && item.label) : null;
+        if(nat) {
+            Logger.info(`peers share nat: ${nat.label}`);
         }
 
         update.peerId = peerId;
@@ -260,33 +261,6 @@ export default class RoomsService {
             throw err;
         }
     }
-
-    /*find() {
-
-        if(!this.hasRoom) {
-
-            return Promise.resolve();
-
-        } else {
-
-            return fetch(this.url + '/' + this.id + '?sessionId=' + this.sessionId)
-                .then(response => {
-                    if (!response.ok) {
-                        console.error(response.status);
-                    } else {
-                        return response.json();
-                    }
-                })
-                .then(json => {
-                    //Logger.debug('read ' + JSON.stringify(json));
-                    return json;
-                })
-                .then(data => {
-                    //scope.emitter.emit('urls', data);
-                    return data;
-                });
-        }
-    }*/
 
     async share(data) {
 
@@ -380,7 +354,8 @@ export default class RoomsService {
 
     connect(connection) {
 
-        return fetch(this.url + '/' + this.id + '/photos/connections', {
+        connection.fileName = encodeURIComponent(connection.fileName);
+        return fetch(this.url + '/' + this.id + '/connections', {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
@@ -398,7 +373,7 @@ export default class RoomsService {
             infoHash: infoHash,
         };
 
-        return fetch(this.url + '/' + this.id + '/photos/connections', {
+        return fetch(this.url + '/' + this.id + '/connections', {
             method: 'DELETE',
             headers: {
                 'Accept': 'application/json',
@@ -419,7 +394,8 @@ export default class RoomsService {
                 },
                 body: JSON.stringify({
                     infoHash: infoHash,
-                    peerId: peerId
+                    peerId: peerId,
+                    loading: true
                 })
             });
         } catch(e) {
@@ -440,6 +416,22 @@ export default class RoomsService {
                 peerId: peerId
             })
         });
+    }
+
+    updateOwner(infoHash, update) {
+
+        try {
+            return fetch(this.url + '/' + this.id + '/photos/' + infoHash + '/owners/' + update.peerId, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(update)
+            });
+        } catch(e) {
+            Logger.error(update + ' updateOwner ' + e);
+        }
     }
 
     saveNetwork(chain) {

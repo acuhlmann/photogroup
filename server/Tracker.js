@@ -2,6 +2,7 @@
 const util = require('util');
 const IpTranslator = require('./IpTranslator');
 const transform = require('sdp-transform');
+const _ = require('lodash');
 
 const wsPort = process.env.WS_PORT || 9000;
 const hostname = '0.0.0.0';
@@ -131,7 +132,8 @@ module.exports = class Tracker {
         if(jsonSdp) {
             const stripped = this.mapSdp(jsonSdp);
             const withIpObj = stripped.map(ip => {
-                ip.ip = IpTranslator.createEmptyIpObj(ip.ip);
+                //_.merge(ip, IpTranslator.createEmptyIpObj(ip.ip));
+                ip.network = IpTranslator.createEmptyIpObj(ip.ip);
                 return ip;
             });
             IpTranslator.enrichCandidateIPs(withIpObj).then(sdp => {

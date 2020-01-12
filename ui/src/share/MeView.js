@@ -12,7 +12,7 @@ import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import Paper from "@material-ui/core/Paper";
 import AccountCircleRounded from '@material-ui/icons/AccountCircleRounded';
 import TextField from "@material-ui/core/TextField";
-import _ from "lodash";
+import update from "immutability-helper";
 
 const styles = theme => ({
 
@@ -56,37 +56,16 @@ class MeView extends Component {
             me: {}, myNat: null, connectionSpeedType: ''
         };
 
-        /*props.master.emitter.on('networkTopology', data => {
+        emitter.on('localNetwork', chain => {
 
-            if(!props.master.client) return;
-
-            const me = data.nodes
-                .find(item => item.networkType === 'client'
-                    && item.peerId === props.master.client.peerId);
-
-            const myEdgeNat = data.edges
-                .find(item => {
-                    const edgePeer = item.from.split('/')[1];
-                    return item.networkType === 'nat' && edgePeer === props.master.client.peerId;
-                });
-            const myNat = myEdgeNat ? data.nodes.find(node => node.id === myEdgeNat.to) : null;
-
-            this.setState({
-                me: me ? me : {},
-                myNat: myNat
-            });
-        });*/
-
-        props.master.emitter.on('localNetwork', chain => {
-
+            //if(this.master.service.hasRoom) return;
             const me = chain
                 .find(item => item.typeDetail === 'host');
 
             if(me) {
                 me.label = this.state.originPlatform + ' ' + me.ip;
             }
-            const myNat = chain
-                .find(item => item.typeDetail.includes('srflx') || item.typeDetail.includes('prflx'));
+            const myNat = this.findNat(chain);
             if(myNat) {
                 myNat.label = myNat.typeDetail + ' ' + myNat.ip;
                 myNat.network = {
@@ -102,13 +81,39 @@ class MeView extends Component {
             });
         });
 
-        props.master.emitter.on('connectionSpeedType', type => {
+        emitter.on('peers', event => {
+
+            if(event.type === 'update') {
+                const myPeer = event.item;
+                if(myPeer && myPeer.peerId === this.master.client.peerId && myPeer.networkChain) {
+                    const myNat = this.findNat(myPeer.networkChain);
+                    if(!myNat.network) {
+                        myNat.network = {
+                            ip: {
+                                city: ''
+                            }
+                        }
+                    }
+                    myNat.label = myNat.typeDetail + ' ' + (myNat.network.hostname || myNat.ip);
+                    const me = myPeer.networkChain.find(item => item.typeDetail === 'host');
+                    if(me) {
+                        me.label = this.state.originPlatform + ' ' + me.ip;
+                    }
+                    this.setState({
+                        myNat: myNat,
+                        me: me ? me : {},
+                    });
+                }
+            }
+        });
+
+        emitter.on('connectionSpeedType', type => {
             this.setState({
                 connectionSpeedType: type + ' '
             });
         });
 
-        props.master.emitter.on('addPeerDone', peer => {
+        emitter.on('addPeerDone', peer => {
 
             this.setState({
                 originPlatform: this.slimPlatform(peer.originPlatform),
@@ -119,6 +124,11 @@ class MeView extends Component {
         emitter.on('showMe', value => {
             this.setState({showMe: value});
         });
+    }
+
+    findNat(chain) {
+        return chain
+            .find(item => item.typeDetail.includes('srflx') || item.typeDetail.includes('prflx'));
     }
 
     slimPlatform(platform) {
@@ -149,7 +159,7 @@ class MeView extends Component {
         if(!event.target) return;
 
         console.log('change name ' + event.target.value);
-        this.master.service.updatePeer(this.master.client.peerId, {
+        this.master.service.updatePeer({
             name: event.target.value
         });
     }
@@ -202,12 +212,12 @@ class MeView extends Component {
                                     </span>
                                     {myNat ? <span
                                         className={classes.horizontal}>
-                                        <img src={"./firewall.png"} style={{
+                                        <img src={"./firewall.png"} alt="firewall" style={{
                                             width: '20px'
                                         }}/>
                                         <Typography variant="caption" style={{
                                             marginLeft: '5px'
-                                        }}>{myNat.label} {myNat.network.ip.city}</Typography>
+                                        }}>{myNat.label} {myNat.network.city}</Typography>
                                     </span> : ''}
                                 </div>
                             </Paper>

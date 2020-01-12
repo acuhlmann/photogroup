@@ -15,9 +15,9 @@ import DialogTitle from '@material-ui/core/DialogTitle';
 import DialogActions from '@material-ui/core/DialogActions';
 
 import List from '@material-ui/core/List';
-import ListItem from '@material-ui/core/ListItem';
+/*import ListItem from '@material-ui/core/ListItem';
 import ListItemText from '@material-ui/core/ListItemText';
-import { FixedSizeList } from 'react-window';
+import { FixedSizeList } from 'react-window';*/
 
 import Switch from '@material-ui/core/Switch';
 import FormGroup from '@material-ui/core/FormGroup';
@@ -26,11 +26,11 @@ import FormControlLabel from '@material-ui/core/FormControlLabel';
 import RoomsService from '../RoomsService';
 import moment from "moment";
 import Typography from "@material-ui/core/Typography/Typography";
-import PeersView from "./PeersView";
+/*import PeersView from "./PeersView";
 import QRCodeButton from "./QRCodeButton";
 import FileUtil from "../util/FileUtil";
 import TextField from "@material-ui/core/TextField";
-import _ from "lodash";
+import _ from "lodash";*/
 import {withSnackbar} from "notistack";
 import update from "immutability-helper";
 
@@ -129,7 +129,7 @@ class SettingsView extends Component {
         const msg = level + ': ' + message;
         console.log(msg);
 
-        const messages = update(this.state.messages, {$unshift: [msg]});
+        /*const messages = update(this.state.messages, {$unshift: [msg]});
 
 
         //this.state.messages.unshift(msg);
@@ -139,7 +139,7 @@ class SettingsView extends Component {
                     .map((item,  index) => <div key={index}>
                     <Typography variant="caption">{item}</Typography>
                 </div>)});
-        }
+        }*/
     }
 
     showLogs() {
@@ -173,7 +173,7 @@ class SettingsView extends Component {
         RoomsService.deleteAll();
     }
 
-    getAll() {
+    /*getAll() {
         return this.master.service.find(this.master.service.id).then(result => {
             let msg = '';
             for (let key in result) {
@@ -188,7 +188,7 @@ class SettingsView extends Component {
             }
             return msg;
         });
-    }
+    }*/
 
     requestBLE() {
 
@@ -345,7 +345,7 @@ class SettingsView extends Component {
             {this.state.messages}
         </List>;
 
-        const {showTopology, showOtherPeers, showMe} = this.state;
+        const {showMe} = this.state;
         //{messages}
         return (
             <div>
@@ -419,8 +419,10 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v1 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v4 {this.state.peerId}</Typography>
+
                         {messages}
+
                         <Button key='delete' onClick={this.handleReset.bind(this)} color="primary">
                             Del server state
                         </Button>

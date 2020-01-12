@@ -170,12 +170,12 @@ class OtherPeersView extends Component {
                                             }}>
                         {nat ? <span
                             className={classes.horizontal}>
-                            <img src={"./firewall.png"} style={{
+                            <img src={"./firewall.png"} alt="firewall" style={{
                                 width: '20px'
                             }}/>
                             <Typography variant="caption" style={{
                                 marginLeft: '5px'
-                            }}>{nat.label} {nat.network.ip.city}</Typography>
+                            }}>{nat.label} {nat.network.city}</Typography>
                         </span> : ''}
                         <span
                             className={classes.horizontal}>

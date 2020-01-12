@@ -8,20 +8,11 @@ import {withStyles, createMuiTheme } from '@material-ui/core/styles';
 import { ThemeProvider } from '@material-ui/styles';
 
 import Logger from 'js-logger';
-import ExpansionPanel from '@material-ui/core/ExpansionPanel';
-import ExpansionPanelSummary from '@material-ui/core/ExpansionPanelSummary';
-import ExpansionPanelDetails from '@material-ui/core/ExpansionPanelDetails';
-import Typography from '@material-ui/core/Typography';
-import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import { withSnackbar } from 'notistack';
 
-import TopologyView from './topology/TopologyView';
-
-import OtherPeersView from "./OtherPeersView";
 import QRCodeView from "./security/QRCodeView";
 import MeView from "./MeView";
 import WebTorrent from 'webtorrent';
-import update from 'immutability-helper';
 import Online from 'online-js'
 
 const styles = theme => ({
@@ -55,7 +46,6 @@ class ShareCanvas extends Component {
         const {enqueueSnackbar, master, gallery} = props;
 
         this.master = master;
-        const {emitter} = master;
         this.gallery = gallery;
 
         this.state = {

@@ -43,8 +43,6 @@ class App extends Component {
         const { classes } = props;
         this.classes = classes;
 
-        const scope = this;
-
         //Logger.useDefaults();
         Logger.setLevel(Logger.INFO);
 
@@ -62,7 +60,7 @@ class App extends Component {
             //Statistics.visibilityChange(state);
             Logger.debug('Visibility.change ' + state);
             if(state === 'visible') {
-                const peerId = this.master.client && this.master.client.peerId;
+                //const peerId = this.master.client && this.master.client.peerId;
                 /*if(peerId) {
                     this.master.service.getPeer(peerId)
                         .catch((err) => {

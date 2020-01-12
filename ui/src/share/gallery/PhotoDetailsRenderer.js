@@ -98,7 +98,7 @@ export default class PhotoDetailsRenderer {
 
     buildReverseGeocode(value) {
         return <div>
-            {'lat: ' + value.lat + ', ' + 'long: ' + value.long}
+            {`lat: ${value.lat}, long: ${value.long}`}
             {/*<Async
                 promise={this.reverseGeocode(value)}
                 then={val => {

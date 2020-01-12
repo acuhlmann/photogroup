@@ -1,6 +1,7 @@
 //-----------------Custom WebTorrent Tracker - ICE Events
 const rp = require('request-promise');
 const isLocal = require('is-local-ip');
+const _ = require('lodash');
 
 module.exports = class IpTranslator {
 
@@ -40,7 +41,7 @@ module.exports = class IpTranslator {
 
             } else {
 
-                const isOnline = false;
+                const isOnline = true;
                 if(isOnline) {
 
                     const key = '8f125144341210254a52ef8d24bcc4dc';
@@ -76,12 +77,29 @@ module.exports = class IpTranslator {
         };
     }
 
+    static enrichNetworkChainIPs(chain) {
+
+        return Promise.all(chain.map(item => IpTranslator.getLookupIp(item.ip))).then(results => {
+
+            const values = chain.map(item => {
+                item.network = results.find(result => result.ip === item.ip);
+                if(!item.network) {
+                    item.network = this.createEmptyIpObj(item.ip);
+                }
+                return item;
+            });
+
+            return values;
+        });
+    }
+
     static enrichCandidateIPs(candidates) {
 
-        return Promise.all(candidates.map(item => IpTranslator.getLookupIp(item.ip.ip))).then(results => {
+        return Promise.all(candidates.map(item => IpTranslator.getLookupIp(item.ip))).then(results => {
 
             const values = candidates.map(item => {
-                item.ip = results.find(result => result.ip === item.ip.ip);
+                //_.merge(item, results.find(result => result.ip === item.ip));
+                item.network = results.find(result => result.ip === item.ip);
                 return item;
             });
 

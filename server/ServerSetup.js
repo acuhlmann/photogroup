@@ -22,10 +22,11 @@ module.exports = class ServerSetup {
 
     remoteLog(msg) {
         console.log(msg);
-        this.updateChannel.send({
+        /*this.updateChannel.send({
             event: 'discoveryMessage',
             data: msg
         });
+        */
     }
 
     startExpress() {

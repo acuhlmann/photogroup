@@ -10,7 +10,7 @@ import PasswordInput from "../security/PasswordInput";
 import IconButton from '@material-ui/core/IconButton';
 import InfoIcon from '@material-ui/icons/Info';
 import DeleteIcon from '@material-ui/icons/Delete';
-import CloudUploadIcon from '@material-ui/icons/CloudUpload';
+//import CloudUploadIcon from '@material-ui/icons/CloudUpload';
 import CloudDownloadIcon from '@material-ui/icons/CloudDownload';
 import Typography from "@material-ui/core/Typography";
 import Paper from "@material-ui/core/Paper";
@@ -29,7 +29,6 @@ import CircularProgress from "@material-ui/core/CircularProgress";
 import MetadataParser from "./MetadataParser";
 import Encrypter from "../security/Encrypter";
 import OwnersList from "./OwnersList";
-//import OwnersList from "./OwnersList";
 
 const styles = theme => ({
     root: {
@@ -91,6 +90,25 @@ const styles = theme => ({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center'
+    },
+    progressContainer: {
+        //display: 'flex',
+        //position: 'inherit'
+        position: 'absolute',
+        top: '-20px', right: '-100px'
+    },
+    progress: {
+        //margin: theme.spacing(2),
+        //position: 'absolute',
+        //top: '-7px',
+        //right: '78px',
+    },
+    progressText: {
+        position: 'relative',
+        fontSize: '0.7rem',
+        wordBreak: 'break-word',
+        width: '110px',
+        top: '-30px',
     }
 });
 
@@ -113,11 +131,12 @@ class Gallery extends Component {
             this.addMediaToDom(item);
         }, this);
 
+        const emitter = this.state.master.emitter;
         const self = this;
         //When webtorrent errors on a duplicated add, try to remove and re-seed.
         //This may happen if client state is lost
         //i.e. due to removal of browser (indexeddb cache)
-        this.state.master.emitter.on('duplicate', duplicated => {
+        emitter.on('duplicate', duplicated => {
             let tiles = this.state.tiles;
             const index = tiles.findIndex(item => item.infoHash === duplicated.photo.infoHash);
             if(index > -1) {
@@ -135,6 +154,17 @@ class Gallery extends Component {
                     }
                 });
             }*/
+        }, this);
+
+        emitter.on('downloadProgress', event => {
+            const progress = event.progress;
+            //const show = (progress > 0 && progress < 100);
+            self.setState({torrent: event.torrent, progress: progress, downSpeed: event.speed});
+        }, this);
+        emitter.on('uploadProgress', event => {
+            const progress = event.progress;
+            //const show = (progress > 0 && progress < 100);
+            self.setState({torrent: event.torrent, progress: progress, upSpeed: event.speed});
         }, this);
 
         const { classes } = props;
@@ -158,7 +188,7 @@ class Gallery extends Component {
         }
     }
 
-    renderTile(newTile) {
+    async renderTile(newTile) {
         newTile.fileSize = FileUtil.formatBytes(newTile.elem.size);
         newTile.isVideo = newTile.elem.type.includes('video');
         newTile.fileName = newTile.torrent.name;
@@ -167,6 +197,7 @@ class Gallery extends Component {
         const oldTiles = this.state.tiles;
         const index = oldTiles.findIndex(item => item.infoHash === newTile.infoHash);
         if(index > -1) {
+            newTile = _.merge(oldTiles[index], newTile);
             tiles = update(oldTiles, {$splice: [[index, 1, newTile]]});
         } else {
             tiles = update(oldTiles, {$unshift: [newTile]});
@@ -176,12 +207,14 @@ class Gallery extends Component {
         if(!newTile.seed) {
 
             this.state.master.emitter.emit('torrentDone', newTile.torrent);
-            this.state.master.service.addOwner(newTile.infoHash, this.state.master.client.peerId).then(() => {
-                Logger.info('added owner and downloaded ' + newTile.torrent.name);
-                /*this.state.master.emitter.emit('appEventRequest', {level: 'success', type: 'downloaded',
-                    event: {file: item.torrent.name, sharedBy: item.sharedBy, downloader: this.state.master.client.peerId}
-                });*/
+            await this.state.master.service.updateOwner(newTile.infoHash, {
+                peerId: this.state.master.client.peerId,
+                loading: false
             });
+            Logger.info('owner downloaded ' + newTile.torrent.name);
+            /*this.state.master.emitter.emit('appEventRequest', {level: 'success', type: 'downloaded',
+                event: {file: item.torrent.name, sharedBy: item.sharedBy, downloader: this.state.master.client.peerId}
+            });*/
         }
     }
 
@@ -192,7 +225,32 @@ class Gallery extends Component {
             let tiles = oldTiles;
             let index;
 
-            if(event.type === 'add') {
+            if(event.type === 'all') {
+
+                ((oldTiles, photos) => {
+
+                    //const client = this.state.master.client;
+
+                    photos.forEach(item => {
+                        item.loading = true;
+                    });
+
+                    this.setState({tiles: photos});
+
+                    /*client.torrents.forEach(torrent => {
+                        const photo = photos.find(item => item.infoHash === torrent.infoHash);
+                        if(!photo) {
+
+                            this.emitter.emit('photos', {
+                                type: 'delete', item: torrent.infoHash
+                            });
+                        }
+                    });
+                    */
+
+                })(oldTiles, event.item);
+
+            } else if(event.type === 'add') {
 
                 index = oldTiles.findIndex(item => item.infoHash === event.item.infoHash);
                 if(index < 0) {
@@ -225,7 +283,8 @@ class Gallery extends Component {
                         const oldOwners = oldTiles[index].owners;
                         const ownersIndex = oldOwners.findIndex(item => item.peerId === event.item.peerId);
                         if(ownersIndex < 0) {
-                            const owners = update(oldOwners, {$push: [{peerId: event.item.peerId}]});
+                            delete event.item.infoHash;
+                            const owners = update(oldOwners, {$push: [event.item]});
                             const tile = update(oldTiles[index], {owners: {$set: owners}});
                             tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
                             this.setState({tiles: tiles});
@@ -248,6 +307,25 @@ class Gallery extends Component {
                             this.setState({tiles: tiles});
                         }
                     });
+
+                })(oldTiles);
+
+            } else if(event.type === 'updateOwner') {
+
+                ((oldTiles) => {
+
+                    const index = oldTiles.findIndex(item => item.infoHash === event.item.infoHash);
+                    if(index > -1) {
+                        const oldOwners = oldTiles[index].owners;
+                        const ownersIndex = oldOwners.findIndex(item => item.peerId === event.item.peerId);
+                        if(ownersIndex > -1) {
+                            delete event.item.infoHash;
+                            const owners = update(oldOwners, {$splice: [[ownersIndex, 1, event.item]]});
+                            const tile = update(oldTiles[index], {owners: {$set: owners}});
+                            tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
+                            this.setState({tiles: tiles});
+                        }
+                    }
 
                 })(oldTiles);
             }
@@ -304,8 +382,9 @@ class Gallery extends Component {
     }
 
     handleImageLoaded(tile, img) {
-        this.state.parser.view = this;
-        this.state.parser.readMetadata(tile, img, async tile => {
+        const parser = this.state.parser;
+        parser.view = this;
+        parser.readMetadata(tile, img, async tile => {
 
             if(tile.seed) {
 
@@ -415,7 +494,8 @@ class Gallery extends Component {
         });
     }
 
-    buildTile(tile, index, classes, master) {
+    buildTile(tile, index, classes, master,
+              torrent, downSpeed, upSpeed, progress) {
 
         const name = `${tile.picSummary} ${tile.fileSize} ${tile.cameraSettings}`;
         let owners = tile.owners ? tile.owners : [];
@@ -431,7 +511,11 @@ class Gallery extends Component {
                 </Button>
             </GridListTile>;
         } else if(tile.loading) {
+
             const have = owners.find(owner => owner.peerId === master.client.peerId);
+            const loadingText = tile.rendering ? 'Rendering' : 'Loading';
+            const isLoading = !!(torrent && torrent.infoHash === tile.infoHash);
+
             return <Paper key={index} style={{
                     margin: '10px',
                     padding: '10px'
@@ -446,6 +530,29 @@ class Gallery extends Component {
                             color="secondary"
                             size={36} className={classes.fabProgress} />}
                         <Typography variant="caption" className={classes.wordwrap}>
+                            {loadingText}
+                        </Typography>
+                        {isLoading ? <div className={classes.progressContainer}>
+                            <CircularProgress id="progressBar"
+                                              className={classes.progress}
+                                              variant="static"
+                                              value={progress}
+                            />
+                            <div className={classes.vertical}>
+                                <Typography className={classes.progressText}
+                                            variant={"caption"}>{downSpeed}</Typography>
+                                <Typography className={classes.progressText}
+                                            variant={"caption"}>{upSpeed}</Typography>
+                            </div>
+                            </div> : ''}
+                    </span>
+                    <Divider variant="middle" />
+                    <span style={{
+                        position: 'relative',
+                        textAlign: 'center',
+                        marginRight: '10px'
+                    }}>
+                    <Typography variant="caption" className={classes.wordwrap}>
                             {tile.picSummary} {tile.fileSize} {tile.cameraSettings}
                         </Typography>
                     </span>
@@ -487,8 +594,8 @@ class Gallery extends Component {
                                 <CloudUploadIcon/>
                             </IconButton>*/}
                         </div>
-                        <div className={classes.cardContent}>
-                            <Typography variant={"caption"}>first shared by {tile.peerId}</Typography>
+                        <div style={{width: '100%'}}>
+                            {/*<Typography variant={"caption"}>first shared by {tile.peerId}</Typography>*/}
                             <OwnersList emitter={master.emitter}
                                 tile={tile} owners={tile.owners} peers={master.peers} myPeerId={master.client.peerId}
                             />
@@ -506,13 +613,14 @@ class Gallery extends Component {
 
     render() {
         const classes = this.props.classes;
-        const {tiles, master} = this.state;
+        const {tiles, master, torrent, downSpeed, upSpeed, progress} = this.state;
 
         return (
             <div className={classes.root}>
 
                 <div className={classes.gridList}>
-                    {tiles.map((tile, index) => this.buildTile(tile, index, classes, master))}
+                    {tiles.map((tile, index) => this.buildTile(tile, index, classes, master,
+                        torrent, downSpeed, upSpeed, progress))}
                 </div>
             </div>
         );

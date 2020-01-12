@@ -1,11 +1,12 @@
-import Logger from "js-logger";
 import update from "immutability-helper";
 
 export default class Peers {
 
-    constructor(emitter, items) {
+    constructor(emitter, items, service) {
 
         this.items = items;
+        this.service = service;
+
         emitter.on('peers', event => {
 
             if(event.type === 'add') {
@@ -20,5 +21,49 @@ export default class Peers {
                     this.items = update(this.items, {$splice: [[index, 1, event.item]]});
             }
         });
+
+        emitter.on('peerConnections', connections => {
+            this.connections = connections;
+        });
+    }
+
+    connect(torrent, myPeerId) {
+
+        if(!torrent._peers) return;
+
+        const self = this;
+        const infoHash = torrent.infoHash;
+        const fileName = torrent.name;
+        const peers = Object.values(torrent._peers).map(peer => {
+
+            const conn = peer.conn;
+            const peerId = conn.id;
+
+            const result = {
+                fileName: fileName,
+                infoHash: infoHash,
+
+                fromPeerId: peerId,
+                from: conn.remoteAddress,
+                fromPort: conn.remotePort,
+                remoteFamily: conn.remoteFamily,
+
+                toPeerId: myPeerId,
+                to: conn.localAddress,
+                toPort: conn.localPort,
+                localFamily: conn.localFamily
+            };
+
+            self.service.connect(result);
+
+            return result;
+        });
+
+        return peers;
+    }
+
+    disconnect(infoHash) {
+
+        this.service.disconnect(infoHash);
     }
 }

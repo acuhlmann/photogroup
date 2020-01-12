@@ -2,7 +2,6 @@
 const ServerPeer = require('./ServerPeer');
 const Topology = require('./Topology');
 const Peers = require('./Peers');
-const magnet = require('magnet-uri');
 const _ = require('lodash');
 
 module.exports = class Rooms {
@@ -58,7 +57,8 @@ module.exports = class Rooms {
             const peers = room.peers.create(request.body.peer);
             response.send({
                 photos: room.photos,
-                peers: peers
+                peers: peers,
+                connections: room.topology.connections
             });
         }
 
@@ -72,10 +72,9 @@ module.exports = class Rooms {
                 photos: [],
                 connections: []
             };
-            //room.topology = new Topology(room.clients, this.updateChannel, this.remoteLog, this.app,
-            //    this.emitter, this.tracker);
-            //room.serverPeer = new ServerPeer(room.topology, this.remoteLog, this, this.ice, this.emitter);
             room.peers = new Peers(this.updateChannel, this.remoteLog, this.app, this.emitter);
+            room.topology = new Topology(room.peers, this.updateChannel);
+            //room.serverPeer = new ServerPeer(room.topology, this.remoteLog, this, this.ice, this.emitter);
             rooms.set(id, room);
 
             joinRoom(room, request, response);
@@ -140,7 +139,9 @@ module.exports = class Rooms {
                             event.origin = origin;
                             this.emitter.emit('event', 'info', 'picAdd', event, id);*/
 
-                            this.addOwner(room, photo.infoHash, peerId);
+                            this.addOwner(room, photo.infoHash, peerId, {
+                                loading: false
+                            });
                         }
                     }
 
@@ -236,7 +237,7 @@ module.exports = class Rooms {
 
             } else {
 
-                response.send(this.addOwner(room, request.body.infoHash, request.params.peerId));
+                response.send(this.addOwner(room, request.body.infoHash, request.params.peerId, request.body));
             }
         });
 
@@ -252,26 +253,39 @@ module.exports = class Rooms {
                 response.send(this.removeOwner(room, request.params.peerId));
             }
         });
+
+        app.put('/api/rooms/:id/photos/:infoHash/owners/:peerId', (request, response) => {
+
+            const id = request.params.id;
+            const room = this.rooms.get(id);
+            if(!room) {
+
+                return response.status(404).send('Room not found');
+
+            } else {
+
+                this.updateOwner(room, request.params.infoHash, request.params.peerId, request.body, response);
+            }
+        });
     }
 
-    addOwner(room, infoHash, peerId) {
+    addOwner(room, infoHash, peerId, update) {
 
         let added = false;
         room.photos.find(item => {
             if(item.infoHash === infoHash) {
                 const found = item.owners.find(item => item.peerId === peerId);
                 if(!found) {
-                    item.owners.push({
-                        peerId: peerId
-                    });
+                    update = update || {};
+                    update.infoHash = infoHash;
+                    update.peerId = peerId;
+                    item.owners.push(update);
                 }
                 added = true;
             }
         });
 
-        this.sendPhotos('addOwner', {
-            infoHash: infoHash, peerId: peerId
-        });
+        this.sendPhotos('addOwner', update);
 
         return added;
     }
@@ -293,8 +307,24 @@ module.exports = class Rooms {
         return deleted;
     }
 
+    updateOwner(room, infoHash, peerId, update, response) {
+
+        const photo = this.findPhoto(room.photos, infoHash);
+        if(!photo) {
+
+            return response.status(404).send('Photo not found');
+
+        } else {
+            const owner = photo.owners.find(item => item.peerId === peerId);
+            _.merge(owner, update);
+            owner.infoHash = infoHash;
+            this.sendPhotos('updateOwner', owner);
+            response.send(owner);
+        }
+    }
+
     registerConnectionRoutes(app) {
-        app.post('/api/rooms/:id/photos/connections', (request, response) => {
+        app.post('/api/rooms/:id/connections', (request, response) => {
 
             const room = this.rooms.get(request.params.id);
             if(!room) {
@@ -304,15 +334,14 @@ module.exports = class Rooms {
             } else {
 
                 const connection = request.body;
+                connection.fileName = decodeURIComponent(connection.fileName);
                 room.topology.connect(connection);
-                room.connections = Array.from(room.topology.connections).map(item => item[1]);
-                this.sendPhotos('connections', room.connections);
 
-                response.send(connection)
+                response.send(true)
             }
         });
 
-        app.delete('/api/rooms/:id/photos/connections', (request, response) => {
+        app.delete('/api/rooms/:id/connections', (request, response) => {
 
             const room = this.rooms.get(request.params.id);
             if(!room) {
@@ -323,10 +352,8 @@ module.exports = class Rooms {
 
                 const infoHash = request.body.infoHash;
                 room.topology.disconnect(infoHash);
-                room.connections = Array.from(room.topology.connections).map(item => item[1]);
-                this.sendPhotos('connections', room.connections);
 
-                response.send(infoHash)
+                response.send(true)
             }
         });
     }

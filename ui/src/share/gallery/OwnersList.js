@@ -8,10 +8,14 @@ import update from "immutability-helper";
 
 const styles = theme => ({
     vertical: {
+        width: '100%',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center'
     },
     horizontal: {
+        width: '100%',
         display: 'flex',
         flexDirection: 'row',
         alignItems: 'center',
@@ -24,30 +28,47 @@ class OwnersList extends Component {
     constructor(props) {
         super(props);
 
-        const {emitter, myPeerId, peers} = props;
+        const {emitter, peers} = props;
 
         this.state = {
-            peerItems: peers.items
+            peerItems: peers.items,
+            photoConnections: []
         };
 
-        emitter.on('peers', event => {
+        emitter.on('peers', this.handlePeersUpdate, this);
+        emitter.on('peerConnections', this.handlePeersConnectionUpdate, this);
+    }
 
-            if(event.type === 'update' && event.item.peerId === myPeerId) {
-                const index = peers.items.findIndex(item => item.peerId === event.item.peerId);
-                if(index > -1) {
-                    peers.items = update(peers.items, {$splice: [[index, 1, event.item]]});
-                    this.setState({peerItems: peers.items});
-                }
+    handlePeersUpdate(event) {
+        const {myPeerId, peers} = this.props;
+        if(event.type === 'update' && event.item.peerId !== myPeerId) {
+            const index = peers.items.findIndex(item => item.peerId === event.item.peerId);
+            if(index > -1) {
+                peers.items = update(peers.items, {$splice: [[index, 1, event.item]]});
+                this.setState({peerItems: peers.items});
             }
-        });
+        }
+    }
+
+    handlePeersConnectionUpdate(connections) {
+        const {tile} = this.props;
+        if(connections && connections.length > 0) {
+            const photoConnections = connections.filter(item => item.infoHash === tile.infoHash);
+            if(photoConnections.length > 0) {
+                this.setState({newConnections: connections});
+            }
+        }
+    }
+
+    componentWillUnmount() {
+        this.props.emitter.removeListener('peers', this.handlePeersUpdate, this);
+        this.props.emitter.removeListener('peerConnections', this.handlePeersConnectionUpdate, this);
     }
 
     render() {
-        const {classes, owners, myPeerId} = this.props;
-        const {peerItems} = this.state;
-        //const owners = tile.owners;
+        const {classes, owners, myPeerId, peers, tile} = this.props;
+        const {peerItems, newConnections} = this.state;
 
-        const connections = [];
         return (
             <List>
                 {
@@ -56,16 +77,17 @@ class OwnersList extends Component {
                         .map((owner, index) => {
 
                         let connection;
-                        if(connections && connections.length > 0) {
-                            const firstConnection = connections.filter(item => item.infoHash === item.infoHash);
-                            connection = firstConnection.find(item => item.fromPeerId === owner.peerId
+                        if(peers.connections && peers.connections.length > 0) {
+                            const photoConnections = peers.connections.filter(item => item.infoHash === tile.infoHash);
+                            connection = photoConnections.find(item => item.fromPeerId === owner.peerId
                                 || item.toPeerId === owner.peerId);
                         }
 
-                        const peer = peerItems.find(item => item.peerId === owner.peerId);
+                        const peer = peers.items.find(item => item.peerId === owner.peerId);
                         if(!peer) return '';
                         const nat = peer.networkChain
-                            ? peer.networkChain.find(item => item.type === 'srflx' || item.type === 'prflx') : null;
+                            ? peer.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))
+                                && item.label) : null;
 
                         return <ListItem key={index}>
                                         <span style={{
@@ -75,18 +97,19 @@ class OwnersList extends Component {
                                         }}>
                                             <span className={classes.vertical}>
                                                 {connection ? <Typography variant="caption">{connection.connectionType}</Typography> : ''}
+                                                {owner.loading ? <Typography variant="caption">Loading</Typography> : ''}
                                             </span>
                                         </span>
-                            <span className={classes.vertical}>
-                                            {nat ? <span
-                                                className={classes.horizontal}>
-                                                    <img src={"./firewall.png"} style={{
-                                                        width: '20px'
-                                                    }}/>
-                                                    <Typography variant="caption" style={{
-                                                        marginLeft: '5px'
-                                                    }}>{nat.label} {nat.network.ip.city}</Typography>
-                                                </span> : ''}
+                                <span className={classes.vertical}>
+                                                {nat ? <span
+                                                    className={classes.horizontal}>
+                                                        <img src={"./firewall.png"} alt="firewall" style={{
+                                                            width: '20px'
+                                                        }}/>
+                                                        <Typography variant="caption" style={{
+                                                            marginLeft: '5px'
+                                                        }}>{nat.label} {nat.network.city}</Typography>
+                                                    </span> : ''}
                                 <span
                                     className={classes.horizontal}>
                                                 <AccountCircleRounded/>

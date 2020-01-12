@@ -1,7 +1,7 @@
 import NetworkTopologyFinder from "../topology/NetworkTopologyFinder";
 import Logger from 'js-logger';
-import createTorrent from 'create-torrent';
 import WebTorrent from 'webtorrent';
+import createTorrent from 'create-torrent';
 
 export default class TorrentCreator {
 
@@ -15,9 +15,9 @@ export default class TorrentCreator {
 
     static setupAnnounceUrls() {
         const isLocal = window.location.href.includes('localhost');
-        console.log('window.location.href ' + window.location.href);
+        //console.log('window.location.href ' + window.location.href);
         const wsUrl = isLocal ? 'ws://' + window.location.hostname + ':9000' : 'wss://' + window.location.hostname + '/ws';
-        console.log('WEBTORRENT_ANNOUNCE wsUrl ' + wsUrl);
+        //console.log('WEBTORRENT_ANNOUNCE wsUrl ' + wsUrl);
         //window.WEBTORRENT_ANNOUNCE = createTorrent.announceList
         window.WEBTORRENT_ANNOUNCE = []
             .map(arr => {
@@ -43,7 +43,6 @@ export default class TorrentCreator {
                 //iceServers.iceServers.unshift({ urls: 'stun:stun.l.google.com:19302'});
             }
 
-            const self = this;
             this.iceServers = iceServers;
             this.createWT();
 
@@ -67,7 +66,7 @@ export default class TorrentCreator {
                 rtcConfig: this.iceServers
             }
         });
-        Logger.error('client.peerId '+client.peerId);
+        Logger.info('client.peerId '+client.peerId);
         window.client = client; // for easier debugging
         TorrentCreator.setupAnnounceUrls();
         this.client = client;

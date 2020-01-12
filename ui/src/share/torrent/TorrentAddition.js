@@ -1,7 +1,5 @@
 import Logger from 'js-logger';
 import Loader from "./Loader";
-import platform from 'platform';
-import idb from 'indexeddb-chunk-store';
 import moment from "moment";
 import shortid  from 'shortid';
 
@@ -158,8 +156,9 @@ export default class TorrentAddition {
 
         }, this);
 
-        return;
+        return torrent;
 
+        /*
         this.update(torrent.numPeers);
 
 
@@ -198,6 +197,7 @@ export default class TorrentAddition {
         });
 
         torrent.on('done', () => self.done(torrent));
+        */
     }
 
     addToDom(photo) {
@@ -214,9 +214,10 @@ export default class TorrentAddition {
 
     metadata(torrent) {
 
-        this.emitter.emit('connectNode', torrent);
-
-        //return;
+        this.master.peers.connect(torrent, this.master.client.peerId);
+        this.master.service.addOwner(torrent.infoHash, this.master.client.peerId).then(() => {
+            Logger.info('added owner ' + torrent.name);
+        });
 
         //Once generated, stores the metadata for later use when re-adding the torrent!
         const parsed = window.parsetorrent(torrent.torrentFile);
@@ -225,7 +226,6 @@ export default class TorrentAddition {
 
         this.update(torrent.numPeers);
 
-        //return;
         const self = this;
         this.torrentsDb.get(key, (err, value) => {
             if (err) {

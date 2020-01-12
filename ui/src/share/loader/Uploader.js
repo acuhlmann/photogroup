@@ -5,16 +5,13 @@ import Logger from 'js-logger';
 import { withStyles } from '@material-ui/core/styles';
 
 import LoaderView from './LoaderView';
-import Encrypter from '../security/Encrypter';
 
 import IconButton from "@material-ui/core/IconButton/IconButton";
 import CloudUploadRounded from '@material-ui/icons/CloudUploadRounded';
 import Dialog from "@material-ui/core/Dialog/Dialog";
 import DialogContent from "@material-ui/core/DialogContent/DialogContent";
 import DialogActions from "@material-ui/core/DialogActions/DialogActions";
-import Button from "@material-ui/core/Button/Button";
 import CloseRounded from "@material-ui/core/SvgIcon/SvgIcon";
-import QRCodeView from "../security/QRCodeView";
 
 //import Slide from '@material-ui/core/Slide';
 //import PasswordInput from "../security/PasswordInput";

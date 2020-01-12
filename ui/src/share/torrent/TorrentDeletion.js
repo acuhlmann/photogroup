@@ -2,10 +2,11 @@ import Logger from 'js-logger';
 
 export default class TorrentDeletion {
 
-    constructor(service, torrentsDb, emitter) {
+    constructor(service, torrentsDb, emitter, master) {
         this.service = service;
         this.torrentsDb = torrentsDb;
         this.emitter = emitter;
+        this.master = master;
     }
 
     update(numPeers) {
@@ -30,7 +31,7 @@ export default class TorrentDeletion {
     async deleteTorrent(torrent) {
 
         this.update(torrent.numPeers);
-        this.emitter.emit('disconnectNode', torrent.infoHash);
+        this.master.peers.disconnect(torrent.infoHash);
 
         await this.deleteTorrentDbEntry(torrent);
 
