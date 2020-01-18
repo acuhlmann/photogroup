@@ -175,6 +175,7 @@ class Gallery extends Component {
 
         if(item.seed) {
             item.elem = item.file;
+            item.img = URL.createObjectURL(item.file);
             this.renderTile(item);
         } else {
             item.torrentFile.getBlob((err, elem) => {
@@ -182,6 +183,7 @@ class Gallery extends Component {
                     Logger.error(err.message);
                 } else {
                     item.elem = elem;
+                    item.img = URL.createObjectURL(elem);
                     this.renderTile(item);
                 }
             });
@@ -269,9 +271,12 @@ class Gallery extends Component {
                 }
             } else if(event.type === 'update') {
 
-                index = oldTiles.findIndex(item => item.infoHash === event.item.peerId);
+                index = oldTiles.findIndex(item => item.infoHash === event.item.infoHash);
                 if(index > -1) {
-                    tiles = update(oldTiles, {$splice: [[index, 1, event.item]]});
+
+                    //tiles = update(oldTiles, {$splice: [[index, 1, event.item]]});
+                    const newTile = update(oldTiles[index], {$merge: event.item});
+                    tiles = update(oldTiles, {$splice: [[index, 1, newTile]]});
                     this.setState({tiles: tiles});
                 }
             } else if(event.type === 'addOwner') {
@@ -566,10 +571,14 @@ class Gallery extends Component {
             return <div key={index}>
                 <div className={classes.gridList}>
 
-                    <div className={classes.wide}
+                    {/*<div className={classes.wide}
                          ref={ref => this.handleContainerLoaded(tile, ref, tile.torrent.files[0])}>
 
-                    </div>
+                    </div>*/}
+
+                    <img id={'img' + index}  src={tile.img} alt={tile.fileName}
+                         className={classes.wide}
+                         onLoad={this.handleImageLoaded.bind(this, tile, tile.elem)} />
 
                     <Paper className={classes.toolbar}>
 

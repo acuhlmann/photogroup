@@ -87,7 +87,7 @@ class MeView extends Component {
                 const myPeer = event.item;
                 if(myPeer && myPeer.peerId === this.master.client.peerId && myPeer.networkChain) {
                     const myNat = this.findNat(myPeer.networkChain);
-                    if(!myNat.network) {
+                    if(myNat && !myNat.network) {
                         myNat.network = {
                             ip: {
                                 city: ''

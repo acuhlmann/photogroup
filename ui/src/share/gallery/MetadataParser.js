@@ -4,6 +4,7 @@ import ExifParser from "./ExifParser";
 import FileUtil from "../util/FileUtil";
 import update from 'immutability-helper';
 import EXIF from 'exif-js';
+import Logger from 'js-logger';
 
 export default class MetadataParser {
 
@@ -21,11 +22,15 @@ export default class MetadataParser {
         //const index = id.substring(3, id.length);
         const EXIF = window.EXIF;
         EXIF.enableXmp();
-        EXIF.getData(tile.elem, function()  {
+        try {
+            EXIF.getData(tile.elem, function()  {
 
-            scope.extractAndProcess(this, tile);
-            callback(tile);
-        });
+                scope.extractAndProcess(this, tile);
+                callback(tile);
+            });
+        } catch(e) {
+            Logger.error('error parsing image ');
+        }
     }
 
     extractAndProcess(img, tile) {

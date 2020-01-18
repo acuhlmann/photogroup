@@ -198,6 +198,8 @@ module.exports = class Rooms {
 
                     if (found) {
                         this.sendPhotos('delete', infoHash);
+                    } else {
+                        found = false;
                     }
                 }
                 response.send([found]);
