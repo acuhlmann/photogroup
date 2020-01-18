@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+mkdir -p ./bin
 rm -rf ./server/ui/
 mkdir -p ./server/ui
 cp -R ./ui/build/ ./server/ui/

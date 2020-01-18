@@ -346,10 +346,8 @@ class Gallery extends Component {
     }
 
     downloadFromServer(tile) {
-        Logger.info('downloadFromServer ' + tile.name);
-        const url = this.state.master.urls.find(item => item.url === tile.torrent.magnetURI);
-        const name = url && url.fileName ? url.fileName + FileUtil.getFileSuffix(tile.name) : tile.name;
-        download(tile.elem, name);
+        Logger.info('downloadFromServer ' + tile.fileName);
+        download(tile.elem, tile.fileName);
     }
 
     addServerPeer(tile, action) {
