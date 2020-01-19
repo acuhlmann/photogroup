@@ -4,9 +4,17 @@ import Typography from "@material-ui/core/Typography";
 import List from "@material-ui/core/List";
 import ListItem from "@material-ui/core/ListItem";
 import AccountCircleRounded from "@material-ui/icons/AccountCircleRounded";
+import GroupRounded from "@material-ui/icons/GroupRounded";
 import update from "immutability-helper";
 import Paper from "@material-ui/core/Paper";
 import Logger from 'js-logger';
+import _ from 'lodash';
+
+import ExpansionPanel from '@material-ui/core/ExpansionPanel';
+import ExpansionPanelSummary from '@material-ui/core/ExpansionPanelSummary';
+import ExpansionPanelDetails from '@material-ui/core/ExpansionPanelDetails';
+import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
+import Badge from "@material-ui/core/Badge";
 
 const styles = theme => ({
     vertical: {
@@ -16,13 +24,23 @@ const styles = theme => ({
         alignItems: 'center',
         justifyContent: 'center'
     },
+    verticalAndWide: {
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%'
+    },
     horizontal: {
         width: '100%',
         display: 'flex',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center'
-    }
+    },
+    content: {
+        padding: '0px 0px 0px 0px',
+        width: '100%',
+        overflow: 'hidden'
+    },
 });
 
 class OwnersList extends Component {
@@ -33,8 +51,9 @@ class OwnersList extends Component {
         const {emitter, peers} = props;
 
         this.state = {
+            expanded: false,
             peerItems: peers.items,
-            photoConnections: []
+            newConnections: []
         };
 
         emitter.on('peers', this.handlePeersUpdate, this);
@@ -57,7 +76,7 @@ class OwnersList extends Component {
         if(connections && connections.length > 0) {
             const photoConnections = connections.filter(item => item.infoHash === tile.infoHash);
             if(photoConnections.length > 0) {
-                this.setState({newConnections: connections});
+                this.setState({newConnections: photoConnections});
             }
         }
     }
@@ -66,6 +85,12 @@ class OwnersList extends Component {
         this.props.emitter.removeListener('peers', this.handlePeersUpdate, this);
         this.props.emitter.removeListener('peerConnections', this.handlePeersConnectionUpdate, this);
     }
+
+    handleExpand = panel => (event, expanded) => {
+        this.setState({
+            [panel]: expanded,
+        });
+    };
 
     hasOwners(owners, peers) {
         const allFound = owners.every(owner => {
@@ -78,39 +103,85 @@ class OwnersList extends Component {
         return owners && owners.length > 0 && allFound;
     }
 
+    buildHeader(owners, peers, connectionTypes, classes) {
+        const numOfOwners = owners.length;
+        const names = owners.map(owner => {
+            let name = owner.peerId;
+            name = _.truncate(name, {length: 10});
+            const peer = peers.items.find(item => item.peerId === owner.peerId);
+            if(peer) {
+                name = peer.name || _.truncate(peer.originPlatform, {length: 10});
+            }
+            return name;
+        }).join(', ');
+        const haveHas = numOfOwners > 1 ? 'have' : 'has';
+        /*if(numOfOwners > 1) {
+            names.split(', ').join('')
+        }*/
+
+        const conns = connectionTypes ? ' connected via ' + connectionTypes : '';
+
+        return <span style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'left',
+            width: '100%'
+        }}>
+            <Badge badgeContent={numOfOwners} color="primary" >
+                    <GroupRounded />
+                </Badge>
+           <Typography style={{
+               marginLeft: '20px'
+           }} variant="caption">{names} {haveHas} this image{conns}</Typography>
+        </span>
+    }
+
     render() {
         const {classes, owners, myPeerId, peers, tile} = this.props;
-        const {peerItems, newConnections} = this.state;
+        const {peerItems, newConnections, expanded} = this.state;
 
-        Logger.info('owners ' + JSON.stringify(owners));
+        const otherPeers = owners.filter(item => item.peerId !== myPeerId);
+        let photoConnections = newConnections;
+        if(peers.connections && peers.connections.length > 0) {
+            photoConnections = peers.connections.filter(item => item.infoHash === tile.infoHash);
+        }
+        const connectionTypes = photoConnections.map(item => item.connectionType).join(', ');
+
+        Logger.info('owners ' + JSON.stringify(otherPeers));
         return (
-            this.hasOwners(owners, peers) ? <Paper style={{
-                margin: '10px',
-                padding: '10px'
-            }}>
-                <List>
-                    {
-                        owners
-                            .filter(item => item.peerId !== myPeerId)
-                            .map((owner, index) => {
+            this.hasOwners(otherPeers, peers) ?
+                <ExpansionPanel expanded={expanded} onChange={this.handleExpand('expanded')}>
+                    <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
+                        {this.buildHeader(otherPeers, peers, connectionTypes, classes)}
+                    </ExpansionPanelSummary>
+                    <ExpansionPanelDetails className={classes.content}>
+                        <Paper style={{
+                            margin: '10px',
+                            padding: '10px'
+                        }}>
+                            <List>
+                                {
+                                    otherPeers
+                                        .map((owner, index) => {
 
-                            let connection;
-                            if(peers.connections && peers.connections.length > 0) {
-                                const photoConnections = peers.connections.filter(item => item.infoHash === tile.infoHash);
-                                connection = photoConnections.find(item => item.fromPeerId === owner.peerId
-                                    || item.toPeerId === owner.peerId);
-                            }
+                                            let connection;
+                                            if(peers.connections && peers.connections.length > 0) {
+                                                const photoConnections = peers.connections.filter(item => item.infoHash === tile.infoHash);
+                                                connection = photoConnections.find(item => item.fromPeerId === owner.peerId
+                                                    || item.toPeerId === owner.peerId);
+                                            }
 
-                            const peer = peers.items.find(item => item.peerId === owner.peerId);
-                            if(!peer) {
-                                Logger.error('Cannot find peerId ' + owner.peerId);
-                                return '';
-                            }
-                            const nat = peer.networkChain
-                                ? peer.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))
-                                    && item.label) : null;
+                                            const peer = peers.items.find(item => item.peerId === owner.peerId);
+                                            if(!peer) {
+                                                Logger.error('Cannot find peerId ' + owner.peerId);
+                                                return '';
+                                            }
+                                            const nat = peer.networkChain
+                                                ? peer.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))
+                                                    && item.label) : null;
 
-                            return <ListItem key={index}>
+                                            return <ListItem key={index}>
                                             <span style={{
                                                 position: 'relative',
                                                 textAlign: 'center',
@@ -121,7 +192,7 @@ class OwnersList extends Component {
                                                     {owner.loading ? <Typography variant="caption">Loading</Typography> : ''}
                                                 </span>
                                             </span>
-                                    <span className={classes.vertical}>
+                                                <span className={classes.vertical}>
                                                     {nat ? <span
                                                         className={classes.horizontal}>
                                                             <img src={"./firewall.png"} alt="firewall" style={{
@@ -131,19 +202,21 @@ class OwnersList extends Component {
                                                                 marginLeft: '5px'
                                                             }}>{nat.label} {nat.network.city}</Typography>
                                                         </span> : ''}
-                                    <span
-                                        className={classes.horizontal}>
+                                                    <span
+                                                        className={classes.horizontal}>
                                                     <AccountCircleRounded/>
                                                     <Typography variant="caption" style={{
                                                         marginLeft: '5px'
                                                     }}>{peer.connectionSpeedType} {peer.name} {peer.originPlatform}</Typography>
                                                 </span>
                                             </span>
-                            </ListItem>;
-                        })
-                    }
-                </List>
-            </Paper> : <Typography variant="caption">No peer has this image</Typography>
+                                            </ListItem>;
+                                        })
+                                }
+                            </List>
+                        </Paper>
+                    </ExpansionPanelDetails>
+                </ExpansionPanel> : <Typography variant="caption">No peer has this image</Typography>
         );
     }
 }

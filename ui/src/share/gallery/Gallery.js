@@ -39,8 +39,7 @@ const styles = theme => ({
         backgroundColor: theme.palette.background.paper,
     },
     gridList: {
-        width: '100%',
-        paddingBottom: '10px'
+        marginBottom: '-5px'
     },
 
     toolbar: {
@@ -167,14 +166,9 @@ class Gallery extends Component {
             self.setState({torrent: event.torrent, progress: progress, upSpeed: event.speed});
         }, this);
 
-        emitter.on('galleryListView', event => {
+        emitter.on('galleryListView', isList => {
 
-            self.setState({listView: true});
-        }, this);
-
-        emitter.on('galleryImageView', event => {
-
-            self.setState({listView: false});
+            self.setState({listView: isList});
         }, this);
 
         const { classes } = props;
@@ -234,8 +228,6 @@ class Gallery extends Component {
         this.state.master.emitter.on('photos', event => {
 
             const oldTiles = this.state.tiles;
-            let tiles = oldTiles;
-            let index;
 
             if(event.type === 'all') {
 
@@ -251,30 +243,39 @@ class Gallery extends Component {
 
             } else if(event.type === 'add') {
 
-                index = oldTiles.findIndex(item => item.infoHash === event.item.infoHash);
-                if(index < 0) {
+                ((oldTiles) => {
+                    const index = oldTiles.findIndex(item => item.infoHash === event.item.infoHash);
+                    if(index < 0) {
 
-                    const tile = event.item;
-                    tile.loading = true;
-                    tiles = update(oldTiles, {$unshift: [tile]});
-                    this.setState({tiles: tiles});
-                }
+                        const tile = event.item;
+                        tile.loading = true;
+                        const tiles = update(oldTiles, {$unshift: [tile]});
+                        this.setState({tiles: tiles});
+                    }
+                })(oldTiles);
+
             } else if(event.type === 'delete') {
 
-                index = oldTiles.findIndex(item => item.infoHash === event.item);
-                if(index > -1) {
-                    tiles = update(oldTiles, {$splice: [[index, 1]]});
-                    this.setState({tiles: tiles});
-                }
+                ((oldTiles) => {
+                    const index = oldTiles.findIndex(item => item.infoHash === event.item);
+                    if(index > -1) {
+                        const tiles = update(oldTiles, {$splice: [[index, 1]]});
+                        this.setState({tiles: tiles});
+                    }
+                })(oldTiles);
+
             } else if(event.type === 'update') {
 
-                index = oldTiles.findIndex(item => item.infoHash === event.item.infoHash);
-                if(index > -1) {
+                ((oldTiles) => {
+                    const index = oldTiles.findIndex(item => item.infoHash === event.item.infoHash);
+                    if(index > -1) {
 
-                    const newTile = update(oldTiles[index], {$merge: event.item});
-                    tiles = update(oldTiles, {$splice: [[index, 1, newTile]]});
-                    this.setState({tiles: tiles});
-                }
+                        const newTile = update(oldTiles[index], {$merge: event.item});
+                        const tiles = update(oldTiles, {$splice: [[index, 1, newTile]]});
+                        this.setState({tiles: tiles});
+                    }
+                })(oldTiles);
+
             } else if(event.type === 'addOwner') {
 
                 ((oldTiles) => {
@@ -287,7 +288,7 @@ class Gallery extends Component {
                             delete event.item.infoHash;
                             const owners = update(oldOwners, {$push: [event.item]});
                             const tile = update(oldTiles[index], {owners: {$set: owners}});
-                            tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
+                            const tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
                             this.setState({tiles: tiles});
                         }
                     }
@@ -304,7 +305,7 @@ class Gallery extends Component {
                         if(ownerIndex > -1) {
                             const owners = update(oldTile.owners, {$splice: [[ownerIndex, 1]]});
                             const tile = update(oldTiles[tileIndex], {owners: {$set: owners}});
-                            tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
+                            const tiles = update(oldTiles, {$splice: [[tileIndex, 1, tile]]});
                             this.setState({tiles: tiles});
                         }
                     });
@@ -323,7 +324,7 @@ class Gallery extends Component {
                             delete event.item.infoHash;
                             const owners = update(oldOwners, {$splice: [[ownersIndex, 1, event.item]]});
                             const tile = update(oldTiles[index], {owners: {$set: owners}});
-                            tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
+                            const tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
                             this.setState({tiles: tiles});
                         }
                     }
@@ -574,7 +575,7 @@ class Gallery extends Component {
 
                     </div>*/}
 
-                    <img id={'img' + index}  src={tile.img} alt={tile.fileName}
+                    <img id={'img' + index} src={tile.img} alt={tile.fileName}
                          className={classes.wide}
                          onLoad={this.handleImageLoaded.bind(this, tile, tile.elem)} />
 
@@ -622,11 +623,15 @@ class Gallery extends Component {
         const classes = this.props.classes;
         const {tiles, master, torrent, downSpeed, upSpeed, progress, localDownloads, listView} = this.state;
 
-        //const has
+        const hasImages = tiles.find(tile => !tile.isLoading && !tile.secure && tile.img);
+        if(hasImages) {
+            master.emitter.emit('galleryHasImages', true);
+        } else {
+            master.emitter.emit('galleryHasImages', false);
+        }
         return (
-            <div className={classes.root}>
-
-                <div className={classes.gridList}>
+            <div>
+                <div>
                     {tiles.map((tile, index) => this.buildTile(tile, index, classes, master,
                         torrent, downSpeed, upSpeed, progress, localDownloads, listView))}
                 </div>

@@ -111,6 +111,8 @@ class LoaderView extends Component {
                         //const downSpeed = FileUtil.formatBytes(client.downloadSpeed) + '/sec';
                         //const upSpeed = FileUtil.formatBytes(client.uploadSpeed) + '/sec';
                         self.setState({ down: 'down ' + down, up: 'up ' + up});
+
+                        emitter.emit('loadedAnything');
                         //self.setState({ down: down, up: up,
                         //    downSpeed: downSpeed, upSpeed: upSpeed,
                         //    progress: progress });
@@ -122,7 +124,7 @@ class LoaderView extends Component {
     }
 
     render() {
-        const {classes} = this.props;
+        const {classes, emitter} = this.props;
         const {show, down, up, downSpeed, upSpeed, progress, ratio} = this.state;
 
         return (

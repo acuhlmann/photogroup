@@ -18,11 +18,6 @@ import ViewAgendaRounded from '@material-ui/icons/ViewAgendaRounded';
 import IconButton from '@material-ui/core/IconButton';
 
 const styles = theme => ({
-
-    heading: {
-        fontSize: theme.typography.pxToRem(15),
-        fontWeight: theme.typography.fontWeightRegular,
-    },
     content: {
         padding: '0px 0px 0px 0px',
         width: '100%',
@@ -55,7 +50,7 @@ class MeView extends Component {
 
         this.state = {
             expandedMe: false,
-            showMe: true,
+            showMe: true, galleryHasImages: false, listView: true,
             me: {}, myNat: null, connectionSpeedType: ''
         };
 
@@ -127,6 +122,10 @@ class MeView extends Component {
         emitter.on('showMe', value => {
             this.setState({showMe: value});
         });
+
+        emitter.on('galleryHasImages', hasImages => {
+            this.setState({galleryHasImages: hasImages});
+        });
     }
 
     findNat(chain) {
@@ -167,7 +166,7 @@ class MeView extends Component {
         });
     }
 
-    buildHeader(classes) {
+    buildHeader(galleryHasImages, listView, classes) {
         const init = this.master && this.master.client && this.master.client.peerId && this.master.me;
         return init ? <span style={{
             display: 'flex',
@@ -189,35 +188,37 @@ class MeView extends Component {
                     //_.debounce(this.batchChangeName.bind(this), 2000)
                 }
             />
-            <span className={classes.horizontal}>
-                <IconButton
+            {galleryHasImages ? <span className={classes.horizontal}>
+                <IconButton color={listView ? 'primary' : 'inherit'}
                         onClick={(event) => {
                             event.stopPropagation();
-                            this.master.emitter.emit('galleryListView');
+                            this.master.emitter.emit('galleryListView', true);
+                            this.setState({listView: true});
                         }}>
                     <ViewListRounded />
                 </IconButton>
-                <IconButton
+                <IconButton color={!listView ? 'primary' : 'inherit'}
                         onClick={(event) => {
                             event.stopPropagation();
-                            this.master.emitter.emit('galleryImageView');
+                            this.master.emitter.emit('galleryListView', false);
+                            this.setState({listView: false});
                         }}>
                     <ViewAgendaRounded />
                 </IconButton>
-            </span>
+            </span> : ''}
         </span> : '';
     }
 
     render() {
 
         const { classes } = this.props;
-        const {expandedMe, showMe, me, myNat, connectionSpeedType} = this.state;
+        const {expandedMe, showMe, galleryHasImages, listView, me, myNat, connectionSpeedType} = this.state;
 
         return (
             showMe ? <span>
                 <ExpansionPanel expanded={expandedMe} onChange={this.handleExpand('expandedMe')}>
                     <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
-                        {this.buildHeader(classes)}
+                        {this.buildHeader(galleryHasImages, listView, classes)}
                     </ExpansionPanelSummary>
                     <ExpansionPanelDetails className={classes.content}>
                         <div className={classes.verticalAndWide}>
@@ -245,7 +246,7 @@ class MeView extends Component {
                                 </div>
                             </Paper>
                         </div>
-                </ExpansionPanelDetails>
+                    </ExpansionPanelDetails>
                 </ExpansionPanel>
             </span> : ''
         );

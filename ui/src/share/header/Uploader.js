@@ -43,13 +43,19 @@ class Uploader extends Component {
         this.state = {
             visible: false,
             open: false,
-            disabled: true,
+            disabled: true, loadedAnything: false
         };
 
         model.emitter.on('readyToUpload', () => {
             this.setState({
                 visible: true,
                 disabled: false
+            });
+        });
+
+        model.emitter.on('loadedAnything', () => {
+            this.setState({
+                loadedAnything: true
             });
         });
     }
@@ -104,9 +110,10 @@ class Uploader extends Component {
 
     render() {
         const {classes, emitter} = this.props;
-        const {visible, disabled} = this.state;
+        const {visible, disabled, loadedAnything} = this.state;
         const hasRoom = this.hasRoom();
 
+        console.log('loadedAnything ' + loadedAnything)
         return (
             visible || hasRoom ? <div>
 
@@ -116,7 +123,7 @@ class Uploader extends Component {
                     accept="image/*"
                     style={{
                         position: 'absolute',
-                        top: '-15px'
+                        top: loadedAnything ? '-15px' : '0px',
                     }}
                     className={classes.input}
                     id="contained-button-file" disabled={disabled}
@@ -129,7 +136,8 @@ class Uploader extends Component {
                         component="span"
                         style={{
                             position: 'relative',
-                            top: '-15px',
+                            //top: '-15px',
+                            top: loadedAnything ? '-15px' : '0px',
                         }}
                         disabled={disabled}
                     >

@@ -76,7 +76,8 @@ class AddPeersView extends Component {
             this.setState({
                 visible: true,
                 open: true,
-                openQr: true
+                openQr: true,
+                openRecorder: false
             });
         });
 
@@ -344,10 +345,7 @@ class AddPeersView extends Component {
         return (
             visible || hasRoom ? <div>
                 <IconButton
-                    aria-haspopup="true"
-                    onClick={this.show.bind(this, true)}
-                    color="inherit"
-                >
+                    onClick={this.show.bind(this, true)}>
                     <Badge badgeContent={numPeers} color="primary" >
                         <GroupAddRounded />
                     </Badge>
@@ -392,7 +390,7 @@ class AddPeersView extends Component {
                                         </IconButton>
                                     </span> : ''}
                                     <span className={classes.horizontal}>
-                                        <Typography variant={"body2"}>Play Audio Signal to Peers Listening</Typography>
+                                        <Typography variant={"body2"}>Play Audio Signal to Listening Peers</Typography>
                                         <IconButton color="primary"
                                             onClick={() => this.sendAudioChirp(master.service.id) }>
                                             <AudiotrackRounded />
@@ -423,7 +421,7 @@ class AddPeersView extends Component {
                             !openRecorder ?
                                 '' :
                                 <div>
-                                    <EqualizerRounded color={isChirp ? 'secondary' : 'primary'}/>
+                                    <EqualizerRounded color={isChirp ? 'primary' : 'secondary'}/>
                                 </div>
                         }
                     </DialogContent>
