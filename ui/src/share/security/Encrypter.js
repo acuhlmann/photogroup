@@ -1,6 +1,6 @@
 import Logger from "js-logger";
 import FileUtil from "../util/FileUtil";
-import EncrypterUtil from "../util/EncrypterUtil";
+import EncrypterUtil from "./EncrypterUtil";
 
 export default class Encrypter {
 

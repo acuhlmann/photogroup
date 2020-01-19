@@ -10,7 +10,7 @@ import { ThemeProvider } from '@material-ui/styles';
 import Logger from 'js-logger';
 import { withSnackbar } from 'notistack';
 
-import QRCodeView from "./security/QRCodeView";
+import FrontView from "./FrontView";
 import MeView from "./MeView";
 import WebTorrent from 'webtorrent';
 import Online from 'online-js'
@@ -199,7 +199,7 @@ class ShareCanvas extends Component {
         return (
             <ThemeProvider theme={defaultTheme}>
                 <MeView master={master} />
-                <QRCodeView master={master}/>
+                <FrontView master={master}/>
                 <Gallery className={classes.nooverflow} master={master} />
             </ThemeProvider>
         );

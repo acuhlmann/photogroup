@@ -17,11 +17,11 @@ import RoomsService from "./share/RoomsService";
 import ShareCanvas from './share/ShareCanvas';
 import SettingsView from "./share/header/SettingsView";
 import Logger from 'js-logger';
-import Uploader from "./share/loader/Uploader";
+import Uploader from "./share/header/Uploader";
 
 import { SnackbarProvider } from 'notistack';
 import Visibility from "visibilityjs";
-import QRCodeButton from "./share/header/QRCodeButton";
+import AddPeersView from "./share/header/AddPeersView";
 
 const styles = {
     typography: {
@@ -99,10 +99,9 @@ class App extends Component {
                                             Zero Install, Peer-to-Peer Photo Collaboration.
                                         </Typography>
                                     </div>
-                                    <QRCodeButton master={this.master}/>
+                                    <AddPeersView master={this.master}/>
                                     <Uploader model={this.master.torrentAddition}
-                                              emitter={this.master.emitter}
-                                              loader={this.master.torrentAddition.loader} />
+                                              emitter={this.master.emitter} />
                                     <SettingsView master={this.master} emitter={this.master.emitter}/>
                                 </Toolbar>
                             </AppBar>

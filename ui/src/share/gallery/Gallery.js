@@ -119,10 +119,10 @@ class Gallery extends Component {
 
         this.state = {
             tiles: [],
-            open: false,
+            open: false, listView: true,
             parser: new MetadataParser(),
             master: props.master,
-            allMetadata: []
+            allMetadata: [], localDownloads: []
         };
 
         this.syncWithPhotos();
@@ -165,6 +165,16 @@ class Gallery extends Component {
             const progress = event.progress;
             //const show = (progress > 0 && progress < 100);
             self.setState({torrent: event.torrent, progress: progress, upSpeed: event.speed});
+        }, this);
+
+        emitter.on('galleryListView', event => {
+
+            self.setState({listView: true});
+        }, this);
+
+        emitter.on('galleryImageView', event => {
+
+            self.setState({listView: false});
         }, this);
 
         const { classes } = props;
@@ -231,24 +241,11 @@ class Gallery extends Component {
 
                 ((oldTiles, photos) => {
 
-                    //const client = this.state.master.client;
-
                     photos.forEach(item => {
                         item.loading = true;
                     });
 
                     this.setState({tiles: photos});
-
-                    /*client.torrents.forEach(torrent => {
-                        const photo = photos.find(item => item.infoHash === torrent.infoHash);
-                        if(!photo) {
-
-                            this.emitter.emit('photos', {
-                                type: 'delete', item: torrent.infoHash
-                            });
-                        }
-                    });
-                    */
 
                 })(oldTiles, event.item);
 
@@ -274,7 +271,6 @@ class Gallery extends Component {
                 index = oldTiles.findIndex(item => item.infoHash === event.item.infoHash);
                 if(index > -1) {
 
-                    //tiles = update(oldTiles, {$splice: [[index, 1, event.item]]});
                     const newTile = update(oldTiles[index], {$merge: event.item});
                     tiles = update(oldTiles, {$splice: [[index, 1, newTile]]});
                     this.setState({tiles: tiles});
@@ -353,6 +349,8 @@ class Gallery extends Component {
     downloadFromServer(tile) {
         Logger.info('downloadFromServer ' + tile.fileName);
         download(tile.elem, tile.fileName);
+        const localDownloads = update(this.state.localDownloads, {$push: [tile.infoHash]});
+        this.setState({localDownloads: localDownloads});
     }
 
     addServerPeer(tile, action) {
@@ -498,7 +496,7 @@ class Gallery extends Component {
     }
 
     buildTile(tile, index, classes, master,
-              torrent, downSpeed, upSpeed, progress) {
+              torrent, downSpeed, upSpeed, progress, localDownloads, listView) {
 
         const name = `${tile.picSummary} ${tile.fileSize} ${tile.cameraSettings}`;
         let owners = tile.owners ? tile.owners : [];
@@ -580,12 +578,14 @@ class Gallery extends Component {
                          className={classes.wide}
                          onLoad={this.handleImageLoaded.bind(this, tile, tile.elem)} />
 
-                    <Paper className={classes.toolbar}>
+                    {listView ? <Paper className={classes.toolbar}>
 
-                        <div style={{width: '100%'}}>
+                        <div style={{width: '100%'}} className={classes.horizontal}>
+
                             <IconButton onClick={this.downloadFromServer.bind(this, tile)}>
                                 <CloudDownloadIcon/>
                             </IconButton>
+                            {localDownloads.includes(tile.infoHash) ? <Typography variant={"caption"}>Downloaded</Typography> : ''}
                             <IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
                                 <InfoIcon />
                             </IconButton>
@@ -607,7 +607,7 @@ class Gallery extends Component {
                                 tile={tile} owners={tile.owners} peers={master.peers} myPeerId={master.client.peerId}
                             />
                         </div>
-                    </Paper>
+                    </Paper> : ''}
                 </div>
                 <PhotoDetails metadata={this.state.allMetadata}
                               open={open}
@@ -620,14 +620,15 @@ class Gallery extends Component {
 
     render() {
         const classes = this.props.classes;
-        const {tiles, master, torrent, downSpeed, upSpeed, progress} = this.state;
+        const {tiles, master, torrent, downSpeed, upSpeed, progress, localDownloads, listView} = this.state;
 
+        //const has
         return (
             <div className={classes.root}>
 
                 <div className={classes.gridList}>
                     {tiles.map((tile, index) => this.buildTile(tile, index, classes, master,
-                        torrent, downSpeed, upSpeed, progress))}
+                        torrent, downSpeed, upSpeed, progress, localDownloads, listView))}
                 </div>
             </div>
         );

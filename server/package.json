@@ -21,7 +21,7 @@
     "express-request-id": "^1.4.1",
     "is-local-ip": "^1.1.0",
     "magnet-uri": "^5.2.4",
-    "mocha": "^6.2.2",
+    "mocha": "^7.0.0",
     "path": "^0.12.7",
     "request-promise": "^4.2.5",
     "sdp-transform": "^2.13.0",

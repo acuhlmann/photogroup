@@ -32,6 +32,7 @@ export default class RoomsService {
             if(urlParams.has('room')) {
                 this.id = urlParams.get('room');
                 await this.master.findExistingContent(this.joinRoom);
+                //this.emitter.emit('openRoomEnd');
                 this.emitter.emit('readyToUpload');
             }
         });

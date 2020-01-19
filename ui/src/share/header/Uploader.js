@@ -39,7 +39,6 @@ class Uploader extends Component {
 
         this.classes = classes;
         this.model = model;
-        this.loader = loader;
 
         this.state = {
             visible: false,
@@ -111,7 +110,7 @@ class Uploader extends Component {
         return (
             visible || hasRoom ? <div>
 
-                <LoaderView loader={this.loader} emitter={emitter}/>
+                <LoaderView emitter={emitter}/>
                 <input
                     //accept="image/*,video/*"
                     accept="image/*"
@@ -171,7 +170,6 @@ class Uploader extends Component {
 Uploader.propTypes = {
     classes: PropTypes.object.isRequired,
     model: PropTypes.object.isRequired,
-    loader: PropTypes.object.isRequired,
 };
 
 export default withStyles(styles)(Uploader);

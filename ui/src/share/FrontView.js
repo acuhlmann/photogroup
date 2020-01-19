@@ -7,6 +7,7 @@ import Button from '@material-ui/core/Button';
 import PlayCircleFilledWhiteRoundedIcon from '@material-ui/icons/PlayCircleFilledWhiteRounded';
 import {Typography} from "@material-ui/core";
 import CropFreeRounded from '@material-ui/icons/CropFreeRounded';
+import SettingsVoiceRounded from '@material-ui/icons/SettingsVoiceRounded';
 import IconButton from "@material-ui/core/IconButton";
 
 const styles = theme => ({
@@ -25,17 +26,20 @@ const styles = theme => ({
     }
 });
 
-class QRCodeView extends Component {
+class FrontView extends Component {
 
     constructor(props) {
         super(props);
         this.state = {
-            showQR: false,
+            show: false,
             visible: false
         };
 
         props.master.emitter.on('openRoomEnd', () => {
-            this.setState({showQR: true});
+            this.setState({show: true});
+        });
+        props.master.emitter.on('hideFrontView', () => {
+            this.setState({show: false, visible: false});
         });
         props.master.emitter.on('iceDone', () => {
             this.setState({visible: true});
@@ -54,8 +58,8 @@ class QRCodeView extends Component {
         master.emitter.emit('readyToUpload');
     }
 
-    buildQRView(master, showQR, classes) {
-        return !showQR ? <div style={{
+    buildView(master, show, classes) {
+        return !show ? <div style={{
                             marginTop: '50px'
                         }}>
                     <Typography variant={"body2"}>One peer needs to...</Typography>
@@ -67,14 +71,26 @@ class QRCodeView extends Component {
                     >
                         start Private Room
                     </Button>
+                <Typography variant={"body2"}>or join another room via</Typography>
                 <span className={classes.horizontal}>
-                    <Typography variant={"body2"}>or join another room</Typography>
+                    <Typography variant={"body2"}>Scanning a QR code</Typography>
                     <IconButton
                         onClick={() => master.emitter.emit('openQr')}
                         color="inherit">
                         <CropFreeRounded />
                     </IconButton>
                 </span>
+                <span className={classes.horizontal}>
+                        <Typography variant={"body2"}>Listening to an audio signal</Typography>
+                        <IconButton color="primary"
+                            onClick={() => master.emitter.emit('openRecorderChirp')}>
+                            <SettingsVoiceRounded />
+                        </IconButton>
+                        <IconButton color="secondary"
+                            onClick={() => master.emitter.emit('openRecorder')}>
+                            <SettingsVoiceRounded />
+                        </IconButton>
+                    </span>
             </div> : '';
     }
 
@@ -86,23 +102,23 @@ class QRCodeView extends Component {
     render() {
 
         const {classes, master} = this.props;
-        const {showQR, visible} = this.state;
+        const {show, visible} = this.state;
 
         const hasRoom = this.hasRoom();
 
         return (
             !hasRoom && visible ? <div>
 
-                {this.buildQRView(master, showQR, classes)}
+                {this.buildView(master, show, classes)}
 
             </div> : ''
         );
     }
 }
 
-QRCodeView.propTypes = {
+FrontView.propTypes = {
     classes: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,
 };
 
-export default withStyles(styles)(QRCodeView);
+export default withStyles(styles)(FrontView);

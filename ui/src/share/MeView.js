@@ -13,6 +13,9 @@ import Paper from "@material-ui/core/Paper";
 import AccountCircleRounded from '@material-ui/icons/AccountCircleRounded';
 import TextField from "@material-ui/core/TextField";
 import update from "immutability-helper";
+import ViewListRounded from '@material-ui/icons/ViewListRounded';
+import ViewAgendaRounded from '@material-ui/icons/ViewAgendaRounded';
+import IconButton from '@material-ui/core/IconButton';
 
 const styles = theme => ({
 
@@ -39,7 +42,7 @@ const styles = theme => ({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center'
-    }
+    },
 });
 
 class MeView extends Component {
@@ -164,25 +167,45 @@ class MeView extends Component {
         });
     }
 
-    buildNameEntry() {
+    buildHeader(classes) {
         const init = this.master && this.master.client && this.master.client.peerId && this.master.me;
         return init ? <span style={{
             display: 'flex',
             flexDirection: 'row',
-            alignItems: 'center'
-        }}><TextField
-            placeholder="Your Nickname"
-            margin="normal"
-            variant="outlined"
-            defaultValue={this.master.me.name}
-            onClick={event => {
-                event.stopPropagation();
-            }}
-            onChange={
-                this.batchChangeName.bind(this)
-                //_.debounce(this.batchChangeName.bind(this), 2000)
-            }
-        /></span> : '';
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%'
+        }}>
+            <TextField
+                placeholder="Your Nickname"
+                margin="normal"
+                variant="outlined"
+                defaultValue={this.master.me.name}
+                onClick={event => {
+                    event.stopPropagation();
+                }}
+                onChange={
+                    this.batchChangeName.bind(this)
+                    //_.debounce(this.batchChangeName.bind(this), 2000)
+                }
+            />
+            <span className={classes.horizontal}>
+                <IconButton
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            this.master.emitter.emit('galleryListView');
+                        }}>
+                    <ViewListRounded />
+                </IconButton>
+                <IconButton
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            this.master.emitter.emit('galleryImageView');
+                        }}>
+                    <ViewAgendaRounded />
+                </IconButton>
+            </span>
+        </span> : '';
     }
 
     render() {
@@ -194,7 +217,7 @@ class MeView extends Component {
             showMe ? <span>
                 <ExpansionPanel expanded={expandedMe} onChange={this.handleExpand('expandedMe')}>
                     <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
-                        {this.buildNameEntry()}
+                        {this.buildHeader(classes)}
                     </ExpansionPanelSummary>
                     <ExpansionPanelDetails className={classes.content}>
                         <div className={classes.verticalAndWide}>

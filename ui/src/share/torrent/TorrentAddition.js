@@ -1,5 +1,4 @@
 import Logger from 'js-logger';
-import Loader from "./Loader";
 import moment from "moment";
 import shortid  from 'shortid';
 
@@ -18,8 +17,6 @@ export default class TorrentAddition {
         this.emitter = emitter;
         this.stopWatch = new Map();
         this.master = master;
-
-        this.loader = new Loader();
     }
 
     update(numPeers) {
@@ -207,9 +204,6 @@ export default class TorrentAddition {
             photo.torrentFile = file;
             self.emitter.emit('torrentReady', photo);
         });
-
-        // Trigger statistics refresh
-        this.loader.start(photo.torrent);
     }
 
     metadata(torrent) {
@@ -277,8 +271,7 @@ export default class TorrentAddition {
 
     done(torrent) {
         this.update(torrent.numPeers);
-        this.loader.onDone();
-
+        Logger.info('done ' + torrent.name);
         //Checks to make sure that ImmediateChunkStore has finished writing to store before destroying the torrent!
         /*const isMemStoreEmpty = setInterval(()=>{
             //Since client.seed is sequential, this is okay here.

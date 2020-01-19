@@ -126,43 +126,21 @@ class SettingsView extends Component {
     }
 
     log(message, level) {
-        const msg = level + ': ' + message;
-        console.log(msg);
+        const msg = <div key={Math.random()}>
+            <Typography variant="caption">{level + ': ' + message}</Typography>
+        </div>;
+        console.info(level, message);
 
-        /*const messages = update(this.state.messages, {$unshift: [msg]});
-
-
-        //this.state.messages.unshift(msg);
-        if(this.mounted) {
-            //this.setState({messages: this.state.messages});
-            this.setState({messages: messages
-                    .map((item,  index) => <div key={index}>
-                    <Typography variant="caption">{item}</Typography>
-                </div>)});
-        }*/
+        if(level === 'WARN' || level === 'ERROR') {
+            const messages = update(this.state.messages, {$unshift: [msg]});
+            this.setState({messages: messages});
+        }
     }
 
     showLogs() {
-        if(!this.master) {
-            this.master.emitter.on('addPeerDone', () => {
-
-                this.getLogs();
-            });
-        } else {
-            this.getLogs();
-        }
-
         this.setState({
             open: true
         });
-    }
-
-    getLogs() {
-        /*this.getAll().then(dom => {
-            this.setState({
-                urls: dom
-            });
-        });*/
     }
 
     handleClose() {
@@ -172,23 +150,6 @@ class SettingsView extends Component {
     handleReset() {
         RoomsService.deleteAll();
     }
-
-    /*getAll() {
-        return this.master.service.find(this.master.service.id).then(result => {
-            let msg = '';
-            for (let key in result) {
-                //msg += 'Room: ' + key + '\n\n';
-                const urls = result[key];
-                msg += 'Shared: ' + urls.length + '\n\n';
-                urls.forEach(item => {
-                    const parsed = window.parsetorrent(item.url);
-                    const key = parsed.name + ' ' + parsed.infoHash;
-                    msg += key + ' '  + item.secure + '\n';
-                });
-            }
-            return msg;
-        });
-    }*/
 
     requestBLE() {
 
@@ -346,7 +307,6 @@ class SettingsView extends Component {
         </List>;
 
         const {showMe} = this.state;
-        //{messages}
         return (
             <div>
                 <IconButton
@@ -419,7 +379,7 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v6 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v1 {this.state.peerId}</Typography>
 
                         {messages}
 

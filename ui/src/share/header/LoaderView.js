@@ -50,9 +50,6 @@ class LoaderView extends Component {
     constructor(props) {
         super(props);
 
-        this.loader = props.loader;
-        this.loader.parent = this;
-
         this.state = {
             show: false,
             progress: 0,
