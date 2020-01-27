@@ -20,6 +20,7 @@ export default class Peers {
                 if(index > -1)
                     this.items = update(this.items, {$splice: [[index, 1, event.item]]});
             }
+            emitter.emit('numPeersChange', this.items.length);
         });
 
         emitter.on('peerConnections', connections => {

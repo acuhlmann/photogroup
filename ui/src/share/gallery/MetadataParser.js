@@ -86,7 +86,7 @@ export default class MetadataParser {
             const cameraSettings = allMetadata['x-Settings'] ? allMetadata['x-Settings'] : '';
             tileItem.cameraSettings = cameraMake + cameraSettings;
 
-            tiles.sort((a,b) => {
+            tiles.sort((a, b) => {
                 return new Date(b.picDateTakenDate) - new Date(a.picDateTakenDate);
             });
 

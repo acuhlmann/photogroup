@@ -17,7 +17,7 @@ const EventEmitter = require('eventemitter3');
 const emitter = new EventEmitter();
 
 const IceServers = require('./IceServers');
-const Events = require('./Events');
+//const Events = require('./Events');
 const IpTranslator = require('./IpTranslator');
 const Tracker = require('./Tracker');
 const Rooms = require('./Rooms');
@@ -32,8 +32,8 @@ function init() {
     const rooms = new Rooms(updateChannel, remoteLog, app, emitter, ice, tracker);
     rooms.start();
 
-    const events = new Events(rooms.rooms, updateChannel, remoteLog, app, emitter);
-    events.start();
+    //const events = new Events(rooms.rooms, updateChannel, remoteLog, app, emitter);
+    //events.start();
 
     //const network = new Topology(room.rooms, updateChannel, remoteLog, app, emitter, peers, tracker);
     //network.start();

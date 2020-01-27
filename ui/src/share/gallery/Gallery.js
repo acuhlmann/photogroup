@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import {withStyles} from '@material-ui/core/styles';
 
 import GridListTile from '@material-ui/core/GridListTile';
-
+import moment from 'moment';
 import Button from "@material-ui/core/Button/Button";
 import PasswordInput from "../security/PasswordInput";
 
@@ -249,7 +249,16 @@ class Gallery extends Component {
 
                         const tile = event.item;
                         tile.loading = true;
+                        const format = 'HH:mm:ss MMM Do YY';
+                        if(!tile.picDateTaken && tile.file && tile.file.lastModified) {
+                            tile.picDateTaken = moment(tile.file.lastModified).format(format);
+                        }
                         const tiles = update(oldTiles, {$unshift: [tile]});
+                        tiles.sort((a, b) => {
+                            const dateA = moment(a.picDateTaken, format).toDate();
+                            const dateB = moment(b.picDateTaken, format).toDate();
+                            return dateB - dateA;
+                        });
                         this.setState({tiles: tiles});
                     }
                 })(oldTiles);
@@ -299,16 +308,19 @@ class Gallery extends Component {
 
                 ((oldTiles) => {
 
+                    let tiles = oldTiles;
                     oldTiles.forEach((oldTile, tileIndex) => {
 
                         const ownerIndex = oldTile.owners.findIndex(owner => owner.peerId === event.item);
                         if(ownerIndex > -1) {
                             const owners = update(oldTile.owners, {$splice: [[ownerIndex, 1]]});
                             const tile = update(oldTiles[tileIndex], {owners: {$set: owners}});
-                            const tiles = update(oldTiles, {$splice: [[tileIndex, 1, tile]]});
-                            this.setState({tiles: tiles});
+                            tiles = update(oldTiles, {$splice: [[tileIndex, 1, tile]]});
+                            //this.setState({tiles: tiles});
                         }
                     });
+
+                    this.setState({tiles: tiles});
 
                 })(oldTiles);
 
@@ -514,7 +526,7 @@ class Gallery extends Component {
             </GridListTile>;
         } else if(tile.loading) {
 
-            const have = owners.find(owner => owner.peerId === master.client.peerId);
+            const have = owners.find(owner => owner.peerId === master.client.peerId && !owner.isLoading);
             const loadingText = tile.rendering ? 'Rendering' : 'Loading';
             const isLoading = !!(torrent && torrent.infoHash === tile.infoHash);
 

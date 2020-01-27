@@ -90,6 +90,10 @@ class FrontView extends Component {
                             onClick={() => master.emitter.emit('openRecorder')}>
                             <SettingsVoiceRounded />
                         </IconButton>
+                        <IconButton color="inherit"
+                                    onClick={() => master.emitter.emit('openRecorderUltrasonic')}>
+                            <SettingsVoiceRounded />
+                        </IconButton>
                     </span>
             </div> : '';
     }

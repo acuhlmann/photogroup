@@ -10,7 +10,7 @@ module.exports = class Events {
         this.remoteLog = remoteLog;
         this.app = app;
 
-        emitter.on('event', this.sendAppEvent.bind(this))
+        //emitter.on('event', this.sendAppEvent.bind(this))
     }
 
     start() {

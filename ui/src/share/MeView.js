@@ -16,6 +16,7 @@ import update from "immutability-helper";
 import ViewListRounded from '@material-ui/icons/ViewListRounded';
 import ViewAgendaRounded from '@material-ui/icons/ViewAgendaRounded';
 import IconButton from '@material-ui/core/IconButton';
+import _ from 'lodash';
 
 const styles = theme => ({
     content: {
@@ -57,6 +58,9 @@ class MeView extends Component {
         emitter.on('localNetwork', chain => {
 
             //if(this.master.service.hasRoom) return;
+            if(this.state.me && this.state.me.label
+                && this.state.myNat && this.state.myNat.network && this.state.myNat.network.hostname) return;
+
             const me = chain
                 .find(item => item.typeDetail === 'host');
 
@@ -66,11 +70,7 @@ class MeView extends Component {
             const myNat = this.findNat(chain);
             if(myNat) {
                 myNat.label = myNat.typeDetail + ' ' + myNat.ip;
-                myNat.network = {
-                    ip: {
-                        city: ''
-                    }
-                }
+                myNat.network = {};
             }
 
             this.setState({
@@ -86,13 +86,11 @@ class MeView extends Component {
                 if(myPeer && myPeer.peerId === this.master.client.peerId && myPeer.networkChain) {
                     const myNat = this.findNat(myPeer.networkChain);
                     if(myNat && !myNat.network) {
-                        myNat.network = {
-                            ip: {
-                                city: ''
-                            }
-                        }
+                        myNat.network = {};
                     }
-                    myNat.label = myNat.typeDetail + ' ' + (myNat.network.hostname || myNat.ip);
+                    if(myNat) {
+                        myNat.label = this.createNetworkLabel(myNat);
+                    }
                     const me = myPeer.networkChain.find(item => item.typeDetail === 'host');
                     if(me) {
                         me.label = this.state.originPlatform + ' ' + me.ip;
@@ -126,6 +124,26 @@ class MeView extends Component {
         emitter.on('galleryHasImages', hasImages => {
             this.setState({galleryHasImages: hasImages});
         });
+    }
+
+    createNetworkLabel(item) {
+
+        const country = this.addEmptySpaces([
+            item.typeDetail,
+            _.get(item, 'network.location.country_flag_emoji'),
+            _.get(item, 'network.city')
+        ]);
+
+        const host = this.addEmptySpaces([
+            _.get(item, 'network.connection.isp') || item.ip,
+            _.get(item, 'network.hostname')
+        ]);
+
+        return country + ', ' + host;
+    }
+
+    addEmptySpaces(values) {
+        return values.map(value => value && value !== null ? value + ' ' : '').join('').replace(/ $/,'');
     }
 
     findNat(chain) {
@@ -241,7 +259,7 @@ class MeView extends Component {
                                         }}/>
                                         <Typography variant="caption" style={{
                                             marginLeft: '5px'
-                                        }}>{myNat.label} {myNat.network.city}</Typography>
+                                        }}>{myNat.label}</Typography>
                                     </span> : ''}
                                 </div>
                             </Paper>

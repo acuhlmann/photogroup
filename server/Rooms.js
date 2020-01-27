@@ -23,14 +23,6 @@ module.exports = class Rooms {
                 this.removeOwner(room, peerId);
             });
         });
-
-        emitter.on('disconnectPeer', (sessionId) => {
-
-            //const values = Array.from(this.rooms.values());
-            Object.values(this.rooms).forEach(room => {
-                room.clients = room.clients.filter(client => sessionId !== client.req.query.sessionId)
-            });
-        });
     }
 
     start() {
@@ -68,7 +60,6 @@ module.exports = class Rooms {
             const id = request.body.id;
             const room = {
                 id: id,
-                clients: [],
                 photos: [],
                 connections: []
             };

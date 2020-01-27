@@ -113,7 +113,6 @@ class Uploader extends Component {
         const {visible, disabled, loadedAnything} = this.state;
         const hasRoom = this.hasRoom();
 
-        console.log('loadedAnything ' + loadedAnything)
         return (
             visible || hasRoom ? <div>
 

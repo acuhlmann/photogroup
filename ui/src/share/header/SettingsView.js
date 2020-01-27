@@ -247,26 +247,6 @@ class SettingsView extends Component {
         Logger.info('handleBatteryLevelChanges value ' + value);
     }
 
-    restartTrackers() {
-        this.master.client.torrents.forEach(torrent => {
-
-            const isReady = torrent.discovery && torrent.discovery.tracker
-                && torrent.discovery.tracker._trackers && torrent.discovery.tracker._trackers.length > 0;
-            if(isReady) {
-
-                const trackers = torrent.discovery.tracker._trackers;
-
-                //Logger.info('torrent trackers ready ' + trackers.length);
-
-                trackers.forEach(tracker => {
-                    const announceUrl = tracker.announceUrl;
-                    Logger.info('restartTrackers ' + announceUrl);
-                    tracker._openSocket();
-                });
-            }
-        });
-    }
-
     handleTopologyChange(event) {
         this.master.emitter.emit('showTopology', event.target.checked);
     };
@@ -368,8 +348,8 @@ class SettingsView extends Component {
                             >
                                 <Bluetooth />
                             </IconButton>
-                            <Button onClick={this.restartTrackers.bind(this)} color="secondary">
-                                wt track
+                            <Button onClick={this.master.restartTrackers.bind(this.master)} color="secondary">
+                                restart trackers
                             </Button>
                             <IconButton
                                 onClick={this.handleClose.bind(this)}>
@@ -379,7 +359,7 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v7 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v6 {this.state.peerId}</Typography>
 
                         {messages}
 

@@ -45,8 +45,8 @@ module.exports = class IpTranslator {
                 if(isOnline) {
 
                     const key = '8f125144341210254a52ef8d24bcc4dc';
-                    return rp('http://api.ipstack.com/' + ip + '?access_key=' + key
-                        + '&hostname=1&security=1&output=json&fields=ip,hostname,country_code,city,region_name,location.country_flag_emoji')
+                    return rp('https://api.ipstack.com/' + ip + '?access_key=' + key
+                        + '&hostname=1&security=1&output=json&fields=ip,type,hostname,country_code,city,region_name,location.country_flag_emoji,connection.isp')
                         .then(function (result) {
                             const json = JSON.parse(result);
                             IpTranslator.lookedUpIPs.set(ip, json);

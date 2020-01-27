@@ -132,7 +132,7 @@ module.exports = class Tracker {
         if(jsonSdp) {
             const stripped = this.mapSdp(jsonSdp);
             const withIpObj = stripped.map(ip => {
-                //_.merge(ip, IpTranslator.createEmptyIpObj(ip.ip));
+                ip.typeDetail = ip.type;
                 ip.network = IpTranslator.createEmptyIpObj(ip.ip);
                 return ip;
             });

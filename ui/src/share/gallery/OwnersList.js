@@ -93,14 +93,14 @@ class OwnersList extends Component {
     };
 
     hasOwners(owners, peers) {
-        const allFound = owners.every(owner => {
+        const anyFound = owners.some(owner => {
             const peer = peers.items.find(peer => peer.peerId === owner.peerId);
             if(!peer) {
                 Logger.error('hasOwners Cannot find peerId ' + owner.peerId);
             }
             return peer ? owner : undefined;
         });
-        return owners && owners.length > 0 && allFound;
+        return owners && owners.length > 0 && anyFound;
     }
 
     buildHeader(owners, peers, connectionTypes, classes) {
@@ -137,6 +137,26 @@ class OwnersList extends Component {
         </span>
     }
 
+    createNetworkLabel(item) {
+
+        const country = this.addEmptySpaces([
+            item.typeDetail,
+            _.get(item, 'network.location.country_flag_emoji'),
+            _.get(item, 'network.city')
+        ]);
+
+        const host = this.addEmptySpaces([
+            _.get(item, 'network.connection.isp') || item.ip,
+            _.get(item, 'network.hostname')
+        ]);
+
+        return country + ', ' + host;
+    }
+
+    addEmptySpaces(values) {
+        return values.map(value => value && value !== null ? value + ' ' : '').join('');
+    }
+
     render() {
         const {classes, owners, myPeerId, peers, tile} = this.props;
         const {peerItems, newConnections, expanded} = this.state;
@@ -148,10 +168,14 @@ class OwnersList extends Component {
         }
         const connectionTypes = photoConnections.map(item => item.connectionType).join(', ');
 
-        Logger.info('owners ' + JSON.stringify(otherPeers));
+        //Logger.info('owners ' + JSON.stringify(otherPeers));
         return (
             this.hasOwners(otherPeers, peers) ?
-                <ExpansionPanel expanded={expanded} onChange={this.handleExpand('expanded')}>
+                <ExpansionPanel expanded={expanded}
+                                style={{
+                                    marginBottom: '10px', marginLeft: '10px', marginRight: '10px'
+                                }}
+                                onChange={this.handleExpand('expanded')}>
                     <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
                         {this.buildHeader(otherPeers, peers, connectionTypes, classes)}
                     </ExpansionPanelSummary>
@@ -200,7 +224,7 @@ class OwnersList extends Component {
                                                             }}/>
                                                             <Typography variant="caption" style={{
                                                                 marginLeft: '5px'
-                                                            }}>{nat.label} {nat.network.city}</Typography>
+                                                            }}>{this.createNetworkLabel(nat)}</Typography>
                                                         </span> : ''}
                                                     <span
                                                         className={classes.horizontal}>

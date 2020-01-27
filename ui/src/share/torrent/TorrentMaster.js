@@ -265,39 +265,58 @@ export default class TorrentMaster {
     }
 
     syncUiWithServerUrls(photos) {
-            const scope = this;
-            Logger.debug('photos.length: '+photos.length);
+        const scope = this;
+        Logger.debug('photos.length: '+photos.length);
 
-            this.client.torrents.forEach(torrent => {
-                const urlItem = this.findUrl(photos, torrent.infoHash);
-                if(!urlItem) {
-                    scope.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
-                        Logger.info('deleteTorrent done ' + infoHash);
-                    });
-                }
-            });
-
-            photos.forEach(item => {
-                const torrent = scope.client.get(item.infoHash);
-                if(!torrent) {
-                    Logger.debug('new photo found on server');
-
-                    scope.torrentAddition.add(item.url, item.secure, item.sharedBy ? item.sharedBy : {});
-                }
-
-                /*if(torrent && torrent.files && torrent.files.length < 1 && item.owners.find(owner => owner.peerId === this.client.peerId)) {
-                    this.service.removeOwner(item.infoHash, this.client.peerId)
-                }*/
-            });
-        }
-
-        findUrl(photos, infoHash) {
-            const index = photos.findIndex(item => item.infoHash === infoHash);
-            let foundItem = null;
-            if(index => 0) {
-                foundItem = photos[index];
+        this.client.torrents.forEach(torrent => {
+            const urlItem = this.findUrl(photos, torrent.infoHash);
+            if(!urlItem) {
+                scope.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
+                    Logger.info('deleteTorrent done ' + infoHash);
+                });
             }
-            return foundItem;
-        }
+        });
 
+        photos.forEach(item => {
+            const torrent = scope.client.get(item.infoHash);
+            if(!torrent) {
+                Logger.debug('new photo found on server');
+
+                scope.torrentAddition.add(item.url, item.secure, item.sharedBy ? item.sharedBy : {});
+            }
+
+            /*if(torrent && torrent.files && torrent.files.length < 1 && item.owners.find(owner => owner.peerId === this.client.peerId)) {
+                this.service.removeOwner(item.infoHash, this.client.peerId)
+            }*/
+        });
+    }
+
+    findUrl(photos, infoHash) {
+        const index = photos.findIndex(item => item.infoHash === infoHash);
+        let foundItem = null;
+        if(index => 0) {
+            foundItem = photos[index];
+        }
+        return foundItem;
+    }
+
+    restartTrackers() {
+        this.client.torrents.forEach(torrent => {
+
+            const isReady = torrent.discovery && torrent.discovery.tracker
+                && torrent.discovery.tracker._trackers && torrent.discovery.tracker._trackers.length > 0;
+            if(isReady) {
+
+                const trackers = torrent.discovery.tracker._trackers;
+
+                //Logger.info('torrent trackers ready ' + trackers.length);
+
+                trackers.forEach(tracker => {
+                    const announceUrl = tracker.announceUrl;
+                    Logger.warn('restartTrackers ' + announceUrl);
+                    tracker._openSocket();
+                });
+            }
+        });
+    }
 }

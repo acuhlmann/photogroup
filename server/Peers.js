@@ -95,36 +95,33 @@ module.exports = class Peers {
 
     buildIceEvent(event) {
 
-        let chain, peerId;
         if(event.type === 'iceOffer') {
 
-            console.log(event.type)
+            //console.log(event.type + ' ' + event.sharedBy + ' ' + event.sdp.length);
 
-            return;
-            const peer = this.webPeers.set(event.sharedBy);
-            if(peer && peer.network) {
-                //_.merge(peer.network, event.sdp);
+            const peer = this.webPeers.get(event.sharedBy);
+            if(peer && peer.networkChain) {
+                let foundAny;
+                event.sdp.forEach(sdp => {
 
-                /*const hosts = event.sdp.filter(item => item.type === 'host');
-                const host = peer.network.find(item => item.type === 'host' && item.label);
-                const ip = host.ip;
-                _.merge(host, hosts);
-                host.ip = ip;*/
-
-                const relays = event.sdp.filter(item => item.type === 'relay');
-                const relay = peer.network.find(item => item.type === 'relay');
-                if(relay) {
-                    _.merge(relay, relays);
+                    const found = peer.networkChain.find(item => item.ip === sdp.ip);
+                    if(!found) {
+                        peer.networkChain.push(sdp);
+                        console.log('added ' + sdp.ip);
+                        foundAny = true;
+                    }
+                });
+                if(foundAny) {
+                    this.sendWebPeers('update', peer);
                 }
-                console.log('foo')
             }
-            //this.webPeers.set(event.sharedBy, newPeer);
 
         } else if(event.type === 'iceAnswer' && event.event === 'update') {
 
             console.log(event.type)
 
         } else if(event.event === 'completed' || event.event === 'stopped') {
+
             console.log('other event ' + event.event)
         }
     }

@@ -50,16 +50,29 @@ class App extends Component {
         this.master = new TorrentMaster(new RoomsService(emitter), emitter);
         this.master.service.master = this.master;
 
+        emitter.on('addPeerDone', () => {
+
+            this.reactToTouchInOut();
+        });
+    }
+
+    reactToTouchInOut() {
         if(Visibility.isSupported() ) {
-            Logger.debug('Visibility.isSupported');
+            Logger.info('Visibility.isSupported');
         } else {
-            Logger.debug('Visibility NOT supported');
+            Logger.warn('Visibility NOT supported');
         }
 
         Visibility.change((e, state) => {
             //Statistics.visibilityChange(state);
-            Logger.debug('Visibility.change ' + state);
+            Logger.info('Visibility.change ' + state);
             if(state === 'visible') {
+
+                this.master.client.torrents.forEach(torrent => {
+                    this.master.torrentAddition.add(torrent);
+                });
+                this.master.service.updatePeer({});
+
                 //const peerId = this.master.client && this.master.client.peerId;
                 /*if(peerId) {
                     this.master.service.getPeer(peerId)

@@ -82,12 +82,22 @@ class AddPeersView extends Component {
         });
 
         props.master.emitter.on('openRecorder', () => {
-            this.listenOrPlaySound();
+            this.listenOrPlaySound(false, null, 'audible');
             this.setState({
                 visible: true,
                 open: true,
                 openRecorder: true,
-                isChirp: false
+                audioType: 'secondary'
+            });
+        });
+
+        props.master.emitter.on('openRecorderUltrasonic', () => {
+            this.listenOrPlaySound(false, null, 'ultrasonic');
+            this.setState({
+                visible: true,
+                open: true,
+                openRecorder: true,
+                audioType: 'inherit'
             });
         });
 
@@ -97,7 +107,7 @@ class AddPeersView extends Component {
                 visible: true,
                 open: true,
                 openRecorder: true,
-                isChirp: true
+                audioType: 'primary'
             });
         });
 
@@ -150,7 +160,7 @@ class AddPeersView extends Component {
         const chirp = new ChirpSDK('62c52CE2027c8eac9A4D6Add1');
         const payload = new TextEncoder('utf-8').encode(id);
         chirp.send(payload).then(() => {
-            Logger.info('sent' + payload);
+            Logger.info('sent ' + payload);
         }).catch(Logger.error);
         /*Chirp({ key: '62c52CE2027c8eac9A4D6Add1' })
             .then(sdk => { sdk.start()
@@ -161,7 +171,7 @@ class AddPeersView extends Component {
         }).catch(Logger.error);*/
     }
 
-    listenOrPlaySound(play, text) {
+    listenOrPlaySound(play = false, text = '', profileName = 'audible') {
 
         const Quiet = window.Quiet;
         Quiet.init({
@@ -170,7 +180,7 @@ class AddPeersView extends Component {
             libfecPrefix: ""
         });
 
-        let transmit, profileName = 'audible';
+        let transmit;
         function onQuietReady() {
 
             if(!play) {
@@ -208,7 +218,10 @@ class AddPeersView extends Component {
             Logger.info('onReceive ' + result);
             const parsed = result.split('m=')[1];
             Logger.info('onReceive parsed ' + parsed);
-            self.handleScanOrSound(parsed, true);
+            if(parsed) {
+                const url = self.getFullUrl(parsed);
+                self.handleScanOrSound(url, true);
+            }
         }
 
         function onReceiverCreateFail(reason) {
@@ -226,7 +239,7 @@ class AddPeersView extends Component {
 
         if(!data) return;
 
-        Logger.info('handleScanOrSound data ' + data);
+        Logger.info('handleScanOrSound data ' + data, handledSound);
 
         let urlParams;
         try {
@@ -324,7 +337,7 @@ class AddPeersView extends Component {
 
     render() {
         const {classes, master} = this.props;
-        const {visible, createdRoom, openQr, openRecorder, isChirp, numPeers, open, copiedLink} = this.state;
+        const {visible, createdRoom, openQr, openRecorder, audioType, numPeers, open, copiedLink} = this.state;
         const url = this.getFullUrl(master.service.id);
         const hasRoom = this.hasRoom();
 
@@ -396,7 +409,11 @@ class AddPeersView extends Component {
                                             <AudiotrackRounded />
                                         </IconButton>
                                         <IconButton color="secondary"
-                                                    onClick={() => this.listenOrPlaySound(true, url) }>
+                                                    onClick={() => this.listenOrPlaySound(true, url, 'audible') }>
+                                            <AudiotrackRounded />
+                                        </IconButton>
+                                         <IconButton color="inherit"
+                                                     onClick={() => this.listenOrPlaySound(true, url, 'ultrasonic') }>
                                             <AudiotrackRounded />
                                         </IconButton>
                                     </span>
@@ -421,7 +438,7 @@ class AddPeersView extends Component {
                             !openRecorder ?
                                 '' :
                                 <div>
-                                    <EqualizerRounded color={isChirp ? 'primary' : 'secondary'}/>
+                                    <EqualizerRounded color={audioType}/>
                                 </div>
                         }
                     </DialogContent>

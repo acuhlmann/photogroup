@@ -19,7 +19,7 @@ module.exports = class Topology {
                 connection.connectionType = 'p2p';
             } else if(typeFrom.typeDetail === 'relay' || typeTo.typeDetail === 'relay') {
                 connection.connectionType = 'relay' + this.addEmptySpaces(
-                    [typeFrom.network.ip.location ? typeFrom.network.ip.location.country_flag_emoji : '']);
+                    [typeFrom.network.location ? typeFrom.network.location.country_flag_emoji : '']);
             } else {
                 connection.connectionType = 'p2p nat';
             }
