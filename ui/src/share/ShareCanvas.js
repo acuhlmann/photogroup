@@ -12,6 +12,7 @@ import { withSnackbar } from 'notistack';
 
 import FrontView from "./FrontView";
 import MeView from "./MeView";
+import TopologyView from './topology/TopologyView';
 import WebTorrent from 'webtorrent';
 import Online from 'online-js'
 
@@ -198,6 +199,7 @@ class ShareCanvas extends Component {
 
         return (
             <ThemeProvider theme={defaultTheme}>
+                <TopologyView master={master} />
                 <MeView master={master} />
                 <FrontView master={master}/>
                 <Gallery className={classes.nooverflow} master={master} />

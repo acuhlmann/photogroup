@@ -23,6 +23,9 @@ const Tracker = require('./Tracker');
 const Rooms = require('./Rooms');
 
 function init() {
+
+    IpTranslator.lookedUpIPs = new Map();
+
     const ice = new IceServers(updateChannel, remoteLog, app);
     ice.start();
 
@@ -31,12 +34,6 @@ function init() {
 
     const rooms = new Rooms(updateChannel, remoteLog, app, emitter, ice, tracker);
     rooms.start();
-
-    //const events = new Events(rooms.rooms, updateChannel, remoteLog, app, emitter);
-    //events.start();
-
-    //const network = new Topology(room.rooms, updateChannel, remoteLog, app, emitter, peers, tracker);
-    //network.start();
 }
 
 init();

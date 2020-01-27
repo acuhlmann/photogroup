@@ -220,7 +220,7 @@ export default class NetworkTopologyFinder {
 
             } else {
                 item.ports = [item.port];
-                item.transportsLabel = [item.transport];
+                item.transportsLabel = item.transport;
                 ipMap.set(item.ip, item);
                 uniques.push(item);
             }
@@ -245,7 +245,7 @@ export default class NetworkTopologyFinder {
 
             } else {
                 item.ports = [item.port];
-                item.transportsLabel = [item.transport];
+                item.transportsLabel = item.transport;
                 if(NetworkTopologyFinder.typeDetailsyIp) {
                     item.typeDetail = NetworkTopologyFinder.typeDetailsyIp.get(item.ip.ip);
                 } else {

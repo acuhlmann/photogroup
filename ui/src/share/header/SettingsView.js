@@ -26,11 +26,6 @@ import FormControlLabel from '@material-ui/core/FormControlLabel';
 import RoomsService from '../RoomsService';
 import moment from "moment";
 import Typography from "@material-ui/core/Typography/Typography";
-/*import PeersView from "./PeersView";
-import QRCodeButton from "./QRCodeButton";
-import FileUtil from "../util/FileUtil";
-import TextField from "@material-ui/core/TextField";
-import _ from "lodash";*/
 import {withSnackbar} from "notistack";
 import update from "immutability-helper";
 
@@ -70,14 +65,15 @@ class SettingsView extends Component {
             messages: [],
             open: false,
             peerId: '',
-            //showTopology: false,
+            showTopology: false,
             //showOtherPeers: true
         };
 
         Logger.info('platform ' + navigator.platform + ' cpu ' + navigator.oscpu);
 
         this.master.emitter.on('addPeerDone', () => {
-            //self.topology.start();
+            this.handleTopologyChange(this.state.showTopology);
+
             this.setState({peerId: this.master.client.peerId});
             this.checkConnection();
         });
@@ -247,8 +243,9 @@ class SettingsView extends Component {
         Logger.info('handleBatteryLevelChanges value ' + value);
     }
 
-    handleTopologyChange(event) {
-        this.master.emitter.emit('showTopology', event.target.checked);
+    handleTopologyChange(showTopology) {
+        this.master.emitter.emit('showTopology', showTopology);
+        this.setState({showTopology: showTopology});
     };
 
     handleOtherPeersChange(event) {
@@ -286,7 +283,7 @@ class SettingsView extends Component {
             {this.state.messages}
         </List>;
 
-        const {showMe} = this.state;
+        const {showMe, showTopology} = this.state;
         return (
             <div>
                 <IconButton
@@ -306,10 +303,10 @@ class SettingsView extends Component {
                     <DialogTitle>Settings</DialogTitle>
                     <DialogActions className={classes.vertical}>
                         <FormGroup row>
-                            {/*<FormControlLabel
+                            <FormControlLabel
                                 control={
                                     <Switch
-                                        onChange={this.handleTopologyChange.bind(this)}
+                                        onChange={(event) => this.handleTopologyChange(event.target.checked)}
                                         checked={showTopology}
                                         value="showTopology"
                                         color="primary"
@@ -317,6 +314,7 @@ class SettingsView extends Component {
                                 }
                                 label="Topology View"
                             />
+                            {/*
                             <FormControlLabel
                                 control={
                                     <Switch
@@ -359,7 +357,7 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v6 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v3 {this.state.peerId}</Typography>
 
                         {messages}
 

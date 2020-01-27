@@ -10,7 +10,6 @@ module.exports = class Peers {
         this.emitter = emitter;
 
         this.webPeers = new Map();
-        IpTranslator.lookedUpIPs = new Map();
 
         emitter.on('iceEvent', event => {
 

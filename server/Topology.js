@@ -1,4 +1,3 @@
-const IpTranslator = require('./IpTranslator');
 
 module.exports = class Topology {
 
@@ -16,11 +15,19 @@ module.exports = class Topology {
         const typeTo = toPeer.networkChain.find(item => item.ip === connection.to);
         if(typeFrom && typeTo) {
             if(typeFrom.typeDetail === 'host' && typeTo.typeDetail === 'host') {
+
                 connection.connectionType = 'p2p';
+
             } else if(typeFrom.typeDetail === 'relay' || typeTo.typeDetail === 'relay') {
-                connection.connectionType = 'relay' + this.addEmptySpaces(
-                    [typeFrom.network.location ? typeFrom.network.location.country_flag_emoji : '']);
+
+                connection.connectionType = this.addEmptySpaces(
+                    [
+                        'relay',
+                        typeFrom.network.location ? typeFrom.network.location.country_flag_emoji : ''
+                    ]);
+
             } else {
+
                 connection.connectionType = 'p2p nat';
             }
         }

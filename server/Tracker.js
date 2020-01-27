@@ -133,6 +133,8 @@ module.exports = class Tracker {
             const stripped = this.mapSdp(jsonSdp);
             const withIpObj = stripped.map(ip => {
                 ip.typeDetail = ip.type;
+                ip.transportsLabel = ip.transport;
+                ip.ports = [ip.port];
                 ip.network = IpTranslator.createEmptyIpObj(ip.ip);
                 return ip;
             });

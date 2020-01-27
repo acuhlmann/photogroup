@@ -154,7 +154,7 @@ class OwnersList extends Component {
     }
 
     addEmptySpaces(values) {
-        return values.map(value => value && value !== null ? value + ' ' : '').join('');
+        return values.map(value => value && value !== null ? value + ' ' : '').join('').replace(/ $/,'');
     }
 
     render() {

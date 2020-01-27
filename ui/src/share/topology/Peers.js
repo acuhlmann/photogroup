@@ -1,4 +1,5 @@
 import update from "immutability-helper";
+import Logger from "js-logger";
 
 export default class Peers {
 
@@ -55,12 +56,44 @@ export default class Peers {
                 localFamily: conn.localFamily
             };
 
-            self.service.connect(result);
+            if(result.from && result.to) {
+
+                self.service.connect(result);
+
+            } else {
+
+                /*const pc = conn._pc;
+                self.listenToPcEvents(pc);
+                pc.onicecandidate = function(e) {
+                    Logger.info('onicecandidate.type ' + e.type);
+                };*/
+                //pc.createOffer()
+                //    .then(offer => pc.setLocalDescription(offer));
+            }
 
             return result;
         });
 
         return peers;
+    }
+
+    listenToPcEvents(pc) {
+        //const self = this;
+        pc.addEventListener('icegatheringstatechange', event => {
+            const state = event.target.iceGatheringState;
+            //self.emitter.emit('pcEvent', event.type, state);
+            Logger.info('pcEvent ' + event.type, state);
+        });
+        pc.addEventListener('signalingstatechange', event => {
+            const state = event.target.signalingState;
+            //self.emitter.emit('pcEvent', event.type, state);
+            Logger.info('pcEvent ' + event.type, state);
+        });
+        pc.addEventListener('iceconnectionstatechange', event => {
+            const state = event.target.iceConnectionState;
+            //self.emitter.emit('pcEvent', event.type, state);
+            Logger.info('pcEvent ' + event.type, state);
+        });
     }
 
     disconnect(infoHash) {

@@ -258,7 +258,7 @@ export default class TorrentAddition {
     }
 
     wire(wire, addr) {
-        Logger.info('wire ' + wire._pc + ' ' + addr);
+        Logger.info('wire ' + wire.remoteAddress + ':' + wire.remotePort + ' ' + addr);
     }
 
     trackerAnnounce(...rest) {
