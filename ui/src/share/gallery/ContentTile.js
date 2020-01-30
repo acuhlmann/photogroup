@@ -12,6 +12,7 @@ import download from "downloadjs";
 import update from "immutability-helper";
 import Button from "@material-ui/core/Button/Button";
 import { withSnackbar } from 'notistack';
+import Collapse from '@material-ui/core/Collapse';
 
 const styles = theme => ({
     horizontal: {
@@ -48,16 +49,21 @@ class ContentTile extends Component {
 
         const {master} = props;
         const emitter = master.emitter;
-        emitter.on('galleryListView', isList => {
-
-            this.setState({listView: isList});
-        }, this);
+        emitter.on('galleryListView', this.handleGalleryListView, this);
 
         this.state = {
             open: false,
             listView: true,
             localDownloads: []
         }
+    }
+
+    handleGalleryListView(isList) {
+        this.setState({listView: isList});
+    }
+
+    componentWillUnmount() {
+        this.props.master.emitter.removeListener('galleryListView', this.handleGalleryListView, this);
     }
 
     /*addServerPeer(tile, action) {
@@ -194,8 +200,8 @@ class ContentTile extends Component {
 
                     {renderMediaDom}
 
-                    {listView ? <Paper className={classes.toolbar}>
-
+                    <Collapse in={listView}>
+                        <Paper className={classes.toolbar}>
                         <div style={{width: '100%'}} className={classes.horizontal}>
 
                             <IconButton onClick={this.downloadFromServer.bind(this, tile)}>
@@ -223,7 +229,8 @@ class ContentTile extends Component {
                                         tile={tile} owners={tile.owners} peers={master.peers} myPeerId={master.client.peerId}
                             />
                         </div>
-                    </Paper> : ''}
+                        </Paper>
+                    </Collapse>
                 </div>
                 <PhotoDetails open={open}
                               tile={tile}

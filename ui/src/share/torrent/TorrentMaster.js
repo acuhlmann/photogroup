@@ -200,6 +200,14 @@ export default class TorrentMaster {
         });
     }
 
+    sendDownloadEvent(emitter, torrent, downloadSpeedLabel, progress, timeRemaining) {
+        emitter.emit('downloadProgress', {
+            torrent: torrent,
+            speed: downloadSpeedLabel,
+            progress: progress, timeRemaining: timeRemaining
+        });
+    }
+
     addSeedOrGetTorrent(addOrSeed, uri, callback) {
 
         const opts = {'announce': window.WEBTORRENT_ANNOUNCE};
@@ -210,7 +218,10 @@ export default class TorrentMaster {
         Logger.info('addSeedOrGetTorrent ' + torrent.infoHash + ' ' + torrent.name);
 
         const self = this;
-        const debounced = _.throttle(self.publishLoadingStatus.bind(self), 1000, { 'leading': true, 'trailing': false });
+        const debouncedServerPublish = _.throttle(self.publishLoadingStatus.bind(self), 1000,
+            { 'leading': true, 'trailing': false });
+        const debouncedDownload = _.throttle(self.sendDownloadEvent.bind(self), 200,
+            { 'leading': true, 'trailing': false });
 
         let lastProgress = 0;
         let lastDownloadSpeed = 0;
@@ -235,14 +246,11 @@ export default class TorrentMaster {
                 //debounced(torrent.infoHash, progress.toFixed(0));
 
                 if(progressChange) {
-                    debounced(torrent.infoHash, progress);
+                    debouncedServerPublish(torrent.infoHash, progress);
                 }
 
-                self.emitter.emit('downloadProgress', {
-                    torrent: torrent,
-                    speed: downloadSpeedLabel,
-                    progress: progress, timeRemaining: timeRemaining
-                });
+                debouncedDownload(self.emitter, torrent, downloadSpeedLabel, progress, timeRemaining);
+                //self.sendDownloadEvent(self.emitter, torrent, downloadSpeedLabel, progress, timeRemaining);
             }
         });
         let lastUpProgress = 0;

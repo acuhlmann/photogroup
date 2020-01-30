@@ -27,7 +27,12 @@ export default class TorrentAddition {
 
     add(torrentId, secure, fromCache) {
 
-        const parsed = window.parsetorrent(torrentId);
+        let parsed;
+        try {
+            parsed = window.parsetorrent(torrentId);
+        } catch(e) {
+            Logger.error('Invalid torrendId ' + torrent + ' ' + e);
+        }
         const key = parsed.infoHash;
         this.stopWatch.set(key, new Date().getTime());
         Logger.info('add ' + parsed.name + ' ' + key);

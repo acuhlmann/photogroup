@@ -120,6 +120,7 @@ class Uploader extends Component {
                 <input
                     accept="image/*,video/*"
                     //accept="image/*"
+                    //multiple
                     style={{
                         position: 'absolute',
                         top: loadedAnything ? '-15px' : '0px',

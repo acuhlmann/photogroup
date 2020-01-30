@@ -11,6 +11,7 @@ import Divider from "@material-ui/core/Divider";
 import OwnersList from "./OwnersList";
 import FileUtil from "../util/FileUtil";
 import StringUtil from "../util/StringUtil";
+import update from "immutability-helper";
 
 const styles = theme => ({
     horizontal: {
@@ -28,12 +29,12 @@ const styles = theme => ({
     },
     imageIcon: {
         position: 'relative',
-        left: '-10px',
+        left: '-10px', top: '-10px'
     },
     progressPercentageText: {
         position: 'relative',
         fontSize: '0.7rem',
-        bottom: '13px', left: '-28px'
+        bottom: '26px',
     },
     progressSpeedText: {
         fontSize: '0.7rem',
@@ -43,7 +44,7 @@ const styles = theme => ({
         position: 'absolute',
         zIndex: 1,
         left: '-17px',
-        top: '-6px'
+        top: '-16px'
     },
 });
 
@@ -55,31 +56,8 @@ class LoadingTile extends Component {
         const {master, tile} = props;
         const emitter = master.emitter;
 
-        const self = this;
-        emitter.on('downloadProgress', event => {
-
-            const torrent = event.torrent;
-            if(torrent.infoHash === tile.infoHash) {
-                const progress = event.progress;
-                self.setState({
-                    progress: progress,
-                    downSpeed: event.speed,
-                    timeRemaining: event.timeRemaining});
-            }
-
-        }, this);
-
-        emitter.on('uploadProgress', event => {
-
-            const torrent = event.torrent;
-            if(torrent.infoHash === tile.infoHash) {
-                const progress = event.progress;
-                self.setState({
-                    progress: progress,
-                    upSpeed: event.speed,
-                    timeRemaining: event.timeRemaining});
-            }
-        }, this);
+        emitter.on('downloadProgress', this.handleDownloadProgress, this);
+        emitter.on('uploadProgress', this.handleUploadProgress, this);
 
         this.state = {
             progress: null,
@@ -88,16 +66,43 @@ class LoadingTile extends Component {
         }
     }
 
+    handleDownloadProgress(event) {
+        const torrent = event.torrent;
+        if(torrent.infoHash === this.props.tile.infoHash) {
+            const progress = event.progress;
+            this.setState({
+                progress: progress,
+                downSpeed: event.speed,
+                timeRemaining: event.timeRemaining});
+        }
+    }
+
+    handleUploadProgress(event) {
+        const torrent = event.torrent;
+        if(torrent.infoHash === this.props.tile.infoHash) {
+            const progress = event.progress;
+            this.setState({
+                progress: progress,
+                upSpeed: event.speed,
+                timeRemaining: event.timeRemaining});
+        }
+    }
+
+    componentWillUnmount() {
+        this.props.master.emitter.removeListener('downloadProgress', this.handleDownloadProgress, this);
+        this.props.master.emitter.removeListener('uploadProgress', this.handleUploadProgress, this);
+    }
+
     render() {
         const {tile, master, classes} = this.props;
         let {name} = this.props;
 
-        const {downSpeed, upSpeed, timeRemaining, progress} = this.state;
+        let {downSpeed, upSpeed, timeRemaining, progress} = this.state;
 
-        //tile.loading = true;
         //progress = 80;
         //downSpeed = '100kb/sec';
         //upSpeed = '0kb/sec';
+        //timeRemaining = 'in 1 minute';
 
         //let owners = tile.owners ? tile.owners : [];
         const progressPercentage = progress ? Math.round(progress) + '%' : progress;
@@ -122,19 +127,23 @@ class LoadingTile extends Component {
                         <span className={classes.horizontal} style={{
                             position: 'relative', textAlign: 'center',
                         }}>
-                            {have ? <CheckIcon /> : <ImageIcon className={classes.imageIcon} />}
+                            {have ? <CheckIcon
+                                        style={{marginTop: '-14px'}} /> : <ImageIcon
+                                                                    className={classes.imageIcon} />}
                             {!have && <CircularProgress
-                                color="secondary"
-                                size={36} className={classes.fabProgress} />}
+                                        color="secondary"
+                                        size={36} className={classes.fabProgress} />}
                         </span>
-                        <Typography variant="caption" className={classes.wordwrap}>
+                        <Typography variant="caption" className={classes.wordwrap} style={{
+                            marginTop: '-14px'
+                        }}>
                             {loadingText}
                         </Typography>
-                        {isLoading ? <span className={classes.horizontal} style={{ marginLeft: '10px'}}>
+                        {isLoading ? <span className={classes.horizontal} style={{
+                            marginLeft: '10px'}}>
                                     <span className={classes.vertical}>
-                                        <div>
-                                            <CircularProgress id="progressBar"
-                                                              style={{
+                                        <span className={classes.vertical}>
+                                            <CircularProgress style={{
                                                                   width: '35px', height: '35px'
                                                               }}
                                                               variant="static"
@@ -142,18 +151,21 @@ class LoadingTile extends Component {
                                             />
                                             <Typography className={classes.progressPercentageText}
                                                         variant={"caption"}>{progressPercentage}</Typography>
-                                        </div>
+                                        </span>
                                     </span>
-                                    <div className={classes.vertical} style={{ marginLeft: '-10px'}}>
+                                    <div className={classes.vertical} style={{ width: '80px', marginTop: '-14px'}}>
                                             <Typography className={classes.progressSpeedText}
                                                         variant={"caption"}>{downSpeed}</Typography>
                                             <Typography className={classes.progressSpeedText}
                                                         variant={"caption"}>{upSpeed}</Typography>
                                     </div>
-                            <div className={classes.vertical} style={{ marginLeft: '10px'}}>
-                                <Typography className={classes.progressSpeedText}
-                                            variant={"caption"}>{timeRemaining}</Typography>
-                            </div>
+                                    <div className={classes.vertical} style={{ width: '110px'}}>
+                                        <Typography className={classes.progressSpeedText}
+                                                    style={{
+                                                        marginTop: '-14px'
+                                                    }}
+                                                    variant={"caption"}>{timeRemaining}</Typography>
+                                    </div>
                         </span> : ''}
                     </span>
                 <Divider variant="middle" />

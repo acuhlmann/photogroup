@@ -21,12 +21,11 @@ import QrReader from 'react-qr-reader'
 import Logger from 'js-logger';
 import ChirpSDK from 'chirp-js-sdk';
 import Uploader from "./Uploader";
+import Slide from '@material-ui/core/Slide';
 
-//import Slide from '@material-ui/core/Slide';
-
-/*function Transition(props) {
-    return <Slide direction="down" {...props} />;
-}*/
+const Transition = React.forwardRef(function Transition(props, ref) {
+    return <Slide direction="down" ref={ref} {...props} />;
+});
 
 const styles = theme => ({
     vertical: {
@@ -367,7 +366,7 @@ class AddPeersView extends Component {
                 <Dialog
                     open={open}
                     onClose={this.show.bind(this, false)}
-                    //TransitionComponent={Transition}
+                    TransitionComponent={Transition}
                     keepMounted
                 >
                     <DialogContent className={classes.vertical} style={{

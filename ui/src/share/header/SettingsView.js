@@ -28,11 +28,11 @@ import moment from "moment";
 import Typography from "@material-ui/core/Typography/Typography";
 import {withSnackbar} from "notistack";
 import update from "immutability-helper";
+import Slide from '@material-ui/core/Slide';
 
-
-/*function Transition(props) {
-    return <Slide direction="down" {...props} />;
-}*/
+const Transition = React.forwardRef(function Transition(props, ref) {
+    return <Slide direction="down" ref={ref} {...props} />;
+});
 
 const styles = theme => ({
     horizontal: {
@@ -301,7 +301,7 @@ class SettingsView extends Component {
                 <Dialog
                     open={this.state.open}
                     onClose={this.handleClose.bind(this)}
-                    //TransitionComponent={Transition}
+                    TransitionComponent={Transition}
                     keepMounted
                 >
                     <DialogTitle>Settings</DialogTitle>
@@ -351,7 +351,7 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v7 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v9 {this.state.peerId}</Typography>
 
                         {messages}
 

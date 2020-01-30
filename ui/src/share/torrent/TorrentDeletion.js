@@ -74,13 +74,16 @@ export default class TorrentDeletion {
                         reject(err);
                     }
 
-                    torrent.store.destroy(() => {
-                        Logger.info('idb store destroyed');
-                        torrent.store.close(() => {
-                            Logger.info('idb store closed');
-                            resolve(torrent.infoHash);
-                        })
-                    });
+                    const store = torrent.store;
+                    if(store) {
+                        store.destroy(() => {
+                            Logger.info('idb store destroyed');
+                            store.close(() => {
+                                Logger.info('idb store closed');
+                                resolve(torrent.infoHash);
+                            })
+                        });
+                    }
                 });
             }
         });

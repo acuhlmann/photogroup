@@ -268,7 +268,7 @@ class Gallery extends Component {
     buildTile(tile, index, classes, master) {
 
         let name = StringUtil.addEmptySpaces([tile.picSummary, tile.fileSize, tile.cameraSettings]);
-
+        //tile.loading = true;
         if(tile.secure) {
 
             return <GridListTile key={index} cols={tile.cols || 1}>

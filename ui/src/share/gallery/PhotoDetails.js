@@ -12,6 +12,11 @@ import { withStyles } from '@material-ui/core/styles';
 import PhotoDetailsRenderer from "./PhotoDetailsRenderer";
 import IconButton from "@material-ui/core/IconButton";
 import MetadataParser from "./MetadataParser";
+import Slide from '@material-ui/core/Slide';
+
+const Transition = React.forwardRef(function Transition(props, ref) {
+    return <Slide direction="up" ref={ref} {...props} />;
+});
 
 const styles = theme => ({
     root: {
@@ -72,6 +77,7 @@ class PhotoDetails extends Component {
             <div className={classes.root}>
                 <Dialog
                     fullScreen={true}
+                    TransitionComponent={Transition}
                     open={open}
                     onClose={() => this.handleClose()}
                     aria-labelledby="alert-dialog-title"

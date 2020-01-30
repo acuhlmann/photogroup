@@ -122,10 +122,14 @@ class OwnersList extends Component {
 
         const conns = connectionTypes ? ' connected via ' + connectionTypes : '';
 
-        //&nbsp;
-        const sumProgress = owners.map(item => item.progress || 100).reduce((a, b) => a + b, 0);
-        let overallProgress = Math.round((sumProgress / owners.length)) || '';
-        overallProgress = overallProgress || overallProgress !== '' ? overallProgress + '%' : '';
+        const anyoneLoading = owners.some(item => item.loading);
+        let overallProgress = '';
+        if(anyoneLoading) {
+            const sumProgress = owners.map(item => item.progress || 100).reduce((a, b) => a + b, 0);
+            overallProgress = Math.round((sumProgress / owners.length)) || '';
+            overallProgress = overallProgress || overallProgress !== '' ? overallProgress + '%' : '';
+            overallProgress = overallProgress === '100%' ? '' : overallProgress;
+        }
         return <span style={{
                     display: 'flex',
                     flexDirection: 'row',
@@ -193,6 +197,8 @@ class OwnersList extends Component {
                     //owner.loading = true;
                     //connection = {connectionType: 'p2p'};
 
+                    const progress = owner.progress === '' ? '' : owner.progress + '%';
+
                     return <span key={clientIndex} className={classes.horizontal}>
                         <span style={{
                             position: 'relative',
@@ -201,7 +207,7 @@ class OwnersList extends Component {
                         }}>
                             <span className={classes.vertical}>
                                 {connection ? <Typography variant="caption">{connection.connectionType}</Typography> : ''}
-                                {owner.loading ? <Typography variant="caption">Loading {owner.progress}%</Typography> : ''}
+                                {owner.loading ? <Typography variant="caption">Loading {progress}</Typography> : ''}
                             </span>
                         </span>
                         <span
