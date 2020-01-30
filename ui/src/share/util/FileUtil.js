@@ -19,7 +19,7 @@ export default class FileUtil {
     }
 
     static formatBytes(bytes) {
-        return prettyBytes(bytes);
+        return prettyBytes(Number(bytes));
     }
 
     //credits to https://gist.github.com/wuchengwei/b7e1820d39445f431aeaa9c786753d8e

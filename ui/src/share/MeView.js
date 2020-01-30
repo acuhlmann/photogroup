@@ -17,6 +17,7 @@ import ViewListRounded from '@material-ui/icons/ViewListRounded';
 import ViewAgendaRounded from '@material-ui/icons/ViewAgendaRounded';
 import IconButton from '@material-ui/core/IconButton';
 import _ from 'lodash';
+import StringUtil from "./util/StringUtil";
 
 const styles = theme => ({
     content: {
@@ -49,8 +50,9 @@ class MeView extends Component {
         this.master = props.master;
         const emitter = this.master.emitter;
 
+        const expandedMe = localStorage.getItem('expandedMe') || false;
         this.state = {
-            expandedMe: false,
+            expandedMe: String(expandedMe) == 'true',
             showMe: true, galleryHasImages: false, listView: true,
             me: {}, myNat: null, connectionSpeedType: ''
         };
@@ -89,7 +91,7 @@ class MeView extends Component {
                         myNat.network = {};
                     }
                     if(myNat) {
-                        myNat.label = this.createNetworkLabel(myNat);
+                        myNat.label = StringUtil.createNetworkLabel(myNat);
                     }
                     const me = myPeer.networkChain.find(item => item.typeDetail === 'host');
                     if(me) {
@@ -112,8 +114,8 @@ class MeView extends Component {
         emitter.on('addPeerDone', peer => {
 
             this.setState({
-                originPlatform: this.slimPlatform(peer.originPlatform),
-                me: {label: this.slimPlatform(peer.originPlatform)},
+                originPlatform: StringUtil.slimPlatform(peer.originPlatform),
+                me: {label: StringUtil.slimPlatform(peer.originPlatform)},
             });
         });
 
@@ -126,49 +128,13 @@ class MeView extends Component {
         });
     }
 
-    createNetworkLabel(item) {
-
-        const country = this.addEmptySpaces([
-            item.typeDetail,
-            _.get(item, 'network.location.country_flag_emoji'),
-            _.get(item, 'network.city')
-        ]);
-
-        const host = this.addEmptySpaces([
-            _.get(item, 'network.connection.isp') || item.ip,
-            _.get(item, 'network.hostname')
-        ]);
-
-        return country + ', ' + host;
-    }
-
-    addEmptySpaces(values) {
-        return values.map(value => value && value !== null ? value + ' ' : '').join('').replace(/ $/,'');
-    }
-
     findNat(chain) {
         return chain
             .find(item => item.typeDetail.includes('srflx') || item.typeDetail.includes('prflx'));
     }
 
-    slimPlatform(platform) {
-        let slimmed = platform.replace(' Windows ', ' Win ');
-
-        let index, extract;
-        index = slimmed.indexOf('Chrome Mobile');
-        if(index > -1) {
-            extract = slimmed.slice(index + 16, index + 26);
-            slimmed = platform.replace(extract, '');
-        } else if(slimmed.indexOf('Chrome ') > -1) {
-            index = slimmed.indexOf('Chrome ');
-            extract = slimmed.slice(index + 9, index + 19);
-            slimmed = platform.replace(extract, '');
-        }
-
-        return slimmed;
-    }
-
     handleExpand = panel => (event, expanded) => {
+        localStorage.setItem(panel, expanded);
         this.setState({
             [panel]: expanded,
         });

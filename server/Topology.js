@@ -56,9 +56,10 @@ module.exports = class Topology {
 
     sendConnections() {
 
+        const clients = [...this.peers.clientsBySessionId.values()];
         this.updateChannel.send({
             event: 'peerConnections',
             data: this.connections
-        });
+        }, clients);
     }
 };

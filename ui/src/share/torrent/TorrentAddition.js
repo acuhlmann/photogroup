@@ -37,6 +37,7 @@ export default class TorrentAddition {
             rendering: true, secure: secure, fromCache: fromCache,
             peerId: this.master.client.peerId, owners: []
         };
+        //this.master.emitter.emit('photos', {type: 'add', item: photo});
 
         const self = this;
         const torrent = this.master.addSeedOrGetTorrent('add', torrentId, torrent => {
@@ -45,8 +46,6 @@ export default class TorrentAddition {
             const date = new Date().getTime() - this.stopWatch.get(torrent.infoHash);
             const passed = moment(date).format("mm:ss");
             Logger.info('this.client.add ' + torrent.infoHash + ' ' + passed);
-
-            self.listen(torrent);
 
             this.update(torrent.numPeers);
             photo.loading = photo.rendering = false;
@@ -73,16 +72,6 @@ export default class TorrentAddition {
         });
     }
 
-    listen(torrent) {
-        return;
-        /*torrent.discovery.tracker._trackers.forEach(tracker => {
-
-            Object.values(tracker.peers).forEach(peer => {
-                Logger.debug('tracker.peers ' + peer);
-            });
-        });*/
-    }
-
     seed(file, secure, origFile, callback) {
 
         const self = this;
@@ -101,8 +90,6 @@ export default class TorrentAddition {
         const torrent = this.master.addSeedOrGetTorrent('seed', file, torrent => {
 
             Logger.info('Client is seeding ' + torrent.infoHash);
-
-            self.listen(torrent);
 
             this.update(torrent.numPeers);
 
@@ -221,6 +208,7 @@ export default class TorrentAddition {
         this.update(torrent.numPeers);
 
         const self = this;
+        //return;
         this.torrentsDb.get(key, (err, value) => {
             if (err) {
                 return;

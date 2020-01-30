@@ -12,6 +12,7 @@ import Graph from 'vis-react';
 import Logger from 'js-logger';
 import _ from "lodash";
 import update from "immutability-helper";
+import StringUtil from "../util/StringUtil";
 
 const styles = theme => ({
     typography: {
@@ -42,11 +43,19 @@ class TopologyView extends Component {
             this.setState({showTopology: value});
         });
 
+        emitter.on('readyToUpload', () => {
+            this.setState({
+                visible: true
+            });
+        });
+
         const self = this;
 
+        const expandedTopology = localStorage.getItem('expandedTopology') || true;
         this.state = {
+            visible: false,
             showTopology: false,
-            expandedNetwork: true,
+            expandedTopology: String(expandedTopology) == 'true',
             graph: {
                 nodes: [], edges: []
             },
@@ -110,13 +119,26 @@ class TopologyView extends Component {
                             return;
 
                         let label = '';
-                        if(node.type === 'client') {
-                            const platform = this.slimPlatform(node.peer.originPlatform);
-                            label = node.peer.name + '\n' + platform + '\n'
-                        } else {
-                            label = this.createNetworkLabel(node.network) + '\n';
-                        }
                         const network = node.network;
+                        if(node.type === 'client') {
+                            const platform = StringUtil.slimPlatform(node.peer.originPlatform);
+                            label = node.peer.name + '\n' + platform + '\n'
+                        } else if(node.type === 'relay') {
+
+                            const values = [...node.relays.values()];
+                            const ips = values.map(item => item.ip).join(',');
+                            const ports = values.map(item => item.ports).join(',');
+                            node.network.ip = ips;
+                            label = StringUtil.createNetworkLabel(node.network, '\n');
+                            label += (network.transportsLabel ? network.transportsLabel.toLowerCase() : '')
+                                + ' ' + ips + ':' + ports;
+                            self.setState({
+                                selectedNodeLabel: label
+                            });
+                            return;
+                        } else {
+                            label = StringUtil.createNetworkLabel(node.network, '\n') + '\n';
+                        }
                         if(network.transportsLabel && Array.isArray(network.transportsLabel)) {
                             network.transportsLabel = network.transportsLabel.join(',');
                         }
@@ -129,9 +151,10 @@ class TopologyView extends Component {
                         //label += `${network.transportsLabel ? network.transportsLabel.toLowerCase() : ''} ${network.ip}:${network.ports.join(',')}`;
                         label += (network.transportsLabel ? network.transportsLabel.toLowerCase() : '')
                             + ' ' + network.ip + ':' + network.ports;
-                            self.setState({
+                        self.setState({
                             selectedNodeLabel: label
                         });
+
                     } else if(edges && edges.length > 0) {
 
                         if(!edges[0])
@@ -249,15 +272,15 @@ class TopologyView extends Component {
 
         const hosts = peer.networkChain.filter(item => item.typeDetail === 'host');
         if(hosts.length > 1) {
-            Logger.warn('multiple hosts found ' + JSON.stringify(hosts));
+            //Logger.warn('multiple hosts found ' + JSON.stringify(hosts));
         }
         const host = hosts.find(item => item.label);
         if(host) {
 
-            const platform = this.slimPlatform(peer.originPlatform);
+            const platform = StringUtil.slimPlatform(peer.originPlatform);
             const node = {
                 id: peer.peerId,
-                label: peer.name || _.truncate(platform), //this.addEmptySpaces([peer.name, platform]),
+                label: peer.name || _.truncate(platform), //StringUtil.addEmptySpaces([peer.name, platform]),
                 type: 'client',
                 shape: 'box',
                 peer: peer,
@@ -297,23 +320,6 @@ class TopologyView extends Component {
         return platform.indexOf('Mobile') > -1
             || platform.indexOf('Android') > -1
             || platform.indexOf('iOS') > -1;
-    }
-
-    slimPlatform(platform) {
-        let slimmed = platform.replace(' Windows ', ' Win ');
-
-        let index, extract;
-        index = slimmed.indexOf('Chrome Mobile');
-        if(index > -1) {
-            extract = slimmed.slice(index + 16, index + 26);
-            slimmed = platform.replace(extract, '');
-        } else if(slimmed.indexOf('Chrome ') > -1) {
-            index = slimmed.indexOf('Chrome ');
-            extract = slimmed.slice(index + 9, index + 19);
-            slimmed = platform.replace(extract, '');
-        }
-
-        return slimmed;
     }
 
     addNats(peer, nodes, isMe) {
@@ -360,14 +366,17 @@ class TopologyView extends Component {
         return relays.map(relay => {
 
             const shortName = this.createShortNetworkLabel(relay);
-            if(!nodes.find(item => item.id === relay.ip)) {
+            const existing = nodes.find(item => item.id === shortName);
+            if(!existing) {
 
                 const node = {
-                    id: relay.ip,
+                    id: shortName,
                     label: shortName,
-                    //ips: [relay.ip],
+                    relays: new Map([[relay.ip, relay]]),
+                    type: 'relay',
                     shape: 'box',
                     network: relay,
+                    networks: [relay],
                     peer: peer
                 };
                 node.title = node.label;
@@ -380,7 +389,9 @@ class TopologyView extends Component {
                 return node;
 
             } else {
-                return relay;
+                existing.relays.set(relay.ip, relay);
+                existing.networks.push(relay);
+                return existing;
             }
         }).filter(item => item);
     }
@@ -397,33 +408,13 @@ class TopologyView extends Component {
 
     //---
 
-    createNetworkLabel(item) {
-
-        const country = this.addEmptySpaces([
-            item.typeDetail,
-            _.get(item, 'network.location.country_flag_emoji'),
-            _.get(item, 'network.city')
-        ]);
-
-        const host = this.addEmptySpaces([
-            (_.get(item, 'network.connection.isp') || item.ip) + '\n',
-            _.get(item, 'network.hostname')
-        ]);
-
-        return country + ', ' + host;
-    }
-
     createShortNetworkLabel(item) {
 
-        return this.addEmptySpaces([
+        return StringUtil.addEmptySpaces([
             item.typeDetail,
             _.get(item, 'network.location.country_flag_emoji'),
             _.truncate((_.get(item, 'network.connection.isp') || item.ip)) + '\n'
         ]);
-    }
-
-    addEmptySpaces(values) {
-        return values.map(value => value && value !== null ? value + ' ' : '').join('').replace(/ $/,'');
     }
 
     isMeColor(isMe) {
@@ -452,11 +443,8 @@ class TopologyView extends Component {
     }
 
     handleExpand = panel => (event, expanded) => {
-        if(panel === 'expandedNetwork') {
 
-            //if(expanded)
-            //    this.topology.build();
-        }
+        localStorage.setItem(panel, expanded);
         this.setState({
             [panel]: expanded,
         });
@@ -465,11 +453,11 @@ class TopologyView extends Component {
     render() {
 
         const {classes} = this.props;
-        const {showTopology, selectedNodeLabel, expandedNetwork} = this.state;
+        const {visible, showTopology, graph, selectedNodeLabel, expandedTopology} = this.state;
 
         return (
-            showTopology ? <ExpansionPanel expanded={expandedNetwork}
-                                           onChange={this.handleExpand('expandedNetwork')}
+            visible && showTopology ? <ExpansionPanel expanded={expandedTopology}
+                                           onChange={this.handleExpand('expandedTopology')}
                                            style={{
                                                marginBottom: '5px'
                                             }}>
@@ -482,7 +470,7 @@ class TopologyView extends Component {
                 }}>
                     {this.showStatusMessage(selectedNodeLabel, classes)}
                     <Graph ref={node => this.graph = node} getNetwork={this.setNetworkInstance}
-                           graph={this.state.graph} options={this.state.options} events={this.state.events}
+                           graph={graph} options={this.state.options} events={this.state.events}
                            style={{width: "100%", height: "400px"}}/>
                 </ExpansionPanelDetails>
             </ExpansionPanel> : ''

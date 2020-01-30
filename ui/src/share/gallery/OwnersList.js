@@ -15,6 +15,7 @@ import ExpansionPanelSummary from '@material-ui/core/ExpansionPanelSummary';
 import ExpansionPanelDetails from '@material-ui/core/ExpansionPanelDetails';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import Badge from "@material-ui/core/Badge";
+import StringUtil from "../util/StringUtil";
 
 const styles = theme => ({
     vertical: {
@@ -121,40 +122,124 @@ class OwnersList extends Component {
 
         const conns = connectionTypes ? ' connected via ' + connectionTypes : '';
 
+        //&nbsp;
+        const sumProgress = owners.map(item => item.progress || 100).reduce((a, b) => a + b, 0);
+        let overallProgress = Math.round((sumProgress / owners.length)) || '';
+        overallProgress = overallProgress || overallProgress !== '' ? overallProgress + '%' : '';
         return <span style={{
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'left',
-            width: '100%'
-        }}>
-            <Badge badgeContent={numOfOwners} color="primary" >
-                    <GroupRounded />
-                </Badge>
-           <Typography style={{
-               marginLeft: '20px'
-           }} variant="caption">{names} {haveHas} this image{conns}</Typography>
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-around',
+                    width: '100%'
+                }}>
+                <span style={{
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'left',
+                width: '100%'
+            }}>
+                <Badge badgeContent={numOfOwners} color="primary" >
+                        <GroupRounded />
+                    </Badge>
+               <Typography style={{
+                   marginLeft: '20px'
+               }} variant="caption">{names} {haveHas} this image{conns}</Typography>
+            </span>
+            <Typography variant="caption">{overallProgress}</Typography>
         </span>
     }
 
-    createNetworkLabel(item) {
+    renderOwners(otherPeers, peers, tile, classes) {
+        const nats = otherPeers.map(owner => {
 
-        const country = this.addEmptySpaces([
-            item.typeDetail,
-            _.get(item, 'network.location.country_flag_emoji'),
-            _.get(item, 'network.city')
-        ]);
+            const peer = peers.items.find(item => item.peerId === owner.peerId);
+            if(!peer) {
+                Logger.error('Cannot find peerId ' + owner.peerId);
+                return;
+            }
+            const nat = peer.networkChain
+                ? peer.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))
+                    && item.label) : null;
+            if(!nat) {
+                Logger.error('Cannot find nat ' + peer.name + ' ' + owner.peerId);
+                return;
+            }
 
-        const host = this.addEmptySpaces([
-            _.get(item, 'network.connection.isp') || item.ip,
-            _.get(item, 'network.hostname')
-        ]);
+            return {
+                natIp: nat.ip,
+                nat: nat,
+                owner: owner,
+                peer: peer
+            }
+        }).filter(item => item);
 
-        return country + ', ' + host;
+        const groups = _.groupBy(nats, 'natIp');
+
+        return Object.values(groups)
+            .map((natClients, index) => {
+
+                const clients = natClients.map((natClient, clientIndex) => {
+
+                    const {owner, peer} = natClient;
+
+                    let connection;
+                    if(peers.connections && peers.connections.length > 0) {
+                        const photoConnections = peers.connections.filter(item => item.infoHash === tile.infoHash);
+                        connection = photoConnections.find(item => item.fromPeerId === owner.peerId
+                            || item.toPeerId === owner.peerId);
+                    }
+                    //owner.loading = true;
+                    //connection = {connectionType: 'p2p'};
+
+                    return <span key={clientIndex} className={classes.horizontal}>
+                        <span style={{
+                            position: 'relative',
+                            textAlign: 'center',
+                            marginRight: '10px'
+                        }}>
+                            <span className={classes.vertical}>
+                                {connection ? <Typography variant="caption">{connection.connectionType}</Typography> : ''}
+                                {owner.loading ? <Typography variant="caption">Loading {owner.progress}%</Typography> : ''}
+                            </span>
+                        </span>
+                        <span
+                            className={classes.horizontal}
+                            style={{
+                                justifyContent: 'left'
+                        }}>
+                            <AccountCircleRounded/>
+                            <Typography variant="caption" style={{
+                                marginLeft: '5px'
+                            }}>{this.createClientLabel(peer)}</Typography>
+                        </span>
+                    </span>;
+                });
+
+                const nat = natClients[0].nat;
+                return <ListItem key={index} className={classes.vertical}>
+                    {nat ? <span
+                        className={classes.horizontal}>
+                                <img src={"./firewall.png"} alt="firewall" style={{
+                                    width: '20px'
+                                }}/>
+                                <Typography variant="caption" style={{
+                                    marginLeft: '5px'
+                                }}>{StringUtil.createNetworkLabel(nat)}</Typography>
+                            </span> : ''}
+                    {clients}
+                </ListItem>;
+            });
     }
 
-    addEmptySpaces(values) {
-        return values.map(value => value && value !== null ? value + ' ' : '').join('').replace(/ $/,'');
+    createClientLabel(peer) {
+
+        return StringUtil.addEmptySpaces([
+            peer.connectionSpeedType,
+            peer.name,
+            peer.originPlatform
+        ]);
     }
 
     render() {
@@ -186,56 +271,7 @@ class OwnersList extends Component {
                         }}>
                             <List>
                                 {
-                                    otherPeers
-                                        .map((owner, index) => {
-
-                                            let connection;
-                                            if(peers.connections && peers.connections.length > 0) {
-                                                const photoConnections = peers.connections.filter(item => item.infoHash === tile.infoHash);
-                                                connection = photoConnections.find(item => item.fromPeerId === owner.peerId
-                                                    || item.toPeerId === owner.peerId);
-                                            }
-
-                                            const peer = peers.items.find(item => item.peerId === owner.peerId);
-                                            if(!peer) {
-                                                Logger.error('Cannot find peerId ' + owner.peerId);
-                                                return '';
-                                            }
-                                            const nat = peer.networkChain
-                                                ? peer.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))
-                                                    && item.label) : null;
-
-                                            return <ListItem key={index}>
-                                            <span style={{
-                                                position: 'relative',
-                                                textAlign: 'center',
-                                                marginRight: '10px'
-                                            }}>
-                                                <span className={classes.vertical}>
-                                                    {connection ? <Typography variant="caption">{connection.connectionType}</Typography> : ''}
-                                                    {owner.loading ? <Typography variant="caption">Loading</Typography> : ''}
-                                                </span>
-                                            </span>
-                                                <span className={classes.vertical}>
-                                                    {nat ? <span
-                                                        className={classes.horizontal}>
-                                                            <img src={"./firewall.png"} alt="firewall" style={{
-                                                                width: '20px'
-                                                            }}/>
-                                                            <Typography variant="caption" style={{
-                                                                marginLeft: '5px'
-                                                            }}>{this.createNetworkLabel(nat)}</Typography>
-                                                        </span> : ''}
-                                                    <span
-                                                        className={classes.horizontal}>
-                                                    <AccountCircleRounded/>
-                                                    <Typography variant="caption" style={{
-                                                        marginLeft: '5px'
-                                                    }}>{peer.connectionSpeedType} {peer.name} {peer.originPlatform}</Typography>
-                                                </span>
-                                            </span>
-                                            </ListItem>;
-                                        })
+                                    this.renderOwners(otherPeers, peers, tile, classes)
                                 }
                             </List>
                         </Paper>

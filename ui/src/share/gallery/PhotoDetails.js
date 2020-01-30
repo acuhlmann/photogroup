@@ -11,6 +11,7 @@ import List from '@material-ui/core/List';
 import { withStyles } from '@material-ui/core/styles';
 import PhotoDetailsRenderer from "./PhotoDetailsRenderer";
 import IconButton from "@material-ui/core/IconButton";
+import MetadataParser from "./MetadataParser";
 
 const styles = theme => ({
     root: {
@@ -23,34 +24,63 @@ class PhotoDetails extends Component {
 
     constructor(props) {
         super(props);
-
-        const { classes } = props;
-        this.classes = classes;
-        this.details = new PhotoDetailsRenderer(props.service);
+        this.state = {
+            details: new PhotoDetailsRenderer(props.master.service),
+            parser: new MetadataParser()
+        }
     }
 
-    handleClose() {
-        this.props.handleClose();
+    componentDidMount() {
+        const {tile, master} = this.props;
+        const {parser} = this.state;
+
+        const self = this;
+        parser.readMetadata(tile, async (tile, metadata) => {
+
+            const summaryMetadata = parser.createMetadataSummary(metadata);
+            self.setState({metadata: summaryMetadata});
+
+            if(tile.seed) {
+
+                const photo = {
+                    infoHash: tile.torrent.infoHash,
+                    url: tile.torrent.magnetURI,
+                    peerId: tile.peerId,
+                    fileSize: tile.fileSize,
+                    fileName: tile.fileName,
+                    //metadata
+                    picDateTaken: tile.picDateTaken,
+                    picTitle: tile.picTitle,
+                    picDesc: tile.picDesc,
+                    picSummary: tile.picSummary,
+                    cameraSettings: tile.cameraSettings,
+                };
+
+                const result = await master.service.share(photo);
+                console.log('master.service.share(photo) ' + result);
+            }
+        });
     }
 
     render() {
-        const classes = this.classes;
+        const {classes, tile, open} = this.props;
+        const {details, metadata} = this.state;
 
-        const metadataList = this.details.render(this.props.metadata, this.props.tile);
+        const metadataList = details.render(metadata, tile);
 
         return (
             <div className={classes.root}>
                 <Dialog
                     fullScreen={true}
-                    open={this.props.open}
-                    onClose={this.handleClose.bind(this)}
+                    open={open}
+                    onClose={() => this.handleClose()}
                     aria-labelledby="alert-dialog-title"
                     aria-describedby="alert-dialog-description"
                 >
                     <DialogTitle id="alert-dialog-title">{"All that Image Metadata"}</DialogTitle>
                     <DialogActions>
                         <IconButton
-                            onClick={this.handleClose.bind(this)}
+                            onClick={() => this.props.handleClose()}
                         >
                             <CloseRounded />
                         </IconButton>

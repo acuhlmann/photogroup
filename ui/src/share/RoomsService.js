@@ -70,7 +70,7 @@ export default class RoomsService {
                 if(data.type === 'add' || data.type === 'update') {
                     Logger.info(`photos: ${data.type} ${data.item.fileName || ''} infoHash ${data.item.infoHash} peerId ${data.item.peerId}`);
                 } else if(data.type.includes('Owner')) {
-                    Logger.info(`photos: ${data.type} ${JSON.stringify(data.item, null, ' ')}`);
+                    //Logger.info(`photos: ${data.type} ${JSON.stringify(data.item, null, ' ')}`);
                 } else {
                     Logger.info(`photos: ${data.type} ${JSON.stringify(data.item, null, ' ')}`);
                 }

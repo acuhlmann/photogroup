@@ -61,19 +61,26 @@ export default class TorrentDeletion {
     }
 
     deleteTorrentDbEntry(torrent) {
-        const scope = this;
+        const self = this;
         const key = torrent.infoHash;
+
         return new Promise((resolve, reject) => {
 
             if(!key) {
                 reject();
             } else {
-                scope.torrentsDb.remove(key, (err, value) => {
+                self.torrentsDb.remove(key, (err, value) => {
                     if (err) {
                         reject(err);
                     }
 
-                    resolve(torrent.infoHash);
+                    torrent.store.destroy(() => {
+                        Logger.info('idb store destroyed');
+                        torrent.store.close(() => {
+                            Logger.info('idb store closed');
+                            resolve(torrent.infoHash);
+                        })
+                    });
                 });
             }
         });

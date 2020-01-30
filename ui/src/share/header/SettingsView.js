@@ -66,13 +66,18 @@ class SettingsView extends Component {
             open: false,
             peerId: '',
             showTopology: false,
-            //showOtherPeers: true
+            showMe: true
         };
 
         Logger.info('platform ' + navigator.platform + ' cpu ' + navigator.oscpu);
 
         this.master.emitter.on('addPeerDone', () => {
-            this.handleTopologyChange(this.state.showTopology);
+
+            const showMe = localStorage.getItem('showMe') || this.state.showMe;
+            this.handleShowMeChange(String(showMe) == 'true');
+
+            const showTopology = localStorage.getItem('showTopology') || this.state.showTopology;
+            this.handleTopologyChange(String(showTopology) == 'true');
 
             this.setState({peerId: this.master.client.peerId});
             this.checkConnection();
@@ -243,17 +248,16 @@ class SettingsView extends Component {
         Logger.info('handleBatteryLevelChanges value ' + value);
     }
 
-    handleTopologyChange(showTopology) {
-        this.master.emitter.emit('showTopology', showTopology);
-        this.setState({showTopology: showTopology});
+    handleTopologyChange(value) {
+        localStorage.setItem('showTopology', value);
+        this.master.emitter.emit('showTopology', value);
+        this.setState({showTopology: value});
     };
 
-    handleOtherPeersChange(event) {
-        this.master.emitter.emit('showOtherPeers', event.target.checked);
-    };
-
-    handleShowMeChange(event) {
-        this.master.emitter.emit('showMe', event.target.checked);
+    handleShowMeChange(value) {
+        localStorage.setItem('showMe', value);
+        this.master.emitter.emit('showMe', value);
+        this.setState({showMe: value});
     };
 
     batchChangeName(event) {
@@ -306,7 +310,8 @@ class SettingsView extends Component {
                             <FormControlLabel
                                 control={
                                     <Switch
-                                        onChange={(event) => this.handleTopologyChange(event.target.checked)}
+                                        onChange={(event) =>
+                                            this.handleTopologyChange(event.target.checked)}
                                         checked={showTopology}
                                         value="showTopology"
                                         color="primary"
@@ -314,22 +319,11 @@ class SettingsView extends Component {
                                 }
                                 label="Topology View"
                             />
-                            {/*
                             <FormControlLabel
                                 control={
                                     <Switch
-                                        onChange={this.handleOtherPeersChange.bind(this)}
-                                        checked={showOtherPeers}
-                                        value="showOtherPeers"
-                                        color="primary"
-                                    />
-                                }
-                                label="Other Peers View"
-                            />*/}
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        onChange={this.handleShowMeChange.bind(this)}
+                                        onChange={(event) =>
+                                            this.handleShowMeChange(event.target.checked)}
                                         checked={showMe}
                                         value="showMe"
                                         color="primary"
@@ -357,7 +351,7 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v3 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v7 {this.state.peerId}</Typography>
 
                         {messages}
 

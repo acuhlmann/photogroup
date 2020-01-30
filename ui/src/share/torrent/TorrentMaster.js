@@ -5,11 +5,13 @@ import IdbKvStore from 'idb-kv-store';
 //import parsetorrent from 'parse-torrent';
 import Peers from '../topology/Peers';
 import idb from 'indexeddb-chunk-store';
-import TorrentAddition from "./TorrentAddition";
+import TorrentAddition from './TorrentAddition';
 import TorrentDeletion from "./TorrentDeletion";
 import TorrentCreator from "./TorrentCreator";
 import FileUtil from '../util/FileUtil';
-import platform from "platform";
+import platform from 'platform';
+import _ from 'lodash';
+import moment from 'moment';
 
 export default class TorrentMaster {
 
@@ -23,6 +25,15 @@ export default class TorrentMaster {
         this.emitter = emitter;
         this.peers = new Peers(emitter, [], service);
         this.torrentsDb = new IdbKvStore('torrents');
+        this.torrentsDb.on('open',() => {
+            Logger.info('torrentsDb open');
+        });
+        this.torrentsDb.on('close',() => {
+            Logger.info('torrentsDb close');
+        });
+        this.torrentsDb.on('error',(err) => {
+            Logger.error('torrentsDb error ' + err);
+        });
         this.torrentAddition = new TorrentAddition(this.service, this.torrentsDb, this.emitter, this);
         this.torrentDeletion = new TorrentDeletion(this.service, this.torrentsDb, this.emitter, this);
 
@@ -52,10 +63,12 @@ export default class TorrentMaster {
 
                 if(!response) return;
 
-                this.peers.items = response.peers;
+                const peers = this.peers.items = response.peers;
                 this.peers.connections = response.connections;
+                this.emitter.emit('peers', {type: 'all', item: peers});
+
                 const photos = response.photos;
-                Logger.info(`photos: ${response.photos.length} peers ${response.peers.length}`);
+                Logger.info(`photos: ${photos.length} peers ${peers.length}`);
                 const values = await this.resurrectLocallySavedTorrents(photos);
                 Logger.info('done with resurrectAllTorrents ' + values);
                 /*Promise.all(values).then(results => {
@@ -151,9 +164,11 @@ export default class TorrentMaster {
 
                 } else {
 
-                    let photo;
                     if(photos) {
-                        photo = photos.find(item => item.infoHash === metadata.infoHash);
+                        const photo = photos.find(item => item.infoHash === metadata.infoHash);
+                        if(photo) {
+                            photo.rendering = true;
+                        }
                     }
                     scope.torrentAddition.add(metadata, false, true).then(torrent => {
 
@@ -165,9 +180,6 @@ export default class TorrentMaster {
                         Logger.error(msg);
                         reject(msg);
                     });
-                    if(photo) {
-                        //this.emitter.emit('addedTorrent', photo);
-                    }
                 }
 
             } else {
@@ -180,30 +192,56 @@ export default class TorrentMaster {
         return this.creator.client;
     }
 
+    publishLoadingStatus(infoHash, progress) {
+        //console.log('publishLoadingStatus: ' + progress);
+        this.service.updateOwner(infoHash, {
+            peerId: this.client.peerId,
+            progress: progress
+        });
+    }
+
     addSeedOrGetTorrent(addOrSeed, uri, callback) {
 
-        const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE, 'store': idb }, callback);
+        const opts = {'announce': window.WEBTORRENT_ANNOUNCE};
+        opts.store = idb;
+        const torrent = this.client[addOrSeed](uri, opts, callback);
         //const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE}, callback);
 
         Logger.info('addSeedOrGetTorrent ' + torrent.infoHash + ' ' + torrent.name);
 
-        const scope = this;
+        const self = this;
+        const debounced = _.throttle(self.publishLoadingStatus.bind(self), 1000, { 'leading': true, 'trailing': false });
+
         let lastProgress = 0;
         let lastDownloadSpeed = 0;
         torrent.on('download', bytes => {
             //Logger.trace('just downloaded: ' + bytes)
             //Logger.trace('total downloaded: ' + torrent.downloaded)
-            const progress = torrent.progress * 100;
-            const downloadSpeed = torrent.downloadSpeed;
-            if(progress !== lastProgress || downloadSpeed !== lastDownloadSpeed) {
+            const timeRemaining = moment
+                .duration(Math.round(torrent.timeRemaining / 1000), 'seconds')
+                .humanize(true);
+            //console.log('total timeRemaining: ' + timeRemaining);
+            const progress = Math.round(torrent.progress * 100);
+            const downloadSpeed = Math.round(torrent.downloadSpeed);
+            const progressChange = progress !== lastProgress;
+            if(progressChange || downloadSpeed !== lastDownloadSpeed) {
                 lastProgress = progress;
                 lastDownloadSpeed = downloadSpeed;
                 const downloadSpeedLabel = FileUtil.formatBytes(downloadSpeed) + '/sec';
                 //Logger.trace('torrent.download speed: ' + downloadSpeedLabel + ' ' + progress);
-                scope.emitter.emit('downloadProgress', {
+                //self.publishLoadingStatus(torrent.infoHash, progress.toFixed(0));
+                //const debounced = _.debounce(self.publishLoadingStatus.bind(self),
+                //    3000, { 'leading': true, 'trailing': false });
+                //debounced(torrent.infoHash, progress.toFixed(0));
+
+                if(progressChange) {
+                    debounced(torrent.infoHash, progress);
+                }
+
+                self.emitter.emit('downloadProgress', {
                     torrent: torrent,
                     speed: downloadSpeedLabel,
-                    progress: progress
+                    progress: progress, timeRemaining: timeRemaining
                 });
             }
         });
@@ -220,18 +258,18 @@ export default class TorrentMaster {
                 lastUploadSpeed = uploadSpeed;
                 const uploadSpeedLabel = FileUtil.formatBytes(uploadSpeed) + '/sec';
                 //Logger.trace('torrent.upload speed: ' + uploadSpeedLabel + ' ' + progressUp + ' t ' + torrent.progress + ' u ' + torrent.uploaded);
-                scope.emitter.emit('uploadProgress', {
+                self.emitter.emit('uploadProgress', {
                     torrent: torrent,
                     speed: uploadSpeedLabel,
                     progress: progressUp
                 });
             }
         });
-        torrent.on('metadata', () => scope.torrentAddition.metadata(torrent));
-        torrent.on('infoHash', infoHash => scope.torrentAddition.infoHash(torrent, infoHash));
-        torrent.on('noPeers', announceType => scope.torrentAddition.noPeers(torrent, announceType));
-        torrent.on('warning', err => scope.torrentAddition.warning(torrent, err));
-        torrent.on('wire', (wire, addr) => scope.torrentAddition.wire(wire, addr));
+        torrent.on('metadata', () => self.torrentAddition.metadata(torrent));
+        torrent.on('infoHash', infoHash => self.torrentAddition.infoHash(torrent, infoHash));
+        torrent.on('noPeers', announceType => self.torrentAddition.noPeers(torrent, announceType));
+        torrent.on('warning', err => self.torrentAddition.warning(torrent, err));
+        torrent.on('wire', (wire, addr) => self.torrentAddition.wire(wire, addr));
 
 
         this.emitter.emit('update', torrent);

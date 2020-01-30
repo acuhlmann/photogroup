@@ -118,8 +118,8 @@ class Uploader extends Component {
 
                 <LoaderView emitter={emitter}/>
                 <input
-                    //accept="image/*,video/*"
-                    accept="image/*"
+                    accept="image/*,video/*"
+                    //accept="image/*"
                     style={{
                         position: 'absolute',
                         top: loadedAnything ? '-15px' : '0px',

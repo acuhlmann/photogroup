@@ -10,6 +10,7 @@ module.exports = class Peers {
         this.emitter = emitter;
 
         this.webPeers = new Map();
+        this.clientsBySessionId = new Map();
 
         emitter.on('iceEvent', event => {
 
@@ -19,6 +20,7 @@ module.exports = class Peers {
 
     reset() {
         this.webPeers.clear();
+        this.clientsBySessionId.clear();
     }
 
     create(peer) {
@@ -66,6 +68,7 @@ module.exports = class Peers {
 
     disconnect(request) {
         const sessionId = request.query.sessionId;
+        this.clientsBySessionId.delete(sessionId);
 
         const peer = [...this.webPeers.values()].find(item => item.sessionId === sessionId);
         if(peer) {
@@ -83,13 +86,14 @@ module.exports = class Peers {
 
     sendWebPeers(type, item) {
 
+        const clients = [...this.clientsBySessionId.values()];
         this.updateChannel.send({
             event: 'peers',
             data: {
                 type: type,
                 item: item
             }
-        });
+        }, clients);
     }
 
     buildIceEvent(event) {

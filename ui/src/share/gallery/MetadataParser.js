@@ -12,9 +12,9 @@ export default class MetadataParser {
         window.EXIF = EXIF;
     }
 
-    readMetadata(tile, img, callback) {
+    readMetadata(tile, callback) {
 
-        const scope = this;
+        const self = this;
 
         //const id = event.currentTarget.id;
         //const img = document.getElementById(id);
@@ -25,8 +25,8 @@ export default class MetadataParser {
         try {
             EXIF.getData(tile.elem, function()  {
 
-                scope.extractAndProcess(this, tile);
-                callback(tile);
+                const metadata = self.extractAndProcess(this, tile);
+                callback(tile, metadata);
             });
         } catch(e) {
             Logger.error('error parsing image ');
@@ -43,11 +43,13 @@ export default class MetadataParser {
 
         allMetadata['x-file name'] = tile.torrent.name;
         const picDesc = MetadataParser.findBestDesc(allMetadata);
-        if(picDesc)
+        if(picDesc) {
             allMetadata['x-Description'] = picDesc;
+        }
 
-        tile.allMetadata = allMetadata;
+        //tile.allMetadata = allMetadata;
         this.sortByDate(tile, allMetadata);
+        return allMetadata;
     }
 
     static findBestDesc(allMetadata) {
@@ -67,11 +69,12 @@ export default class MetadataParser {
 
     sortByDate(tile, allMetadata) {
 
+        const tileItem = tile;
         const DateTimeOriginal = allMetadata['DateTimeOriginal'];
         const timestamp = MetadataParser.toTimeStamp(DateTimeOriginal);
 
-        const tiles = this.view.state.tiles.slice();
-        const tileItem = tiles.find(item => item.infoHash === tile.infoHash);
+        //const tiles = this.view.state.tiles.slice();
+        //const tileItem = tiles.find(item => item.infoHash === tile.infoHash);
         if(tileItem) {
             const picDateTaken = MetadataParser.formatDateFromTimeStamp(timestamp);
             tileItem.picDateTaken = picDateTaken === 'Invalid date' ? '' : picDateTaken;
@@ -86,7 +89,7 @@ export default class MetadataParser {
             const cameraSettings = allMetadata['x-Settings'] ? allMetadata['x-Settings'] : '';
             tileItem.cameraSettings = cameraMake + cameraSettings;
 
-            tiles.sort((a, b) => {
+            /*tiles.sort((a, b) => {
                 return new Date(b.picDateTakenDate) - new Date(a.picDateTakenDate);
             });
 
@@ -95,7 +98,7 @@ export default class MetadataParser {
             const newTiles = update(tiles, {[tileIndex]: {$set: tileItem}});
             this.view.setState({
                 tiles: newTiles
-            });
+            });*/
         }
     }
 

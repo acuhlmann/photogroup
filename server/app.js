@@ -1,5 +1,4 @@
 'use strict';
-const express = require('express');
 const path = require('path');
 const webPort = process.env.PORT || 8081;
 
@@ -17,7 +16,6 @@ const EventEmitter = require('eventemitter3');
 const emitter = new EventEmitter();
 
 const IceServers = require('./IceServers');
-//const Events = require('./Events');
 const IpTranslator = require('./IpTranslator');
 const Tracker = require('./Tracker');
 const Rooms = require('./Rooms');
