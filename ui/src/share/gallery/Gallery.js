@@ -132,7 +132,8 @@ class Gallery extends Component {
     }
 
     syncWithPhotos() {
-        this.props.master.emitter.on('photos', event => {
+        const master = this.props.master;
+        master.emitter.on('photos', event => {
 
             const oldTiles = this.state.tiles;
 
@@ -168,6 +169,8 @@ class Gallery extends Component {
                 })(oldTiles);
 
             } else if(event.type === 'delete') {
+
+                master.emitter.emit('disconnectNode', event.item);
 
                 ((oldTiles) => {
                     const index = oldTiles.findIndex(item => item.infoHash === event.item);

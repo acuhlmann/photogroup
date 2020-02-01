@@ -11,7 +11,6 @@ import Divider from "@material-ui/core/Divider";
 import OwnersList from "./OwnersList";
 import FileUtil from "../util/FileUtil";
 import StringUtil from "../util/StringUtil";
-import update from "immutability-helper";
 
 const styles = theme => ({
     horizontal: {

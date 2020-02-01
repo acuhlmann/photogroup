@@ -13,6 +13,7 @@ import update from "immutability-helper";
 import Button from "@material-ui/core/Button/Button";
 import { withSnackbar } from 'notistack';
 import Collapse from '@material-ui/core/Collapse';
+import Zoom from '@material-ui/core/Zoom';
 
 const styles = theme => ({
     horizontal: {
@@ -50,11 +51,12 @@ class ContentTile extends Component {
         const {master} = props;
         const emitter = master.emitter;
         emitter.on('galleryListView', this.handleGalleryListView, this);
+        emitter.on('disconnectNode', this.handleDisconnectNode, this);
 
         this.state = {
             open: false,
             listView: true,
-            localDownloads: []
+            localDownloads: [], there: true
         }
     }
 
@@ -62,8 +64,13 @@ class ContentTile extends Component {
         this.setState({listView: isList});
     }
 
+    handleDisconnectNode(foo) {
+        this.setState({there: false});
+    }
+
     componentWillUnmount() {
         this.props.master.emitter.removeListener('galleryListView', this.handleGalleryListView, this);
+        this.props.master.emitter.removeListener('disconnectNode', this.handleDisconnectNode, this);
     }
 
     /*addServerPeer(tile, action) {
@@ -110,6 +117,7 @@ class ContentTile extends Component {
     }
 
     async handleDelete(tile) {
+        this.setState({there: false});
         const infoHash = await this.props.master.torrentDeletion.deleteItem(tile.torrent);
         Logger.info('handleDelete ' + tile.torrent.name + ' ' + infoHash + ' ' + tile.torrent.infoHash);
     }
@@ -185,7 +193,7 @@ class ContentTile extends Component {
     render() {
 
         const {tile, name, master, classes} = this.props;
-        const {open, localDownloads, listView} = this.state;
+        const {open, localDownloads, listView, there} = this.state;
 
         const renderMediaDom = tile.isImage
             ? <img src={tile.img} alt={tile.fileName}
@@ -230,12 +238,12 @@ class ContentTile extends Component {
                             />
                         </div>
                         </Paper>
+                        <PhotoDetails open={open}
+                                      tile={tile}
+                                      master={master}
+                                      handleClose={this.handleClose.bind(this)} />
                     </Collapse>
                 </div>
-                <PhotoDetails open={open}
-                              tile={tile}
-                              master={master}
-                              handleClose={this.handleClose.bind(this)} />
             </div>
         );
     }

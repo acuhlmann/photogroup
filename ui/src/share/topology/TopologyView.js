@@ -71,6 +71,7 @@ class TopologyView extends Component {
                 edges: {
                     color: '#000000'
                 },
+                physics: true,
                 /*groups: {
                     photogroupServer: {
                         shape: 'icon',
@@ -127,10 +128,10 @@ class TopologyView extends Component {
 
                             const values = [...node.relays.values()];
                             const ips = values.map(item => item.ip).join(',');
-                            const ports = values.map(item => item.ports).join(',');
+                            const ports = values.map(item => item.port).join(',');
                             node.network.ip = ips;
                             label = StringUtil.createNetworkLabel(node.network, '\n');
-                            label += (network.transportsLabel ? network.transportsLabel.toLowerCase() : '')
+                            label += (network.transport ? network.transport.toLowerCase() : '')
                                 + ' ' + ips + ':' + ports;
                             self.setState({
                                 selectedNodeLabel: label
@@ -139,18 +140,8 @@ class TopologyView extends Component {
                         } else {
                             label = StringUtil.createNetworkLabel(node.network, '\n') + '\n';
                         }
-                        if(network.transportsLabel && Array.isArray(network.transportsLabel)) {
-                            network.transportsLabel = network.transportsLabel.join(',');
-                        }
-                        if(network.ports && Array.isArray(network.ports)) {
-                            network.ports = network.ports.join(',');
-                        }
-                        if(!network.ports) {
-                            Logger.warn('no ports ' + JSON.stringify(network))
-                        }
-                        //label += `${network.transportsLabel ? network.transportsLabel.toLowerCase() : ''} ${network.ip}:${network.ports.join(',')}`;
-                        label += (network.transportsLabel ? network.transportsLabel.toLowerCase() : '')
-                            + ' ' + network.ip + ':' + network.ports;
+                        label += (network.transport ? network.transport.toLowerCase() : '')
+                            + ' ' + network.ip + ':' + network.port;
                         self.setState({
                             selectedNodeLabel: label
                         });
@@ -170,9 +161,10 @@ class TopologyView extends Component {
                             if(edge.type === 'connection') {
 
                                 const conn = edge.network;
-                                edgeLabel = `${conn.from}:${conn.fromPort} >> ${conn.to}:${conn.toPort}`
+                                edgeLabel = conn.connectionType + ' ' + conn.fileName + '\n';
+                                edgeLabel += `\n${conn.from}:${conn.fromPort} >> ${conn.to}:${conn.toPort}`
                             } else{
-                                edgeLabel = '';//edge.from + ' >> ' + edge.to;
+                                edgeLabel = '';
                             }
                             this.setState({
                                 selectedNodeLabel: edgeLabel
@@ -247,14 +239,19 @@ class TopologyView extends Component {
                 //add connection edges in.
                 connections.forEach(conn => {
 
+                    const from = conn.connectionType === 'p2p' ? conn.fromPeerId : conn.from;
+                    const to = conn.connectionType === 'p2p' ? conn.toPeerId : conn.to;
                     const edge = {
-                        from: conn.connectionType === 'p2p' ? conn.fromPeerId : conn.from,
-                        to: conn.connectionType === 'p2p' ? conn.toPeerId : conn.to,
-                        label: conn.connectionType + ' ' + conn.fileName,
+                        id: conn.id, from: from, to: to,
+                        //label: conn.connectionType + ' ' + conn.fileName,
                         type: 'connection',
                         network: conn,
                         width: 2,
                         arrows: 'to',
+                        smooth: {type: 'curvedCW', roundness: 0.5, forceDirection: 'none'},
+                        font: {
+                            align: 'bottom'
+                        }
                     };
                     edge.title = edge.label;
                     if(!edges.find(item => item.from === edge.from && item.to === edge.to)) {

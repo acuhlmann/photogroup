@@ -1,6 +1,7 @@
 import Logger from 'js-logger';
 import moment from "moment";
 import shortid  from 'shortid';
+import StringUtil from "../util/StringUtil";
 
 /**
  * @emits TorrentAddition.emitter#added
@@ -17,12 +18,6 @@ export default class TorrentAddition {
         this.emitter = emitter;
         this.stopWatch = new Map();
         this.master = master;
-    }
-
-    update(numPeers) {
-        if(numPeers) {
-            this.emitter.emit('numPeers', Number(numPeers));
-        }
     }
 
     add(torrentId, secure, fromCache) {
@@ -52,7 +47,6 @@ export default class TorrentAddition {
             const passed = moment(date).format("mm:ss");
             Logger.info('this.client.add ' + torrent.infoHash + ' ' + passed);
 
-            this.update(torrent.numPeers);
             photo.loading = photo.rendering = false;
             photo.torrent = torrent;
             photo.url = torrent.magnetURI;
@@ -77,26 +71,24 @@ export default class TorrentAddition {
         });
     }
 
-    seed(file, secure, origFile, callback) {
+    seed(files, secure, origFile, callback) {
 
         const self = this;
 
-        Logger.info('TorrendAddition.seed ' + JSON.stringify(file));
+        Logger.info('TorrendAddition.seed ' + JSON.stringify(files));
 
         const photo = {
             infoHash: shortid.generate(),
-            seed: true, rendering: true, file: origFile, origFile: origFile, secure: secure,
+            seed: true, rendering: true, file: files, origFile: files, secure: secure,
             peerId: this.master.client.peerId, owners: []
         };
         this.master.emitter.emit('photos', {
             type: 'add', item: photo
         });
 
-        const torrent = this.master.addSeedOrGetTorrent('seed', file, torrent => {
+        const torrent = this.master.addSeedOrGetTorrent('seed', files, torrent => {
 
             Logger.info('Client is seeding ' + torrent.infoHash);
-
-            this.update(torrent.numPeers);
 
             photo.loading = photo.rendering = false;
             photo.torrent = torrent;
@@ -132,7 +124,7 @@ export default class TorrentAddition {
                     torrent: torrent,
                     torrentId: torrentId,
                     photo: photo,
-                    file: file});
+                    file: files});
             } else {
                 //self.master.torrentAddition.seed(file, undefined, file, () => {
                 //    Logger.info('seeded duplicate');
@@ -148,15 +140,12 @@ export default class TorrentAddition {
         return torrent;
 
         /*
-        this.update(torrent.numPeers);
-
 
         //in case local indexeddb data is lost for some reason, reseed file.
         const fileBak = file[0];
         torrent.on('error', err => {
 
             Logger.error('torrent.seed.error '+JSON.stringify(err));
-            this.update(torrent.numPeers);
             const msg = err.message;
             const isDuplicateError = msg.indexOf('Cannot add duplicate') !== -1;
             if(!isDuplicateError) {
@@ -200,7 +189,9 @@ export default class TorrentAddition {
 
     metadata(torrent) {
 
+        //temporary disable to try wire event approach.
         this.master.peers.connect(torrent, this.master.client.peerId);
+
         this.master.service.addOwner(torrent.infoHash, this.master.client.peerId).then(() => {
             Logger.info('added owner ' + torrent.name);
         });
@@ -210,8 +201,6 @@ export default class TorrentAddition {
         const key = parsed.infoHash;
         Logger.info('metadata ' + parsed.name + ' ' + key);
 
-        this.update(torrent.numPeers);
-
         const self = this;
         //return;
         this.torrentsDb.get(key, (err, value) => {
@@ -220,7 +209,6 @@ export default class TorrentAddition {
             }
 
             if(!value) {
-
                 try {
                     self.torrentsDb.add(key, parsed, () => {
                         Logger.warn('IndexedDB added ' + key);
@@ -235,35 +223,48 @@ export default class TorrentAddition {
         });
     }
 
+    wire(wire, addr, torrent) {
+        const remotePeerId = wire.peerId.toString();
+        const myPeerId = this.master.client.peerId;
+        //this.master.peers.connectWire(myPeerId, torrent, remotePeerId, wire.remoteAddress, wire.remotePort);
+
+        if(remotePeerId && wire.remoteAddress) {
+            const peer = this.master.peers.items.find(item => item.peerId == remotePeerId);
+            if(peer) {
+                const network = peer.networkChain.find(item => item.ip === wire.remoteAddress);
+                if(network) {
+                    Logger.warn('wire peer ' + StringUtil.createNetworkLabel(network));
+                    //Logger.warn('wire peer ' + JSON.stringify(network));
+                }
+            }
+            const address = (wire.remoteAddress || 'Unknown') + ':' + (wire.remotePort || 'Unknown');
+            Logger.warn('wire ' + remotePeerId + ' ' + address + ' ' + addr);
+        } else {
+            Logger.warn('wire no ' + remotePeerId);
+        }
+    }
+
     infoHash(t, infoHash) {
-        Logger.debug('infoHash '+infoHash);
-        this.update(t.numPeers);
+        Logger.warn('infoHash '+infoHash);
     }
 
     noPeers(t, announceType) {
-        Logger.debug('noPeers '+announceType);
-        this.update(t.numPeers);
+        Logger.warn('noPeers '+announceType);
     }
 
     warning(t, err) {
         Logger.warn('warning '+err);
-        this.update(t.numPeers);
-    }
-
-    wire(wire, addr) {
-        Logger.info('wire ' + wire.remoteAddress + ':' + wire.remotePort + ' ' + addr);
     }
 
     trackerAnnounce(...rest) {
-        Logger.debug('trackerAnnounce ' + rest);
+        Logger.warn('trackerAnnounce ' + rest);
     }
 
     peer(peer, source) {
-        Logger.info('peer ' + peer.id + ' ' + source);
+        Logger.warn('peer ' + peer.id + ' ' + source);
     }
 
     done(torrent) {
-        this.update(torrent.numPeers);
         Logger.info('done ' + torrent.name);
         //Checks to make sure that ImmediateChunkStore has finished writing to store before destroying the torrent!
         /*const isMemStoreEmpty = setInterval(()=>{

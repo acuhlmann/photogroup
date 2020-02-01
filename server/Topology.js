@@ -10,9 +10,22 @@ module.exports = class Topology {
     connect(connection) {
 
         const fromPeer = this.peers.webPeers.get(connection.fromPeerId);
-        const typeFrom = fromPeer.networkChain.find(item => item.ip === connection.from);
+        let typeFrom = fromPeer.networkChain.find(item => item.ip === connection.from);
         const toPeer = this.peers.webPeers.get(connection.toPeerId);
-        const typeTo = toPeer.networkChain.find(item => item.ip === connection.to);
+        let typeTo;
+        if(connection.to) {
+            typeTo = toPeer.networkChain.find(item => item.ip === connection.to);
+        } else if(!connection.to && typeFrom.type) {
+            typeTo = toPeer.networkChain.find(item => item.type === typeFrom.type);
+            connection.to = typeTo.ip;
+            connection.toPort = typeTo.port;
+        }
+
+        if(!connection.from && !typeFrom && typeTo.type) {
+            typeFrom = fromPeer.networkChain.find(item => item.type === typeTo.type);
+            connection.from = typeFrom.ip;
+            connection.fromPort = typeFrom.port;
+        }
         if(typeFrom && typeTo) {
             if(typeFrom.typeDetail === 'host' && typeTo.typeDetail === 'host') {
 
@@ -30,9 +43,12 @@ module.exports = class Topology {
 
                 connection.connectionType = 'p2p nat';
             }
+            const id = connection.from + ':' + connection.fromPort + '-'
+                + connection.to + ':' + connection.toPort + '-' + connection.infoHash;
+            connection.id = id;
+            this.connectionsMap.set(id, connection);
+            this.sendConnections();
         }
-        this.connectionsMap.set(connection.to + '-' + connection.from + '-' + connection.infoHash, connection);
-        this.sendConnections();
     }
 
     addEmptySpaces(values) {
@@ -41,9 +57,11 @@ module.exports = class Topology {
 
     disconnect(infoHash) {
 
-        this.connections.forEach(item => {
-            if(item.infoHash === infoHash) {
-                this.connectionsMap.delete(item.to + '-' + item.from + '-' + infoHash);
+        this.connections.forEach(connection => {
+            if(connection.infoHash === infoHash) {
+                const id = connection.from + ':' + connection.fromPort + '-'
+                    + connection.to + ':' + connection.toPort + '-' + connection.infoHash;
+                this.connectionsMap.delete(id);
             }
         });
 

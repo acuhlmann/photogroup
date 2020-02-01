@@ -2,10 +2,6 @@ import Logger from 'js-logger';
 import {parse} from "sdp-transform/lib";
 import Peer from 'simple-peer';
 
-/**
- * @emits TorrentMaster#deleted
- * @type {string} magnetURI
- */
 export default class NetworkTopologyFinder {
 
     constructor(service, emitter) {
@@ -201,61 +197,6 @@ export default class NetworkTopologyFinder {
                 }
             });
 
-        return NetworkTopologyFinder.mergeByIpStrings(all);
-    }
-
-    static mergeByIpStrings(all) {
-        const uniques = [];
-        const ipMap = new Map();
-        all.forEach(item => {
-            if (ipMap.has(item.ip)) {
-
-                const existing = ipMap.get(item.ip);
-                existing.ports.push(item.port);
-                existing.transportsLabel += (existing.transportsLabel.indexOf(item.transport) === -1) ? ',' + item.transport : '';
-                existing.type += ',' + item.type;
-
-                delete existing.port;
-                delete existing.transport;
-
-            } else {
-                item.ports = [item.port];
-                item.transportsLabel = item.transport;
-                ipMap.set(item.ip, item);
-                uniques.push(item);
-            }
-        });
-
-        return uniques;
-    }
-
-    static mergeByIp(all) {
-        const uniques = [];
-        const ipMap = new Map();
-        all.forEach(item => {
-            if (ipMap.has(item.ip.ip)) {
-
-                const existing = ipMap.get(item.ip.ip);
-                existing.ports.push(item.port);
-                existing.transportsLabel += (existing.transportsLabel.indexOf(item.transport) === -1) ? ',' + item.transport : '';
-                existing.type += ',' + item.type;
-
-                delete existing.port;
-                delete existing.transport;
-
-            } else {
-                item.ports = [item.port];
-                item.transportsLabel = item.transport;
-                if(NetworkTopologyFinder.typeDetailsyIp) {
-                    item.typeDetail = NetworkTopologyFinder.typeDetailsyIp.get(item.ip.ip);
-                } else {
-                    item.typeDetail = item.type;
-                }
-                ipMap.set(item.ip.ip, item);
-                uniques.push(item);
-            }
-        });
-
-        return uniques;
+        return all;
     }
 }

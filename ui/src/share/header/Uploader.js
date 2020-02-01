@@ -66,14 +66,13 @@ class Uploader extends Component {
         if(!files[0]) {
             return;
         }
-        this.files = files;
-        const file = this.file = files[0];
-        Logger.info('handleUpload ' + file.name);
 
         this.uploaderDom = event.target || event.srcElement;
-        //this.uploaderDom.value = '';
 
-        this.seed(false);
+        const self = this;
+        this.model.seed(files[0], false, null, () => {
+            self.uploaderDom.value = '';
+        });
     }
 
     cancel() {
@@ -85,22 +84,6 @@ class Uploader extends Component {
         this.setState({
             open: open
         });
-    }
-
-    seed(secure) {
-
-        const scope = this;
-        this.model.seed(this.file, false, this.file, () => {
-            scope.uploaderDom.value = '';
-        });
-
-        /*const scope = this;
-        Encrypter.encryptPic(this.file, secure, this.state.password, (file) => {
-
-            scope.model.seed(file, secure, scope.file, () => {
-                scope.uploaderDom.value = '';
-            });
-        });*/
     }
 
     hasRoom() {
@@ -120,7 +103,7 @@ class Uploader extends Component {
                 <input
                     accept="image/*,video/*"
                     //accept="image/*"
-                    //multiple
+                    multiple
                     style={{
                         position: 'absolute',
                         top: loadedAnything ? '-15px' : '0px',

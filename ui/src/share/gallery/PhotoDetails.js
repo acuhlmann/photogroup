@@ -13,6 +13,7 @@ import PhotoDetailsRenderer from "./PhotoDetailsRenderer";
 import IconButton from "@material-ui/core/IconButton";
 import MetadataParser from "./MetadataParser";
 import Slide from '@material-ui/core/Slide';
+import FileUtil from "../util/FileUtil";
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Slide direction="up" ref={ref} {...props} />;
@@ -30,8 +31,8 @@ class PhotoDetails extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            details: new PhotoDetailsRenderer(props.master.service),
-            parser: new MetadataParser()
+            parser: new MetadataParser(),
+            fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)
         }
     }
 
@@ -40,10 +41,12 @@ class PhotoDetails extends Component {
         const {parser} = this.state;
 
         const self = this;
+        this.setState({fileName: FileUtil.getFileNameWithoutSuffix(tile.fileName)});
         parser.readMetadata(tile, async (tile, metadata) => {
 
             const summaryMetadata = parser.createMetadataSummary(metadata);
-            self.setState({metadata: summaryMetadata});
+            self.setState({metadata: summaryMetadata,
+                fileName: FileUtil.getFileNameWithoutSuffix(tile.fileName)});
 
             if(tile.seed) {
 
@@ -67,11 +70,22 @@ class PhotoDetails extends Component {
         });
     }
 
-    render() {
-        const {classes, tile, open} = this.props;
-        const {details, metadata} = this.state;
+    componentDidUpdate(nextProps) {
+        const { tile } = this.props;
+        const fileName = tile.fileName;
+        if (nextProps.tile.fileName !== fileName) {
+            if (fileName) {
+                this.setState({ fileName: fileName })
+            }
+        }
+    }
 
-        const metadataList = details.render(metadata, tile);
+    render() {
+        const {master, classes, tile, open} = this.props;
+        const {metadata, fileName} = this.state;
+
+        const details = new PhotoDetailsRenderer(master.service, this);
+        const metadataList = details.render(metadata, tile, fileName);
 
         return (
             <div className={classes.root}>

@@ -29,6 +29,24 @@ export default class Peers {
         });
     }
 
+    connectWire(myPeerId, torrent, remotePeerId, remoteAddress, remotePort) {
+
+        if(!torrent || !remotePeerId || !remoteAddress) return;
+
+        const result = {
+            fileName: torrent.name,
+            infoHash: torrent.infoHash,
+
+            fromPeerId: remotePeerId,
+            from: remoteAddress,
+            fromPort: remotePort,
+
+            toPeerId: myPeerId,
+        };
+
+        this.service.connect(result);
+    }
+
     connect(torrent, myPeerId) {
 
         if(!torrent._peers) return;
@@ -56,20 +74,21 @@ export default class Peers {
                 localFamily: conn.localFamily
             };
 
-            if(result.from && result.to) {
+            self.service.connect(result);
+            /*if(result.from && result.to) {
 
                 self.service.connect(result);
 
             } else {
 
-                /*const pc = conn._pc;
+                const pc = conn._pc;
                 self.listenToPcEvents(pc);
                 pc.onicecandidate = function(e) {
                     Logger.info('onicecandidate.type ' + e.type);
-                };*/
+                };
                 //pc.createOffer()
                 //    .then(offer => pc.setLocalDescription(offer));
-            }
+            }*/
 
             return result;
         });

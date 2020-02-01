@@ -16,6 +16,7 @@ import ExpansionPanelDetails from '@material-ui/core/ExpansionPanelDetails';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import Badge from "@material-ui/core/Badge";
 import StringUtil from "../util/StringUtil";
+import CheckIcon from "@material-ui/icons/CheckRounded";
 
 const styles = theme => ({
     vertical: {
@@ -121,6 +122,8 @@ class OwnersList extends Component {
         }*/
 
         const conns = connectionTypes ? ' connected via ' + connectionTypes : '';
+        //const connectLabel = `${names} ${haveHas} this image${conns}`;
+        const connectLabel = `${names}${conns}`;
 
         const anyoneLoading = owners.some(item => item.loading);
         let overallProgress = '';
@@ -129,7 +132,9 @@ class OwnersList extends Component {
             overallProgress = Math.round((sumProgress / owners.length)) || '';
             overallProgress = overallProgress || overallProgress !== '' ? overallProgress + '%' : '';
             overallProgress = overallProgress === '100%' ? '' : overallProgress;
+            overallProgress = overallProgress === '' ? <CheckIcon /> : overallProgress;
         }
+        overallProgress = overallProgress === '' ? <CheckIcon /> : overallProgress;
         return <span style={{
                     display: 'flex',
                     flexDirection: 'row',
@@ -149,7 +154,7 @@ class OwnersList extends Component {
                     </Badge>
                <Typography style={{
                    marginLeft: '20px'
-               }} variant="caption">{names} {haveHas} this image{conns}</Typography>
+               }} variant="caption">{connectLabel}</Typography>
             </span>
             <Typography variant="caption">{overallProgress}</Typography>
         </span>
@@ -257,7 +262,7 @@ class OwnersList extends Component {
         if(peers.connections && peers.connections.length > 0) {
             photoConnections = peers.connections.filter(item => item.infoHash === tile.infoHash);
         }
-        const connectionTypes = photoConnections.map(item => item.connectionType).join(', ');
+        const connectionTypes = [...new Set(photoConnections.map(item => item.connectionType))].join(', ');
 
         //Logger.info('owners ' + JSON.stringify(otherPeers));
         return (

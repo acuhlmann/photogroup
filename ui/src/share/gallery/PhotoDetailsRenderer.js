@@ -12,11 +12,14 @@ import _ from 'lodash';
 
 export default class PhotoDetailsRenderer {
 
-    constructor(service) {
+    constructor(service, view) {
         this.service = service;
+        this.view = view;
+        this.debouncedServerPublish = _.throttle(this.batchChangeName.bind(this), 1000,
+            { 'leading': true, 'trailing': true });
     }
 
-    render(metadata, tile) {
+    render(metadata, tile, fileName) {
 
         this.tile = tile;
 
@@ -36,7 +39,8 @@ export default class PhotoDetailsRenderer {
             } else if(item.key === 'GPSAltitude') {
                 content = item.value + 'm'
             } else if(item.key === 'x-file name') {
-                content = this.getFileNameEntry(tile && tile.fileName ? tile.fileName : item.value, item.value);
+                //const fileName = tile && tile.fileName ? tile.fileName : item.value;
+                content = this.getFileNameEntry(fileName, item.value);
             }
 
             return <ListItem key={index}
@@ -46,8 +50,9 @@ export default class PhotoDetailsRenderer {
         });
     }
 
-    getFileNameEntry(name, fullName) {
-        const fileSuffix = FileUtil.getFileSuffix(fullName);
+    getFileNameEntry(name, origName) {
+
+        const fileSuffix = FileUtil.getFileSuffix(origName);
         return <span style={{
             display: 'flex',
             flexDirection: 'row',
@@ -56,21 +61,20 @@ export default class PhotoDetailsRenderer {
             placeholder="File Name"
             margin="normal"
             variant="outlined"
-            defaultValue={FileUtil.getFileNameWithoutSuffix(name)}
-            onChange={
-                //_.debounce(this.batchChangeName.bind(this), 2000, { 'leading': true })
-                this.batchChangeName.bind(this)
-            }
+            value={name}
+            onChange={(event) =>
+                this.debouncedServerPublish(event.target.value)}
         /><span>{fileSuffix}</span></span>
     }
 
-    batchChangeName(event) {
+    batchChangeName(value) {
 
-        if(!event.target) return;
+        if(!value) return;
 
-        console.log('change name ' + event.target.value);
+        this.view.setState({fileName: value});
+        Logger.info('change name ' + value);
         this.service.update(this.tile.infoHash, {
-            fileName: FileUtil.truncateFileName(event.target.value)
+            fileName: FileUtil.truncateFileName(value)
         });
     }
 

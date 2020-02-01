@@ -1,8 +1,6 @@
 import Logger from 'js-logger';
 
 import IdbKvStore from 'idb-kv-store';
-//TODO: fails in create-create-app build
-//import parsetorrent from 'parse-torrent';
 import Peers from '../topology/Peers';
 import idb from 'indexeddb-chunk-store';
 import TorrentAddition from './TorrentAddition';
@@ -120,7 +118,7 @@ export default class TorrentMaster {
     //more on the approach: https://github.com/SilentBot1/webtorrent-examples/blob/master/resurrection/index.js
     resurrectLocallySavedTorrents(photos) {
         //Iterates through all metadata from metadata store and attempts to resurrect them!
-        const scope = this;
+        const self = this;
 
         return new Promise((resolve, reject) => {
 
@@ -128,13 +126,13 @@ export default class TorrentMaster {
             const loopPromise = new Promise(loopResolver);
 
             const allPendingTorrents = [loopPromise];
-            scope.torrentsDb.iterator((err, cursor) => {
+            self.torrentsDb.iterator((err, cursor) => {
                 if(err) {
                     reject(err);
                 }
                 if(cursor) {
                     if(typeof cursor.value === 'object'){
-                        allPendingTorrents.push(scope.resurrectTorrent(cursor.value, photos));
+                        allPendingTorrents.push(self.resurrectTorrent(cursor.value, photos));
                         loopResolver(true);
                     }
                     cursor.continue()
@@ -152,12 +150,12 @@ export default class TorrentMaster {
     }
 
     resurrectTorrent(metadata, photos){
-        const scope = this;
+        const self = this;
 
         return new Promise((resolve, reject) => {
 
             if(typeof metadata === 'object' && metadata != null) {
-                if(scope.client.get(metadata.infoHash)) {
+                if(self.client.get(metadata.infoHash)) {
 
                     Logger.info('resurrectTorrent.client.get ' + metadata.name);
                     resolve(metadata);
@@ -168,18 +166,23 @@ export default class TorrentMaster {
                         const photo = photos.find(item => item.infoHash === metadata.infoHash);
                         if(photo) {
                             photo.rendering = true;
+
+                            self.torrentAddition.add(metadata, false, true).then(torrent => {
+
+                                Logger.info('resurrectTorrent.add ' + torrent.infoHash);
+                                resolve(torrent);
+
+                            }, error => {
+                                const msg = 'error, failed to resurrect ' + JSON.stringify(arguments);
+                                Logger.error(msg);
+                                reject(msg);
+                            });
+
+                        } else {
+                            //delete any local photos not found on server.
+                            self.torrentDeletion.deleteTorrent(metadata);
                         }
                     }
-                    scope.torrentAddition.add(metadata, false, true).then(torrent => {
-
-                        Logger.info('resurrectTorrent.add ' + torrent.infoHash);
-                        resolve(torrent);
-
-                    }, error => {
-                        const msg = 'error, failed to resurrect ' + JSON.stringify(arguments);
-                        Logger.error(msg);
-                        reject(msg);
-                    });
                 }
 
             } else {
@@ -208,11 +211,19 @@ export default class TorrentMaster {
         });
     }
 
-    addSeedOrGetTorrent(addOrSeed, uri, callback) {
+    sendUploadEvent(emitter, torrent, uploadSpeedLabel, progressUp) {
+        emitter.emit('uploadProgress', {
+            torrent: torrent,
+            speed: uploadSpeedLabel,
+            progress: progressUp
+        });
+    }
+
+    addSeedOrGetTorrent(addOrSeed, input, callback) {
 
         const opts = {'announce': window.WEBTORRENT_ANNOUNCE};
         opts.store = idb;
-        const torrent = this.client[addOrSeed](uri, opts, callback);
+        const torrent = this.client[addOrSeed](input, opts, callback);
         //const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE}, callback);
 
         Logger.info('addSeedOrGetTorrent ' + torrent.infoHash + ' ' + torrent.name);
@@ -240,19 +251,18 @@ export default class TorrentMaster {
                 lastDownloadSpeed = downloadSpeed;
                 const downloadSpeedLabel = FileUtil.formatBytes(downloadSpeed) + '/sec';
                 //Logger.trace('torrent.download speed: ' + downloadSpeedLabel + ' ' + progress);
-                //self.publishLoadingStatus(torrent.infoHash, progress.toFixed(0));
-                //const debounced = _.debounce(self.publishLoadingStatus.bind(self),
-                //    3000, { 'leading': true, 'trailing': false });
-                //debounced(torrent.infoHash, progress.toFixed(0));
 
                 if(progressChange) {
                     debouncedServerPublish(torrent.infoHash, progress);
                 }
 
                 debouncedDownload(self.emitter, torrent, downloadSpeedLabel, progress, timeRemaining);
-                //self.sendDownloadEvent(self.emitter, torrent, downloadSpeedLabel, progress, timeRemaining);
             }
         });
+
+        const debouncedUpload = _.throttle(self.sendUploadEvent.bind(self), 200,
+            { 'leading': true, 'trailing': false });
+
         let lastUpProgress = 0;
         let lastUploadSpeed = 0;
         torrent.on('upload', bytes => {
@@ -266,19 +276,15 @@ export default class TorrentMaster {
                 lastUploadSpeed = uploadSpeed;
                 const uploadSpeedLabel = FileUtil.formatBytes(uploadSpeed) + '/sec';
                 //Logger.trace('torrent.upload speed: ' + uploadSpeedLabel + ' ' + progressUp + ' t ' + torrent.progress + ' u ' + torrent.uploaded);
-                self.emitter.emit('uploadProgress', {
-                    torrent: torrent,
-                    speed: uploadSpeedLabel,
-                    progress: progressUp
-                });
+
+                debouncedUpload(self.emitter, torrent, uploadSpeedLabel, progressUp);
             }
         });
         torrent.on('metadata', () => self.torrentAddition.metadata(torrent));
         torrent.on('infoHash', infoHash => self.torrentAddition.infoHash(torrent, infoHash));
         torrent.on('noPeers', announceType => self.torrentAddition.noPeers(torrent, announceType));
         torrent.on('warning', err => self.torrentAddition.warning(torrent, err));
-        torrent.on('wire', (wire, addr) => self.torrentAddition.wire(wire, addr));
-
+        torrent.on('wire', (wire, addr) => self.torrentAddition.wire(wire, addr, torrent));
 
         this.emitter.emit('update', torrent);
 
@@ -311,24 +317,24 @@ export default class TorrentMaster {
     }
 
     syncUiWithServerUrls(photos) {
-        const scope = this;
+        const self = this;
         Logger.debug('photos.length: '+photos.length);
 
         this.client.torrents.forEach(torrent => {
             const urlItem = this.findUrl(photos, torrent.infoHash);
             if(!urlItem) {
-                scope.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
+                self.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
                     Logger.info('deleteTorrent done ' + infoHash);
                 });
             }
         });
 
         photos.forEach(item => {
-            const torrent = scope.client.get(item.infoHash);
+            const torrent = self.client.get(item.infoHash);
             if(!torrent) {
                 Logger.debug('new photo found on server');
 
-                scope.torrentAddition.add(item.url, item.secure, item.sharedBy ? item.sharedBy : {});
+                self.torrentAddition.add(item.url, item.secure, item.sharedBy ? item.sharedBy : {});
             }
 
             /*if(torrent && torrent.files && torrent.files.length < 1 && item.owners.find(owner => owner.peerId === this.client.peerId)) {

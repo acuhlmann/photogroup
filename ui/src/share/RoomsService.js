@@ -16,6 +16,11 @@ export default class RoomsService {
         this.url = '/api/rooms';
 
         this.sessionId = shortid.generate();
+        this.clientId = localStorage.getItem('clientId');
+        if(!this.clientId) {
+            this.clientId = shortid.generate();
+            localStorage.setItem('clientId', this.clientId);
+        }
         //this.id = cryptoRandomString({length: 20, type: 'url-safe'});
         this.id = cryptoRandomString({length: 20, characters: '1234567890abcdefghijklmnopqrstuvwxyzzyxwvutsrqponmlkjihgfedcbaabcdefghijklmnopqrstuvwxyz'});
 
@@ -104,7 +109,7 @@ export default class RoomsService {
 
             const data = JSON.parse(event.data);
 
-            Logger.info(`peerConnections: ${data.length} ${JSON.stringify(data, null, ' ')}`);
+            //Logger.info(`peerConnections: ${data.length} ${JSON.stringify(data, null, ' ')}`);
 
             scope.emitter.emit('peerConnections', data);
         }, false);
