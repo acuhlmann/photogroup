@@ -2,6 +2,7 @@
 const ServerPeer = require('./ServerPeer');
 const Topology = require('./Topology');
 const Peers = require('./Peers');
+const MyDht = require('./MyDht');
 const _ = require('lodash');
 
 module.exports = class Rooms {
@@ -15,6 +16,8 @@ module.exports = class Rooms {
         this.tracker = tracker;
 
         this.rooms = new Map();
+        //this.dht = new MyDht();
+        //this.dht.start();
 
         //dispatched by Peers when someone disconnects, need to remove all ownerships.
         emitter.on('removeOwner', (peerId) => {
@@ -53,6 +56,23 @@ module.exports = class Rooms {
                 connections: room.topology.connections
             });
         }
+
+        app.get('/api/rooms/:id', (request, response) => {
+
+            const id = request.params.id;
+            const room = rooms.get(id);
+            if(room) {
+
+                response.send({
+                    photos: room.photos,
+                    peers: room.peers.peers,
+                });
+
+            } else {
+
+                response.status(404).send('Room not found');
+            }
+        });
 
         //create room
         app.post('/api/rooms/', (request, response) => {
@@ -98,6 +118,10 @@ module.exports = class Rooms {
 
                 const infoHash = request.params.infoHash;
                 const url = request.body.url;
+
+                if(this.dht) {
+                    this.dht.lookup(infoHash);
+                }
 
                 const serverPeer = request.body.serverPeer;
 
@@ -374,7 +398,7 @@ module.exports = class Rooms {
 
             } else {
 
-                room.peers.update(request, response);
+                room.peers.update(request, response, room);
             }
         });
     }

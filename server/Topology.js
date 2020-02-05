@@ -10,6 +10,7 @@ module.exports = class Topology {
     connect(connection) {
 
         const fromPeer = this.peers.webPeers.get(connection.fromPeerId);
+        if(!fromPeer) return;
         let typeFrom = fromPeer.networkChain.find(item => item.ip === connection.from);
         const toPeer = this.peers.webPeers.get(connection.toPeerId);
         let typeTo;

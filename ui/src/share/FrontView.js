@@ -9,6 +9,7 @@ import {Typography} from "@material-ui/core";
 import CropFreeRounded from '@material-ui/icons/CropFreeRounded';
 import SettingsVoiceRounded from '@material-ui/icons/SettingsVoiceRounded';
 import IconButton from "@material-ui/core/IconButton";
+import Slide from "@material-ui/core/Slide";
 
 const styles = theme => ({
     button: {
@@ -59,7 +60,7 @@ class FrontView extends Component {
     }
 
     buildView(master, show, classes) {
-        return !show ? <div style={{
+        return <div style={{
                             marginTop: '50px'
                         }}>
                     <Typography variant={"body2"}>One peer needs to...</Typography>
@@ -69,18 +70,19 @@ class FrontView extends Component {
                             className={classes.button}
                             endIcon={<PlayCircleFilledWhiteRoundedIcon/>}
                     >
-                        start Private Room
+                        start a Private Room
                     </Button>
                 <Typography variant={"body2"}>or join another room via</Typography>
-                <span className={classes.horizontal}>
-                    <Typography variant={"body2"}>Scanning a QR code</Typography>
-                    <IconButton
-                        onClick={() => master.emitter.emit('openQr')}
-                        color="inherit">
-                        <CropFreeRounded />
-                    </IconButton>
-                </span>
-                <span className={classes.horizontal}>
+                <span className={classes.vertical}>
+                    <span className={classes.horizontal}>
+                        <Typography variant={"body2"}>Scanning a QR code</Typography>
+                        <IconButton
+                            onClick={() => master.emitter.emit('openQr')}
+                            color="inherit">
+                            <CropFreeRounded />
+                        </IconButton>
+                    </span>
+                    <span className={classes.horizontal}>
                         <Typography variant={"body2"}>Listening to an audio signal</Typography>
                         <IconButton color="primary"
                             onClick={() => master.emitter.emit('openRecorderChirp')}>
@@ -95,7 +97,8 @@ class FrontView extends Component {
                             <SettingsVoiceRounded />
                         </IconButton>
                     </span>
-            </div> : '';
+                </span>
+            </div>
     }
 
     hasRoom() {
@@ -111,11 +114,11 @@ class FrontView extends Component {
         const hasRoom = this.hasRoom();
 
         return (
-            !hasRoom && visible ? <div>
-
-                {this.buildView(master, show, classes)}
-
-            </div> : ''
+            <Slide direction="up" in={!hasRoom && visible} mountOnEnter unmountOnExit>
+                <div>
+                    {this.buildView(master, show, classes)}
+                </div>
+            </Slide>
         );
     }
 }

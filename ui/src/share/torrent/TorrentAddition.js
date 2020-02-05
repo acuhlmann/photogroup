@@ -189,6 +189,7 @@ export default class TorrentAddition {
 
     metadata(torrent) {
 
+        Logger.info('metadata '+ torrent.infoHash);
         //temporary disable to try wire event approach.
         this.master.peers.connect(torrent, this.master.client.peerId);
 
@@ -224,6 +225,7 @@ export default class TorrentAddition {
     }
 
     wire(wire, addr, torrent) {
+        this.emitter.emit('wire', wire, addr, torrent);
         const remotePeerId = wire.peerId.toString();
         const myPeerId = this.master.client.peerId;
         //this.master.peers.connectWire(myPeerId, torrent, remotePeerId, wire.remoteAddress, wire.remotePort);
@@ -233,19 +235,20 @@ export default class TorrentAddition {
             if(peer) {
                 const network = peer.networkChain.find(item => item.ip === wire.remoteAddress);
                 if(network) {
-                    Logger.warn('wire peer ' + StringUtil.createNetworkLabel(network));
+                    Logger.info('wire peer ' + StringUtil.createNetworkLabel(network) + ' ' + addr);
                     //Logger.warn('wire peer ' + JSON.stringify(network));
+                    return;
                 }
             }
-            const address = (wire.remoteAddress || 'Unknown') + ':' + (wire.remotePort || 'Unknown');
-            Logger.warn('wire ' + remotePeerId + ' ' + address + ' ' + addr);
+            //const address = (wire.remoteAddress || 'Unknown') + ':' + (wire.remotePort || 'Unknown');
+            Logger.info('wire ' + addr);
         } else {
-            Logger.warn('wire no ' + remotePeerId);
+            Logger.info('wire no ' + remotePeerId);
         }
     }
 
     infoHash(t, infoHash) {
-        Logger.warn('infoHash '+infoHash);
+        Logger.info('infoHash '+infoHash);
     }
 
     noPeers(t, announceType) {
@@ -257,11 +260,11 @@ export default class TorrentAddition {
     }
 
     trackerAnnounce(...rest) {
-        Logger.warn('trackerAnnounce ' + rest);
+        //Logger.info('trackerAnnounce ' + rest);
     }
 
     peer(peer, source) {
-        Logger.warn('peer ' + peer.id + ' ' + source);
+        Logger.info('Webtorrent peer ' + peer.id + ' ' + source);
     }
 
     done(torrent) {

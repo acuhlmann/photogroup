@@ -6,6 +6,7 @@ import ExpansionPanelSummary from '@material-ui/core/ExpansionPanelSummary';
 import ExpansionPanelDetails from '@material-ui/core/ExpansionPanelDetails';
 import Typography from '@material-ui/core/Typography';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
+import GroupRounded from '@material-ui/icons/GroupRounded';
 import { withSnackbar } from 'notistack';
 
 import Graph from 'vis-react';
@@ -13,10 +14,18 @@ import Logger from 'js-logger';
 import _ from "lodash";
 import update from "immutability-helper";
 import StringUtil from "../util/StringUtil";
+import Badge from "@material-ui/core/Badge";
+import Slide from "@material-ui/core/Slide";
 
 const styles = theme => ({
     typography: {
         useNextVariants: true,
+    },
+    horizontal: {
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center'
     },
     heading: {
         fontSize: theme.typography.pxToRem(15),
@@ -49,12 +58,19 @@ class TopologyView extends Component {
             });
         });
 
+        emitter.on('wire', (wire, addr, torrent) => {
+            this.setState({
+                wtNumPeers: torrent.numPeers
+            });
+        });
+
         const self = this;
 
         const expandedTopology = localStorage.getItem('expandedTopology') || true;
         this.state = {
             visible: false,
             showTopology: false,
+            wtNumPeers: 0,
             expandedTopology: String(expandedTopology) == 'true',
             graph: {
                 nodes: [], edges: []
@@ -138,10 +154,20 @@ class TopologyView extends Component {
                             });
                             return;
                         } else {
-                            label = StringUtil.createNetworkLabel(node.network, '\n') + '\n';
+                            label = StringUtil.createNetworkLabel(node.network, '\n', true) + '\n';
                         }
-                        label += (network.transport ? network.transport.toLowerCase() : '')
-                            + ' ' + network.ip + ':' + network.port;
+
+                        if(node.networks) {
+                            label += Object.values(_.groupBy(node.networks, 'ip')).map(ips => {
+                                return ' ' + ips.map(item => item.transport).join(',')
+                                    + ' ' + ips[0].ip + ':'
+                                    + ips.map(item => item.port).join(',');
+                            });
+                        } else {
+                            label += (network.transport ? network.transport.toLowerCase() : '');
+                            label += ' ' + network.ip + ':' + network.port;
+                        }
+
                         self.setState({
                             selectedNodeLabel: label
                         });
@@ -282,6 +308,7 @@ class TopologyView extends Component {
                 shape: 'box',
                 peer: peer,
                 network: host,
+                networks: hosts,
             };
             node.title = node.label;
             node.color = this.isMeColor(isMe);
@@ -334,6 +361,7 @@ class TopologyView extends Component {
                 label: this.createShortNetworkLabel(nat),
                 shape: 'box',
                 network: nat,
+                networks: nats,
                 peer: peer,
                 type: 'nat'
             };
@@ -408,7 +436,7 @@ class TopologyView extends Component {
     createShortNetworkLabel(item) {
 
         return StringUtil.addEmptySpaces([
-            item.typeDetail,
+            StringUtil.stripSrflx(item.typeDetail),
             _.get(item, 'network.location.country_flag_emoji'),
             _.truncate((_.get(item, 'network.connection.isp') || item.ip)) + '\n'
         ]);
@@ -447,19 +475,32 @@ class TopologyView extends Component {
         });
     };
 
+    buildHeader(classes, wtNumPeers) {
+
+        return <span className={classes.horizontal}>
+            <Typography className={classes.heading}>Network Topology</Typography>
+            <Badge badgeContent={wtNumPeers} color="primary" style={{
+                marginLeft: '10px'
+            }} >
+                <GroupRounded />
+            </Badge>
+        </span>
+    }
+
     render() {
 
         const {classes} = this.props;
-        const {visible, showTopology, graph, selectedNodeLabel, expandedTopology} = this.state;
+        const {visible, showTopology, graph, selectedNodeLabel, expandedTopology, wtNumPeers} = this.state;
 
         return (
-            visible && showTopology ? <ExpansionPanel expanded={expandedTopology}
+            <Slide direction="left" in={visible && showTopology} mountOnEnter unmountOnExit>
+                <ExpansionPanel expanded={expandedTopology}
                                            onChange={this.handleExpand('expandedTopology')}
                                            style={{
                                                marginBottom: '5px'
                                             }}>
                 <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography className={classes.heading}>Network Topology</Typography>
+                    {this.buildHeader(classes, wtNumPeers)}
                 </ExpansionPanelSummary>
                 <ExpansionPanelDetails className={classes.content} style={{
                     display: 'flex',
@@ -470,7 +511,8 @@ class TopologyView extends Component {
                            graph={graph} options={this.state.options} events={this.state.events}
                            style={{width: "100%", height: "400px"}}/>
                 </ExpansionPanelDetails>
-            </ExpansionPanel> : ''
+                </ExpansionPanel>
+            </Slide>
         );
     }
 }

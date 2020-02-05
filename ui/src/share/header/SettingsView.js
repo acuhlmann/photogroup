@@ -132,7 +132,7 @@ class SettingsView extends Component {
         </div>;
         console.info(level, message);
 
-        if(level === 'WARN' || level === 'ERROR') {
+        if(level === 'DEBUG' || level === 'INFO' || level === 'WARN' || level === 'ERROR') {
             const messages = update(this.state.messages, {$unshift: [msg]});
             this.setState({messages: messages});
         }
@@ -351,7 +351,7 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v7 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v4 {this.state.peerId}</Typography>
 
                         {messages}
 

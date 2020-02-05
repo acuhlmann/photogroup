@@ -21,12 +21,24 @@ export default class Peers {
                 if(index > -1)
                     this.items = update(this.items, {$splice: [[index, 1, event.item]]});
             }
-            emitter.emit('numPeersChange', this.items.length);
+            emitter.emit('numPeersChange', this.items.length, this);
         });
 
         emitter.on('peerConnections', connections => {
             this.connections = connections;
         });
+
+        /*emitter.on('addPeerDone', () => {
+            const peerConnections = JSON.parse(localStorage.getItem('peerConnections'));
+            if(peerConnections) {
+                peerConnections.forEach(item => {
+                    item.toPeerId = service.master.client.peerId;
+                    this.service.connect(item);
+                });
+            } else {
+                localStorage.setItem('peerConnections', JSON.stringify([]));
+            }
+        });*/
     }
 
     connectWire(myPeerId, torrent, remotePeerId, remoteAddress, remotePort) {
@@ -75,44 +87,15 @@ export default class Peers {
             };
 
             self.service.connect(result);
-            /*if(result.from && result.to) {
 
-                self.service.connect(result);
-
-            } else {
-
-                const pc = conn._pc;
-                self.listenToPcEvents(pc);
-                pc.onicecandidate = function(e) {
-                    Logger.info('onicecandidate.type ' + e.type);
-                };
-                //pc.createOffer()
-                //    .then(offer => pc.setLocalDescription(offer));
-            }*/
+            /*const peerConnections = JSON.parse(localStorage.getItem('peerConnections'));
+            peerConnections.push(result);
+            localStorage.setItem('peerConnections', JSON.stringify(peerConnections));*/
 
             return result;
         });
 
         return peers;
-    }
-
-    listenToPcEvents(pc) {
-        //const self = this;
-        pc.addEventListener('icegatheringstatechange', event => {
-            const state = event.target.iceGatheringState;
-            //self.emitter.emit('pcEvent', event.type, state);
-            Logger.info('pcEvent ' + event.type, state);
-        });
-        pc.addEventListener('signalingstatechange', event => {
-            const state = event.target.signalingState;
-            //self.emitter.emit('pcEvent', event.type, state);
-            Logger.info('pcEvent ' + event.type, state);
-        });
-        pc.addEventListener('iceconnectionstatechange', event => {
-            const state = event.target.iceConnectionState;
-            //self.emitter.emit('pcEvent', event.type, state);
-            Logger.info('pcEvent ' + event.type, state);
-        });
     }
 
     disconnect(infoHash) {

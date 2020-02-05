@@ -16,8 +16,11 @@ import update from "immutability-helper";
 import ViewListRounded from '@material-ui/icons/ViewListRounded';
 import ViewAgendaRounded from '@material-ui/icons/ViewAgendaRounded';
 import IconButton from '@material-ui/core/IconButton';
-import _ from 'lodash';
 import StringUtil from "./util/StringUtil";
+import NatListItem from "./util/NatListItem";
+import UserListItem from "./util/UserListItem";
+import Slide from "@material-ui/core/Slide";
+import {Fade} from "@material-ui/core";
 
 const styles = theme => ({
     content: {
@@ -53,7 +56,7 @@ class MeView extends Component {
         const expandedMe = localStorage.getItem('expandedMe') || false;
         this.state = {
             expandedMe: String(expandedMe) == 'true',
-            showMe: true, galleryHasImages: false, listView: true,
+            showMe: false, galleryHasImages: false, listView: true,
             me: {}, myNat: null, connectionSpeedType: ''
         };
 
@@ -63,6 +66,7 @@ class MeView extends Component {
             if(this.state.me && this.state.me.label
                 && this.state.myNat && this.state.myNat.network && this.state.myNat.network.hostname) return;
 
+            if(!chain.find) return;
             const me = chain
                 .find(item => item.typeDetail === 'host');
 
@@ -172,7 +176,7 @@ class MeView extends Component {
                     //_.debounce(this.batchChangeName.bind(this), 2000)
                 }
             />
-            {galleryHasImages ? <span className={classes.horizontal}>
+            <Fade in={galleryHasImages}><span className={classes.horizontal}>
                 <IconButton color={listView ? 'primary' : 'inherit'}
                         onClick={(event) => {
                             event.stopPropagation();
@@ -189,7 +193,7 @@ class MeView extends Component {
                         }}>
                     <ViewAgendaRounded />
                 </IconButton>
-            </span> : ''}
+            </span></Fade>
         </span> : '';
     }
 
@@ -198,41 +202,33 @@ class MeView extends Component {
         const { classes } = this.props;
         const {expandedMe, showMe, galleryHasImages, listView, me, myNat, connectionSpeedType} = this.state;
 
+        const peer = {
+            connectionSpeedType: connectionSpeedType,
+            name: '', originPlatform: me.label
+        };
         return (
-            showMe ? <span>
-                <ExpansionPanel expanded={expandedMe} onChange={this.handleExpand('expandedMe')}>
-                    <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
-                        {this.buildHeader(galleryHasImages, listView, classes)}
-                    </ExpansionPanelSummary>
-                    <ExpansionPanelDetails className={classes.content}>
-                        <div className={classes.verticalAndWide}>
-                            <Paper style={{
-                                margin: '10px',
-                                padding: '10px'}}>
-                                <div
-                                    className={classes.vertical}>
-                                    <span
-                                        className={classes.horizontal}>
-                                        <AccountCircleRounded/>
-                                        <Typography variant="caption" style={{
-                                            marginLeft: '5px'
-                                        }}>{connectionSpeedType}{me.label}</Typography>
-                                    </span>
-                                    {myNat ? <span
-                                        className={classes.horizontal}>
-                                        <img src={"./firewall.png"} alt="firewall" style={{
-                                            width: '20px'
-                                        }}/>
-                                        <Typography variant="caption" style={{
-                                            marginLeft: '5px'
-                                        }}>{myNat.label}</Typography>
-                                    </span> : ''}
-                                </div>
-                            </Paper>
-                        </div>
-                    </ExpansionPanelDetails>
-                </ExpansionPanel>
-            </span> : ''
+            <Slide direction="left" in={showMe} mountOnEnter unmountOnExit>
+                <span>
+                    <ExpansionPanel expanded={expandedMe} onChange={this.handleExpand('expandedMe')}>
+                        <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
+                            {this.buildHeader(galleryHasImages, listView, classes)}
+                        </ExpansionPanelSummary>
+                        <ExpansionPanelDetails className={classes.content}>
+                            <div className={classes.verticalAndWide}>
+                                <Paper style={{
+                                    margin: '10px',
+                                    padding: '10px'}}>
+                                    <div
+                                        className={classes.vertical}>
+                                        <UserListItem peer={peer} />
+                                        <NatListItem nat={myNat} />
+                                    </div>
+                                </Paper>
+                            </div>
+                        </ExpansionPanelDetails>
+                    </ExpansionPanel>
+                </span>
+            </Slide>
         );
     }
 }

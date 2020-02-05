@@ -64,8 +64,10 @@ class ContentTile extends Component {
         this.setState({listView: isList});
     }
 
-    handleDisconnectNode(foo) {
-        this.setState({there: false});
+    handleDisconnectNode(photo) {
+        if(photo.infoHash === this.props.tile.infoHash) {
+            this.setState({there: false});
+        }
     }
 
     componentWillUnmount() {
@@ -203,48 +205,48 @@ class ContentTile extends Component {
             </div>;
 
         return (
-            <div>
-                <div className={classes.gridList}>
+            /*<Zoom in={there}>*/
+            <div className={classes.gridList}>
 
-                    {renderMediaDom}
+                {renderMediaDom}
 
-                    <Collapse in={listView}>
-                        <Paper className={classes.toolbar}>
-                        <div style={{width: '100%'}} className={classes.horizontal}>
+                <Collapse in={listView}>
+                    <Paper className={classes.toolbar}>
+                    <div style={{width: '100%'}} className={classes.horizontal}>
 
-                            <IconButton onClick={this.downloadFromServer.bind(this, tile)}>
-                                <CloudDownloadIcon/>
-                            </IconButton>
-                            {localDownloads.includes(tile.infoHash) ? <Typography variant={"caption"}>Downloaded</Typography> : ''}
-                            {/*<IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
-                                <InfoIcon />
-                            </IconButton>*/}
-                            <Typography onClick={this.handleOpen.bind(this, tile)} className={classes.wordwrap}
-                                        title={tile.picSummary}
-                                        variant="caption">{name}
-                            </Typography>
-                            <IconButton onClick={this.handleDelete.bind(this, tile)}
-                                        className={classes.icon}>
-                                <DeleteIcon />
-                            </IconButton>
-                            {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
-                                <CloudUploadIcon/>
-                            </IconButton>*/}
-                        </div>
-                        <div style={{width: '100%'}}>
-                            {/*<Typography variant={"caption"}>first shared by {tile.peerId}</Typography>*/}
-                            <OwnersList emitter={master.emitter}
-                                        tile={tile} owners={tile.owners} peers={master.peers} myPeerId={master.client.peerId}
-                            />
-                        </div>
-                        </Paper>
-                        <PhotoDetails open={open}
-                                      tile={tile}
-                                      master={master}
-                                      handleClose={this.handleClose.bind(this)} />
-                    </Collapse>
-                </div>
+                        <IconButton onClick={this.downloadFromServer.bind(this, tile)}>
+                            <CloudDownloadIcon/>
+                        </IconButton>
+                        {localDownloads.includes(tile.infoHash) ? <Typography variant={"caption"}>Downloaded</Typography> : ''}
+                        {/*<IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
+                            <InfoIcon />
+                        </IconButton>*/}
+                        <Typography onClick={this.handleOpen.bind(this, tile)} className={classes.wordwrap}
+                                    title={tile.picSummary}
+                                    variant="caption">{name}
+                        </Typography>
+                        <IconButton onClick={this.handleDelete.bind(this, tile)}
+                                    className={classes.icon}>
+                            <DeleteIcon />
+                        </IconButton>
+                        {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
+                            <CloudUploadIcon/>
+                        </IconButton>*/}
+                    </div>
+                    <div style={{width: '100%'}}>
+                        {/*<Typography variant={"caption"}>first shared by {tile.peerId}</Typography>*/}
+                        <OwnersList emitter={master.emitter}
+                                    tile={tile} owners={tile.owners} peers={master.peers} myPeerId={master.client.peerId}
+                        />
+                    </div>
+                    </Paper>
+                    <PhotoDetails open={open}
+                                  tile={tile}
+                                  master={master}
+                                  handleClose={this.handleClose.bind(this)} />
+                </Collapse>
             </div>
+            /*</Zoom>*/
         );
     }
 }

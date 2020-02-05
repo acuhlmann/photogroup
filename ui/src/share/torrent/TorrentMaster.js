@@ -78,29 +78,31 @@ export default class TorrentMaster {
                 this.syncUiWithServerUrls(photos);
                 this.emitter.emit('photos', {type: 'all', item: photos});
 
-
-                /*let foundAnyMissing;
-                let msg = '';
-                photos.forEach(item => {
-
-                    if(this.fillMissingOwners(item)) {
-                        foundAnyMissing = true;
-                    }
-                    msg += item.infoHash + ' '  + item.fileName + '\n';
-                });
-                if(msg)
-                    Logger.info('photos: ' + msg);
-
-                if(!foundAnyMissing) {
-                    //this.emitter.emit('photos', response.photos);
-                }*/
+                this.fillMissingOwners(photos);
 
                 return response.photos;
             });
     }
 
-    /*fillMissingOwners(item) {
-        let foundAnyMissing;
+    fillMissingOwners(photos) {
+
+        return new Promise((resolve, reject) => {
+            const promises = photos
+                .map(item => this.fillMissingOwnersItem(item))
+                .filter(item => item);
+
+            if(promises.length > 0) {
+                Logger.warn('found missing owners and filled');
+                Promise.all(promises).then(results => {
+                    resolve();
+                });
+            } else {
+                resolve();
+            }
+        });
+    }
+
+    fillMissingOwnersItem(item) {
         //check for missing owners - can happen after re-connections.
         const peerId = this.client.peerId;
         const torrent = this.client.get(item.infoHash);
@@ -108,12 +110,10 @@ export default class TorrentMaster {
         if(isOwner) {
             const found = item.owners.find(owner => owner.peerId === peerId);
             if(!found) {
-                foundAnyMissing = true;
-                this.service.addOwner(item.infoHash, peerId);
+                return this.service.addOwner(item.infoHash, peerId, false);
             }
         }
-        return foundAnyMissing
-    }*/
+    }
 
     //more on the approach: https://github.com/SilentBot1/webtorrent-examples/blob/master/resurrection/index.js
     resurrectLocallySavedTorrents(photos) {
@@ -166,6 +166,7 @@ export default class TorrentMaster {
                         const photo = photos.find(item => item.infoHash === metadata.infoHash);
                         if(photo) {
                             photo.rendering = true;
+                            photo.fromCache = true;
 
                             self.torrentAddition.add(metadata, false, true).then(torrent => {
 

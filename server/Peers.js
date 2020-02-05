@@ -23,6 +23,10 @@ module.exports = class Peers {
         this.clientsBySessionId.clear();
     }
 
+    get peers() {
+        return [...this.webPeers.values()];
+    }
+
     create(peer) {
 
         if(!peer.networkChain) {
@@ -35,31 +39,56 @@ module.exports = class Peers {
                 this.sendWebPeers('update', peer);
             }
         });
-        return [...this.webPeers.values()];
+        return this.peers;
     }
 
-    update(request, response) {
+    update(request, response, room) {
 
         const peerId = request.params.peerId;
+        const update = request.body;
         const peer = this.webPeers.get(peerId);
         if(!peer) {
 
-            return response.status(404).send('Peer not found');
+            if(update.peerId && update.sessionId && update.originPlatform) {
+
+                const peers = this.createPeer(peerId, update);
+                response.send({
+                    photos: room.photos,
+                    peers: peers,
+                });
+
+            } else {
+
+                return response.status(404).send('Peer not found');
+            }
 
         } else {
 
-            const update = request.body;
-            const peer = this.webPeers.get(peerId);
-            const newPeer = _.merge(peer, update);
-            this.webPeers.set(peer.peerId, newPeer);
-            this.sendWebPeers('update', newPeer);
-            IpTranslator.enrichNetworkChainIPs(newPeer.networkChain).then(results => {
-                if(results && results.length > 0) {
-                    this.sendWebPeers('update', newPeer);
-                }
-            });
+            this.updatePeer(peer, update);
             response.send(true);
         }
+    }
+
+    updatePeer(peer, update) {
+        const newPeer = _.merge(peer, update);
+        this.webPeers.set(peer.peerId, newPeer);
+        this.sendWebPeers('update', newPeer);
+        IpTranslator.enrichNetworkChainIPs(newPeer.networkChain).then(results => {
+            if(results && results.length > 0) {
+                this.sendWebPeers('update', newPeer);
+            }
+        });
+    }
+
+    createPeer(peerId, update) {
+        this.webPeers.set(peerId, update);
+        this.sendWebPeers('add', update);
+        IpTranslator.enrichNetworkChainIPs(update.networkChain).then(results => {
+            if(results && results.length > 0) {
+                this.sendWebPeers('update', update);
+            }
+        });
+        return this.peers;
     }
 
     connect(sessionId) {

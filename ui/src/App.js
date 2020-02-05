@@ -63,28 +63,40 @@ class App extends Component {
             Logger.warn('Visibility NOT supported');
         }
 
-        Visibility.change((e, state) => {
+        const self = this;
+        Visibility.change(async (e, state) => {
             //Statistics.visibilityChange(state);
-            Logger.info('Visibility.change ' + state);
+
             if(state === 'visible') {
 
-                this.master.client.torrents.forEach(torrent => {
-                    this.master.torrentAddition.add(torrent);
-                });
-                this.master.service.updatePeer({});
-
-                //const peerId = this.master.client && this.master.client.peerId;
-                /*if(peerId) {
-                    this.master.service.getPeer(peerId)
-                        .catch((err) => {
-                            Logger.info('reconnect ');
-                            if(Number(err.message) === 404) {
-                                this.master.creator.buildTopology();
-                            }
-                        });
-                }*/
+                Logger.info('Visibility.change ' + state);
+                const response = await self.master.service.updatePeer(self.master.service.peerData);
+                if(!response) return;
+                const {photos, peers} = response;
+                if(photos && peers) {
+                    this.leaveRoom();
+                    /*
+                    //tried to do this without refreshing the page, but failed so far.
+                    Logger.info(`photos: ${photos.length} peers ${peers.length}`);
+                    this.emitter.emit('peers', {type: 'all', item: peers});
+                    this.master.client.torrents.forEach(torrent => {
+                        this.master.torrentAddition.add(torrent);
+                    });
+                    this.emitter.emit('photos', {type: 'all', item: photos});
+                    const results = await this.master.fillMissingOwners(photos);
+                    Logger.info('fillMissingOwners results ' + results);
+                    const lastResults = await this.master.service.getRoom();
+                    this.emitter.emit('peers', {type: 'all', item: lastResults.peers});
+                    this.emitter.emit('photos', {type: 'all', item: lastResults.photos});
+                    */
+                }
             }
         });
+    }
+
+    leaveRoom() {
+        const location = window.location;
+        location.reload();
     }
 
     render() {

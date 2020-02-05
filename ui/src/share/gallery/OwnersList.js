@@ -5,7 +5,6 @@ import List from "@material-ui/core/List";
 import ListItem from "@material-ui/core/ListItem";
 import AccountCircleRounded from "@material-ui/icons/AccountCircleRounded";
 import GroupRounded from "@material-ui/icons/GroupRounded";
-import update from "immutability-helper";
 import Paper from "@material-ui/core/Paper";
 import Logger from 'js-logger';
 import _ from 'lodash';
@@ -17,6 +16,8 @@ import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import Badge from "@material-ui/core/Badge";
 import StringUtil from "../util/StringUtil";
 import CheckIcon from "@material-ui/icons/CheckRounded";
+import NatListItem from "../util/NatListItem";
+import UserListItem from "../util/UserListItem";
 
 const styles = theme => ({
     vertical: {
@@ -54,23 +55,16 @@ class OwnersList extends Component {
 
         this.state = {
             expanded: false,
-            peerItems: peers.items,
+            peerItems: peers,
             newConnections: []
         };
 
-        emitter.on('peers', this.handlePeersUpdate, this);
+        emitter.on('numPeersChange', this.handlePeersUpdate, this);
         emitter.on('peerConnections', this.handlePeersConnectionUpdate, this);
     }
 
-    handlePeersUpdate(event) {
-        const {myPeerId, peers} = this.props;
-        if(event.type === 'update' && event.item.peerId !== myPeerId) {
-            const index = peers.items.findIndex(item => item.peerId === event.item.peerId);
-            if(index > -1) {
-                peers.items = update(peers.items, {$splice: [[index, 1, event.item]]});
-                this.setState({peerItems: peers.items});
-            }
-        }
+    handlePeersUpdate(len, peers) {
+        this.setState({peerItems: peers});
     }
 
     handlePeersConnectionUpdate(connections) {
@@ -84,7 +78,7 @@ class OwnersList extends Component {
     }
 
     componentWillUnmount() {
-        this.props.emitter.removeListener('peers', this.handlePeersUpdate, this);
+        this.props.emitter.removeListener('numPeersChange', this.handlePeersUpdate, this);
         this.props.emitter.removeListener('peerConnections', this.handlePeersConnectionUpdate, this);
     }
 
@@ -168,12 +162,17 @@ class OwnersList extends Component {
                 Logger.error('Cannot find peerId ' + owner.peerId);
                 return;
             }
-            const nat = peer.networkChain
+            let nat = peer.networkChain
                 ? peer.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))
                     && item.label) : null;
             if(!nat) {
-                Logger.error('Cannot find nat ' + peer.name + ' ' + owner.peerId);
-                return;
+
+                nat = peer.networkChain
+                    ? peer.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))) : null;
+                if(!nat) {
+                    Logger.error('Cannot find nat ' + peer.name + ' ' + owner.peerId);
+                    return;
+                }
             }
 
             return {
@@ -202,61 +201,40 @@ class OwnersList extends Component {
                     //owner.loading = true;
                     //connection = {connectionType: 'p2p'};
 
-                    const progress = owner.progress === '' ? '' : owner.progress + '%';
+                    const progress = isNaN(owner.progress) ? '' : owner.progress + '%';
 
-                    return <span key={clientIndex} className={classes.horizontal}>
+                    return <span key={clientIndex} className={classes.horizontal} style={{
+                                justifyContent: 'left'
+                            }}>
                         <span style={{
                             position: 'relative',
                             textAlign: 'center',
-                            marginRight: '10px'
+                            //marginRight: '10px'
                         }}>
-                            <span className={classes.vertical}>
+                            <span className={classes.vertical} style={{
+                                justifyContent: 'left'
+                            }}>
                                 {connection ? <Typography variant="caption">{connection.connectionType}</Typography> : ''}
                                 {owner.loading ? <Typography variant="caption">Loading {progress}</Typography> : ''}
                             </span>
                         </span>
-                        <span
-                            className={classes.horizontal}
-                            style={{
-                                justifyContent: 'left'
-                        }}>
-                            <AccountCircleRounded/>
-                            <Typography variant="caption" style={{
-                                marginLeft: '5px'
-                            }}>{this.createClientLabel(peer)}</Typography>
-                        </span>
+                        <UserListItem peer={peer} />
                     </span>;
                 });
 
                 const nat = natClients[0].nat;
                 return <ListItem key={index} className={classes.vertical}>
-                    {nat ? <span
-                        className={classes.horizontal}>
-                                <img src={"./firewall.png"} alt="firewall" style={{
-                                    width: '20px'
-                                }}/>
-                                <Typography variant="caption" style={{
-                                    marginLeft: '5px'
-                                }}>{StringUtil.createNetworkLabel(nat)}</Typography>
-                            </span> : ''}
+                    <NatListItem nat={nat} />
                     {clients}
                 </ListItem>;
             });
     }
 
-    createClientLabel(peer) {
-
-        return StringUtil.addEmptySpaces([
-            peer.connectionSpeedType,
-            peer.name,
-            peer.originPlatform
-        ]);
-    }
-
     render() {
-        const {classes, owners, myPeerId, peers, tile} = this.props;
+        const {classes, owners, myPeerId, tile} = this.props;
         const {peerItems, newConnections, expanded} = this.state;
 
+        const peers = peerItems;
         const otherPeers = owners.filter(item => item.peerId !== myPeerId);
         let photoConnections = newConnections;
         if(peers.connections && peers.connections.length > 0) {
@@ -278,7 +256,7 @@ class OwnersList extends Component {
                     <ExpansionPanelDetails className={classes.content}>
                         <Paper style={{
                             margin: '10px',
-                            padding: '10px'
+                            //padding: '10px'
                         }}>
                             <List>
                                 {

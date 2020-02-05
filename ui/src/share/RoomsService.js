@@ -99,7 +99,7 @@ export default class RoomsService {
                 ? peer.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))
                     && item.label) : null;
             if(nat) {
-                Logger.info(`peers nat: ${nat.label}`);
+                //Logger.info(`peers nat: ${nat.label}`);
             }
 
             scope.emitter.emit('peers', data);
@@ -229,6 +229,27 @@ export default class RoomsService {
             throw err;
         }
     }
+
+    async getRoom() {
+
+        try {
+            let response = await fetch(this.url + '/' + this.id);
+
+            if (!response.ok) {
+                console.error(response.status);
+            } else {
+                Logger.info('get room');
+                const room = await response.json();
+                return room;
+            }
+
+        } catch(err) {
+            Logger.error('get room ' + err);
+            throw err;
+        }
+    }
+
+    //---------------------
 
     async updatePeer(update) {
 
@@ -389,7 +410,7 @@ export default class RoomsService {
         });
     }
 
-    addOwner(infoHash, peerId) {
+    addOwner(infoHash, peerId, loading = true) {
 
         try {
             return fetch(this.url + '/' + this.id + '/photos/owners/' + peerId, {
@@ -401,7 +422,7 @@ export default class RoomsService {
                 body: JSON.stringify({
                     infoHash: infoHash,
                     peerId: peerId,
-                    loading: true
+                    loading: loading
                 })
             });
         } catch(e) {

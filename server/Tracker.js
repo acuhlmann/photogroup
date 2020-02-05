@@ -17,9 +17,6 @@ module.exports = class Tracker {
     }
 
     start() {
-
-        //listenDHT();
-
         const onlistening = this.handleEvent.bind(this);
         const remoteLog = this.remoteLog;
         const app = this.app;

@@ -105,9 +105,9 @@ class LoadingTile extends Component {
 
         //let owners = tile.owners ? tile.owners : [];
         const progressPercentage = progress ? Math.round(progress) + '%' : progress;
-        const have = tile.owners.find(owner => owner.peerId === master.client.peerId && !owner.loading);
+        let have = tile.owners.find(owner => owner.peerId === master.client.peerId && !owner.loading);
         const isLoading = !!progress;
-        const loadingText = tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path');
+        let loadingText = tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path');
         const isRendering = loadingText === 'Rendering';
         if(tile.rendering && !name) {
             const fileSize = _.get(tile, 'file.size');
@@ -115,6 +115,11 @@ class LoadingTile extends Component {
                 tile.fileSize = FileUtil.formatBytes(fileSize);
             }
             name = StringUtil.addEmptySpaces([_.get(tile, 'file.name'), tile.fileSize, tile.picDateTaken]);
+        }
+
+        if(isRendering && tile.fromCache) {
+            loadingText = 'Restoring from Cache';
+            have = false;
         }
 
         return (

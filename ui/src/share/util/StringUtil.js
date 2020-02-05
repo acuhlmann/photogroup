@@ -23,19 +23,24 @@ export default class StringUtil {
         return slimmed;
     }
 
-    static createNetworkLabel(item, ispSeparator='') {
+    static stripSrflx(label) {
+        return label.replace(/srflx/, '');
+    }
 
-        const country = StringUtil.addEmptySpaces([
-            item.typeDetail,
+    static createNetworkLabel(item, ispSeparator='', noStripping) {
+
+        let country = StringUtil.addEmptySpaces([
+            noStripping ? item.typeDetail : StringUtil.stripSrflx(item.typeDetail),
             _.get(item, 'network.location.country_flag_emoji'),
             _.get(item, 'network.city')
-        ]);
+        ]).trim();
 
         const host = StringUtil.addEmptySpaces([
             (_.get(item, 'network.connection.isp') || item.ip) + ispSeparator,
             _.get(item, 'network.hostname')
         ]);
 
-        return country + ', ' + host;
+        country = country ? country + ', ' : country;
+        return country + host;
     }
 }

@@ -21,10 +21,12 @@ import QrReader from 'react-qr-reader'
 import Logger from 'js-logger';
 import ChirpSDK from 'chirp-js-sdk';
 import Uploader from "./Uploader";
-import Slide from '@material-ui/core/Slide';
+//import Slide from '@material-ui/core/Slide';
+import Fade from '@material-ui/core/Fade';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
-    return <Slide direction="down" ref={ref} {...props} />;
+    //return <Slide direction="down" ref={ref} {...props} />;
+    return <Fade ref={ref} {...props} />;
 });
 
 const styles = theme => ({
