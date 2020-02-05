@@ -83,11 +83,13 @@ module.exports = class Peers {
     createPeer(peerId, update) {
         this.webPeers.set(peerId, update);
         this.sendWebPeers('add', update);
-        IpTranslator.enrichNetworkChainIPs(update.networkChain).then(results => {
-            if(results && results.length > 0) {
-                this.sendWebPeers('update', update);
-            }
-        });
+        if(update.networkChain) {
+            IpTranslator.enrichNetworkChainIPs(update.networkChain).then(results => {
+                if(results && results.length > 0) {
+                    this.sendWebPeers('update', update);
+                }
+            });
+        }
         return this.peers;
     }
 
