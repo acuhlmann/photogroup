@@ -231,18 +231,18 @@ class OwnersList extends Component {
     }
 
     render() {
-        const {classes, owners, myPeerId, tile} = this.props;
+        const {classes, myPeerId, tile} = this.props;
         const {peerItems, newConnections, expanded} = this.state;
 
         const peers = peerItems;
-        const otherPeers = owners.filter(item => item.peerId !== myPeerId);
+        const otherPeers = tile.owners.filter(item => item.peerId !== myPeerId);
         let photoConnections = newConnections;
         if(peers.connections && peers.connections.length > 0) {
             photoConnections = peers.connections.filter(item => item.infoHash === tile.infoHash);
         }
         const connectionTypes = [...new Set(photoConnections.map(item => item.connectionType))].join(', ');
 
-        //Logger.info('owners ' + JSON.stringify(otherPeers));
+        //Logger.info('tile.owners ' + JSON.stringify(otherPeers));
         return (
             this.hasOwners(otherPeers, peers) ?
                 <ExpansionPanel expanded={expanded}

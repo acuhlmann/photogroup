@@ -70,7 +70,7 @@ class Uploader extends Component {
         this.uploaderDom = event.target || event.srcElement;
 
         const self = this;
-        this.model.seed(files[0], false, null, () => {
+        this.model.seed(files, false, null, () => {
             self.uploaderDom.value = '';
         });
     }
@@ -103,7 +103,7 @@ class Uploader extends Component {
                 <input
                     accept="image/*,video/*"
                     //accept="image/*"
-                    //multiple
+                    multiple
                     style={{
                         position: 'absolute',
                         top: loadedAnything ? '-15px' : '0px',

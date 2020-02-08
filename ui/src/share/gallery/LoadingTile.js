@@ -66,6 +66,18 @@ class LoadingTile extends Component {
     }
 
     handleDownloadProgress(event) {
+        /*this.setState((state, props) => {
+
+            const torrent = event.torrent;
+            if(torrent.infoHash === props.tile.infoHash) {
+                const progress = event.progress;
+                return {
+                    progress: progress,
+                    downSpeed: event.speed,
+                    timeRemaining: event.timeRemaining
+                }
+        });*/
+
         const torrent = event.torrent;
         if(torrent.infoHash === this.props.tile.infoHash) {
             const progress = event.progress;
@@ -184,7 +196,7 @@ class LoadingTile extends Component {
                     </span>
                 <Divider variant="middle" />
                 {!isRendering ? <OwnersList emitter={master.emitter}
-                            tile={tile} owners={tile.owners} peers={master.peers} myPeerId={master.client.peerId}
+                            tile={tile} peers={master.peers} myPeerId={master.client.peerId}
                 /> : ''}
             </Paper>
         );

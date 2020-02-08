@@ -116,48 +116,46 @@ module.exports = class Rooms {
 
             } else {
 
-                const infoHash = request.params.infoHash;
-                const url = request.body.url;
+                const infoHash = decodeURIComponent(request.params.infoHash);
+                const requestPhoto = request.body.photo;
 
                 if(this.dht) {
                     this.dht.lookup(infoHash);
                 }
 
-                const serverPeer = request.body.serverPeer;
+                const serverPeer = requestPhoto.serverPeer;
 
-                if(serverPeer && url) {
+                if(serverPeer && requestPhoto.url) {
 
-                    room.serverPeer.start(room, url, request, response);
+                    room.serverPeer.start(room, requestPhoto.url, request, response);
 
                 } else {
-                    const peerId = request.body.peerId;
+                    const peerId = requestPhoto.peerId;
                     if(!peerId) {
                         response.status(400).send('Expected peerId');
                         return;
                     }
 
                     let photo;
-                    if (url) {
-                        photo = this.findPhoto(room.photos, infoHash);
-                        if (!photo) {
+                    const sessionId = request.body.sessionId;
+                    photo = this.findPhoto(room.photos, infoHash);
+                    if (!photo) {
 
-                            photo = request.body;
-                            photo.owners = [];
+                        photo = requestPhoto;
+                        photo.owners = [];
 
-                            room.photos.unshift(photo);
+                        room.photos.unshift(photo);
+                        this.sendPhotos(room, this.allRoomClientsExcept(room, sessionId), 'add', photo);
 
-                            this.sendPhotos(room, 'add', photo);
+                        /*const parsed = magnet(url);
+                        const event = Peers.peerToAppPeer(peer);
+                        event.file = parsed.dn;
+                        event.origin = origin;
+                        this.emitter.emit('event', 'info', 'picAdd', event, id);*/
 
-                            /*const parsed = magnet(url);
-                            const event = Peers.peerToAppPeer(peer);
-                            event.file = parsed.dn;
-                            event.origin = origin;
-                            this.emitter.emit('event', 'info', 'picAdd', event, id);*/
-
-                            this.addOwner(room, photo.infoHash, peerId, {
-                                loading: false
-                            });
-                        }
+                        this.addOwner(room, photo.infoHash, peerId, {
+                            loading: false
+                        });
                     }
 
                     response.send(photo);
@@ -175,12 +173,12 @@ module.exports = class Rooms {
 
             } else {
 
-                const infoHash = request.params.infoHash;
+                const infoHash = decodeURIComponent(request.params.infoHash);
                 const existing = this.findPhoto(room.photos, infoHash);
                 const newUrl = request.body;
                 _.merge(existing, newUrl);
                 existing.picSummary = this.createPicSummary(existing);
-                this.sendPhotos(room, 'update', existing);
+                this.sendPhotos(room, this.allRoomClients(room),'update', existing);
                 response.send(existing);
             }
         });
@@ -191,7 +189,7 @@ module.exports = class Rooms {
             const room = rooms.get(id);
             if(room) {
 
-                const infoHash = request.params.infoHash;
+                const infoHash = decodeURIComponent(request.params.infoHash);
 
                 let found = undefined;
                 if (infoHash) {
@@ -212,7 +210,7 @@ module.exports = class Rooms {
                     });
 
                     if (found) {
-                        this.sendPhotos(room,'delete', infoHash);
+                        this.sendPhotos(room, this.allRoomClients(room),'delete', infoHash);
                     } else {
                         found = false;
                     }
@@ -281,7 +279,7 @@ module.exports = class Rooms {
 
             } else {
 
-                this.updateOwner(room, request.params.infoHash, request.params.peerId, request.body, response);
+                this.updateOwner(room, decodeURIComponent(request.params.infoHash), request.params.peerId, request.body, response);
             }
         });
     }
@@ -302,7 +300,7 @@ module.exports = class Rooms {
             }
         });
 
-        this.sendPhotos(room,'addOwner', update);
+        this.sendPhotos(room, this.allRoomClients(room),'addOwner', update);
 
         return added;
     }
@@ -320,7 +318,7 @@ module.exports = class Rooms {
             }
         });
 
-        this.sendPhotos(room,'removeOwner', peerId);
+        this.sendPhotos(room, this.allRoomClients(room),'removeOwner', peerId);
         return deleted;
     }
 
@@ -333,10 +331,14 @@ module.exports = class Rooms {
 
         } else {
             const owner = photo.owners.find(item => item.peerId === peerId);
-            _.merge(owner, update);
-            owner.infoHash = infoHash;
-            this.sendPhotos(room,'updateOwner', owner);
-            response.send(owner);
+            if(owner) {
+                _.merge(owner, update);
+                owner.infoHash = infoHash;
+                this.sendPhotos(room, this.allRoomClients(room), 'updateOwner', owner);
+                response.send(owner);
+            } else {
+                response.send(false);
+            }
         }
     }
 
@@ -375,9 +377,8 @@ module.exports = class Rooms {
         });
     }
 
-    sendPhotos(room, type, item) {
+    sendPhotos(room, clients, type, item) {
 
-        const clients = [...room.peers.clientsBySessionId.values()];
         this.updateChannel.send({
             event: 'photos',
             data: {
@@ -385,6 +386,18 @@ module.exports = class Rooms {
                 item: item
             }
         }, clients);
+    }
+
+    allRoomClients(room) {
+        return [...room.peers.clientsBySessionId.values()];
+    }
+
+    allRoomClientsExcept(room, sessionId) {
+        return [...room.peers.clientsBySessionId.entries()]
+            .filter(item => {
+                return item[0] !== sessionId
+            })
+            .map(item => item[1])
     }
 
     registerPeerRoutes(app) {

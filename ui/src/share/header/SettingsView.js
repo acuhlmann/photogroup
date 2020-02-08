@@ -68,6 +68,7 @@ class SettingsView extends Component {
             showTopology: false,
             showMe: true
         };
+        this.logsBeforeMount = []
 
         Logger.info('platform ' + navigator.platform + ' cpu ' + navigator.oscpu);
 
@@ -124,17 +125,25 @@ class SettingsView extends Component {
 
     componentDidMount() {
         this.mounted = true;
+        this.logsBeforeMount.forEach(missedMessage => this.log(missedMessage));
+        this.logsBeforeMount = [];
     }
 
     log(message, level) {
-        const msg = <div key={Math.random()}>
-            <Typography variant="caption">{level + ': ' + message}</Typography>
-        </div>;
-        console.info(level, message);
+        if(this.mounted) {
+            const msg = <div key={Math.random()}>
+                <Typography variant="caption">{level + ': ' + message}</Typography>
+            </div>;
+            console.info(level, message);
 
-        if(level === 'DEBUG' || level === 'INFO' || level === 'WARN' || level === 'ERROR') {
-            const messages = update(this.state.messages, {$unshift: [msg]});
-            this.setState({messages: messages});
+            if(level === 'DEBUG' || level === 'INFO' || level === 'WARN' || level === 'ERROR') {
+                this.setState(state => {
+                    const messages = update(state.messages, {$unshift: [msg]});
+                    return {messages: messages};
+                });
+            }
+        } else {
+            this.logsBeforeMount.push({message: message, level: level});
         }
     }
 
@@ -148,8 +157,9 @@ class SettingsView extends Component {
         this.setState({ open: false });
     }
 
-    handleReset() {
-        RoomsService.deleteAll();
+    async handleReset() {
+        await RoomsService.deleteAll();
+        this.master.leaveRoomAndReload();
     }
 
     requestBLE() {
@@ -351,7 +361,7 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v7 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v1 {this.state.peerId}</Typography>
 
                         {messages}
 

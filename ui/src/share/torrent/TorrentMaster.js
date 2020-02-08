@@ -168,7 +168,7 @@ export default class TorrentMaster {
                             photo.rendering = true;
                             photo.fromCache = true;
 
-                            self.torrentAddition.add(metadata, false, true).then(torrent => {
+                            self.torrentAddition.add(metadata, photo, true).then(torrent => {
 
                                 Logger.info('resurrectTorrent.add ' + torrent.infoHash);
                                 resolve(torrent);
@@ -220,7 +220,7 @@ export default class TorrentMaster {
         });
     }
 
-    addSeedOrGetTorrent(addOrSeed, input, callback) {
+    addSeedOrGetTorrent(addOrSeed, input, callback, photo) {
 
         const opts = {'announce': window.WEBTORRENT_ANNOUNCE};
         opts.store = idb;
@@ -254,7 +254,8 @@ export default class TorrentMaster {
                 //Logger.trace('torrent.download speed: ' + downloadSpeedLabel + ' ' + progress);
 
                 if(progressChange) {
-                    debouncedServerPublish(torrent.infoHash, progress);
+                    const infoHash = photo ? photo.infoHash : torrent.infoHash;
+                    debouncedServerPublish(infoHash, progress);
                 }
 
                 debouncedDownload(self.emitter, torrent, downloadSpeedLabel, progress, timeRemaining);
@@ -281,7 +282,7 @@ export default class TorrentMaster {
                 debouncedUpload(self.emitter, torrent, uploadSpeedLabel, progressUp);
             }
         });
-        torrent.on('metadata', () => self.torrentAddition.metadata(torrent));
+        torrent.on('metadata', () => self.torrentAddition.metadata(torrent, photo));
         torrent.on('infoHash', infoHash => self.torrentAddition.infoHash(torrent, infoHash));
         torrent.on('noPeers', announceType => self.torrentAddition.noPeers(torrent, announceType));
         torrent.on('warning', err => self.torrentAddition.warning(torrent, err));
@@ -292,27 +293,16 @@ export default class TorrentMaster {
         return torrent;
     }
 
-
     syncWithPhotoEvents() {
         this.emitter.on('photos', event => {
 
-            if(event.type === 'add' && !event.item.seed) {
-                const index = this.client.torrents.findIndex(item => item.infoHash === event.item.infoHash);
-                if(index < 0) {
+            if(event.type === 'add') {
 
-                    this.torrentAddition.add(event.item.url, event.item.secure, false);
-                }
+                this.torrentAddition.handlePhotoAddEvent(event.item);
+
             } else if(event.type === 'delete') {
 
-                const index = this.client.torrents.findIndex(item => item.infoHash === event.item);
-                if(index > -1) {
-                    const torrent = this.client.torrents[index];
-                    if(torrent) {
-                        this.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
-                            Logger.info('deleteTorrent done ' + infoHash);
-                        });
-                    }
-                }
+                this.torrentDeletion.handlePhotoDeleteEvent(event.item);
             }
         });
     }
@@ -335,7 +325,7 @@ export default class TorrentMaster {
             if(!torrent) {
                 Logger.debug('new photo found on server');
 
-                self.torrentAddition.add(item.url, item.secure, item.sharedBy ? item.sharedBy : {});
+                self.torrentAddition.add(item.url, item, item.sharedBy ? item.sharedBy : {});
             }
 
             /*if(torrent && torrent.files && torrent.files.length < 1 && item.owners.find(owner => owner.peerId === this.client.peerId)) {
@@ -371,5 +361,16 @@ export default class TorrentMaster {
                 });
             }
         });
+    }
+
+    leaveRoomAndReload() {
+        const location = window.location;
+        window.history.replaceState({}, '', decodeURIComponent(`${location.pathname}`));
+        location.reload();
+    }
+
+    reload() {
+        const location = window.location;
+        location.reload();
     }
 }

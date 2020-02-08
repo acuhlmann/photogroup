@@ -210,7 +210,49 @@ class TopologyView extends Component {
             const peers = this.master.peers;
             emitter.on('peers', event => {
                 const nodes = [];
-                const edges = this.state.graph.edges.filter(item => item.type === 'connection');
+
+                this.setState(state => {
+                    const edges = state.graph.edges.filter(item => item.type === 'connection');
+                    peers.items.forEach(peer => {
+                        if(peer.networkChain) {
+
+                            const isMe = peer.peerId === myPeerId;
+
+                            const host = this.addHosts(peer, nodes, isMe);
+                            const nat = this.addNats(peer, nodes, isMe);
+                            const relays = this.addRelays(peer, nodes, isMe);
+
+                            if(nat) {
+
+                                const edge = {
+                                    from: peer.peerId,
+                                    to: nat.id || nat.ip,
+                                    width: 2,
+                                    dashes: true,
+                                    arrows: '',
+                                    color: this.isMeColor(isMe),
+                                    network: host
+                                };
+                                edges.push(edge);
+
+                                relays.forEach(relay => {
+                                    const edge = {
+                                        from: nat.id || nat.ip,
+                                        to: relay.id || relay.ip,
+                                        width: 2,
+                                        dashes: true,
+                                        arrows: '',
+                                        color: this.isMeColor(isMe)
+                                    };
+                                    edges.push(edge);
+                                });
+                            }
+                        }
+                    });
+                    return {graph: {nodes : nodes, edges: edges}};
+                });
+
+                /*const edges = this.state.graph.edges.filter(item => item.type === 'connection');
                 peers.items.forEach(peer => {
                     if(peer.networkChain) {
 
@@ -247,12 +289,50 @@ class TopologyView extends Component {
                         }
                     }
                 });
-                this.setState({graph: {nodes : nodes, edges: edges}});
+                this.setState({graph: {nodes : nodes, edges: edges}});*/
             });
 
             emitter.on('peerConnections', connections => {
 
-                const nodes = this.state.graph.nodes;
+
+                this.setState(state => {
+
+                    const nodes = state.graph.nodes;
+                    let edges = state.graph.edges;
+
+                    //remove all connection edges
+                    const connEdges = edges.filter(item => item.type === 'connection');
+                    connEdges.forEach(edge => {
+                        const index = edges.findIndex(item => item.from === edge.from && item.to === edge.to);
+                        edges = update(edges, {$splice: [[index, 1]]});
+                    });
+
+                    //add connection edges in.
+                    connections.forEach(conn => {
+
+                        const from = conn.connectionType === 'p2p' ? conn.fromPeerId : conn.from;
+                        const to = conn.connectionType === 'p2p' ? conn.toPeerId : conn.to;
+                        const edge = {
+                            id: conn.id, from: from, to: to,
+                            //label: conn.connectionType + ' ' + conn.fileName,
+                            type: 'connection',
+                            network: conn,
+                            width: 2,
+                            arrows: 'to',
+                            smooth: {type: 'curvedCW', roundness: 0.5, forceDirection: 'none'},
+                            font: {
+                                align: 'bottom'
+                            }
+                        };
+                        edge.title = edge.label;
+                        if(!edges.find(item => item.from === edge.from && item.to === edge.to)) {
+                            edges = update(edges, {$push: [edge]});
+                        }
+                    });
+
+                    return {graph: {nodes : nodes, edges: edges}};
+                });
+                /*const nodes = this.state.graph.nodes;
                 let edges = this.state.graph.edges;
 
                 //remove all connection edges
@@ -284,7 +364,7 @@ class TopologyView extends Component {
                         edges = update(edges, {$push: [edge]});
                     }
                 });
-                this.setState({graph: {nodes: nodes, edges: edges}});
+                this.setState({graph: {nodes: nodes, edges: edges}});*/
             });
         });
     }

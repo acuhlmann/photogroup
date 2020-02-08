@@ -9,8 +9,12 @@ export default class FileUtil {
     }
 
     static  getFileNameWithoutSuffix(name) {
-        const suffix = FileUtil.getFileSuffix(name);
-        return _.replace(name, suffix, '');
+        if(name) {
+            const suffix = FileUtil.getFileSuffix(name);
+            return _.replace(name, suffix, '');
+        } else {
+            return null;
+        }
     }
 
     static truncateFileName(name) {

@@ -20,39 +20,55 @@ export default class TorrentAddition {
         this.master = master;
     }
 
-    add(torrentId, secure, fromCache) {
+    handlePhotoAddEvent(photo) {
 
-        let parsed;
+        if(photo.rendering) return;
+        this.add(photo.infoHash, photo);
+    }
+
+    add(torrentId, photo, fromCache) {
+
+        const isMultiFileTorrent = photo.infoHash.includes('-');
+        if(isMultiFileTorrent) {
+            const parts = photo.infoHash.split('-');
+            const torrentId = parts[0];
+            const path = parts[1];
+            const torrent = this.master.client.get(torrentId);
+            if(!torrent) {
+                this._add(torrentId, photo, fromCache, path);
+            } else {
+                torrent.on('metadata', () => {
+                    this.addTorrent(torrent, photo, fromCache, path);
+                });
+                //this._add(torrentId, photo, fromCache, path);
+                //this.addTorrent(torrent, photo, fromCache, path);
+            }
+
+        } else {
+            const torrent = this.master.client.get(photo.infoHash);
+            if(!torrent) {
+                this._add(photo.infoHash, photo, fromCache);
+            }
+        }
+    }
+
+    _add(torrentId, photo, fromCache, path) {
+        /*let parsed;
         try {
             parsed = window.parsetorrent(torrentId);
         } catch(e) {
             Logger.error('Invalid torrendId ' + torrent + ' ' + e);
         }
-        const key = parsed.infoHash;
-        this.stopWatch.set(key, new Date().getTime());
-        Logger.info('add ' + parsed.name + ' ' + key);
+        const key = parsed.infoHash;*/
+        //this.stopWatch.set(key, new Date().getTime());
+        //Logger.info('add ' + parsed.name + ' ' + key);
         //Logger.time('add ' + parsed.name + ' ' + key);
-        const photo = {
-            infoHash: shortid.generate(),
-            rendering: true, secure: secure, fromCache: fromCache,
-            peerId: this.master.client.peerId, owners: []
-        };
-        //this.master.emitter.emit('photos', {type: 'add', item: photo});
 
         const self = this;
         const torrent = this.master.addSeedOrGetTorrent('add', torrentId, torrent => {
 
-            //console.timeEnd('adding ' + torrent.infoHash);
-            const date = new Date().getTime() - this.stopWatch.get(torrent.infoHash);
-            const passed = moment(date).format("mm:ss");
-            Logger.info('this.client.add ' + torrent.infoHash + ' ' + passed);
-
-            photo.loading = photo.rendering = false;
-            photo.torrent = torrent;
-            photo.url = torrent.magnetURI;
-            photo.infoHash = torrent.infoHash;
-            this.addToDom(photo);
-        });
+            this.addTorrent(torrent, photo, fromCache, path);
+        }, photo);
 
         //TODO: try kicking off ws tracker if we can't get over this torrent..._openSocket
         Logger.info('torrent created ' + torrent.infoHash);
@@ -60,8 +76,13 @@ export default class TorrentAddition {
         return new Promise((resolve, reject) => {
 
             torrent.on('error', err => {
-                Logger.error('torrent.add '+err);
-                reject(err);
+
+                //if(path && this.isDuplicateError(err)) {
+                    //this.addTorrent(torrent, photo, fromCache, path);
+                //} else {
+                    Logger.error('torrent.add '+err);
+                    reject(err);
+                //}
             });
 
             torrent.on('done', () => {
@@ -71,30 +92,77 @@ export default class TorrentAddition {
         });
     }
 
+    addTorrent(torrent, photo, fromCache, path) {
+        //console.timeEnd('adding ' + torrent.infoHash);
+        //const date = new Date().getTime() - this.stopWatch.get(torrent.infoHash);
+        //const passed = moment(date).format("mm:ss");
+        Logger.info('this.client.add ' + torrent.infoHash + ' ');
+
+        const photos = torrent.files
+            .filter(file => {
+                if(path) {
+                    return file.path === path;
+                } else {
+                    return true;
+                }
+            })
+            .map(file => {
+
+                photo.fromCache = fromCache;
+                photo.peerId = this.master.client.peerId;
+                photo.loading = photo.rendering = false;
+                photo.torrent = torrent;
+                //photo.infoHash = torrent.infoHash;
+                photo.url = torrent.magnetURI;
+                photo.torrentFile = file;
+                return photo;
+            });
+
+        if(photos.length > 0) {
+            this.emitter.emit('torrentReady', photos);
+        }
+    }
+
     seed(files, secure, origFile, callback) {
 
         const self = this;
 
         Logger.info('TorrendAddition.seed ' + JSON.stringify(files));
 
-        const photo = {
-            infoHash: shortid.generate(),
-            seed: true, rendering: true, file: files, origFile: files, secure: secure,
-            peerId: this.master.client.peerId, owners: []
-        };
-        this.master.emitter.emit('photos', {
-            type: 'add', item: photo
+        //const tempInfoHash = shortid.generate();
+        const photos = [...files].map(file => {
+            const photo = {
+                infoHash: shortid.generate(),
+                seed: true, rendering: true, file: file, origFile: file, secure: secure,
+                peerId: this.master.client.peerId, owners: []
+            };
+            this.master.emitter.emit('photos', {
+                type: 'add', item: photo
+            });
+            return photo;
         });
 
         const torrent = this.master.addSeedOrGetTorrent('seed', files, torrent => {
 
             Logger.info('Client is seeding ' + torrent.infoHash);
 
-            photo.loading = photo.rendering = false;
-            photo.torrent = torrent;
-            photo.infoHash = torrent.infoHash;
-            photo.url = torrent.magnetURI;
-            this.addToDom(photo);
+            photos.forEach(photo => {
+                photo.loading = photo.rendering = false;
+                photo.torrent = torrent;
+                photo.infoHash = torrent.infoHash;
+                photo.url = torrent.magnetURI;
+            });
+            torrent.files.forEach((file, index, files) => {
+                const photo = photos[index];
+                photo.torrentFile = file;
+                if(files.length > 1) {
+                    photo.infoHash += '-' + file.path;
+                }
+                //self.emitter.emit('torrentReady', photo);
+            });
+
+            //torrent.files.forEach((file, index) => self.emitter.emit('torrentReady', photos[index]));
+            self.emitter.emit('torrentReady', photos);
 
             if(callback) {
                 callback(torrent);
@@ -111,19 +179,18 @@ export default class TorrentAddition {
 
             console.error('torrent ' + err.message);
 
-            const msg = err.message;
-            const isDuplicateError = msg.indexOf('Cannot add duplicate') !== -1;
-            if(!isDuplicateError) {
+            if(!this.isDuplicateError(err)) {
                 return;
             }
 
+            const msg = err.message;
             const torrentId = msg.substring(msg.lastIndexOf('torrent ') + 8, msg.length);
             const torrent = self.master.client.get(torrentId);
             if(torrent) {
                 self.emitter.emit('duplicate', {
                     torrent: torrent,
                     torrentId: torrentId,
-                    photo: photo,
+                    photos: photos,
                     file: files});
             } else {
                 //self.master.torrentAddition.seed(file, undefined, file, () => {
@@ -178,22 +245,19 @@ export default class TorrentAddition {
         */
     }
 
-    addToDom(photo) {
-
-        const self = this;
-        photo.torrent.files.forEach(file => {
-            photo.torrentFile = file;
-            self.emitter.emit('torrentReady', photo);
-        });
+    isDuplicateError(err) {
+        const msg = err.message;
+        return msg.indexOf('Cannot add duplicate') !== -1;
     }
 
-    metadata(torrent) {
+    metadata(torrent, photo) {
 
         Logger.info('metadata '+ torrent.infoHash);
         //temporary disable to try wire event approach.
         this.master.peers.connect(torrent, this.master.client.peerId);
 
-        this.master.service.addOwner(torrent.infoHash, this.master.client.peerId).then(() => {
+        const infoHash = photo ? photo.infoHash : torrent.infoHash;
+        this.master.service.addOwner(infoHash, this.master.client.peerId).then(() => {
             Logger.info('added owner ' + torrent.name);
         });
 
@@ -252,7 +316,7 @@ export default class TorrentAddition {
     }
 
     noPeers(t, announceType) {
-        Logger.warn('noPeers '+announceType);
+        Logger.warn('noPeers ' + announceType);
     }
 
     warning(t, err) {

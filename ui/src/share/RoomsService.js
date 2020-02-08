@@ -289,10 +289,14 @@ export default class RoomsService {
         }
     }
 
-    async share(data) {
+    async share(photo) {
 
         try {
-            let response = await fetch(this.url + '/' + this.id + '/photos/' + data.infoHash, {
+            const data = {
+                sessionId: this.sessionId,
+                photo: photo
+            };
+            let response = await fetch(this.url + '/' + this.id + '/photos/' + encodeURIComponent(photo.infoHash), {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -347,7 +351,7 @@ export default class RoomsService {
 
         update.infoHash = infoHash;
         try {
-            let response = await fetch(this.url + '/' + this.id + '/photos/' + infoHash, {
+            let response = await fetch(this.url + '/' + this.id + '/photos/' + encodeURIComponent(infoHash), {
                 method: 'PUT',
                 headers: {
                     'Accept': 'application/json',
@@ -368,7 +372,7 @@ export default class RoomsService {
 
     delete(infoHash) {
 
-        return fetch(this.url + '/' + this.id + '/photos/' + infoHash, {
+        return fetch(this.url + '/' + this.id + '/photos/' + encodeURIComponent(infoHash), {
             method: 'DELETE',
             headers: {
                 'Accept': 'application/json',
@@ -447,8 +451,9 @@ export default class RoomsService {
 
     updateOwner(infoHash, update) {
 
+        const encodedInfoHash = encodeURIComponent(infoHash);
         try {
-            return fetch(this.url + '/' + this.id + '/photos/' + infoHash + '/owners/' + update.peerId, {
+            return fetch(this.url + '/' + this.id + '/photos/' + encodedInfoHash + '/owners/' + update.peerId, {
                 method: 'PUT',
                 headers: {
                     'Accept': 'application/json',

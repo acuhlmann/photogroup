@@ -113,14 +113,18 @@ class ContentTile extends Component {
 
     downloadFromServer(tile) {
         Logger.info('downloadFromServer ' + tile.fileName);
+
         download(tile.elem, tile.fileName);
-        const localDownloads = update(this.state.localDownloads, {$push: [tile.infoHash]});
-        this.setState({localDownloads: localDownloads});
+
+        this.setState(state => {
+            const localDownloads = update(state.localDownloads, {$push: [tile.infoHash]});
+            return {localDownloads: localDownloads};
+        });
     }
 
     async handleDelete(tile) {
         this.setState({there: false});
-        const infoHash = await this.props.master.torrentDeletion.deleteItem(tile.torrent);
+        const infoHash = await this.props.master.torrentDeletion.deleteItem(tile);
         Logger.info('handleDelete ' + tile.torrent.name + ' ' + infoHash + ' ' + tile.torrent.infoHash);
     }
 
@@ -236,7 +240,7 @@ class ContentTile extends Component {
                     <div style={{width: '100%'}}>
                         {/*<Typography variant={"caption"}>first shared by {tile.peerId}</Typography>*/}
                         <OwnersList emitter={master.emitter}
-                                    tile={tile} owners={tile.owners} peers={master.peers} myPeerId={master.client.peerId}
+                                    tile={tile} peers={master.peers} myPeerId={master.client.peerId}
                         />
                     </div>
                     </Paper>

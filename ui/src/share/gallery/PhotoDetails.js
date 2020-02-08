@@ -40,18 +40,20 @@ class PhotoDetails extends Component {
         const {tile, master} = this.props;
         const {parser} = this.state;
 
-        const self = this;
-        this.setState({fileName: FileUtil.getFileNameWithoutSuffix(tile.fileName)});
+        this.setState((state, props) => {
+            return {fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)}
+        });
         parser.readMetadata(tile, async (tile, metadata) => {
 
-            const summaryMetadata = parser.createMetadataSummary(metadata);
-            self.setState({metadata: summaryMetadata,
-                fileName: FileUtil.getFileNameWithoutSuffix(tile.fileName)});
+            this.setState((state, props) => {
+                const summaryMetadata = state.parser.createMetadataSummary(metadata);
+                return {metadata: summaryMetadata, fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)}
+            });
 
             if(tile.seed) {
 
                 const photo = {
-                    infoHash: tile.torrent.infoHash,
+                    infoHash: tile.infoHash,
                     url: tile.torrent.magnetURI,
                     peerId: tile.peerId,
                     fileSize: tile.fileSize,

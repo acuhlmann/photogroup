@@ -15,9 +15,7 @@ export default class TorrentCreator {
 
     static setupAnnounceUrls() {
         const isLocal = window.location.href.includes('localhost');
-        //console.log('window.location.href ' + window.location.href);
         const wsUrl = isLocal ? 'ws://' + window.location.hostname + ':9000' : 'wss://' + window.location.hostname + '/ws';
-        //console.log('WEBTORRENT_ANNOUNCE wsUrl ' + wsUrl);
         //window.WEBTORRENT_ANNOUNCE = createTorrent.announceList
         window.WEBTORRENT_ANNOUNCE = []
             .map(arr => {
@@ -28,7 +26,7 @@ export default class TorrentCreator {
             })
             .concat(wsUrl);
 
-        Logger.info('window.WEBTORRENT_ANNOUNCE ' + window.WEBTORRENT_ANNOUNCE);
+        Logger.info('trackers ' + window.WEBTORRENT_ANNOUNCE);
     }
 
     start() {
@@ -72,11 +70,11 @@ export default class TorrentCreator {
         this.client = client;
         this.emitter.emit('wtInitialized', client);
 
-        const scope = this;
+        const self = this;
         client.on('error', (err, arg) => {
             Logger.error('client.error '+err);
 
-            scope.emitter.emit('torrentError', err);
+            self.emitter.emit('torrentError', err);
 
             /*
             const msg = err.message;
@@ -86,27 +84,27 @@ export default class TorrentCreator {
             }
 
             const torrentId = msg.substring(msg.lastIndexOf('torrent ') + 8, msg.length);
-            const torrent = scope.client.get(torrentId);
-            scope.emitter.emit('duplicate', {
+            const torrent = self.client.get(torrentId);
+            self.emitter.emit('duplicate', {
                 torrent: torrent,
                 torrentId: torrentId,
                 files: null});
             */
         });
 
-        this.listenToTrackersChange(scope, client.torrents);
+        this.listenToTrackersChange(self, client.torrents);
 
         client.on('torrent', torrent => {
             Logger.debug('client.torrent numPeers '+ torrent.numPeers + ' infoHash ' + torrent.infoHash);
-            scope.numPeers = torrent.numPeers;
-            scope.emitter.emit('numPeers', Number(scope.numPeers));
+            self.numPeers = torrent.numPeers;
+            self.emitter.emit('numPeers', Number(self.numPeers));
 
-            torrent.discovery.on('peer', (peer, source) => scope.torrentAddition.peer(peer, source));
+            torrent.discovery.on('peer', (peer, source) => self.torrentAddition.peer(peer, source));
             torrent.discovery.on('trackerAnnounce', (l) => {
-                scope.torrentAddition.trackerAnnounce(l)
+                self.torrentAddition.trackerAnnounce(l)
             });
-            torrent.discovery.on('warn', (err) => scope.torrentAddition.warning(torrent, err));
-            torrent.discovery.on('error', (err) => scope.torrentAddition.warning(torrent, err));
+            torrent.discovery.on('warn', (err) => self.torrentAddition.warning(torrent, err));
+            torrent.discovery.on('error', (err) => self.torrentAddition.warning(torrent, err));
 
             torrent.discovery.tracker._trackers.forEach(tracker => {
 
@@ -208,7 +206,7 @@ export default class TorrentCreator {
                                     self.emitter.emit('pcEvent', event.type, state);
 
                                     if(state === 'connected' || state === 'completed') {
-                                        self.emitter.emit('torrentDone', torrent);
+                                        //self.emitter.emit('torrentDone', torrent);
                                     }
                                 });
                             }

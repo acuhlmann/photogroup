@@ -73,8 +73,6 @@ export default class MetadataParser {
         const DateTimeOriginal = allMetadata['DateTimeOriginal'];
         const timestamp = MetadataParser.toTimeStamp(DateTimeOriginal);
 
-        //const tiles = this.view.state.tiles.slice();
-        //const tileItem = tiles.find(item => item.infoHash === tile.infoHash);
         if(tileItem) {
             const picDateTaken = MetadataParser.formatDateFromTimeStamp(timestamp);
             tileItem.picDateTaken = picDateTaken === 'Invalid date' ? '' : picDateTaken;
@@ -88,17 +86,6 @@ export default class MetadataParser {
             const cameraMake = allMetadata['Make'] ? allMetadata['Make']  + ' ': '';
             const cameraSettings = allMetadata['x-Settings'] ? allMetadata['x-Settings'] : '';
             tileItem.cameraSettings = cameraMake + cameraSettings;
-
-            /*tiles.sort((a, b) => {
-                return new Date(b.picDateTakenDate) - new Date(a.picDateTakenDate);
-            });
-
-            const tileIndex = tiles.findIndex(item => item.infoHash === tile.infoHash);
-            //tiles[tileIndex] = update(tiles[tileIndex], {$set: tileItem});
-            const newTiles = update(tiles, {[tileIndex]: {$set: tileItem}});
-            this.view.setState({
-                tiles: newTiles
-            });*/
         }
     }
 

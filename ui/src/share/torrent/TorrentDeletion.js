@@ -10,13 +10,43 @@ export default class TorrentDeletion {
         this.master = master;
     }
 
-    deleteItem(torrent) {
+    deleteItem(tile) {
 
-        return this.service.delete(torrent.infoHash)
+        return this.service.delete(tile.infoHash)
             .then(() => {
-                Logger.info('deleted ' + torrent.infoHash);
-                return torrent.infoHash;
+                Logger.info('deleted ' + tile.infoHash);
+                return tile.infoHash;
             });
+    }
+
+    handlePhotoDeleteEvent(infoHash) {
+        const isMultiFileTorrent = infoHash.includes('-');
+        if(isMultiFileTorrent) {
+            const parts = infoHash.split('-');
+            const torrentId = parts[0];
+            const path = parts[1];
+            const torrent = this.master.client.get(torrentId);
+            if(!torrent) return;
+            const fileIndex = torrent.files.findIndex(item => item.path === path);
+            torrent.files.splice(fileIndex, 1);
+            if(torrent.files.length < 1) {
+
+                this.deleteTorrent(torrent).then(infoHash => {
+                    Logger.info('deleteTorrent done ' + infoHash);
+                });
+            }
+        } else {
+            this.findAndDeleteTorrent(infoHash);
+        }
+    }
+
+    findAndDeleteTorrent(infoHash) {
+        const torrent = this.master.client.get(infoHash);
+        if(torrent) {
+            this.deleteTorrent(torrent).then(infoHash => {
+                Logger.info('deleteTorrent done ' + infoHash);
+            });
+        }
     }
 
     async deleteTorrent(torrent) {

@@ -326,12 +326,6 @@ class AddPeersView extends Component {
         return urlParams.has('room');
     }
 
-    leaveRoom() {
-        const location = window.location;
-        window.history.replaceState({}, '', decodeURIComponent(`${location.pathname}`));
-        location.reload();
-    }
-
     getFullUrl(id) {
         return window.location.origin + '?room=' + id;
     }
@@ -454,7 +448,7 @@ class AddPeersView extends Component {
                         {hasRoom ? <span className={classes.horizontal}>
                                         <Typography variant={"body2"}>Leave Room</Typography>
                                         <IconButton
-                                                    onClick={() => this.leaveRoom() }>
+                                                    onClick={() => master.leaveRoomAndReload() }>
                                             <ExitToAppOutlined />
                                         </IconButton>
                                     </span> : ''}

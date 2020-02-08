@@ -74,7 +74,7 @@ class App extends Component {
                 if(!response) return;
                 const {photos, peers} = response;
                 if(photos && peers) {
-                    this.leaveRoom();
+                    this.master.reload();
                     /*
                     //tried to do this without refreshing the page, but failed so far.
                     Logger.info(`photos: ${photos.length} peers ${peers.length}`);
@@ -92,11 +92,6 @@ class App extends Component {
                 }
             }
         });
-    }
-
-    leaveRoom() {
-        const location = window.location;
-        location.reload();
     }
 
     render() {

@@ -90,20 +90,23 @@ class MeView extends Component {
             if(event.type === 'update') {
                 const myPeer = event.item;
                 if(myPeer && myPeer.peerId === this.master.client.peerId && myPeer.networkChain) {
-                    const myNat = this.findNat(myPeer.networkChain);
-                    if(myNat && !myNat.network) {
-                        myNat.network = {};
-                    }
-                    if(myNat) {
-                        myNat.label = StringUtil.createNetworkLabel(myNat);
-                    }
-                    const me = myPeer.networkChain.find(item => item.typeDetail === 'host');
-                    if(me) {
-                        me.label = this.state.originPlatform + ' ' + me.ip;
-                    }
-                    this.setState({
-                        myNat: myNat,
-                        me: me ? me : {},
+
+                    this.setState(state => {
+                        const myNat = this.findNat(myPeer.networkChain);
+                        if(myNat && !myNat.network) {
+                            myNat.network = {};
+                        }
+                        if(myNat) {
+                            myNat.label = StringUtil.createNetworkLabel(myNat);
+                        }
+                        const me = myPeer.networkChain.find(item => item.typeDetail === 'host');
+                        if(me) {
+                            me.label = state.originPlatform + ' ' + me.ip;
+                        }
+                        return {
+                            myNat: myNat,
+                            me: me ? me : {},
+                        };
                     });
                 }
             }
