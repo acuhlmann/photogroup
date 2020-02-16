@@ -3,7 +3,10 @@ import _ from 'lodash';
 export default class StringUtil {
 
     static addEmptySpaces(values) {
-        return values.map(value => value && value !== null ? value + ' ' : '').join('').replace(/ $/,'');
+        return values
+            .filter(item => item)
+            .map(value => value && value !== null ? value + ' ' : '')
+            .join('').replace(/ $/,'');
     }
 
     static slimPlatform(platform) {

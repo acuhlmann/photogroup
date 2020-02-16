@@ -289,14 +289,20 @@ export default class RoomsService {
         }
     }
 
-    async share(photo) {
+    async share(photos) {
 
+        photos.forEach(item => {
+            if(item.infoHash) {
+                item.infoHash = encodeURIComponent(item.infoHash);
+            }
+        });
+        const data = {
+            sessionId: this.sessionId,
+            photos: photos
+        };
         try {
-            const data = {
-                sessionId: this.sessionId,
-                photo: photo
-            };
-            let response = await fetch(this.url + '/' + this.id + '/photos/' + encodeURIComponent(photo.infoHash), {
+
+            let response = await fetch(this.url + '/' + this.id + '/photos/', {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -343,21 +349,24 @@ export default class RoomsService {
         }
     }*/
 
-    async update(infoHash, update) {
+    async update(updates) {
 
         //if(update.fileName) {
         //    localStorage.setItem('fileName-' + infoHash, update.fileName);
         //}
-
-        update.infoHash = infoHash;
+        updates.forEach(item => {
+            if(item.infoHash) {
+                item.infoHash = encodeURIComponent(item.infoHash);
+            }
+        });
         try {
-            let response = await fetch(this.url + '/' + this.id + '/photos/' + encodeURIComponent(infoHash), {
+            let response = await fetch(this.url + '/' + this.id + '/photos/', {
                 method: 'PUT',
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(update)});
+                body: JSON.stringify(updates)});
 
             if (!response.ok) {
                 Logger.error(response.url + ' ' + response.status);
@@ -372,12 +381,13 @@ export default class RoomsService {
 
     delete(infoHash) {
 
-        return fetch(this.url + '/' + this.id + '/photos/' + encodeURIComponent(infoHash), {
+        return fetch(this.url + '/' + this.id + '/photos/', {
             method: 'DELETE',
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
-            }
+            },
+            body: JSON.stringify({infoHash: encodeURIComponent(infoHash)})
         }).then(response => {
             return response.json();
         });
@@ -385,6 +395,9 @@ export default class RoomsService {
 
     connect(connection) {
 
+        if(connection.infoHash) {
+            connection.infoHash = encodeURIComponent(connection.infoHash);
+        }
         connection.fileName = encodeURIComponent(connection.fileName);
         return fetch(this.url + '/' + this.id + '/connections', {
             method: 'POST',
@@ -401,7 +414,7 @@ export default class RoomsService {
     disconnect(infoHash) {
 
         const data = {
-            infoHash: infoHash,
+            infoHash: encodeURIComponent(infoHash),
         };
 
         return fetch(this.url + '/' + this.id + '/connections', {
@@ -414,55 +427,56 @@ export default class RoomsService {
         });
     }
 
-    addOwner(infoHash, peerId, loading = true) {
+    addOwner(updates) {
 
+        updates.forEach(item => {
+            if(item.infoHash) {
+                item.infoHash = encodeURIComponent(item.infoHash);
+            }
+        });
         try {
-            return fetch(this.url + '/' + this.id + '/photos/owners/' + peerId, {
+            return fetch(this.url + '/' + this.id + '/photos/owners/', {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    infoHash: infoHash,
-                    peerId: peerId,
-                    loading: loading
-                })
+                body: JSON.stringify(updates)
             });
         } catch(e) {
-            Logger.error(infoHash + ' addOwner ' + e);
+            Logger.error(updates.length + ' addOwner ' + e);
         }
     }
 
-    removeOwner(infoHash, peerId) {
+    removeOwner(peerId) {
 
         return fetch(this.url + '/' + this.id + '/photos/owners/' + peerId, {
             method: 'DELETE',
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                infoHash: infoHash,
-                peerId: peerId
-            })
+            }
         });
     }
 
-    updateOwner(infoHash, update) {
+    updateOwner(updates) {
 
-        const encodedInfoHash = encodeURIComponent(infoHash);
+        updates.forEach(item => {
+            if(item.infoHash) {
+                item.infoHash = encodeURIComponent(item.infoHash);
+            }
+        });
         try {
-            return fetch(this.url + '/' + this.id + '/photos/' + encodedInfoHash + '/owners/' + update.peerId, {
+            return fetch(this.url + '/' + this.id + '/photos/owners/', {
                 method: 'PUT',
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(update)
+                body: JSON.stringify(updates)
             });
         } catch(e) {
-            Logger.error(update + ' updateOwner ' + e);
+            Logger.error(updates.length + ' updateOwner ' + e);
         }
     }
 

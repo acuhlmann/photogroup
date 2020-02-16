@@ -87,17 +87,15 @@ export default class TorrentMaster {
     fillMissingOwners(photos) {
 
         return new Promise((resolve, reject) => {
-            const promises = photos
+            const toBeAdded = photos
                 .map(item => this.fillMissingOwnersItem(item))
                 .filter(item => item);
 
-            if(promises.length > 0) {
-                Logger.warn('found missing owners and filled');
-                Promise.all(promises).then(results => {
-                    resolve();
+            if(toBeAdded && toBeAdded.length > 0) {
+                this.service.addOwner(toBeAdded).then(result => {
+                    Logger.warn('found missing owners and filled ' + result);
+                    resolve(result)
                 });
-            } else {
-                resolve();
             }
         });
     }
@@ -110,7 +108,11 @@ export default class TorrentMaster {
         if(isOwner) {
             const found = item.owners.find(owner => owner.peerId === peerId);
             if(!found) {
-                return this.service.addOwner(item.infoHash, peerId, false);
+                return {
+                    infoHash: item.infoHash,
+                    peerId: peerId,
+                    loading: false
+                }
             }
         }
     }
@@ -170,7 +172,11 @@ export default class TorrentMaster {
 
                             self.torrentAddition.add(metadata, photo, true).then(torrent => {
 
-                                Logger.info('resurrectTorrent.add ' + torrent.infoHash);
+                                if(!torrent) {
+                                    Logger.error('resurrectTorrent.add no torrent');
+                                } else {
+                                    Logger.info('resurrectTorrent.add ' + torrent.infoHash);
+                                }
                                 resolve(torrent);
 
                             }, error => {
@@ -198,10 +204,11 @@ export default class TorrentMaster {
 
     publishLoadingStatus(infoHash, progress) {
         //console.log('publishLoadingStatus: ' + progress);
-        this.service.updateOwner(infoHash, {
+        this.service.updateOwner([{
+            infoHash: infoHash,
             peerId: this.client.peerId,
             progress: progress
-        });
+        }]);
     }
 
     sendDownloadEvent(emitter, torrent, downloadSpeedLabel, progress, timeRemaining) {
@@ -220,9 +227,9 @@ export default class TorrentMaster {
         });
     }
 
-    addSeedOrGetTorrent(addOrSeed, input, callback, photo) {
+    addSeedOrGetTorrent(addOrSeed, input, callback) {
 
-        const opts = {'announce': window.WEBTORRENT_ANNOUNCE};
+        const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true};
         opts.store = idb;
         const torrent = this.client[addOrSeed](input, opts, callback);
         //const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE}, callback);
@@ -254,7 +261,7 @@ export default class TorrentMaster {
                 //Logger.trace('torrent.download speed: ' + downloadSpeedLabel + ' ' + progress);
 
                 if(progressChange) {
-                    const infoHash = photo ? photo.infoHash : torrent.infoHash;
+                    const infoHash = torrent.infoHash;
                     debouncedServerPublish(infoHash, progress);
                 }
 
@@ -282,7 +289,7 @@ export default class TorrentMaster {
                 debouncedUpload(self.emitter, torrent, uploadSpeedLabel, progressUp);
             }
         });
-        torrent.on('metadata', () => self.torrentAddition.metadata(torrent, photo));
+        torrent.on('metadata', () => self.torrentAddition.metadata(torrent));
         torrent.on('infoHash', infoHash => self.torrentAddition.infoHash(torrent, infoHash));
         torrent.on('noPeers', announceType => self.torrentAddition.noPeers(torrent, announceType));
         torrent.on('warning', err => self.torrentAddition.warning(torrent, err));
@@ -325,7 +332,7 @@ export default class TorrentMaster {
             if(!torrent) {
                 Logger.debug('new photo found on server');
 
-                self.torrentAddition.add(item.url, item, item.sharedBy ? item.sharedBy : {});
+                self.torrentAddition.add(item.infoHash, item);
             }
 
             /*if(torrent && torrent.files && torrent.files.length < 1 && item.owners.find(owner => owner.peerId === this.client.peerId)) {

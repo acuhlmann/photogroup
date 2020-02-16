@@ -55,11 +55,13 @@ class Gallery extends Component {
 
             this.setState(state => {
                 let tiles = state.tiles;
-                const index = tiles.findIndex(item => item.infoHash === duplicated.photo.infoHash);
-                if(index > -1) {
-                    tiles = update(tiles, {$splice: [[index, 1]]});
-                    return {tiles: tiles};
-                }
+                duplicated.photos.forEach(photo => {
+                    const index = tiles.findIndex(item => item.infoHash === photo.infoHash);
+                    if(index > -1) {
+                        tiles = update(tiles, {$splice: [[index, 1]]});
+                    }
+                });
+                return {tiles: tiles};
             });
 
             //const tile = tiles.find(item => item.infoHash === duplicated.torrentId);
@@ -89,14 +91,28 @@ class Gallery extends Component {
 
             const photoPromises = photos.map(photo => {
                 return new Promise((resolve, reject) => {
-                    photo.torrentFile.getBlob((err, elem) => {
-                        if (err) {
-                            Logger.error(err.message);
-                            reject(err.message);
-                        } else {
-                            resolve(this.mergeEasyToGetMetadata(photo, elem));
-                        }
-                    });
+                    const ext = photo.torrentFile.name.split('.').pop().toLowerCase();
+                    if(ext !== 'mp4') {
+                        photo.torrentFile.getBlob((err, elem) => {
+                            if (err) {
+                                Logger.error(err.message);
+                                reject(err.message);
+                            } else {
+                                resolve(this.mergeEasyToGetMetadata(photo, elem));
+                            }
+                        });
+                    } else {
+                        /*
+                        const stream = photo.torrentFile.createReadStream();
+                        stream.on('data', (chunk) => {
+                            console.log(`Received ${chunk.length} bytes of data.`);
+                        });
+                        stream.on('end', () => {
+                            console.log('There will be no more data.');
+                        });
+                        */
+                        resolve(this.mergeStreamingMetadata(photo));
+                    }
                 });
             });
 
@@ -106,27 +122,41 @@ class Gallery extends Component {
         }
     }
 
+    mergeStreamingMetadata(photo) {
+        photo.elem = null;
+        photo.img = null;
+        photo.fileSize = photo.fileSize || FileUtil.formatBytes(photo.torrentFile.length);
+        photo.isVideo = true;
+        photo.isImage = false;
+        photo.fileName = FileUtil.truncateFileName(photo.torrentFile.name);
+        photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
+        return photo;
+    }
+
     mergeEasyToGetMetadata(photo, file) {
+        photo.loading = false;
         photo.elem = file;
         photo.img = URL.createObjectURL(file);
         photo.fileSize = photo.fileSize || FileUtil.formatBytes(photo.elem.size);
         photo.isVideo = photo.elem.type.includes('video/');
         photo.isImage = photo.elem.type.includes('image/');
-        photo.fileName = photo.torrent.name;
+        photo.isAudio = photo.elem.type.includes('audio/');
+        photo.fileName = file.name;
+        photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
         return photo;
     }
 
     renderTile(photos, isSeeding) {
 
-        let tiles;
         this.setState((state, props) => {
 
             const oldTiles = state.tiles;
+            let tiles = oldTiles;
             photos.forEach(photo => {
                 const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
                 if(index > -1) {
                     photo = _.merge(oldTiles[index], photo);
-                    tiles = update(oldTiles, {$splice: [[index, 1, photo]]});
+                    update(oldTiles, {$splice: [[index, 1, photo]]});
                 } else {
                     tiles = update(oldTiles, {$unshift: [photo]});
                 }
@@ -135,18 +165,17 @@ class Gallery extends Component {
             if(!isSeeding) {
 
                 tiles.forEach(photo => {
-                    this.props.master.service.updateOwner(photo.infoHash, {
+                    this.props.master.service.updateOwner([{
+                        infoHash: photo.infoHash,
                         peerId: this.props.master.client.peerId,
                         loading: false
-                    }).then(() => {
+                    }]).then(() => {
                         //Logger.info('owner registered ' + photo.torrent.name)
                     })
                 });
             }
 
             return {tiles: tiles};
-
-        }, () => {
 
         });
     }
@@ -198,7 +227,7 @@ class Gallery extends Component {
         const {classes, master} = this.props;
         const {tiles} = this.state;
 
-        const hasImages = tiles.find(tile => !tile.isLoading && !tile.secure && tile.img);
+        const hasImages = tiles && tiles.find(tile => !tile.isLoading && !tile.secure && tile.img);
         if(hasImages) {
             master.emitter.emit('galleryHasImages', true);
         } else {

@@ -51,7 +51,6 @@ class MeView extends Component {
         super(props);
 
         this.master = props.master;
-        const emitter = this.master.emitter;
 
         const expandedMe = localStorage.getItem('expandedMe') || false;
         this.state = {
@@ -59,7 +58,11 @@ class MeView extends Component {
             showMe: false, galleryHasImages: false, listView: true,
             me: {}, myNat: null, connectionSpeedType: ''
         };
+    }
 
+    componentDidMount() {
+
+        const emitter = this.master.emitter;
         emitter.on('localNetwork', chain => {
 
             //if(this.master.service.hasRoom) return;

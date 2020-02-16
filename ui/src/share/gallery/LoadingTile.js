@@ -11,6 +11,9 @@ import Divider from "@material-ui/core/Divider";
 import OwnersList from "./OwnersList";
 import FileUtil from "../util/FileUtil";
 import StringUtil from "../util/StringUtil";
+import IconButton from "@material-ui/core/IconButton";
+import DeleteIcon from "@material-ui/icons/Delete";
+import Logger from "js-logger";
 
 const styles = theme => ({
     horizontal: {
@@ -52,7 +55,7 @@ class LoadingTile extends Component {
     constructor(props) {
         super(props);
 
-        const {master, tile} = props;
+        const {master} = props;
         const emitter = master.emitter;
 
         emitter.on('downloadProgress', this.handleDownloadProgress, this);
@@ -66,18 +69,6 @@ class LoadingTile extends Component {
     }
 
     handleDownloadProgress(event) {
-        /*this.setState((state, props) => {
-
-            const torrent = event.torrent;
-            if(torrent.infoHash === props.tile.infoHash) {
-                const progress = event.progress;
-                return {
-                    progress: progress,
-                    downSpeed: event.speed,
-                    timeRemaining: event.timeRemaining
-                }
-        });*/
-
         const torrent = event.torrent;
         if(torrent.infoHash === this.props.tile.infoHash) {
             const progress = event.progress;
@@ -102,6 +93,11 @@ class LoadingTile extends Component {
     componentWillUnmount() {
         this.props.master.emitter.removeListener('downloadProgress', this.handleDownloadProgress, this);
         this.props.master.emitter.removeListener('uploadProgress', this.handleUploadProgress, this);
+    }
+
+    async handleDelete(tile) {
+        const result = await this.props.master.torrentDeletion.deleteItem(tile);
+        Logger.info('handleDelete ' + result);
     }
 
     render() {
@@ -183,6 +179,12 @@ class LoadingTile extends Component {
                                                     variant={"caption"}>{timeRemaining}</Typography>
                                     </div>
                         </span> : ''}
+                        <IconButton onClick={this.handleDelete.bind(this, tile)}
+                                    style={{
+                                        marginTop: '-14px'
+                                    }}>
+                            <DeleteIcon />
+                        </IconButton>
                     </span>
                 <Divider variant="middle" />
                 <span style={{

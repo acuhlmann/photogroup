@@ -101,7 +101,7 @@ class Uploader extends Component {
 
                 <LoaderView emitter={emitter}/>
                 <input
-                    accept="image/*,video/*"
+                    accept="image/*,video/*,audio/*"
                     //accept="image/*"
                     multiple
                     style={{

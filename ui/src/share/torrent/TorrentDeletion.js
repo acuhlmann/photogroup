@@ -12,11 +12,26 @@ export default class TorrentDeletion {
 
     deleteItem(tile) {
 
-        return this.service.delete(tile.infoHash)
-            .then(() => {
-                Logger.info('deleted ' + tile.infoHash);
-                return tile.infoHash;
+        if(tile.torrent) {
+            return this.service.delete(tile.infoHash)
+                .then(() => {
+                    Logger.info('deleted ' + tile.infoHash);
+                    return tile.infoHash;
+                });
+        } else {
+            return new Promise((resolve) => {
+                tile.deleted = true;
+                this.master.emitter.emit('photos', {
+                    type: 'delete', item: tile.infoHash
+                });
+                return this.service.delete(tile.infoHash)
+                    .then(() => {
+                        Logger.info('deleted ' + tile.infoHash);
+                        return tile.infoHash;
+                    });
+                //resolve(tile.infoHash);
             });
+        }
     }
 
     handlePhotoDeleteEvent(infoHash) {

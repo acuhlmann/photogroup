@@ -83,7 +83,7 @@ class LoaderView extends Component {
                 const show = (progress > 0 && progress < 100);
                 const uploadSpeedLabel = FileUtil.formatBytes(client.uploadSpeed) + '/sec';
                 const downloadSpeedLabel = FileUtil.formatBytes(client.downloadSpeed) + '/sec';
-                const ratio = client.ratio === 0 ? '' : client.ratio;
+                const ratio = client.ratio === 0 ? '' : client.ratio / 1000;
                 self.setState({show: show, progress: progress,
                     upSpeed: uploadSpeedLabel, downSpeed: downloadSpeedLabel, ratio: ratio});
 

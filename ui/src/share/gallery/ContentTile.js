@@ -14,6 +14,8 @@ import Button from "@material-ui/core/Button/Button";
 import { withSnackbar } from 'notistack';
 import Collapse from '@material-ui/core/Collapse';
 import Zoom from '@material-ui/core/Zoom';
+import CircularProgress from "@material-ui/core/CircularProgress";
+import FileUtil from "../util/FileUtil";
 
 const styles = theme => ({
     horizontal: {
@@ -41,6 +43,11 @@ const styles = theme => ({
         flexWrap: 'wrap',
         padding: '5px',
     },
+    progressPercentageText: {
+        position: 'relative',
+        fontSize: '0.7rem',
+        //bottom: '26px',
+    },
 });
 
 class ContentTile extends Component {
@@ -48,16 +55,35 @@ class ContentTile extends Component {
     constructor(props) {
         super(props);
 
-        const {master} = props;
-        const emitter = master.emitter;
-        emitter.on('galleryListView', this.handleGalleryListView, this);
-        emitter.on('disconnectNode', this.handleDisconnectNode, this);
-
         this.state = {
             open: false,
             listView: true,
-            localDownloads: [], there: true
-        }
+            localDownloaded: [], localDownloading: [], there: true,
+            //for streaming
+            progress: null,
+            downSpeed: '', upSpeed: '',
+            timeRemaining: ''
+        };
+    }
+
+    componentDidMount() {
+        const {master, tile} = this.props;
+        const emitter = master.emitter;
+
+        emitter.on('galleryListView', this.handleGalleryListView, this);
+        emitter.on('disconnectNode', this.handleDisconnectNode, this);
+        emitter.on('downloadProgress', this.handleDownloadProgress, this);
+        emitter.on('uploadProgress', this.handleUploadProgress, this);
+        tile.torrent.on('done', this.handleDone.bind(this));
+    }
+
+    componentWillUnmount() {
+        this.props.master.emitter.removeListener('galleryListView', this.handleGalleryListView, this);
+        this.props.master.emitter.removeListener('disconnectNode', this.handleDisconnectNode, this);
+
+        this.props.master.emitter.removeListener('downloadProgress', this.handleDownloadProgress, this);
+        this.props.master.emitter.removeListener('uploadProgress', this.handleUploadProgress, this);
+        this.props.tile.torrent.removeListener('done', this.handleDone, this);
     }
 
     handleGalleryListView(isList) {
@@ -70,9 +96,32 @@ class ContentTile extends Component {
         }
     }
 
-    componentWillUnmount() {
-        this.props.master.emitter.removeListener('galleryListView', this.handleGalleryListView, this);
-        this.props.master.emitter.removeListener('disconnectNode', this.handleDisconnectNode, this);
+    handleDownloadProgress(event) {
+        const torrent = event.torrent;
+        if(torrent.infoHash === this.props.tile.infoHash) {
+            const progress = event.progress;
+            this.setState({
+                progress: progress,
+                downSpeed: event.speed,
+                timeRemaining: event.timeRemaining});
+        }
+    }
+
+    handleUploadProgress(event) {
+        const torrent = event.torrent;
+        if(torrent.infoHash === this.props.tile.infoHash) {
+            const progress = event.progress;
+            this.setState({
+                progress: progress,
+                upSpeed: event.speed,
+                timeRemaining: event.timeRemaining});
+        }
+    }
+
+    handleDone() {
+        this.setState({
+            progress: 100
+        })
     }
 
     /*addServerPeer(tile, action) {
@@ -114,11 +163,40 @@ class ContentTile extends Component {
     downloadFromServer(tile) {
         Logger.info('downloadFromServer ' + tile.fileName);
 
-        download(tile.elem, tile.fileName);
+        if(tile.elem) {
+
+            this._download(tile.infoHash, tile.elem, tile.fileName);
+
+        } else {
+
+            this.setState(state => {
+                const localDownloading = update(state.localDownloading, {$push: [tile.infoHash]});
+                return {localDownloading: localDownloading};
+            });
+
+            tile.torrentFile.getBlob((err, elem) => {
+
+                this.setState(state => {
+                    const index = state.localDownloading.findIndex(item => item === tile.infoHash);
+                    const localDownloading = update(state.localDownloading, {$splice: [[index, 1]]});
+                    return {localDownloading: localDownloading};
+                });
+
+                if (err) {
+                    Logger.error(err.message);
+                } else {
+                    this._download(tile.infoHash, elem, tile.fileName);
+                }
+            });
+        }
+    }
+
+    _download(infoHash, elem, fileName) {
+        download(elem, fileName);
 
         this.setState(state => {
-            const localDownloads = update(state.localDownloads, {$push: [tile.infoHash]});
-            return {localDownloads: localDownloads};
+            const localDownloaded = update(state.localDownloaded, {$push: [infoHash]});
+            return {localDownloaded: localDownloaded};
         });
     }
 
@@ -145,6 +223,7 @@ class ContentTile extends Component {
                 node.infoHash = tile.torrent.infoHash;
                 this.appendFile(tile, node, file);
             }
+
             return;
         }
 
@@ -154,8 +233,8 @@ class ContentTile extends Component {
 
     appendFile(tile, node, file) {
         const opts = {
-            autoplay: true,
-            muted: true, loop: true
+            //autoplay: true,
+            muted: false, loop: true,
         };
         const self = this;
         file.appendTo(node, opts, (err, elem) => {
@@ -177,15 +256,19 @@ class ContentTile extends Component {
                 });
             }
 
-            console.log('New DOM node with the content', elem);
+            Logger.info('New DOM node with the content', elem);
             if(elem && elem.style) {
                 elem.style.width = '100%';
-                elem.style.height = '100%';
+                //elem.style.height = '100%';
             }
 
             if(tile.isVideo) {
-                if(elem)
+                if(elem) {
+                    //elem.preload = 'none';
+                    //elem.autoplay = true;
                     elem.loop = true;
+                    //elem.play();
+                }
             }
         });
     }
@@ -199,14 +282,33 @@ class ContentTile extends Component {
     render() {
 
         const {tile, name, master, classes} = this.props;
-        const {open, localDownloads, listView, there} = this.state;
+        const {open, localDownloaded, localDownloading, listView, there, progress} = this.state;
+
+        const isLoading = !tile.torrentFile.done;
+        let loadingDom, progressPercentage, downloaded;
+        if(isLoading) {
+            progressPercentage = Math.round(tile.torrentFile.progress * 100);
+            downloaded = FileUtil.formatBytes(tile.torrentFile.downloaded);
+            loadingDom = <span className={classes.vertical} style={{width: '50px'}}>
+                            <Typography className={classes.progressPercentageText}
+                                        variant={"caption"}>{progressPercentage}%</Typography>
+                            <Typography className={classes.progressPercentageText}
+                                        style={{marginTop: '-5px'}}
+                                        variant={"caption"}>{downloaded}</Typography>
+                        </span>;
+        }
 
         const renderMediaDom = tile.isImage
             ? <img src={tile.img} alt={tile.fileName}
                    className={classes.wide} />
-            : <div className={classes.wide}
-                   ref={ref => this.handleContainerLoaded(tile, ref, tile.torrent.files[0])}>
+            : <div style={{
+                width: '100%',
+            }}
+                   ref={ref => this.handleContainerLoaded(tile, ref, tile.torrentFile)}>
             </div>;
+
+        const isDownloadingFile = localDownloading.includes(tile.infoHash);
+        const downloadedFile = localDownloaded.includes(tile.infoHash);
 
         return (
             /*<Zoom in={there}>*/
@@ -216,21 +318,23 @@ class ContentTile extends Component {
 
                 <Collapse in={listView}>
                     <Paper className={classes.toolbar}>
-                    <div style={{width: '100%'}} className={classes.horizontal}>
+                    <div className={classes.horizontal} style={{width: '100%'}}>
 
-                        <IconButton onClick={this.downloadFromServer.bind(this, tile)}>
+                        {loadingDom}
+
+                        <IconButton disabled={isDownloadingFile} onClick={this.downloadFromServer.bind(this, tile)}>
                             <CloudDownloadIcon/>
                         </IconButton>
-                        {localDownloads.includes(tile.infoHash) ? <Typography variant={"caption"}>Downloaded</Typography> : ''}
-                        {/*<IconButton onClick={this.handleOpen.bind(this, tile)} className={classes.icon}>
+                        {downloadedFile ? <Typography variant={"caption"}
+                                                  style={{marginRight: '5px'}}>Downloaded</Typography> : ''}
+                        {/*<IconButton onClick={this.handleOpen.bind(this, tile)}>
                             <InfoIcon />
                         </IconButton>*/}
                         <Typography onClick={this.handleOpen.bind(this, tile)} className={classes.wordwrap}
                                     title={tile.picSummary}
                                     variant="caption">{name}
                         </Typography>
-                        <IconButton onClick={this.handleDelete.bind(this, tile)}
-                                    className={classes.icon}>
+                        <IconButton onClick={this.handleDelete.bind(this, tile)}>
                             <DeleteIcon />
                         </IconButton>
                         {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>

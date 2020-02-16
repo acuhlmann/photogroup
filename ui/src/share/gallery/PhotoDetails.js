@@ -14,6 +14,7 @@ import IconButton from "@material-ui/core/IconButton";
 import MetadataParser from "./MetadataParser";
 import Slide from '@material-ui/core/Slide';
 import FileUtil from "../util/FileUtil";
+import Logger from 'js-logger';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Slide direction="up" ref={ref} {...props} />;
@@ -46,8 +47,12 @@ class PhotoDetails extends Component {
         parser.readMetadata(tile, async (tile, metadata) => {
 
             this.setState((state, props) => {
-                const summaryMetadata = state.parser.createMetadataSummary(metadata);
-                return {metadata: summaryMetadata, fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)}
+                if(metadata) {
+                    const summaryMetadata = state.parser.createMetadataSummary(metadata, tile);
+                    return {metadata: summaryMetadata, fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)}
+                } else {
+                    return {fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)}
+                }
             });
 
             if(tile.seed) {
@@ -66,8 +71,9 @@ class PhotoDetails extends Component {
                     cameraSettings: tile.cameraSettings,
                 };
 
-                const result = await master.service.share(photo);
-                console.log('master.service.share(photo) ' + result);
+                const result = await master.service.update([photo]);
+                Logger.info('fully rendered, update photo ' + result.length + ' '
+                    + result.map(item => item.fileName));
             }
         });
     }
@@ -99,7 +105,7 @@ class PhotoDetails extends Component {
                     aria-labelledby="alert-dialog-title"
                     aria-describedby="alert-dialog-description"
                 >
-                    <DialogTitle id="alert-dialog-title">{"All that Image Metadata"}</DialogTitle>
+                    <DialogTitle id="alert-dialog-title">{"All that metadata"}</DialogTitle>
                     <DialogActions>
                         <IconButton
                             onClick={() => this.props.handleClose()}

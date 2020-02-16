@@ -62,7 +62,8 @@ export default class TorrentCreator {
         const client = new WebTorrent({
             tracker: {
                 rtcConfig: this.iceServers
-            }
+            },
+            dht: false
         });
         Logger.info('client.peerId '+client.peerId);
         window.client = client; // for easier debugging

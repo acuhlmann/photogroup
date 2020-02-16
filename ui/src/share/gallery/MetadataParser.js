@@ -2,9 +2,10 @@ import moment from 'moment';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
 import FileUtil from "../util/FileUtil";
-import update from 'immutability-helper';
 import EXIF from 'exif-js';
 import Logger from 'js-logger';
+import jsmediatags from 'jsmediatags';
+import StringUtil from "../util/StringUtil";
 
 export default class MetadataParser {
 
@@ -12,24 +13,46 @@ export default class MetadataParser {
         window.EXIF = EXIF;
     }
 
-    readMetadata(tile, callback) {
+    async readMetadata(tile, callback) {
 
-        const self = this;
+        if(tile.isImage) {
 
-        //const id = event.currentTarget.id;
-        //const img = document.getElementById(id);
+            const self = this;
+            const EXIF = window.EXIF;
+            EXIF.enableXmp();
+            try {
+                EXIF.getData(tile.elem, function()  {
 
-        //const index = id.substring(3, id.length);
-        const EXIF = window.EXIF;
-        EXIF.enableXmp();
-        try {
-            EXIF.getData(tile.elem, function()  {
+                    const metadata = self.extractAndProcess(this, tile);
+                    callback(tile, metadata);
+                });
+            } catch(e) {
+                Logger.error('error parsing image ');
+            }
 
-                const metadata = self.extractAndProcess(this, tile);
-                callback(tile, metadata);
+        } else if(tile.isAudio) {
+
+            jsmediatags.read(tile.elem, {
+                onSuccess: (tag) => {
+                    Logger.info('id3 tag ' + tag);
+                    const tags = tag.tags;
+
+                    tile.picSummary = StringUtil.addEmptySpaces([
+                        tags.artist, tags.title, tags.album, tags.genre]);
+
+                    tags.format = StringUtil.addEmptySpaces([tag.type, tag.version, tag.major, tag.revision]);
+                    tags.size = tag.size;
+                    tags.flags = tag.flags;
+                    callback(tile, tags);
+                },
+                onError: (error) => {
+                    Logger.error(error);
+                }
             });
-        } catch(e) {
-            Logger.error('error parsing image ');
+
+        } else if(tile.isVideo) {
+
+
         }
     }
 
@@ -113,7 +136,7 @@ export default class MetadataParser {
         return date.format("HH:mm:ss MMM Do YY");
     }
 
-    createMetadataSummary(rawMetadata) {
+    createMetadataSummary(rawMetadata, tile) {
 
         if(!rawMetadata) return;
 
@@ -125,41 +148,78 @@ export default class MetadataParser {
                 const valueObj = entry[1];
                 let newValueObj;
 
-                if(key.substring(0, 2) === 'x-') {
-                    newValueObj = valueObj;
-                } else if(key === 'DateTimeOriginal') {
-                    newValueObj = MetadataParser.formatDate(valueObj);
-                }
-                else if(Array.isArray(valueObj)) {
-                    newValueObj = valueObj.toString();
-                } else if(typeof valueObj === 'string' || valueObj instanceof String) {
-                    newValueObj = valueObj;
-                } else {
-                    newValueObj = JSON.stringify(valueObj);
+                if(tile.isImage) {
+                    if(key.substring(0, 2) === 'x-') {
+                        newValueObj = valueObj;
+                    } else if(key === 'DateTimeOriginal') {
+                        newValueObj = MetadataParser.formatDate(valueObj);
+                    } else if(Array.isArray(valueObj)) {
+                        newValueObj = valueObj.toString();
+                    } else if(typeof valueObj === 'string' || valueObj instanceof String) {
+                        newValueObj = valueObj;
+                    } else {
+                        newValueObj = JSON.stringify(valueObj);
+                    }
+                } else if(tile.isAudio) {
+                    if(key === 'flags' && valueObj) {
+
+                        newValueObj = Object.entries(valueObj).map(entry => entry[0] + ': ' + entry[1] + ', ');
+
+                    } else if(key === 'picture') {
+                        newValueObj = valueObj;
+                    } else if(key === 'size') {
+                        newValueObj = FileUtil.formatBytes(valueObj);
+                    }
+                    else if(valueObj && valueObj.id) {
+                        newValueObj = null;
+                    } else if(Array.isArray(valueObj)) {
+                        newValueObj = valueObj.toString();
+                    } else if(typeof valueObj === 'string' || valueObj instanceof String) {
+                        newValueObj = valueObj;
+                    } else {
+                        newValueObj = JSON.stringify(valueObj);
+                    }
                 }
 
                 return {key: key,
                     value: newValueObj};
-            });
+            }).filter(item => item.value);
 
-        ['x-file name', 'Title XMP', 'x-Description', 'Rating XMP', 'Keywords XMP', 'XPKeywords',
-            'DateTimeOriginal', 'x-Location', 'GPSAltitude',
-            'x-Pixel Size', 'x-Camera', 'x-Settings',
-            'DigitalZoomRation', 'Flash', 'WhiteBalance', 'MeteringMode',
-            'Software', 'x-Last Save with', 'x-Last Save at']
-            .reverse()
-            .forEach(key => {
+        if(tile.isImage) {
+            ['x-file name', 'Title XMP', 'x-Description', 'Rating XMP', 'Keywords XMP', 'XPKeywords',
+                'DateTimeOriginal', 'x-Location', 'GPSAltitude',
+                'x-Pixel Size', 'x-Camera', 'x-Settings',
+                'DigitalZoomRation', 'Flash', 'WhiteBalance', 'MeteringMode',
+                'Software', 'x-Last Save with', 'x-Last Save at']
+                .reverse()
+                .forEach(key => {
 
-            metadata.find((item, index) => {
-                if(item.key === key) {
+                    metadata.find((item, index) => {
+                        if(item.key === key) {
 
-                    metadata.splice(index, 1);
-                    metadata.unshift(item);
-                    return true;
-                }
-                return false;
-            });
-        });
+                            metadata.splice(index, 1);
+                            metadata.unshift(item);
+                            return true;
+                        }
+                        return false;
+                    });
+                });
+        } else if(tile.isAudio) {
+            ['x-file name', 'picture', 'artist', 'title', 'album', 'track', 'year', 'comment', 'format']
+                .reverse()
+                .forEach(key => {
+
+                    metadata.find((item, index) => {
+                        if(item.key === key) {
+
+                            metadata.splice(index, 1);
+                            metadata.unshift(item);
+                            return true;
+                        }
+                        return false;
+                    });
+                });
+        }
 
         return metadata;
     }

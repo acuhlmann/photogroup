@@ -30,24 +30,55 @@ export default class PhotoDetailsRenderer {
             //metadata.unshift({key: 'Shared by ', value: shared + ' ' + fileSize});
         }
 
-        return metadata.map((item, index) => {
-            let content = item.value;
-            if(item.key === 'Rating XMP') {
-                content = this.getRating(item.value);
-            } else if(item.key === 'x-Location') {
-                content = this.getLocation(item.value);
-            } else if(item.key === 'GPSAltitude') {
-                content = item.value + 'm'
-            } else if(item.key === 'x-file name') {
-                //const fileName = tile && tile.fileName ? tile.fileName : item.value;
-                content = this.getFileNameEntry(fileName, item.value);
-            }
+        if(tile.isImage) {
 
-            return <ListItem key={index}
-                             divider>
-                <ListItemText primary={content} secondary={item.key} />
-            </ListItem>
-        });
+            return metadata.map((item, index) => {
+                let content = item.value;
+                if(item.key === 'Rating XMP') {
+                    content = this.getRating(item.value);
+                } else if(item.key === 'x-Location') {
+                    content = this.getLocation(item.value);
+                } else if(item.key === 'GPSAltitude') {
+                    content = item.value + 'm'
+                } else if(item.key === 'x-file name') {
+                    //const fileName = tile && tile.fileName ? tile.fileName : item.value;
+                    content = this.getFileNameEntry(fileName, item.value);
+                }
+
+                return <ListItem key={index}
+                                 divider>
+                    <ListItemText primary={content} secondary={item.key} />
+                </ListItem>
+            });
+        } else if(tile.isAudio) {
+
+            return metadata.map((item, index) => {
+                let content = item.value;
+                if(item.key === 'picture') {
+                    content = this.getAlbumArtPicture(item.value, tile.picSummary);
+                } else if(item.key === 'x-file name') {
+                    //const fileName = tile && tile.fileName ? tile.fileName : item.value;
+                    content = this.getFileNameEntry(fileName, item.value);
+                }
+
+                return <ListItem key={index}
+                                 divider>
+                    <ListItemText primary={content} secondary={item.key} />
+                </ListItem>
+            });
+        }
+    }
+
+    getAlbumArtPicture(value, summary) {
+        let base64String = "";
+        for (let i = 0; i < value.data.length; i++) {
+            base64String += String.fromCharCode(value.data[i]);
+        }
+        const dataUrl = "data:" + value.format + ";base64," + window.btoa(base64String);
+
+        return  <img src={dataUrl} alt={summary} style={{
+            width: '100%'
+        }} />;
     }
 
     getFileNameEntry(name, origName) {
@@ -73,9 +104,10 @@ export default class PhotoDetailsRenderer {
 
         this.view.setState({fileName: value});
         Logger.info('change name ' + value);
-        this.service.update(this.tile.infoHash, {
+        this.service.update([{
+            infoHash: this.tile.infoHash,
             fileName: FileUtil.truncateFileName(value)
-        });
+        }]);
     }
 
     getRating(value) {
