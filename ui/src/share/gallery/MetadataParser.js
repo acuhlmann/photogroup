@@ -1,10 +1,11 @@
 import moment from 'moment';
+import momentDurationFormatSetup  from 'moment-duration-format';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
 import FileUtil from "../util/FileUtil";
 import EXIF from 'exif-js';
 import Logger from 'js-logger';
-import jsmediatags from 'jsmediatags';
+import * as mm from 'music-metadata-browser';
 import StringUtil from "../util/StringUtil";
 
 export default class MetadataParser {
@@ -24,36 +25,77 @@ export default class MetadataParser {
                 EXIF.getData(tile.elem, function()  {
 
                     const metadata = self.extractAndProcess(this, tile);
+                    tile.metadata = metadata;
+                    tile.hasMetadata = true;
                     callback(tile, metadata);
                 });
             } catch(e) {
-                Logger.error('error parsing image ');
+                Logger.error('error parsing image');
+                callback(tile, {});
             }
 
-        } else if(tile.isAudio) {
+        } else if(tile.isAudio || tile.isVideo) {
 
-            jsmediatags.read(tile.elem, {
-                onSuccess: (tag) => {
-                    Logger.info('id3 tag ' + tag);
-                    const tags = tag.tags;
+            try {
+                const mmRef = mm;
+                mm.parseBlob(tile.elem).then(metadata => {
+                    Logger.info('metadata ' + metadata);
 
-                    tile.picSummary = StringUtil.addEmptySpaces([
-                        tags.artist, tags.title, tags.album, tags.genre]);
+                    const duration = metadata.format.duration ? moment
+                        .duration(metadata.format.duration, "seconds").format() + ' sec' : '';
+                    const sampleRate = metadata.format.sampleRate
+                        ? 'sample rate ' + metadata.format.sampleRate : '';
+                    const bitrate = metadata.format.bitrate ?
+                        'bitrate ' + Math.round(metadata.format.bitrate) : '';
 
-                    tags.format = StringUtil.addEmptySpaces([tag.type, tag.version, tag.major, tag.revision]);
-                    tags.size = tag.size;
-                    tags.flags = tag.flags;
-                    callback(tile, tags);
-                },
-                onError: (error) => {
-                    Logger.error(error);
-                }
-            });
+                    const starRating = metadata.common.rating ? mmRef.ratingToStars(metadata.common.rating) : '';
+                    metadata.common.starRating = starRating;
 
-        } else if(tile.isVideo) {
+                    if(tile.isVideo) {
 
+                        tile.picSummary = StringUtil.addEmptySpaces([
+                            tile.picDateTaken, duration, metadata.format.container, metadata.format.codec,
+                            sampleRate, bitrate], ', ');
+                        metadata.format.duration = duration;
 
+                    } else if(tile.isAudio) {
+                        tile.picSummary = StringUtil.addEmptySpaces([
+                            tile.picDateTaken, metadata.common.artist, metadata.common.title,
+                            metadata.common.album, metadata.common.genre,
+                            duration], ', ');
+                    }
+
+                    tile.metadata = metadata;
+                    tile.hasMetadata = true;
+                    callback(tile, metadata);
+                }).catch(e => {
+                    Logger.error('error parsing media metadata ' + e);
+                    callback(tile, {});
+                });
+            } catch(e) {
+                Logger.error('error parsing media metadata ' + e);
+                callback(tile, {});
+            }
         }
+    }
+
+    readStreaming(tile, callback) {
+
+        const stream = tile.torrentFile.createReadStream();
+        stream.on('data', (chunk) => {
+            console.log(`Received ${chunk.length} bytes of data.`);
+        });
+        stream.on('end', () => {
+            console.log('There will be no more data.');
+        });
+
+        mm.parseReadableStream(stream, {
+            size: tile.torrentFile.length,
+            mimeType: tile.torrentFile.name})
+            .then(metadata => {
+                console.log(Logger.info(metadata));
+                stream.close();
+            });
     }
 
     extractAndProcess(img, tile) {
@@ -106,18 +148,17 @@ export default class MetadataParser {
             tileItem.fileName = FileUtil.truncateFileName(tile.torrent.name);
 
             tileItem.picSummary = this.createSummary(allMetadata, tileItem.picDateTaken, tile.torrent.name);
-            const cameraMake = allMetadata['Make'] ? allMetadata['Make']  + ' ': '';
-            const cameraSettings = allMetadata['x-Settings'] ? allMetadata['x-Settings'] : '';
-            tileItem.cameraSettings = cameraMake + cameraSettings;
+            tileItem.cameraSettings = StringUtil.addEmptySpaces([
+                allMetadata['Make'],
+                allMetadata['x-Settings']]);
         }
     }
 
     createSummary(allMetadata, picDateTaken, name) {
-        const picTitle = allMetadata['Title XMP'] ? allMetadata['Title XMP'] + ' ' : '';
-        const picDesc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
-        return picDateTaken + ' '
-            + picTitle + picDesc
-            + FileUtil.truncateFileName(name)
+
+        return StringUtil.addEmptySpaces([picDateTaken,
+            allMetadata['Title XMP'], allMetadata['x-Description'],
+            FileUtil.truncateFileName(name)], ', ');
     }
 
     static toTimeStamp(date) {
@@ -160,18 +201,13 @@ export default class MetadataParser {
                     } else {
                         newValueObj = JSON.stringify(valueObj);
                     }
-                } else if(tile.isAudio) {
-                    if(key === 'flags' && valueObj) {
-
-                        newValueObj = Object.entries(valueObj).map(entry => entry[0] + ': ' + entry[1] + ', ');
-
-                    } else if(key === 'picture') {
+                } else if(tile.isAudio || tile.isVideo) {
+                    if((key === 'format' || key === 'common') && valueObj) {
                         newValueObj = valueObj;
-                    } else if(key === 'size') {
-                        newValueObj = FileUtil.formatBytes(valueObj);
-                    }
-                    else if(valueObj && valueObj.id) {
-                        newValueObj = null;
+                    } else if(key === 'native') {
+                        newValueObj = Object.entries(valueObj)
+                            .map(entry => entry[0] + '----->' + entry[1]
+                                .map(item => item.id + ': ' + item.value));
                     } else if(Array.isArray(valueObj)) {
                         newValueObj = valueObj.toString();
                     } else if(typeof valueObj === 'string' || valueObj instanceof String) {
@@ -204,8 +240,9 @@ export default class MetadataParser {
                         return false;
                     });
                 });
-        } else if(tile.isAudio) {
-            ['x-file name', 'picture', 'artist', 'title', 'album', 'track', 'year', 'comment', 'format']
+        } else if(tile.isAudio || tile.isVideo) {
+            //['x-file name', 'picture', 'artist', 'title', 'album', 'track', 'year', 'comment', 'format']
+            ['x-file name', 'common', 'format']
                 .reverse()
                 .forEach(key => {
 

@@ -9,6 +9,7 @@ import Typography from '@material-ui/core/Typography';
 import TextField from '@material-ui/core/TextField';
 import FileUtil from "../util/FileUtil";
 import _ from 'lodash';
+import StringUtil from "../util/StringUtil";
 
 export default class PhotoDetailsRenderer {
 
@@ -50,35 +51,115 @@ export default class PhotoDetailsRenderer {
                     <ListItemText primary={content} secondary={item.key} />
                 </ListItem>
             });
-        } else if(tile.isAudio) {
+        } else if(tile.isAudio || tile.isVideo) {
 
             return metadata.map((item, index) => {
-                let content = item.value;
-                if(item.key === 'picture') {
-                    content = this.getAlbumArtPicture(item.value, tile.picSummary);
-                } else if(item.key === 'x-file name') {
-                    //const fileName = tile && tile.fileName ? tile.fileName : item.value;
-                    content = this.getFileNameEntry(fileName, item.value);
-                }
+                let {key, value} = item;
+                if(key === 'x-file name') {
 
-                return <ListItem key={index}
-                                 divider>
-                    <ListItemText primary={content} secondary={item.key} />
-                </ListItem>
+                    value = this.getFileNameEntry(fileName, value);
+                    return this.createListItemText(index, key, value);
+
+                } else if(key === 'format') {
+
+                    return Object.entries(value).map((entry, subIndex) => {
+
+                        const key = entry[0];
+                        const item = entry[1];
+                        let content;
+                        if(key === 'trackInfo') {
+                            content = item.map(item => {
+                                return StringUtil.addEmptySpaces([
+                                    item.codecName, item.type,
+                                    Object.entries(item.audio).map(entry => entry[0] + ':' + entry[1])],
+                                    ', ')
+                            });
+                        } else if(Array.isArray(item)) {
+                            content = item.map(item => {
+                                return item;
+                            });
+                        } else if(typeof item === 'string') {
+                            content = item;
+                        } else {
+                            content = Object.entries(item)
+                                .map(entry => {
+                                    if(entry[1]) {
+                                        return entry[0] + ':' + entry[1];
+                                    }
+                                    return null;
+                                })
+                                .filter(item => item).join(', ');
+                        }
+                        return content ? this.createListItemText(index + subIndex, key,
+                            <Typography>{content}</Typography>) : null;
+                    }).filter(item => item);
+
+                } else if(key === 'common') {
+
+                    return Object.entries(value).map((entry, subIndex) => {
+
+                        const key = entry[0];
+                        const item = entry[1];
+                        if(key === 'picture') {
+                            return this.createListItem(index + subIndex, key, <div>{item
+                                .map(pic => this.getAlbumArtPicture(pic, tile.picSummary, subIndex))}
+                            </div>);
+                        } else if(key === 'starRating' && item.starRating) {
+
+                            return this.getRating(item.starRating);
+
+                        } else {
+
+                            let content;
+                            if(Array.isArray(item)) {
+                                content = item.map(item => item);
+                            } else if(typeof item === 'string') {
+                                content = item;
+                            } else {
+                                content = Object.entries(item)
+                                    .map(entry => {
+                                        if(entry[1]) {
+                                            return entry[0] + ':' + entry[1];
+                                        }
+                                        return null;
+                                    })
+                                    .filter(item => item).join(', ');
+                            }
+                            return content ? this.createListItemText(index + subIndex, key,
+                                <Typography>{content}</Typography>) : null;
+                        }
+                    }).filter(item => item);
+                }
             });
         }
     }
 
-    getAlbumArtPicture(value, summary) {
+    createListItemText(index, key, value) {
+        return <ListItem key={index}
+                  divider>
+            <ListItemText primary={value} secondary={key} />
+        </ListItem>
+    }
+
+    createListItem(index, key, value) {
+        return <ListItem key={index}
+                         divider>
+            {value}
+        </ListItem>
+    }
+
+    getAlbumArtPicture(value, summary, index) {
         let base64String = "";
         for (let i = 0; i < value.data.length; i++) {
             base64String += String.fromCharCode(value.data[i]);
         }
         const dataUrl = "data:" + value.format + ";base64," + window.btoa(base64String);
-
-        return  <img src={dataUrl} alt={summary} style={{
-            width: '100%'
-        }} />;
+        const description = StringUtil.addEmptySpaces([value.type, value.description]);
+        const alt = StringUtil.addEmptySpaces([description, summary]);
+        return  <div key={index}>
+                <Typography>{description}</Typography>
+                <img src={dataUrl} alt={alt} style={{width: '100%'}} />
+            </div>;
     }
 
     getFileNameEntry(name, origName) {

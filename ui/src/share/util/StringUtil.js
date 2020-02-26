@@ -2,10 +2,10 @@ import _ from 'lodash';
 
 export default class StringUtil {
 
-    static addEmptySpaces(values) {
+    static addEmptySpaces(values, separator = ' ') {
         return values
             .filter(item => item)
-            .map(value => value && value !== null ? value + ' ' : '')
+            .map(value => value && value !== null ? value + separator : '')
             .join('').replace(/ $/,'');
     }
 

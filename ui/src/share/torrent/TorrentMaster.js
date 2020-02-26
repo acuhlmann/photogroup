@@ -10,6 +10,7 @@ import FileUtil from '../util/FileUtil';
 import platform from 'platform';
 import _ from 'lodash';
 import moment from 'moment';
+import MetadataParser from "../gallery/MetadataParser";
 
 export default class TorrentMaster {
 
@@ -22,6 +23,10 @@ export default class TorrentMaster {
         this.service.master = this;
         this.emitter = emitter;
         this.peers = new Peers(emitter, [], service);
+        this.metadata = new MetadataParser();
+        this.STREAMING_VIDEO_FORMATS = ['mp4', 'm4v', 'm4a'];
+        this.STREAMING_AUDIO_FORMATS = ['mp3'];
+        this.STREAMING_FORMATS = [...this.STREAMING_VIDEO_FORMATS, ...this.STREAMING_AUDIO_FORMATS];
         this.torrentsDb = new IdbKvStore('torrents');
         this.torrentsDb.on('open',() => {
             Logger.info('torrentsDb open');
@@ -231,6 +236,15 @@ export default class TorrentMaster {
 
         const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true};
         opts.store = idb;
+        if(addOrSeed === 'seed') {
+            const filesArr = [...input];
+            if(filesArr.every(file => !file.type.includes('video/'))) {
+                opts.strategy = 'rarest';
+            }
+        } else if(addOrSeed === 'add' && input && input.files) {
+
+            this.torrentAddition.defineStrategy(input.files, opts);
+        }
         const torrent = this.client[addOrSeed](input, opts, callback);
         //const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE}, callback);
 
@@ -295,7 +309,7 @@ export default class TorrentMaster {
         torrent.on('warning', err => self.torrentAddition.warning(torrent, err));
         torrent.on('wire', (wire, addr) => self.torrentAddition.wire(wire, addr, torrent));
 
-        this.emitter.emit('update', torrent);
+        this.emitter.emit('newTorrent', torrent);
 
         return torrent;
     }

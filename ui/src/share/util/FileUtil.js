@@ -4,6 +4,7 @@ import prettyBytes from 'pretty-bytes';
 export default class FileUtil {
 
     static getFileSuffix(name) {
+        if(!name) return name;
         const matched = name.match(/\.[0-9a-z]+$/i);
         return matched ? matched[0] : '';
     }
@@ -23,7 +24,12 @@ export default class FileUtil {
     }
 
     static formatBytes(bytes) {
-        return prettyBytes(Number(bytes));
+        try{
+            const result = prettyBytes(Number(bytes));
+            return result;
+        } catch(e) {
+            return '';
+        }
     }
 
     //credits to https://gist.github.com/wuchengwei/b7e1820d39445f431aeaa9c786753d8e

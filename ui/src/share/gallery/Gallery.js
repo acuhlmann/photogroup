@@ -43,7 +43,6 @@ class Gallery extends Component {
         }, this);
 
         const emitter = props.master.emitter;
-        const self = this;
 
         this.photoHandler = new GalleryPhotoHandler(this, emitter);
         this.photoHandler.sync();
@@ -85,20 +84,26 @@ class Gallery extends Component {
 
         const isSeeding = photos[0].seed;
         if(isSeeding) {
-            const tiles = photos.map(photo => this.mergeEasyToGetMetadata(photo, photo.file));
-            this.renderTile(tiles, isSeeding);
+            photos.forEach(photo => {
+                this.mergePreloadMetadata(photo);
+                this.mergePostloadMetadata(photo, photo.file);
+            });
+            this.renderTile(photos, isSeeding);
         } else {
 
             const photoPromises = photos.map(photo => {
                 return new Promise((resolve, reject) => {
-                    const ext = photo.torrentFile.name.split('.').pop().toLowerCase();
-                    if(ext !== 'mp4') {
+                    const extention = photo.torrentFile.name.split('.').pop().toLowerCase();
+                    if(!this.props.master.STREAMING_FORMATS.includes(extention)) {
+                        Logger.info('getBlob ' + photo.torrent.name);
+                        this.mergePreloadMetadata(photo);
                         photo.torrentFile.getBlob((err, elem) => {
+                            Logger.info('getBlob done ' + photo.torrent.name);
                             if (err) {
                                 Logger.error(err.message);
                                 reject(err.message);
                             } else {
-                                resolve(this.mergeEasyToGetMetadata(photo, elem));
+                                resolve(this.mergePostloadMetadata(photo, elem));
                             }
                         });
                     } else {
@@ -111,42 +116,51 @@ class Gallery extends Component {
                             console.log('There will be no more data.');
                         });
                         */
-                        resolve(this.mergeStreamingMetadata(photo));
+                        resolve(this.mergeStreamingMetadata(photo, extention));
                     }
                 });
             });
 
+            this.renderTile(photos, false, false);
+
             Promise.all(photoPromises).then(results => {
-                this.renderTile(results, isSeeding);
+                this.renderTile(results, false, true);
             });
         }
     }
 
-    mergeStreamingMetadata(photo) {
+    mergeStreamingMetadata(photo, extention) {
+        photo.loading = photo.rendering = false;
         photo.elem = null;
         photo.img = null;
         photo.fileSize = photo.fileSize || FileUtil.formatBytes(photo.torrentFile.length);
-        photo.isVideo = true;
+        photo.isVideo = this.props.master.STREAMING_VIDEO_FORMATS.includes(extention);
+        photo.isAudio = this.props.master.STREAMING_AUDIO_FORMATS.includes(extention);
         photo.isImage = false;
         photo.fileName = FileUtil.truncateFileName(photo.torrentFile.name);
         photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
         return photo;
     }
 
-    mergeEasyToGetMetadata(photo, file) {
-        photo.loading = false;
+    mergePreloadMetadata(photo) {
+        photo.fileName = FileUtil.truncateFileName(photo.torrentFile.name);
+        photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
+    }
+
+    mergePostloadMetadata(photo, file) {
+        photo.loading = photo.rendering = false;
         photo.elem = file;
         photo.img = URL.createObjectURL(file);
         photo.fileSize = photo.fileSize || FileUtil.formatBytes(photo.elem.size);
         photo.isVideo = photo.elem.type.includes('video/');
         photo.isImage = photo.elem.type.includes('image/');
         photo.isAudio = photo.elem.type.includes('audio/');
-        photo.fileName = file.name;
-        photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
+        photo.fileName = FileUtil.truncateFileName(file.name);
+        //photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
         return photo;
     }
 
-    renderTile(photos, isSeeding) {
+    renderTile(photos, isSeeding, updateOwner) {
 
         this.setState((state, props) => {
 
@@ -162,7 +176,7 @@ class Gallery extends Component {
                 }
             });
 
-            if(!isSeeding) {
+            if(!isSeeding && updateOwner) {
 
                 tiles.forEach(photo => {
                     this.props.master.service.updateOwner([{

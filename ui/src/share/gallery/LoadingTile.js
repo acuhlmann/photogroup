@@ -14,6 +14,7 @@ import StringUtil from "../util/StringUtil";
 import IconButton from "@material-ui/core/IconButton";
 import DeleteIcon from "@material-ui/icons/Delete";
 import Logger from "js-logger";
+import PiecesLoadingView from "../torrent/PiecesLoadingView";
 
 const styles = theme => ({
     horizontal: {
@@ -112,6 +113,7 @@ class LoadingTile extends Component {
         //timeRemaining = 'in 1 minute';
 
         //let owners = tile.owners ? tile.owners : [];
+        progress = tile.torrentFile ? Math.round(tile.torrentFile.progress * 100) : progress;
         const progressPercentage = progress ? Math.round(progress) + '%' : progress;
         let have = tile.owners.find(owner => owner.peerId === master.client.peerId && !owner.loading);
         const isLoading = !!progress;
@@ -196,6 +198,10 @@ class LoadingTile extends Component {
                             {name}
                         </Typography>
                     </span>
+                <Divider variant="middle" />
+                <div style={{width: '100%', height: '100%'}}>
+                    <PiecesLoadingView master={master} tile={tile} />
+                </div>
                 <Divider variant="middle" />
                 {!isRendering ? <OwnersList emitter={master.emitter}
                             tile={tile} peers={master.peers} myPeerId={master.client.peerId}

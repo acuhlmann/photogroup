@@ -32,59 +32,33 @@ class PhotoDetails extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            parser: new MetadataParser(),
             fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)
         }
     }
 
     componentDidMount() {
-        const {tile, master} = this.props;
-        const {parser} = this.state;
-
         this.setState((state, props) => {
             return {fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)}
-        });
-        parser.readMetadata(tile, async (tile, metadata) => {
-
-            this.setState((state, props) => {
-                if(metadata) {
-                    const summaryMetadata = state.parser.createMetadataSummary(metadata, tile);
-                    return {metadata: summaryMetadata, fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)}
-                } else {
-                    return {fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)}
-                }
-            });
-
-            if(tile.seed) {
-
-                const photo = {
-                    infoHash: tile.infoHash,
-                    url: tile.torrent.magnetURI,
-                    peerId: tile.peerId,
-                    fileSize: tile.fileSize,
-                    fileName: tile.fileName,
-                    //metadata
-                    picDateTaken: tile.picDateTaken,
-                    picTitle: tile.picTitle,
-                    picDesc: tile.picDesc,
-                    picSummary: tile.picSummary,
-                    cameraSettings: tile.cameraSettings,
-                };
-
-                const result = await master.service.update([photo]);
-                Logger.info('fully rendered, update photo ' + result.length + ' '
-                    + result.map(item => item.fileName));
-            }
         });
     }
 
     componentDidUpdate(nextProps) {
-        const { tile } = this.props;
+        const { tile, open } = this.props;
         const fileName = tile.fileName;
         if (nextProps.tile.fileName !== fileName) {
             if (fileName) {
                 this.setState({ fileName: fileName })
             }
+        }
+        if (!nextProps.open && open && tile.metadata) {
+            this.setState((state, props) => {
+                if(tile.metadata) {
+                    const summaryMetadata = props.parser.createMetadataSummary(tile.metadata, tile);
+                    return {metadata: summaryMetadata, fileName: FileUtil.getFileNameWithoutSuffix(tile.fileName)};
+                } else {
+                    return {fileName: FileUtil.getFileNameWithoutSuffix(tile.fileName)};
+                }
+            });
         }
     }
 

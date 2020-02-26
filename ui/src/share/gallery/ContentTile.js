@@ -13,9 +13,10 @@ import update from "immutability-helper";
 import Button from "@material-ui/core/Button/Button";
 import { withSnackbar } from 'notistack';
 import Collapse from '@material-ui/core/Collapse';
-import Zoom from '@material-ui/core/Zoom';
-import CircularProgress from "@material-ui/core/CircularProgress";
 import FileUtil from "../util/FileUtil";
+import PiecesLoadingView from "../torrent/PiecesLoadingView";
+import Webamp from 'webamp';
+import {Icon} from "@material-ui/core";
 
 const styles = theme => ({
     horizontal: {
@@ -48,6 +49,12 @@ const styles = theme => ({
         fontSize: '0.7rem',
         //bottom: '26px',
     },
+    imageIcon: {
+        height: '100%'
+    },
+    iconRoot: {
+        textAlign: 'center'
+    }
 });
 
 class ContentTile extends Component {
@@ -207,11 +214,7 @@ class ContentTile extends Component {
     }
 
     handleContainerLoaded(tile, node, file) {
-        if(!tile || !file) {
-            return;
-        }
-
-        if(!node) {
+        if(!tile || !file || !node) {
             return;
         }
 
@@ -231,11 +234,51 @@ class ContentTile extends Component {
         this.appendFile(tile, node, file);
     }
 
+    handleWebamp(tile, node, file) {
+        if(!tile || !file || !node || !tile.isAudio) {
+            return;
+        }
+
+        if(!Webamp.browserIsSupported()) {
+            Logger.error("Oh no! Webamp does not work!")
+            throw new Error("What's the point of anything?")
+        }
+        const webamp = new Webamp({
+            initialTracks: [{
+                metaData: {
+                    artist: "DJ Mike Llama",
+                    title: "Llama Whippin' Intro",
+                },
+                url: "llama-2.91.mp3"
+            }],
+            zIndex: 99999,
+        });
+        //this.setState({webamp: webamp, webampNode: node});
+        this.webamp = webamp;
+        this.webampNode = node;
+        //webamp.renderWhenReady(node);
+        //webamp.appendTracks([{blob: 'https://example.com/track1.mp3'}]);
+    }
+
+    openInWebamp() {
+        const webamp = this.webamp;
+        this.props.tile.torrentFile.getBlob((err, elem) => {
+            webamp.appendTracks([{blob: elem}]);
+            webamp.renderWhenReady(this.webampNode).then(() => {
+                //webamp.appendTracks([{blob: 'https://example.com/track1.mp3'}]);
+                webamp.play();
+            });
+        });
+    }
+
     appendFile(tile, node, file) {
         const opts = {
-            //autoplay: true,
-            muted: false, loop: true,
+            autoplay: !tile.isAudio,
+            muted: !tile.isAudio, loop: true,
         };
+        //if(tile.isAudio) opts.muted = false;
+
+
         const self = this;
         file.appendTo(node, opts, (err, elem) => {
             // file failed to download or display in the DOM
@@ -262,6 +305,8 @@ class ContentTile extends Component {
                 //elem.style.height = '100%';
             }
 
+            this.getBlobAndReadMetadata(tile);
+
             if(tile.isVideo) {
                 if(elem) {
                     //elem.preload = 'none';
@@ -271,12 +316,100 @@ class ContentTile extends Component {
                 }
             }
         });
+        Logger.info('streaming start ' + tile.torrentFile.progress);
+        /*tile.torrent.critical(0, tile.torrent.pieces.length - 1);
+        tile.torrent._rechoke();
+
+        const stream = tile.torrentFile.createReadStream({
+                                                    start: 0,
+                                                    end: tile.torrent.pieces.length - 1
+                                                });
+        stream.on('data', (chunk) => {
+            console.log(`Received ${chunk.length} bytes of data.`);
+        });
+        stream.on('end', () => {
+            console.log('There will be no more data.');
+        });*/
+    }
+
+    getBlobAndReadMetadata(tile) {
+        Logger.info('streaming done ' + tile.torrentFile.progress);
+        const master = this.props.master;
+        /*master.metadata.readStreaming(tile, (tile, metadata) => {
+            Logger.info('readStreaming');
+        });*/
+
+        tile.torrentFile.getBlob((err, elem) => {
+            Logger.info('streaming getBlob ' + tile.torrentFile);
+            if (err) {
+                Logger.error(err.message);
+            } else {
+                tile.elem = elem;
+                this.readMetadata(tile);
+            }
+        });
+    }
+
+    readMetadata(tile) {
+        const master = this.props.master;
+        master.metadata.readMetadata(tile, (tile, metadata) => {
+            Logger.info('readMetadata');
+            master.emitter.emit('photos', {type: 'update', item: [tile]});
+            if(tile.seed) {
+                master.emitter.emit('photoRendered', tile);
+            }
+        });
+    }
+
+    imgLoaded(tile) {
+        this.readMetadata(tile);
     }
 
     removeFile(node) {
         while (node.firstChild) {
             node.removeChild(node.firstChild);
         }
+    }
+
+    buildMetadataTitle(tile, name, classes) {
+        if(tile.hasMetadata) {
+            return <a href="#">
+                <Typography onClick={this.handleOpen.bind(this, tile)} className={classes.wordwrap}
+                            title={tile.picSummary}
+                            variant="caption">{name}
+                </Typography>
+            </a>
+        } else {
+            return <Typography onClick={this.handleOpen.bind(this, tile)} className={classes.wordwrap}
+                               title={tile.picSummary}
+                               variant="caption">{name}
+            </Typography>
+        }
+    }
+
+    renderMediaDom(tile, classes) {
+        return tile.isImage
+            ? <img src={tile.img} alt={tile.fileName}
+                   className={classes.wide}
+                   onLoad={this.imgLoaded.bind(this, tile)} />
+            : <div className={classes.horizontal}>
+                {tile.isAudio ? <div className={classes.horizontal}>
+                        <Typography variant={"caption"}>Open in</Typography>
+                        <IconButton color="primary"
+                                    onClick={() => this.openInWebamp()}>
+
+                            <Icon classes={{root: classes.iconRoot}}>
+                                <img className={classes.imageIcon} src="./webamp.svg"/>
+                            </Icon>
+                        </IconButton>
+                    </div> : ''}
+                    <div style={{
+                    width: '100%', marginTop: '10px'}}
+                       ref={ref => this.handleContainerLoaded(tile, ref, tile.torrentFile)}>
+                    </div>
+                {tile.isAudio ? <div ref={ref => this.handleWebamp(tile, ref, tile.torrentFile)}>
+                    </div> : ''};
+                </div>;
     }
 
     render() {
@@ -298,15 +431,6 @@ class ContentTile extends Component {
                         </span>;
         }
 
-        const renderMediaDom = tile.isImage
-            ? <img src={tile.img} alt={tile.fileName}
-                   className={classes.wide} />
-            : <div style={{
-                width: '100%',
-            }}
-                   ref={ref => this.handleContainerLoaded(tile, ref, tile.torrentFile)}>
-            </div>;
-
         const isDownloadingFile = localDownloading.includes(tile.infoHash);
         const downloadedFile = localDownloaded.includes(tile.infoHash);
 
@@ -314,7 +438,7 @@ class ContentTile extends Component {
             /*<Zoom in={there}>*/
             <div className={classes.gridList}>
 
-                {renderMediaDom}
+                {this.renderMediaDom(tile, classes)}
 
                 <Collapse in={listView}>
                     <Paper className={classes.toolbar}>
@@ -330,10 +454,7 @@ class ContentTile extends Component {
                         {/*<IconButton onClick={this.handleOpen.bind(this, tile)}>
                             <InfoIcon />
                         </IconButton>*/}
-                        <Typography onClick={this.handleOpen.bind(this, tile)} className={classes.wordwrap}
-                                    title={tile.picSummary}
-                                    variant="caption">{name}
-                        </Typography>
+                        {this.buildMetadataTitle(tile, name, classes)}
                         <IconButton onClick={this.handleDelete.bind(this, tile)}>
                             <DeleteIcon />
                         </IconButton>
@@ -342,7 +463,9 @@ class ContentTile extends Component {
                         </IconButton>*/}
                     </div>
                     <div style={{width: '100%'}}>
-                        {/*<Typography variant={"caption"}>first shared by {tile.peerId}</Typography>*/}
+                        <PiecesLoadingView master={master} tile={tile} />
+                    </div>
+                    <div style={{width: '100%', height: '100%'}}>
                         <OwnersList emitter={master.emitter}
                                     tile={tile} peers={master.peers} myPeerId={master.client.peerId}
                         />
@@ -350,7 +473,7 @@ class ContentTile extends Component {
                     </Paper>
                     <PhotoDetails open={open}
                                   tile={tile}
-                                  master={master}
+                                  master={master} parser={master.metadata}
                                   handleClose={this.handleClose.bind(this)} />
                 </Collapse>
             </div>

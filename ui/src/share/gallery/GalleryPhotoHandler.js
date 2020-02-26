@@ -20,6 +20,7 @@ export default class GalleryPhotoHandler {
     sync() {
         this.emitter.on('photos', event => {
 
+            const format = 'HH:mm:ss MMM Do YY';
             if(event.type === 'all') {
 
                 this.view.setState(() => {
@@ -27,7 +28,6 @@ export default class GalleryPhotoHandler {
                     photos.forEach(item => {
                         item.loading = true;
                     });
-                    const format = 'HH:mm:ss MMM Do YY';
                     this.sortPictures(photos, format);
                     return {tiles: photos};
                 });
@@ -36,7 +36,7 @@ export default class GalleryPhotoHandler {
 
                 this.view.setState(state => {
 
-                    const oldTiles = state.tiles, format = 'HH:mm:ss MMM Do YY';
+                    const oldTiles = state.tiles;
                     let tiles = oldTiles;
                     event.item.forEach(photo => {
                         const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);

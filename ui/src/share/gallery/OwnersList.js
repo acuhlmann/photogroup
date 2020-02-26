@@ -92,7 +92,7 @@ class OwnersList extends Component {
         const anyFound = owners.some(owner => {
             const peer = peers.items.find(peer => peer.peerId === owner.peerId);
             if(!peer) {
-                Logger.error('hasOwners Cannot find peerId ' + owner.peerId);
+                //Logger.error('hasOwners Cannot find peerId ' + owner.peerId);
             }
             return peer ? owner : undefined;
         });
@@ -159,7 +159,7 @@ class OwnersList extends Component {
 
             const peer = peers.items.find(item => item.peerId === owner.peerId);
             if(!peer) {
-                Logger.error('Cannot find peerId ' + owner.peerId);
+                //Logger.error('Cannot find peerId ' + owner.peerId);
                 return;
             }
             let nat = peer.networkChain
