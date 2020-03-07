@@ -1,24 +1,15 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import {withStyles} from '@material-ui/core/styles';
-
-import Typography from "@material-ui/core/Typography";
-import Button from "@material-ui/core/Button/Button";
-import PasswordInput from "../security/PasswordInput";
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import {withSnackbar} from "notistack";
 import update from "immutability-helper";
 import _ from "lodash";
-import Encrypter from "../security/Encrypter";
 import LoadingTile from "./LoadingTile";
 import StringUtil from "../util/StringUtil";
 import ContentTile from "./ContentTile";
 import GalleryPhotoHandler from "./GalleryPhotoHandler";
-import * as exifr from 'exifr';
-import IconButton from "@material-ui/core/IconButton";
-import DeleteIcon from "@material-ui/icons/Delete";
-import WebCrypto from "../security/WebCrypto";
 
 const styles = theme => ({
     root: {
@@ -244,52 +235,6 @@ class Gallery extends Component {
             }
 
             return {tiles: tiles};
-
-        });
-    }
-
-    async decrypt(tile, password, index) {
-        const elem = tile.elem;
-        const self = this;
-
-        const crypto = new WebCrypto();
-        let result;
-        try {
-            result = await crypto.decryptFile([elem], password, tile.fileName);
-        } catch(e) {
-            Logger.error('Error decrypting ' + e);
-            this.snack('Cannot Decrypt', 'error', false, 'bottom');
-            return;
-        }
-
-        tile.isDecrypted = true;
-
-        const file = new File([result.blob], tile.fileName, { type: tile.fileType });
-        tile.elem = file;
-        tile.file = file;
-        tile.img = URL.createObjectURL(file);
-
-        self.setState(state => {
-            const tiles = update(state.tiles, {$splice: [[index, 1]]});
-            return {tiles: tiles}
-        }, () => {
-            self.renderTile([tile], false);
-        });
-    }
-
-    snack(payload, type = 'info', persist = false, vertical = 'bottom') {
-
-        const {enqueueSnackbar, closeSnackbar} = this.props;
-
-        enqueueSnackbar(payload, {
-            variant: type,
-            persist: persist,
-            autoHideDuration: 4000,
-            action: (key) => (<Button className={this.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
-            anchorOrigin: {
-                vertical: vertical,
-                horizontal: 'right'
-            }
         });
     }
 
@@ -304,28 +249,7 @@ class Gallery extends Component {
         let name = StringUtil.addEmptySpaces([tile.picSummary, tile.fileSize, tile.cameraSettings]);
         //tile.loading = true;
 
-        if(tile.secure && !tile.seed && !tile.isDecrypted) {
-
-            const disabled = tile.torrentFile ? !tile.torrentFile.done : true;
-            return <div key={index} style={{
-                        marginTop: '10px'
-                    }}>
-                <Typography>Decrypt with</Typography>
-                <span className={classes.horizontal}>
-                    <PasswordInput onChange={value => this.setState({password: value})}/>
-                    <Button disabled={disabled} onClick={this.decrypt.bind(this, tile, this.state.password, index)}
-                            color="primary">
-                        Submit
-                    </Button>
-                        <IconButton onClick={this.handleDelete.bind(this, tile)}
-                                    style={{
-                                        marginTop: '-14px'
-                                    }}>
-                            <DeleteIcon />
-                        </IconButton>
-                </span>
-            </div>;
-        } else if(tile.loading) {
+        if(tile.loading) {
 
             return <LoadingTile key={index} name={name} tile={tile}
                                 master={master}/>

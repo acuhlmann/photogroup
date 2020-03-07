@@ -65,9 +65,9 @@ class SettingsView extends Component {
             messages: [],
             open: false,
             peerId: '',
-            showTopology: false, showMe: true, encrypt: false
+            showTopology: false, showMe: true, encrypt: false, strategyPreference: false
         };
-        this.logsBeforeMount = []
+        this.logsBeforeMount = [];
 
         Logger.info('platform ' + navigator.platform + ' cpu ' + navigator.oscpu);
 
@@ -81,6 +81,9 @@ class SettingsView extends Component {
 
             const encrypt = localStorage.getItem('encrypt') || this.state.encrypt;
             this.handleEncryptChange(String(encrypt) == 'true');
+
+            const strategyPreference = localStorage.getItem('strategyPreference') || this.state.strategyPreference;
+            this.handleStrategyPreferenceChange(String(strategyPreference) == 'true');
 
             this.setState({peerId: this.master.client.peerId});
             this.checkConnection();
@@ -279,6 +282,13 @@ class SettingsView extends Component {
         this.setState({[field]: value});
     };
 
+    handleStrategyPreferenceChange(value) {
+        const field = 'strategyPreference';
+        localStorage.setItem(field, value);
+        this.master.emitter.emit(field, value);
+        this.setState({[field]: value});
+    };
+
     batchChangeName(event) {
 
         if(!event.target) return;
@@ -306,7 +316,7 @@ class SettingsView extends Component {
             {this.state.messages}
         </List>;
 
-        const {showMe, showTopology, encrypt} = this.state;
+        const {showMe, showTopology, encrypt, strategyPreference} = this.state;
         return (
             <div>
                 <IconButton
@@ -325,31 +335,6 @@ class SettingsView extends Component {
                 >
                     <DialogTitle>Settings</DialogTitle>
                     <DialogActions className={classes.vertical}>
-                        <FormGroup row>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        onChange={(event) =>
-                                            this.handleTopologyChange(event.target.checked)}
-                                        checked={showTopology}
-                                        value="showTopology"
-                                        color="primary"
-                                    />
-                                }
-                                label="Topology View"
-                            />
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        onChange={(event) =>
-                                            this.handleShowMeChange(event.target.checked)}
-                                        checked={showMe}
-                                        value="showMe"
-                                        color="primary"
-                                    />
-                                }
-                                label="Me View"
-                            />
                             <FormControlLabel
                                 control={
                                     <Switch
@@ -362,7 +347,32 @@ class SettingsView extends Component {
                                 }
                                 label="Encrypt End-to-end"
                             />
-                        </FormGroup>
+                            <FormGroup row>
+                                <FormControlLabel
+                                control={
+                                    <Switch
+                                        onChange={(event) =>
+                                            this.handleTopologyChange(event.target.checked)}
+                                        checked={showTopology}
+                                        value="showTopology"
+                                        color="primary"
+                                    />
+                                }
+                                label="Topology View"
+                            />
+                                <FormControlLabel
+                                    control={
+                                        <Switch
+                                            onChange={(event) =>
+                                                this.handleShowMeChange(event.target.checked)}
+                                            checked={showMe}
+                                            value="showMe"
+                                            color="primary"
+                                        />
+                                    }
+                                    label="Me View"
+                                />
+                            </FormGroup>
                         <span className={classes.horizontal}>
                             <IconButton
                                 aria-haspopup="true"
@@ -378,11 +388,23 @@ class SettingsView extends Component {
                                 onClick={this.handleClose.bind(this)}>
                                 <CloseRounded />
                             </IconButton>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        onChange={(event) =>
+                                            this.handleStrategyPreferenceChange(event.target.checked)}
+                                        checked={strategyPreference}
+                                        value="strategyPreference"
+                                        color="primary"
+                                    />
+                                }
+                                label="Prefer Sequential over Rarest-First Downloading?"
+                            />
                         </span>
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v5 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v6 {this.state.peerId}</Typography>
 
                         {messages}
 

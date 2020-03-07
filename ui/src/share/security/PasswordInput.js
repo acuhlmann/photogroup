@@ -9,6 +9,8 @@ import InputAdornment from '@material-ui/core/InputAdornment';
 import TextField from '@material-ui/core/TextField';
 import Visibility from '@material-ui/icons/Visibility';
 import VisibilityOff from '@material-ui/icons/VisibilityOff';
+import zxcvbn from 'zxcvbn';
+import Typography from "@material-ui/core/Typography";
 
 const styles = theme => ({
     margin: {
@@ -16,6 +18,12 @@ const styles = theme => ({
     },
     textField: {
         flexBasis: 200,
+    },
+    vertical: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center'
     },
 });
 
@@ -32,8 +40,13 @@ class PasswordInput extends Component {
             password: 'foobar',
             //password: '',
             showPassword: false,
+            strengthMeter: 0, strengthText: ''
         };
         this.props.onChange(this.state.password);
+    }
+
+    componentDidMount() {
+        this.keyCheckMeter(this.state.password);
     }
 
     get password() {
@@ -48,10 +61,35 @@ class PasswordInput extends Component {
         const password = event.target.value;
         this.setState({ [prop]: password });
         this.props.onChange(password);
+        this.keyCheckMeter(password);
     };
+
+    //credits https://github.com/sh-dv/hat.sh/blob/master/src/js/app.js
+    keyCheckMeter(password) {
+        let strength = {
+            0: "Very Bad",
+            1: "Bad",
+            2: "Weak",
+            3: "Good",
+            4: "Strong"
+        };
+        let result = zxcvbn(password);
+        const strengthMeter = result.score * 25 + '%';
+        let strengthText;
+        if (password !== '') {
+            strengthText = strength[result.score];
+        } else {
+            strengthText = "none.";
+        }
+
+        this.setState({
+            strengthMeter: strengthMeter, strengthText: strengthText
+        })
+    }
 
     render() {
         const {classes} = this.props;
+        const {strengthMeter, strengthText} = this.state;
 
         return (
             <div>
@@ -76,6 +114,14 @@ class PasswordInput extends Component {
                         ),
                     }}
                 />
+
+                {/*<span className={classes.vertical} style={{width: '100%'}}>
+                </span>*/}
+                <div style={{
+                    backgroundColor: '#757575',
+                    width: strengthMeter, height: '10px'
+                }}> </div>
+                <Typography variant="caption">Password Strength: {strengthText}</Typography>
             </div>
         );
     }

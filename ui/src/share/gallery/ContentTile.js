@@ -17,9 +17,8 @@ import FileUtil from "../util/FileUtil";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
 import Webamp from 'webamp';
 import {Icon} from "@material-ui/core";
-import render from 'render-media';
-import from from 'from2';
-//import ReactAudioPlayer from 'react-audio-player';
+import PasswordInput from "../security/PasswordInput";
+import WebCrypto from "../security/WebCrypto";
 
 const styles = theme => ({
     horizontal: {
@@ -38,7 +37,7 @@ const styles = theme => ({
     wide: {
         width: '100%',
     },
-    gridList: {
+    moveUp: {
         marginBottom: '-5px'
     },
     toolbar: {
@@ -72,7 +71,8 @@ class ContentTile extends Component {
             //for streaming
             progress: null,
             downSpeed: '', upSpeed: '',
-            timeRemaining: ''
+            timeRemaining: '',
+            password: '', isDecrypted: false
         };
     }
 
@@ -130,14 +130,16 @@ class ContentTile extends Component {
     }
 
     handleDone() {
+
         this.setState({
             progress: 100
-        })
+        });
     }
 
     handleBlobDone(photo) {
         Logger.info('blobDone received ' + photo.fileName);
-        this.props.tile.elem = photo.elem;
+        const {master, tile} = this.props;
+        tile.elem = photo.elem;
     }
 
     /*addServerPeer(tile, action) {
@@ -285,118 +287,85 @@ class ContentTile extends Component {
     }
 
     appendFile(tile, node, file) {
+
+        if(tile.secure) {
+
+            const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true};
+            this.props.master.client.seed(tile.file, opts, (torrent) => {
+                this.doAppendFile(tile, torrent.files[0], node);
+            });
+
+        } else {
+            this.doAppendFile(tile, file, node);
+            Logger.info('streaming start ' + tile.torrentFile.progress);
+        }
+
+        /*
+        tile.torrent.critical(0, tile.torrent.pieces.length - 1);
+        tile.torrent._rechoke();
+        */
+    }
+
+    doAppendFile(tile, file, node) {
+
         const opts = {
             autoplay: !tile.isAudio,
             muted: !tile.isAudio, loop: true,
         };
-        //if(tile.isAudio) opts.muted = false;
-
 
         const self = this;
-        //render.append(this, elem, opts, cb)
-        //let appendFile = !tile.secure ? file.appendTo : file.appendTo = (elem, opts, cb) => {
-        //    console.log('foo');
-            //render.append(tile.file, elem, opts, cb);
-        //};
-        //appendFile = file.appendTo;
+        file.appendTo(node, opts, (err, elem) => {
+            // file failed to download or display in the DOM
+            if (err) {
+                //Unsupported file type
+                const msgNode = document.createElement("div");                 // Create a <li> node
+                const msgNodeText = document.createTextNode(err.message);         // Create a text node
+                msgNode.appendChild(msgNodeText);
+                node.appendChild(msgNode);
 
-        if(true) {
-            file.appendTo(node, opts, (err, elem) => {
-                // file failed to download or display in the DOM
-                if (err) {
-                    //Unsupported file type
-                    const msgNode = document.createElement("div");                 // Create a <li> node
-                    const msgNodeText = document.createTextNode(err.message);         // Create a text node
-                    msgNode.appendChild(msgNodeText);
-                    node.appendChild(msgNode);
+                Logger.error('webtorrent.appendTo ' + err.message);
+                const {enqueueSnackbar, closeSnackbar} = self.props;
+                enqueueSnackbar(err.message, {
+                    variant: 'error',
+                    persist: false,
+                    autoHideDuration: 4000,
+                    action: (key) => (<Button className={self.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
+                });
+            }
 
-                    Logger.error('webtorrent.appendTo ' + err.message);
-                    const {enqueueSnackbar, closeSnackbar} = self.props;
-                    enqueueSnackbar(err.message, {
-                        variant: 'error',
-                        persist: false,
-                        autoHideDuration: 4000,
-                        action: (key) => (<Button className={self.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
-                    });
-                    //Unsupported file type
-                    if(tile.isAudio) {
-                        /*const audio = document.createElement('audio');
-                        audio.controls = 'controls';
-                        //audio.src = 'media/' + tile.elem.name;
-                        audio.setAttribute('src', tile.elem);
-                        audio.type = tile.fileType;
-                        audio.autoplay = opts.autoplay;
-                        audio.muted = opts.muted;
-                        audio.loop = opts.loop;
-                        node.appendChild(audio);
-                        audio.load();
-                        audio.play();*/
-                        //elem = audio;
-                        /*node = <ReactAudioPlayer
-                            src={tile.elem}
-                            autoPlay
-                            controls
-                        />*/
-                        /*node.appendChild(<ReactAudioPlayer
-                            src={tile.elem}
-                            autoPlay
-                            controls
-                        />)*/
-                    }
+            Logger.info('New DOM node with the content', elem);
+            if(elem && elem.style) {
+                elem.style.width = '100%';
+                //elem.style.height = '100%';
+            }
+
+            this.getBlobAndReadMetadata(tile);
+
+            if(tile.isVideo) {
+                if(elem) {
+                    //elem.preload = 'none';
+                    //elem.autoplay = true;
+                    elem.loop = true;
+                    //elem.play();
                 }
+            }
+        });
+    }
 
-                Logger.info('New DOM node with the content', elem);
-                if(elem && elem.style) {
-                    elem.style.width = '100%';
-                    //elem.style.height = '100%';
-                }
+    snack(payload, type = 'info', persist = false, vertical = 'bottom') {
 
-                this.getBlobAndReadMetadata(tile);
+        const {enqueueSnackbar, closeSnackbar} = this.props;
 
-                if(tile.isVideo) {
-                    if(elem) {
-                        //elem.preload = 'none';
-                        //elem.autoplay = true;
-                        elem.loop = true;
-                        //elem.play();
-                    }
-                }
-            });
-            Logger.info('streaming start ' + tile.torrentFile.progress);
-        } else {
-
-            /*const stream = tile.torrentFile.createReadStream();
-            stream.on('data', (chunk) => {
-                console.log(`Received ${chunk.length} bytes of data.`);
-            });
-            stream.on('end', () => {
-                console.log('There will be no more data.');
-            });*/
-
-            const streamingFile = {
-                name: tile.file.name,
-                //createReadStream: tile.torrentFile.createReadStream
-                createReadStream: function (opts) {
-                    if (!opts) opts = {};
-                    return from([ tile.file.slice(opts.start || 0, opts.end || (tile.file.size - 1)) ])
-                }
-                /*createReadStream: function (opts) {
-                    //return from([ tile.file.slice(0, tile.file.size) ])
-                    //return from([ tile.file.slice(0, tile.file.size) ])
-                    const stream = tile.file.stream();
-                    stream.pipe = stream.pipeTo;
-                    return stream;
-                }*/
-            };
-
-            render.append(streamingFile, node, opts, (err, elem) => {
-                console.log('appended ');
-            });
-        }
-
-
-        /*tile.torrent.critical(0, tile.torrent.pieces.length - 1);
-        tile.torrent._rechoke();*/
+        enqueueSnackbar(payload, {
+            variant: type,
+            persist: persist,
+            autoHideDuration: 4000,
+            action: (key) => (<Button className={this.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
+            anchorOrigin: {
+                vertical: vertical,
+                horizontal: 'right'
+            }
+        });
     }
 
     getBlobAndReadMetadata(tile) {
@@ -483,10 +452,34 @@ class ContentTile extends Component {
                 </div>;
     }
 
+    async decrypt(tile, password, index) {
+        const elem = tile.elem;
+        const self = this;
+
+        const crypto = new WebCrypto();
+        let result;
+        try {
+            result = await crypto.decryptFile([elem], password, tile.fileName);
+        } catch(e) {
+            Logger.error('Error decrypting ' + e);
+            self.snack('Cannot Decrypt', 'error', false, 'bottom');
+            return;
+        }
+
+        tile.isDecrypted = true;
+
+        const file = new File([result.blob], tile.fileName, { type: tile.fileType });
+        tile.elem = file;
+        tile.file = file;
+        tile.img = URL.createObjectURL(file);
+
+        this.setState({isDecrypted: true})
+    }
+
     render() {
 
         const {tile, name, master, classes} = this.props;
-        const {open, localDownloaded, localDownloading, listView, there, progress} = this.state;
+        const {open, localDownloaded, localDownloading, listView, isDecrypted} = this.state;
 
         const isLoading = !tile.torrentFile.done;
         let loadingDom, progressPercentage, downloaded;
@@ -506,49 +499,69 @@ class ContentTile extends Component {
         const downloadedFile = localDownloaded.includes(tile.infoHash);
 
         return (
-            /*<Zoom in={there}>*/
-            <div className={classes.gridList}>
+            <div className={classes.moveUp}>
 
-                {this.renderMediaDom(tile, classes)}
+                {tile.secure && !tile.seed && !isDecrypted ?
+                    <div style={{
+                        marginTop: '10px', marginBottom: '10px'
+                    }}>
+                        <Typography>Decrypt with</Typography>
+                        <span className={classes.horizontal}>
+                            <PasswordInput onChange={value => this.setState({password: value})}/>
+                            <Button onClick={this.decrypt.bind(this, tile, this.state.password)}
+                                    color="primary" style={{
+                                    marginTop: '-30px'
+                                }}>
+                                Submit
+                            </Button>
+                            <IconButton onClick={this.handleDelete.bind(this, tile)}
+                                        style={{
+                                            marginTop: '-30px'
+                                        }}>
+                                <DeleteIcon />
+                            </IconButton>
+                        </span>
+                    </div> : <span>
+                        {this.renderMediaDom(tile, classes)}
+                        <Collapse in={listView}>
+                            <Paper className={classes.toolbar}>
+                            <div className={classes.horizontal} style={{width: '100%'}}>
 
-                <Collapse in={listView}>
-                    <Paper className={classes.toolbar}>
-                    <div className={classes.horizontal} style={{width: '100%'}}>
+                                {loadingDom}
 
-                        {loadingDom}
-
-                        <IconButton disabled={isDownloadingFile} onClick={this.downloadFromServer.bind(this, tile)}>
-                            <CloudDownloadIcon/>
-                        </IconButton>
-                        {downloadedFile ? <Typography variant={"caption"}
-                                                  style={{marginRight: '5px'}}>Downloaded</Typography> : ''}
-                        {/*<IconButton onClick={this.handleOpen.bind(this, tile)}>
-                            <InfoIcon />
-                        </IconButton>*/}
-                        {this.buildMetadataTitle(tile, name, classes)}
-                        <IconButton onClick={this.handleDelete.bind(this, tile)}>
-                            <DeleteIcon />
-                        </IconButton>
-                        {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
-                            <CloudUploadIcon/>
-                        </IconButton>*/}
-                    </div>
-                    <div style={{width: '100%'}}>
-                        <PiecesLoadingView master={master} tile={tile} />
-                    </div>
-                    <div style={{width: '100%', height: '100%'}}>
-                        <OwnersList emitter={master.emitter}
-                                    tile={tile} peers={master.peers} myPeerId={master.client.peerId}
-                        />
-                    </div>
-                    </Paper>
-                    <PhotoDetails open={open}
-                                  tile={tile}
-                                  master={master} parser={master.metadata}
-                                  handleClose={this.handleClose.bind(this)} />
-                </Collapse>
+                                <IconButton disabled={isDownloadingFile} onClick={this.downloadFromServer.bind(this, tile)}>
+                                    <CloudDownloadIcon/>
+                                </IconButton>
+                                {downloadedFile ? <Typography variant={"caption"}
+                                                          style={{marginRight: '5px'}}>Downloaded</Typography> : ''}
+                                {/*<IconButton onClick={this.handleOpen.bind(this, tile)}>
+                                    <InfoIcon />
+                                </IconButton>*/}
+                                {this.buildMetadataTitle(tile, name, classes)}
+                                <IconButton onClick={this.handleDelete.bind(this, tile)}>
+                                    <DeleteIcon />
+                                </IconButton>
+                                {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
+                                    <CloudUploadIcon/>
+                                </IconButton>*/}
+                            </div>
+                            <div style={{width: '100%'}}>
+                                <PiecesLoadingView master={master} tile={tile} />
+                            </div>
+                            <div style={{width: '100%', height: '100%'}}>
+                                <OwnersList emitter={master.emitter}
+                                            tile={tile} peers={master.peers} myPeerId={master.client.peerId}
+                                />
+                            </div>
+                            </Paper>
+                            <PhotoDetails open={open}
+                                          tile={tile}
+                                          master={master} parser={master.metadata}
+                                          handleClose={this.handleClose.bind(this)} />
+                        </Collapse>
+                    </span>
+                }
             </div>
-            /*</Zoom>*/
         );
     }
 }

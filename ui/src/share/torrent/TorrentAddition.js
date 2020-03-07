@@ -11,7 +11,7 @@ export default class TorrentAddition {
         this.emitter = emitter;
         this.master = master;
 
-        emitter.on('photoRendered', this.updatePhotoThatRendered, this)
+        emitter.on('photoRendered', this.updatePhotoThatRendered, this);
     }
 
     async updatePhotoThatRendered(photo) {
@@ -277,7 +277,8 @@ export default class TorrentAddition {
             const ext = file.name.split('.').pop().toLowerCase();
             return !this.master.STREAMING_FORMATS.includes(ext);
         })) {
-            opts.strategy = 'rarest';
+            opts.strategy = this.master.strategyPreference ? 'sequential' : 'rarest';
+            //opts.strategy = 'rarest';
         }
     }
 

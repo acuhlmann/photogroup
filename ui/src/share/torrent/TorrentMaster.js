@@ -57,6 +57,10 @@ export default class TorrentMaster {
         });
 
         this.syncWithPhotoEvents();
+
+        this.emitter.on('strategyPreference', value => {
+            this.strategyPreference = value;
+        });
     }
 
     async findExistingContent(roomPromise) {
@@ -239,7 +243,8 @@ export default class TorrentMaster {
         if(addOrSeed === 'seed') {
             const filesArr = [...input];
             if(filesArr.every(file => !file.type.includes('video/'))) {
-                opts.strategy = 'rarest';
+                opts.strategy = this.strategyPreference ? 'sequential' : 'rarest';
+                //opts.strategy = 'rarest';
             }
         } else if(addOrSeed === 'add' && input && input.files) {
 

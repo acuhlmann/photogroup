@@ -52,7 +52,8 @@
     "vis-react": "^0.4.8",
     "visibilityjs": "^2.0.2",
     "webamp": "^1.4.1-beta01",
-    "webtorrent": "^0.107.17"
+    "webtorrent": "^0.107.17",
+    "zxcvbn": "^4.4.2"
   },
   "scripts": {
     "start": "react-scripts start && cra-append-sw --mode dev ./build/service-worker-custom.js",

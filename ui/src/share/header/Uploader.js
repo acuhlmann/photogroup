@@ -162,15 +162,12 @@ class Uploader extends Component {
                     keepMounted
                 >
                     <DialogContent>
-                        <div>
-                            <div>or encrypt with</div>
-                            <span style={{display: 'flex'}}>
-                                <PasswordInput onChange={value => this.setState({password: value})} />
-                                <Button onClick={this.secureShare.bind(this)} color="primary">
-                                    Encrypt
-                                </Button>
-                            </span>
-                        </div>
+                        <span style={{display: 'flex'}}>
+                            <PasswordInput onChange={value => this.setState({password: value})} />
+                            <Button onClick={this.secureShare.bind(this)} color="primary">
+                                Encrypt
+                            </Button>
+                        </span>
                     </DialogContent>
                     <DialogActions>
                         <IconButton

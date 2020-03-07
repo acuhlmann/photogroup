@@ -1,5 +1,4 @@
 import moment from 'moment';
-import momentDurationFormatSetup  from 'moment-duration-format';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
 import * as exifr from 'exifr';
@@ -7,6 +6,7 @@ import FileUtil from "../util/FileUtil";
 import Logger from 'js-logger';
 import * as mm from 'music-metadata-browser';
 import StringUtil from "../util/StringUtil";
+import _ from 'lodash';
 
 export default class MetadataParser {
 
@@ -15,7 +15,8 @@ export default class MetadataParser {
         if(tile.isImage) {
 
             const self = this;
-            exifr.parse(tile.elem, {xmp: true, userComment: true, makerNote: true, ifd1: true})
+            //{xmp: true, userComment: true, makerNote: true, ifd1: true}
+            exifr.parse(tile.elem, true)
                 .then(output => {
                     if(output) {
                         Logger.info('Camera:', output.Make, output.Model);
@@ -94,6 +95,10 @@ export default class MetadataParser {
 
         XmpParser.parse(allMetadata, allMetadata.xmp);
         ExifParser.parse(allMetadata);
+
+        allMetadata['Title XMP'] = _.get(allMetadata, 'title.value');
+        allMetadata['Description XMP'] = _.get(allMetadata, 'description.value');
+        allMetadata['Rating XMP'] = allMetadata.Rating;
 
         allMetadata['x-file name'] = tile.torrent.name;
         const picDesc = MetadataParser.findBestDesc(allMetadata);
