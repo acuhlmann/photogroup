@@ -15,21 +15,10 @@ export default class TorrentAddition {
     }
 
     async updatePhotoThatRendered(photo) {
-        const updatedPhoto = {
-            infoHash: photo.infoHash,
-            url: photo.torrent.magnetURI,
-            peerId: photo.peerId,
-            fileSize: photo.fileSize,
-            fileName: photo.fileName,
-            //metadata
-            picDateTaken: photo.picDateTaken,
-            picTitle: photo.picTitle,
-            picDesc: photo.picDesc,
-            picSummary: photo.picSummary,
-            cameraSettings: photo.cameraSettings,
-        };
 
-        const result = await this.master.service.update([updatedPhoto]);
+        const toBeShared = this.stripClientOnlyPhotoFields([photo]);
+
+        const result = await this.master.service.update(toBeShared);
         Logger.info('fully rendered, update photo ' + result.length + ' '
             + result.map(item => item.fileName));
     }
@@ -135,7 +124,6 @@ export default class TorrentAddition {
                 photo.torrentFile = torrent.files.find(file => file.name === torrent.name);
             }
             photo.fromCache = fromCache;
-            photo.peerId = this.master.client.peerId;
             photo.loading = true;
             photo.rendering = false;
             photo.torrent = torrent;
@@ -146,21 +134,25 @@ export default class TorrentAddition {
         this.emitter.emit('torrentReady', photos);
     }
 
-    seed(files, secure, origFile, callback) {
+    seed(files, secure = false, origFiles = [], callback) {
 
         const self = this;
 
         const filesArr = [...files];
+        const origFilesArr = [...origFiles];
         Logger.info('seed ' + filesArr.map(item => item.name).join(', '));
 
         const format = 'HH:mm:ss MMM Do YY';
-        const photos = filesArr.map(file => {
+        const photos = filesArr.map((file, index) => {
+            const origFile = secure ? origFilesArr[index] : file;
             return {
                 infoHash: shortid.generate(),
                 isFake: true,
-                seed: true, rendering: true, file: file, origFile: file, secure: secure,
+                seed: true, rendering: true,
                 peerId: this.master.client.peerId, owners: [],
-                picDateTaken: moment(file.lastModified).format(format)
+                file: origFile, origFile: secure ? file : file, secure: secure,
+                picDateTaken: secure ? moment(origFile.lastModified).format(format) : moment(file.lastModified).format(format),
+                fileType: origFile.type, fileName: origFile.name,
             };
         });
 
@@ -172,27 +164,21 @@ export default class TorrentAddition {
 
             //this.storeTorrent(torrent);
 
-            const toBeShared = photos.map(photo => {
+            const addedInfoHash = photos.map(photo => {
                 photo.infoHash = torrent.infoHash;
                 if(torrent.files.length > 1) {
                     photo.infoHash += '-' + torrent.files.find(file => file.name === photo.file.name).path;
                 }
                 photo.url = torrent.magnetURI;
-                const serverPhoto = {...photo};
-                delete serverPhoto.isFake;
-                delete serverPhoto.file;
-                delete serverPhoto.origFile;
-                delete serverPhoto.rendering;
-                delete serverPhoto.loading;
-                delete serverPhoto.seed;
-                return serverPhoto;
+                return photo;
             });
+
+            const toBeShared = this.stripClientOnlyPhotoFields(addedInfoHash);
 
             Logger.info('seed.infoHash photo sharing');
             this.service.share(toBeShared).then(result => {
-                Logger.info('photo shared ' + result.length);
+                Logger.info('photo shared ' + result);
             });
-
 
             this.storeTorrent(torrent).then(torrent => {
 
@@ -224,80 +210,11 @@ export default class TorrentAddition {
         });
 
         torrent.on('infoHash', async () => {
-
             Logger.info('seed.infoHash');
-            /*const toBeShared = photos.map(photo => {
-                photo.infoHash = torrent.infoHash;
-                if(torrent.files.length > 1) {
-                    photo.infoHash += '-' + torrent.files.find(file => file.name === photo.file.name).path;
-                }
-                photo.url = torrent.magnetURI;
-                const serverPhoto = {...photo};
-                delete serverPhoto.isFake;
-                delete serverPhoto.file;
-                delete serverPhoto.origFile;
-                delete serverPhoto.rendering;
-                delete serverPhoto.loading;
-                delete serverPhoto.seed;
-                return serverPhoto;
-            });
-
-            Logger.info('seed.infoHash photo sharing');
-            this.service.share(toBeShared).then(result => {
-                Logger.info('photo shared ' + result.length);
-            });*/
         });
 
         torrent.on('metadata', async () => {
             Logger.info('seed.metadata');
-
-
-            /*const toBeShared = photos.map(photo => {
-                photo.infoHash = torrent.infoHash;
-                if(torrent.files.length > 1) {
-                    photo.infoHash += '-' + torrent.files.find(file => file.name === photo.file.name).path;
-                }
-                photo.url = torrent.magnetURI;
-                const serverPhoto = {...photo};
-                delete serverPhoto.isFake;
-                delete serverPhoto.file;
-                delete serverPhoto.origFile;
-                delete serverPhoto.rendering;
-                delete serverPhoto.loading;
-                delete serverPhoto.seed;
-                return serverPhoto;
-            });
-
-            Logger.info('seed.infoHash photo sharing');
-            this.service.share(toBeShared).then(result => {
-                Logger.info('photo shared ' + result.length);
-            });*/
-
-            /*
-            this.storeTorrent(torrent).then(torrent => {
-
-                if(photos[0].deleted) {
-                    return;
-                }
-                photos.forEach(photo => {
-                    photo.isFake = photo.loading = photo.rendering = false;
-                    photo.torrent = torrent;
-                    photo.infoHash = torrent.infoHash;
-                    photo.url = torrent.magnetURI;
-                });
-                torrent.files.forEach((file, index, files) => {
-                    const photo = photos[index];
-                    photo.torrentFile = file;
-                    if(files.length > 1) {
-                        photo.infoHash += '-' + file.path;
-                    }
-                    //self.emitter.emit('torrentReady', photo);
-                });
-
-                //torrent.files.forEach((file, index) => self.emitter.emit('torrentReady', photos[index]));
-                self.emitter.emit('torrentReady', photos);
-
-            })*/
         });
 
         this.emitter.on('torrentError', err => {
@@ -330,6 +247,29 @@ export default class TorrentAddition {
         }, this);
 
         return torrent;
+    }
+
+    stripClientOnlyPhotoFields(photos) {
+        const toBeShared = photos.map(photo => {
+            const serverPhoto = {...photo};
+            delete serverPhoto.isFake;
+            delete serverPhoto.file;
+            delete serverPhoto.origFile;
+            delete serverPhoto.rendering;
+            delete serverPhoto.loading;
+            delete serverPhoto.seed;
+            delete serverPhoto.isDecrypted;
+            delete serverPhoto.torrent;
+            delete serverPhoto.torrentFile;
+            delete serverPhoto.picDateTakenDate;
+            delete serverPhoto.picSummary;
+            delete serverPhoto.metadata;
+            delete serverPhoto.hasMetadata;
+            delete serverPhoto.elem;
+            delete serverPhoto.img;
+            return serverPhoto;
+        });
+        return toBeShared;
     }
 
     defineStrategy(files, opts) {

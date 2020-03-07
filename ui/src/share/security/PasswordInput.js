@@ -29,7 +29,8 @@ class PasswordInput extends Component {
         this.classes = classes;
 
         this.state = {
-            password: 'p',
+            password: 'foobar',
+            //password: '',
             showPassword: false,
         };
         this.props.onChange(this.state.password);

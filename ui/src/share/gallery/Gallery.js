@@ -2,7 +2,7 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import {withStyles} from '@material-ui/core/styles';
 
-import GridListTile from '@material-ui/core/GridListTile';
+import Typography from "@material-ui/core/Typography";
 import Button from "@material-ui/core/Button/Button";
 import PasswordInput from "../security/PasswordInput";
 import Logger from 'js-logger';
@@ -15,6 +15,10 @@ import LoadingTile from "./LoadingTile";
 import StringUtil from "../util/StringUtil";
 import ContentTile from "./ContentTile";
 import GalleryPhotoHandler from "./GalleryPhotoHandler";
+import * as exifr from 'exifr';
+import IconButton from "@material-ui/core/IconButton";
+import DeleteIcon from "@material-ui/icons/Delete";
+import WebCrypto from "../security/WebCrypto";
 
 const styles = theme => ({
     root: {
@@ -27,6 +31,16 @@ const styles = theme => ({
     white: {
         color: '#ffffff'
     },
+    horizontal: {
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    vertical: {
+        display: 'flex',
+        flexDirection: 'column'
+    },
 });
 
 class Gallery extends Component {
@@ -38,14 +52,16 @@ class Gallery extends Component {
            tiles : [],
         };
 
-        props.master.emitter.on('torrentReady', photos => {
+        this.classes = props.classes;
+    }
+
+    componentDidMount() {
+
+        const emitter = this.props.master.emitter;
+
+        emitter.on('torrentReady', photos => {
             this.addMediaToDom(photos);
         }, this);
-
-        const emitter = props.master.emitter;
-
-        this.photoHandler = new GalleryPhotoHandler(this, emitter);
-        this.photoHandler.sync();
 
         //When webtorrent errors on a duplicated add, try to remove and re-seed.
         //This may happen if client state is lost
@@ -76,8 +92,8 @@ class Gallery extends Component {
             }*/
         }, this);
 
-        const { classes } = props;
-        this.classes = classes;
+        this.photoHandler = new GalleryPhotoHandler(this, emitter);
+        this.photoHandler.sync();
     }
 
     addMediaToDom(photos) {
@@ -86,13 +102,33 @@ class Gallery extends Component {
         if(isSeeding) {
             photos.forEach(photo => {
                 this.mergePreloadMetadata(photo);
-                this.mergePostloadMetadata(photo, photo.file);
+                this.mergePostloadMetadata(photo, photo.file, true);
+                this.getBlob(photo);
             });
             this.renderTile(photos, isSeeding);
         } else {
 
             const photoPromises = photos.map(photo => {
                 return new Promise((resolve, reject) => {
+
+                    /*const stream = photo.torrentFile.createReadStream();
+                    stream.on('data', (chunk) => {
+                        console.log(`Received ${chunk.length} bytes of data.`);
+
+                        exifr.thumbnailUrl(chunk)
+                            .then(output => {
+                                if(output) {
+                                    Logger.info('FOOOOUUUUND:', output);
+                                }
+                            })
+                            .catch(e => {
+                                Logger.error('exifr.thumbnail:', e);
+                            })
+                    });
+                    stream.on('end', () => {
+                        console.log('There will be no more data.');
+                    });*/
+
                     const extention = photo.torrentFile.name.split('.').pop().toLowerCase();
                     if(!this.props.master.STREAMING_FORMATS.includes(extention)) {
                         Logger.info('getBlob ' + photo.torrent.name);
@@ -116,6 +152,7 @@ class Gallery extends Component {
                             console.log('There will be no more data.');
                         });
                         */
+                        this.getBlob(photo);
                         resolve(this.mergeStreamingMetadata(photo, extention));
                     }
                 });
@@ -129,6 +166,21 @@ class Gallery extends Component {
         }
     }
 
+    getBlob(photo) {
+        const self = this;
+        if(photo.file && photo.file instanceof Blob) {
+            photo.elem = photo.file;
+            Logger.info('blobDone dispatch ' + photo.fileName);
+            self.props.master.emitter.emit('blobDone-' + photo.infoHash, photo);
+        } else {
+            photo.torrentFile.getBlob((err, elem) => {
+                photo.elem = elem;
+                Logger.info('blobDone dispatch ' + photo.fileName);
+                self.props.master.emitter.emit('blobDone-' + photo.infoHash, photo);
+            });
+        }
+    }
+
     mergeStreamingMetadata(photo, extention) {
         photo.loading = photo.rendering = false;
         photo.elem = null;
@@ -137,25 +189,27 @@ class Gallery extends Component {
         photo.isVideo = this.props.master.STREAMING_VIDEO_FORMATS.includes(extention);
         photo.isAudio = this.props.master.STREAMING_AUDIO_FORMATS.includes(extention);
         photo.isImage = false;
-        photo.fileName = FileUtil.truncateFileName(photo.torrentFile.name);
-        photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
+        //photo.fileName = FileUtil.truncateFileName(photo.torrentFile.name);
+        //photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
         return photo;
     }
 
     mergePreloadMetadata(photo) {
-        photo.fileName = FileUtil.truncateFileName(photo.torrentFile.name);
-        photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
+        //photo.fileName = FileUtil.truncateFileName(photo.torrentFile.name);
+        //photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
     }
 
-    mergePostloadMetadata(photo, file) {
+    mergePostloadMetadata(photo, file, noElem) {
         photo.loading = photo.rendering = false;
-        photo.elem = file;
+        photo.elem = noElem ? null : file;
         photo.img = URL.createObjectURL(file);
-        photo.fileSize = photo.fileSize || FileUtil.formatBytes(photo.elem.size);
-        photo.isVideo = photo.elem.type.includes('video/');
-        photo.isImage = photo.elem.type.includes('image/');
-        photo.isAudio = photo.elem.type.includes('audio/');
-        photo.fileName = FileUtil.truncateFileName(file.name);
+        photo.fileSize = photo.fileSize || FileUtil.formatBytes(noElem ? photo.torrentFile.length : photo.elem.size);
+        photo.isVideo = photo.fileType.includes('video/');
+        photo.isImage = photo.fileType.includes('image/');
+        photo.isAudio = photo.fileType.includes('audio/');
+        //photo.fileName = FileUtil.truncateFileName(file.name);
+        //photo.fileType = file.type;
+        //photo.fileNameFull = file.name;
         //photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
         return photo;
     }
@@ -194,37 +248,83 @@ class Gallery extends Component {
         });
     }
 
-    decrypt(tile, password, index) {
-        const file = tile.file;
+    async decrypt(tile, password, index) {
         const elem = tile.elem;
-        const torrent = tile.torrent;
         const self = this;
 
-        Encrypter.decryptPic(elem, password, (blob) => {
+        const crypto = new WebCrypto();
+        let result;
+        try {
+            result = await crypto.decryptFile([elem], password, tile.fileName);
+        } catch(e) {
+            Logger.error('Error decrypting ' + e);
+            this.snack('Cannot Decrypt', 'error', false, 'bottom');
+            return;
+        }
 
-            self.setState(state => {
-                const tiles = update(state.tiles, {$splice: [[index, 1]]});
-                return {tiles: tiles}
-            }, () => {
-                self.renderTo(file, blob, torrent, false);
-            });
+        tile.isDecrypted = true;
+
+        const file = new File([result.blob], tile.fileName, { type: tile.fileType });
+        tile.elem = file;
+        tile.file = file;
+        tile.img = URL.createObjectURL(file);
+
+        self.setState(state => {
+            const tiles = update(state.tiles, {$splice: [[index, 1]]});
+            return {tiles: tiles}
+        }, () => {
+            self.renderTile([tile], false);
         });
+    }
+
+    snack(payload, type = 'info', persist = false, vertical = 'bottom') {
+
+        const {enqueueSnackbar, closeSnackbar} = this.props;
+
+        enqueueSnackbar(payload, {
+            variant: type,
+            persist: persist,
+            autoHideDuration: 4000,
+            action: (key) => (<Button className={this.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
+            anchorOrigin: {
+                vertical: vertical,
+                horizontal: 'right'
+            }
+        });
+    }
+
+    async handleDelete(tile) {
+        const result = await this.props.master.torrentDeletion.deleteItem(tile);
+        Logger.info('handleDelete ' + result);
     }
 
     buildTile(tile, index, classes, master) {
 
+        tile.picSummary = StringUtil.addEmptySpaces([tile.picDateTaken, FileUtil.truncateFileName(tile.fileName)]);
         let name = StringUtil.addEmptySpaces([tile.picSummary, tile.fileSize, tile.cameraSettings]);
         //tile.loading = true;
-        if(tile.secure) {
 
-            return <GridListTile key={index} cols={tile.cols || 1}>
-                <div>Decrypt with</div>
-                <PasswordInput onChange={value => this.setState({password: value})}/>
-                <Button onClick={this.decrypt.bind(this, tile, this.state.password, index)}
-                        color="primary">
-                    Submit
-                </Button>
-            </GridListTile>;
+        if(tile.secure && !tile.seed && !tile.isDecrypted) {
+
+            const disabled = tile.torrentFile ? !tile.torrentFile.done : true;
+            return <div key={index} style={{
+                        marginTop: '10px'
+                    }}>
+                <Typography>Decrypt with</Typography>
+                <span className={classes.horizontal}>
+                    <PasswordInput onChange={value => this.setState({password: value})}/>
+                    <Button disabled={disabled} onClick={this.decrypt.bind(this, tile, this.state.password, index)}
+                            color="primary">
+                        Submit
+                    </Button>
+                        <IconButton onClick={this.handleDelete.bind(this, tile)}
+                                    style={{
+                                        marginTop: '-14px'
+                                    }}>
+                            <DeleteIcon />
+                        </IconButton>
+                </span>
+            </div>;
         } else if(tile.loading) {
 
             return <LoadingTile key={index} name={name} tile={tile}

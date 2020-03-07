@@ -2,37 +2,29 @@ import moment from 'moment';
 import momentDurationFormatSetup  from 'moment-duration-format';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
+import * as exifr from 'exifr';
 import FileUtil from "../util/FileUtil";
-import EXIF from 'exif-js';
 import Logger from 'js-logger';
 import * as mm from 'music-metadata-browser';
 import StringUtil from "../util/StringUtil";
 
 export default class MetadataParser {
 
-    constructor() {
-        window.EXIF = EXIF;
-    }
-
     async readMetadata(tile, callback) {
 
         if(tile.isImage) {
 
             const self = this;
-            const EXIF = window.EXIF;
-            EXIF.enableXmp();
-            try {
-                EXIF.getData(tile.elem, function()  {
-
-                    const metadata = self.extractAndProcess(this, tile);
-                    tile.metadata = metadata;
-                    tile.hasMetadata = true;
-                    callback(tile, metadata);
-                });
-            } catch(e) {
-                Logger.error('error parsing image');
-                callback(tile, {});
-            }
+            exifr.parse(tile.elem, {xmp: true, userComment: true, makerNote: true, ifd1: true})
+                .then(output => {
+                    if(output) {
+                        Logger.info('Camera:', output.Make, output.Model);
+                        const metadata = self.extractAndProcess(output, tile);
+                        tile.metadata = metadata;
+                        tile.hasMetadata = true;
+                        callback(tile, metadata);
+                    }
+                })
 
         } else if(tile.isAudio || tile.isVideo) {
 
@@ -98,12 +90,9 @@ export default class MetadataParser {
             });
     }
 
-    extractAndProcess(img, tile) {
+    extractAndProcess(allMetadata, tile) {
 
-        const EXIF = window.EXIF;
-        const allMetadata = EXIF.getAllTags(img);
-
-        XmpParser.parse(allMetadata, img.xmpdata);
+        XmpParser.parse(allMetadata, allMetadata.xmp);
         ExifParser.parse(allMetadata);
 
         allMetadata['x-file name'] = tile.torrent.name;
@@ -145,9 +134,9 @@ export default class MetadataParser {
 
             tileItem.picTitle = allMetadata['Title XMP'] ? allMetadata['Title XMP'] + ' ' : '';
             tileItem.picDesc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
-            tileItem.fileName = FileUtil.truncateFileName(tile.torrent.name);
 
-            tileItem.picSummary = this.createSummary(allMetadata, tileItem.picDateTaken, tile.torrent.name);
+            //photo.picDateTaken, photo.picTitle, photo.picDesc, photo.fileName
+            tileItem.picSummary = this.createSummary(allMetadata, tileItem.picDateTaken, tile.fileName);
             tileItem.cameraSettings = StringUtil.addEmptySpaces([
                 allMetadata['Make'],
                 allMetadata['x-Settings']]);

@@ -192,7 +192,6 @@ module.exports = class Rooms {
                     const infoHash = update.infoHash;
                     const existing = this.findPhoto(room.photos, infoHash);
                     _.merge(existing, update);
-                    existing.picSummary = this.createPicSummary(existing);
                     return existing;
                 });
                 this.sendPhotos(room, this.allRoomClients(room),'update', updated);
@@ -231,12 +230,6 @@ module.exports = class Rooms {
                 response.status(404).send('Room not found');
             }
         });
-    }
-
-    createPicSummary(photo) {
-        //return url.picDateTaken + ' ' + url.picTitle
-        //    + ' ' + url.picDesc + url.fileName;
-        return Rooms.addEmptySpaces([photo.picDateTaken, photo.picTitle, photo.picDesc, photo.fileName]);
     }
 
     static addEmptySpaces(values) {

@@ -17,6 +17,8 @@ import FileUtil from "../util/FileUtil";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
 import Webamp from 'webamp';
 import {Icon} from "@material-ui/core";
+import render from 'render-media';
+import from from 'from2';
 
 const styles = theme => ({
     horizontal: {
@@ -81,6 +83,7 @@ class ContentTile extends Component {
         emitter.on('disconnectNode', this.handleDisconnectNode, this);
         emitter.on('downloadProgress', this.handleDownloadProgress, this);
         emitter.on('uploadProgress', this.handleUploadProgress, this);
+        emitter.on('blobDone-' + tile.infoHash, this.handleBlobDone, this);
         tile.torrent.on('done', this.handleDone.bind(this));
     }
 
@@ -129,6 +132,11 @@ class ContentTile extends Component {
         this.setState({
             progress: 100
         })
+    }
+
+    handleBlobDone(photo) {
+        Logger.info('blobDone received ' + photo.fileName);
+        this.props.tile.elem = photo.elem;
     }
 
     /*addServerPeer(tile, action) {
@@ -253,22 +261,26 @@ class ContentTile extends Component {
             }],
             zIndex: 99999,
         });
-        //this.setState({webamp: webamp, webampNode: node});
         this.webamp = webamp;
         this.webampNode = node;
-        //webamp.renderWhenReady(node);
-        //webamp.appendTracks([{blob: 'https://example.com/track1.mp3'}]);
     }
 
     openInWebamp() {
         const webamp = this.webamp;
-        this.props.tile.torrentFile.getBlob((err, elem) => {
-            webamp.appendTracks([{blob: elem}]);
-            webamp.renderWhenReady(this.webampNode).then(() => {
-                //webamp.appendTracks([{blob: 'https://example.com/track1.mp3'}]);
-                webamp.play();
-            });
-        });
+
+        const elem = this.props.tile.elem;
+        if(!this.openedWebamp) {
+            if(elem) {
+                this.openedWebamp = true;
+                webamp.appendTracks([{blob: elem}]);
+                webamp.renderWhenReady(this.webampNode).then(() => {
+                    webamp.play();
+                });
+            }
+        } else {
+            webamp.setTracksToPlay([{blob: elem}]);
+            webamp.reopen();
+        }
     }
 
     appendFile(tile, node, file) {
@@ -280,85 +292,118 @@ class ContentTile extends Component {
 
 
         const self = this;
-        file.appendTo(node, opts, (err, elem) => {
-            // file failed to download or display in the DOM
-            if (err) {
-                //Unsupported file type
-                const msgNode = document.createElement("div");                 // Create a <li> node
-                const msgNodeText = document.createTextNode(err);         // Create a text node
-                msgNode.appendChild(msgNodeText);
-                node.appendChild(msgNode);
+        //render.append(this, elem, opts, cb)
+        //let appendFile = !tile.secure ? file.appendTo : file.appendTo = (elem, opts, cb) => {
+        //    console.log('foo');
+            //render.append(tile.file, elem, opts, cb);
+        //};
+        //appendFile = file.appendTo;
 
-                Logger.error('webtorrent.appendTo ' + err.message);
-                const {enqueueSnackbar, closeSnackbar} = self.props;
-                enqueueSnackbar(err.message, {
-                    variant: 'error',
-                    persist: false,
-                    autoHideDuration: 4000,
-                    action: (key) => (<Button className={self.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
-                });
-            }
+        if(true) {
+            file.appendTo(node, opts, (err, elem) => {
+                // file failed to download or display in the DOM
+                if (err) {
+                    //Unsupported file type
+                    const msgNode = document.createElement("div");                 // Create a <li> node
+                    const msgNodeText = document.createTextNode(err.message);         // Create a text node
+                    msgNode.appendChild(msgNodeText);
+                    node.appendChild(msgNode);
 
-            Logger.info('New DOM node with the content', elem);
-            if(elem && elem.style) {
-                elem.style.width = '100%';
-                //elem.style.height = '100%';
-            }
-
-            this.getBlobAndReadMetadata(tile);
-
-            if(tile.isVideo) {
-                if(elem) {
-                    //elem.preload = 'none';
-                    //elem.autoplay = true;
-                    elem.loop = true;
-                    //elem.play();
+                    Logger.error('webtorrent.appendTo ' + err.message);
+                    const {enqueueSnackbar, closeSnackbar} = self.props;
+                    enqueueSnackbar(err.message, {
+                        variant: 'error',
+                        persist: false,
+                        autoHideDuration: 4000,
+                        action: (key) => (<Button className={self.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
+                    });
                 }
-            }
-        });
-        Logger.info('streaming start ' + tile.torrentFile.progress);
-        /*tile.torrent.critical(0, tile.torrent.pieces.length - 1);
-        tile.torrent._rechoke();
 
-        const stream = tile.torrentFile.createReadStream({
-                                                    start: 0,
-                                                    end: tile.torrent.pieces.length - 1
-                                                });
-        stream.on('data', (chunk) => {
-            console.log(`Received ${chunk.length} bytes of data.`);
-        });
-        stream.on('end', () => {
-            console.log('There will be no more data.');
-        });*/
+                Logger.info('New DOM node with the content', elem);
+                if(elem && elem.style) {
+                    elem.style.width = '100%';
+                    //elem.style.height = '100%';
+                }
+
+                this.getBlobAndReadMetadata(tile);
+
+                if(tile.isVideo) {
+                    if(elem) {
+                        //elem.preload = 'none';
+                        //elem.autoplay = true;
+                        elem.loop = true;
+                        //elem.play();
+                    }
+                }
+            });
+            Logger.info('streaming start ' + tile.torrentFile.progress);
+        } else {
+
+            /*const stream = tile.torrentFile.createReadStream();
+            stream.on('data', (chunk) => {
+                console.log(`Received ${chunk.length} bytes of data.`);
+            });
+            stream.on('end', () => {
+                console.log('There will be no more data.');
+            });*/
+
+            const streamingFile = {
+                name: tile.file.name,
+                //createReadStream: tile.torrentFile.createReadStream
+                createReadStream: function (opts) {
+                    if (!opts) opts = {};
+                    return from([ tile.file.slice(opts.start || 0, opts.end || (tile.file.size - 1)) ])
+                }
+                /*createReadStream: function (opts) {
+                    //return from([ tile.file.slice(0, tile.file.size) ])
+                    //return from([ tile.file.slice(0, tile.file.size) ])
+                    const stream = tile.file.stream();
+                    stream.pipe = stream.pipeTo;
+                    return stream;
+                }*/
+            };
+
+            render.append(streamingFile, node, opts, (err, elem) => {
+                console.log('appended ');
+            });
+        }
+
+
+        /*tile.torrent.critical(0, tile.torrent.pieces.length - 1);
+        tile.torrent._rechoke();*/
     }
 
     getBlobAndReadMetadata(tile) {
         Logger.info('streaming done ' + tile.torrentFile.progress);
         const master = this.props.master;
-        /*master.metadata.readStreaming(tile, (tile, metadata) => {
-            Logger.info('readStreaming');
-        });*/
 
-        tile.torrentFile.getBlob((err, elem) => {
+        if(tile.elem) {
             Logger.info('streaming getBlob ' + tile.torrentFile);
-            if (err) {
-                Logger.error(err.message);
-            } else {
-                tile.elem = elem;
+            this.readMetadata(tile);
+        } else {
+            master.emitter.on('blobDone-' + tile.infoHash, (photo) => {
+                tile.elem = photo.elem;
                 this.readMetadata(tile);
-            }
-        });
+            }, this);
+        }
     }
 
     readMetadata(tile) {
         const master = this.props.master;
-        master.metadata.readMetadata(tile, (tile, metadata) => {
-            Logger.info('readMetadata');
-            master.emitter.emit('photos', {type: 'update', item: [tile]});
-            if(tile.seed) {
-                master.emitter.emit('photoRendered', tile);
-            }
-        });
+        if(tile.elem) {
+            master.metadata.readMetadata(tile, (tile, metadata) => {
+                Logger.info('readMetadata');
+                master.emitter.emit('photos', {type: 'update', item: [tile]});
+                if(tile.seed) {
+                    master.emitter.emit('photoRendered', tile);
+                }
+            });
+        } else {
+            master.emitter.on('blobDone-' + tile.infoHash, (photo) => {
+                tile.elem = photo.elem;
+                this.readMetadata(tile);
+            }, this);
+        }
     }
 
     imgLoaded(tile) {

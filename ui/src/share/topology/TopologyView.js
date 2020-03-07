@@ -430,7 +430,8 @@ class TopologyView extends Component {
 
         const nats = peer.networkChain.filter(item => this.isNatType(item.typeDetail));
         if(nats.length > 1) {
-            Logger.warn('multiple nats found ' + JSON.stringify(nats));
+            Logger.warn('multiple nats found '
+                + nats.length + ': ' + nats.map(item => item.label || item.hostname).join(', '));
         }
         const nat = nats.find(item => item.label);
         if(nat) {

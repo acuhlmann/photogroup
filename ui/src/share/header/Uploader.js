@@ -12,13 +12,11 @@ import Dialog from "@material-ui/core/Dialog/Dialog";
 import DialogContent from "@material-ui/core/DialogContent/DialogContent";
 import DialogActions from "@material-ui/core/DialogActions/DialogActions";
 import CloseRounded from "@material-ui/core/SvgIcon/SvgIcon";
+import Button from "@material-ui/core/Button";
 
-//import Slide from '@material-ui/core/Slide';
-//import PasswordInput from "../security/PasswordInput";
+import PasswordInput from "../security/PasswordInput";
+import WebCrypto from "../security/WebCrypto";
 
-/*function Transition(props) {
-    return <Slide direction="down" {...props} />;
-}*/
 
 const styles = theme => ({
 
@@ -35,7 +33,7 @@ class Uploader extends Component {
     constructor(props) {
         super(props);
 
-        const { classes, model, loader } = props;
+        const { classes, model } = props;
 
         this.classes = classes;
         this.model = model;
@@ -43,8 +41,13 @@ class Uploader extends Component {
         this.state = {
             visible: false,
             open: false,
-            disabled: true, loadedAnything: false
+            disabled: true, loadedAnything: false,
+            password: '', files: null
         };
+    }
+
+    componentDidMount() {
+        const { model } = this.props;
 
         model.emitter.on('readyToUpload', () => {
             this.setState({
@@ -58,6 +61,12 @@ class Uploader extends Component {
                 loadedAnything: true
             });
         });
+
+        model.emitter.on('encrypt', (value) => {
+            this.setState({
+                secure: value
+            });
+        });
     }
 
     handleUpload(event) {
@@ -69,10 +78,30 @@ class Uploader extends Component {
 
         this.uploaderDom = event.target || event.srcElement;
 
+        if(this.state.secure) {
+            this.setState({files: files, open: true});
+        } else {
+            this.share(files);
+        }
+    }
+
+    share(files, isSecure, origFiles) {
         const self = this;
-        this.model.seed(files, false, null, () => {
+        this.model.seed(files, isSecure, origFiles, () => {
             self.uploaderDom.value = '';
         });
+    }
+
+    async secureShare() {
+        const {files, password} = this.state;
+
+        const crypto = new WebCrypto();
+        const result = await crypto.encryptFile(files, password);
+        //const text = await result.blob.text();
+
+        Logger.info('secureShare ' + result);
+        this.share([result].map((item, index) => item.blob), true, files);
+        this.show(false);
     }
 
     cancel() {
@@ -81,9 +110,7 @@ class Uploader extends Component {
     }
 
     show(open) {
-        this.setState({
-            open: open
-        });
+        this.setState({open: open});
     }
 
     hasRoom() {
@@ -136,13 +163,13 @@ class Uploader extends Component {
                 >
                     <DialogContent>
                         <div>
-                            {/*<div>or encrypt with</div>
+                            <div>or encrypt with</div>
                             <span style={{display: 'flex'}}>
                                 <PasswordInput onChange={value => this.setState({password: value})} />
-                                <Button onClick={this.secureShare.bind(this, false)} color="primary">
+                                <Button onClick={this.secureShare.bind(this)} color="primary">
                                     Encrypt
                                 </Button>
-                            </span>*/}
+                            </span>
                         </div>
                     </DialogContent>
                     <DialogActions>

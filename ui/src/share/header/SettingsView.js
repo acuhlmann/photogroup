@@ -65,8 +65,7 @@ class SettingsView extends Component {
             messages: [],
             open: false,
             peerId: '',
-            showTopology: false,
-            showMe: true
+            showTopology: false, showMe: true, encrypt: false
         };
         this.logsBeforeMount = []
 
@@ -79,6 +78,9 @@ class SettingsView extends Component {
 
             const showTopology = localStorage.getItem('showTopology') || this.state.showTopology;
             this.handleTopologyChange(String(showTopology) == 'true');
+
+            const encrypt = localStorage.getItem('encrypt') || this.state.encrypt;
+            this.handleEncryptChange(String(encrypt) == 'true');
 
             this.setState({peerId: this.master.client.peerId});
             this.checkConnection();
@@ -270,6 +272,13 @@ class SettingsView extends Component {
         this.setState({showMe: value});
     };
 
+    handleEncryptChange(value) {
+        const field = 'encrypt';
+        localStorage.setItem(field, value);
+        this.master.emitter.emit(field, value);
+        this.setState({[field]: value});
+    };
+
     batchChangeName(event) {
 
         if(!event.target) return;
@@ -297,7 +306,7 @@ class SettingsView extends Component {
             {this.state.messages}
         </List>;
 
-        const {showMe, showTopology} = this.state;
+        const {showMe, showTopology, encrypt} = this.state;
         return (
             <div>
                 <IconButton
@@ -341,6 +350,18 @@ class SettingsView extends Component {
                                 }
                                 label="Me View"
                             />
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        onChange={(event) =>
+                                            this.handleEncryptChange(event.target.checked)}
+                                        checked={encrypt}
+                                        value="encrypt"
+                                        color="primary"
+                                    />
+                                }
+                                label="Encrypt End-to-end"
+                            />
                         </FormGroup>
                         <span className={classes.horizontal}>
                             <IconButton
@@ -361,7 +382,7 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v1 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v4 {this.state.peerId}</Typography>
 
                         {messages}
 

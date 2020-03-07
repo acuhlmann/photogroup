@@ -1,8 +1,23 @@
 import {get} from 'lodash';
+import Logger from 'js-logger';
+import xmlParser from 'fast-xml-parser';
 
 export default class XmpParser {
 
-    static parse(allMetadata, xmpdata) {
+    static parse(allMetadata, xmp) {
+
+        if(!xmp) return allMetadata;
+
+        const opts = {ignoreAttributes: false}
+        let xmpdata;
+        try{
+            xmpdata = xmlParser.parse(xmp, opts);
+        }catch(error){
+            Logger.error(error.message);
+            return allMetadata;
+        }
+
+        //const title = xmpdata["x:xmpmeta"]["rdf:RDF"]["rdf:Description"]["dc:title"]["rdf:Alt"]["rdf:li"];
 
         const descriptionPrefix = get(xmpdata, '["x:xmpmeta"]["rdf:RDF"]["rdf:Description"]');
 
@@ -15,7 +30,7 @@ export default class XmpParser {
             allMetadata['Description XMP'] = description;
         }
 
-        const keywords = get(descriptionPrefix, '["dc:subject"]["rdf:Bag"]["rdf:li"]');
+        const keywords = get(descriptionPrefix, '["dc:subject"]["rdf:Bag"]["rdf:li"]["#text"]');
         if(keywords) {
             if(Array.isArray(keywords)) {
                 allMetadata['Keywords XMP'] = keywords.map(item => item["#text"]).join(', ');
@@ -24,18 +39,22 @@ export default class XmpParser {
             }
         }
 
-        const rating = get(descriptionPrefix, '["@attributes"]["xmp:Rating"]');
+        const rating = get(descriptionPrefix, '["@_xmp:Rating"]');
         if(rating) {
             allMetadata['Rating XMP'] = rating;
         }
 
-        const historySoftware = get(descriptionPrefix, '["xmpMM:History"]["rdf:Seq"]["rdf:li"]["@attributes"]["stEvt:softwareAgent"]');
+        const historySoftware = get(descriptionPrefix, '["xmpMM:History"]["rdf:Seq"]["rdf:li"]["@_stEvt:softwareAgent"]');
         if(historySoftware) {
             allMetadata['x-Last Save with'] = historySoftware;
         }
-        const historyLastSave = get(descriptionPrefix, '["xmpMM:History"]["rdf:Seq"]["rdf:li"]["@attributes"]["stEvt:when"]');
+        const historyLastSave = get(descriptionPrefix, '["xmpMM:History"]["rdf:Seq"]["rdf:li"]["@_stEvt:when"]');
         if(historyLastSave) {
             allMetadata['x-Last Save at'] = historyLastSave;
         }
+        if(descriptionPrefix['@_xmp:CreatorTool']) {
+            allMetadata['x-CreatorTool'] = descriptionPrefix['@_xmp:CreatorTool'];
+        }
+        return allMetadata;
     }
 }
