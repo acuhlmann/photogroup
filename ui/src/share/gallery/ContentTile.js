@@ -19,6 +19,7 @@ import Webamp from 'webamp';
 import {Icon} from "@material-ui/core";
 import render from 'render-media';
 import from from 'from2';
+//import ReactAudioPlayer from 'react-audio-player';
 
 const styles = theme => ({
     horizontal: {
@@ -317,6 +318,31 @@ class ContentTile extends Component {
                         autoHideDuration: 4000,
                         action: (key) => (<Button className={self.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
                     });
+                    //Unsupported file type
+                    if(tile.isAudio) {
+                        /*const audio = document.createElement('audio');
+                        audio.controls = 'controls';
+                        //audio.src = 'media/' + tile.elem.name;
+                        audio.setAttribute('src', tile.elem);
+                        audio.type = tile.fileType;
+                        audio.autoplay = opts.autoplay;
+                        audio.muted = opts.muted;
+                        audio.loop = opts.loop;
+                        node.appendChild(audio);
+                        audio.load();
+                        audio.play();*/
+                        //elem = audio;
+                        /*node = <ReactAudioPlayer
+                            src={tile.elem}
+                            autoPlay
+                            controls
+                        />*/
+                        /*node.appendChild(<ReactAudioPlayer
+                            src={tile.elem}
+                            autoPlay
+                            controls
+                        />)*/
+                    }
                 }
 
                 Logger.info('New DOM node with the content', elem);

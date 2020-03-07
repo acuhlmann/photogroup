@@ -130,7 +130,7 @@ class Gallery extends Component {
                     });*/
 
                     const extention = photo.torrentFile.name.split('.').pop().toLowerCase();
-                    if(!this.props.master.STREAMING_FORMATS.includes(extention)) {
+                    if(!this.props.master.STREAMING_FORMATS.includes(extention) || photo.secure) {
                         Logger.info('getBlob ' + photo.torrent.name);
                         this.mergePreloadMetadata(photo);
                         photo.torrentFile.getBlob((err, elem) => {
