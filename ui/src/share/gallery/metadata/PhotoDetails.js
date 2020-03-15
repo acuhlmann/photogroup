@@ -13,7 +13,7 @@ import PhotoDetailsRenderer from "./PhotoDetailsRenderer";
 import IconButton from "@material-ui/core/IconButton";
 import MetadataParser from "./MetadataParser";
 import Slide from '@material-ui/core/Slide';
-import FileUtil from "../util/FileUtil";
+import FileUtil from "../../util/FileUtil";
 import Logger from 'js-logger';
 
 const Transition = React.forwardRef(function Transition(props, ref) {

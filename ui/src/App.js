@@ -1,8 +1,6 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import {withStyles, createMuiTheme } from '@material-ui/core/styles';
-
-import { ThemeProvider } from '@material-ui/styles';
+import {ThemeProvider, withStyles, withTheme, createMuiTheme} from '@material-ui/core/styles';
 
 import AppBar from '@material-ui/core/AppBar';
 import Toolbar from '@material-ui/core/Toolbar';
@@ -46,13 +44,31 @@ class App extends Component {
         //Logger.useDefaults();
         Logger.setLevel(Logger.INFO);
 
-        const emitter = new EventEmitter();
-        this.master = new TorrentMaster(new RoomsService(emitter), emitter);
+        this.emitter = new EventEmitter();
+        this.master = new TorrentMaster(new RoomsService(this.emitter), this.emitter);
         this.master.service.master = this.master;
+        this.state = {
+            theme: props.theme
+        }
+    }
 
-        emitter.on('addPeerDone', () => {
+    componentDidMount() {
+
+        this.emitter.on('addPeerDone', () => {
 
             this.reactToTouchInOut();
+        });
+
+        this.emitter.on('darkMode', isDark => {
+
+            console.log('fllkj')
+            //this.props.theme.palette.type = isDark ? 'dark' : 'light';
+            const theme = createMuiTheme({
+                palette: {
+                    type: isDark ? 'dark' : 'light'
+                }
+            });
+            this.setState({theme: theme});
         });
     }
 
@@ -96,10 +112,7 @@ class App extends Component {
 
     render() {
 
-        const defaultTheme = createMuiTheme();
-
-        return (
-            <ThemeProvider theme={defaultTheme}>
+        return (<ThemeProvider theme={this.state.theme}>
                 <SnackbarProvider
                     anchorOrigin={{
                         vertical: 'bottom',
@@ -122,7 +135,8 @@ class App extends Component {
                                     <AddPeersView master={this.master}/>
                                     <Uploader model={this.master.torrentAddition}
                                               emitter={this.master.emitter} />
-                                    <SettingsView master={this.master} emitter={this.master.emitter}/>
+                                    <SettingsView master={this.master} emitter={this.master.emitter}
+                                                  prefersDarkMode={this.props.prefersDarkMode}/>
                                 </Toolbar>
                             </AppBar>
                         </header>
@@ -132,15 +146,14 @@ class App extends Component {
                               master={this.master} />
                         </div>
                     </div>
-                </SnackbarProvider>
-            </ThemeProvider>
+                </SnackbarProvider></ThemeProvider>
         );
     }
 }
 
 App.propTypes = {
-    classes: PropTypes.object.isRequired,
+    prefersDarkMode: PropTypes.bool.isRequired,
 };
 
-export default withStyles(styles)(App);
+export default withTheme(withStyles(styles)(App));
 

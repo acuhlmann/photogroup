@@ -10,7 +10,7 @@ import FileUtil from '../util/FileUtil';
 import platform from 'platform';
 import _ from 'lodash';
 import moment from 'moment';
-import MetadataParser from "../gallery/MetadataParser";
+import MetadataParser from "../gallery/metadata/MetadataParser";
 
 export default class TorrentMaster {
 

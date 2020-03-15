@@ -1,11 +1,8 @@
 import React, { Component } from 'react';
-import PropTypes from 'prop-types';
 import Gallery from "./gallery/Gallery";
 
 import Button from '@material-ui/core/Button';
-
-import {withStyles, createMuiTheme } from '@material-ui/core/styles';
-import { ThemeProvider } from '@material-ui/styles';
+import {withStyles, withTheme } from '@material-ui/core/styles';
 
 import Logger from 'js-logger';
 import { withSnackbar } from 'notistack';
@@ -44,16 +41,7 @@ class ShareCanvas extends Component {
     constructor(props) {
         super(props);
 
-        const {enqueueSnackbar, master, gallery} = props;
-
-        this.master = master;
-        this.gallery = gallery;
-
-        this.state = {
-            loader: {},
-            expandedGallery: true,
-            expandedInfo: true,
-        };
+        const {enqueueSnackbar} = props;
 
         if(!WebTorrent.WEBRTC_SUPPORT) {
             const msg = 'Your browser does not support WebRTC';
@@ -105,8 +93,8 @@ class ShareCanvas extends Component {
                 Logger.warn('Disconnected!')
                 this.snack('Disconnected', 'warning', false, 'top');
             }
-        }
-        statusChecker.onUpdateStatus(onlineCallback)
+        };
+        statusChecker.onUpdateStatus(onlineCallback);
 
         window.addEventListener('load', () => {
             const online = navigator.onLine;
@@ -184,32 +172,19 @@ class ShareCanvas extends Component {
         });
     }
 
-    handleExpand = panel => (event, expanded) => {
-
-        this.setState({
-            [panel]: expanded,
-        });
-    };
-
     render() {
 
-        const defaultTheme = createMuiTheme();
-
-        const { classes, master } = this.props;
+        const { master } = this.props;
 
         return (
-            <ThemeProvider theme={defaultTheme}>
+            <div>
                 <TopologyView master={master} />
                 <MeView master={master} />
                 <FrontView master={master}/>
-                <Gallery className={classes.nooverflow} master={master} />
-            </ThemeProvider>
+                <Gallery master={master} />
+            </div>
         );
     }
 }
 
-ShareCanvas.propTypes = {
-    classes: PropTypes.object.isRequired,
-};
-
-export default withSnackbar(withStyles(styles)(ShareCanvas));
+export default withTheme(withSnackbar(withStyles(styles)(ShareCanvas)));

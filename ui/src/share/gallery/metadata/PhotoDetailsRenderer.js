@@ -7,9 +7,9 @@ import Logger from "js-logger";
 import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
 import TextField from '@material-ui/core/TextField';
-import FileUtil from "../util/FileUtil";
+import FileUtil from "../../util/FileUtil";
 import _ from 'lodash';
-import StringUtil from "../util/StringUtil";
+import StringUtil from "../../util/StringUtil";
 
 export default class PhotoDetailsRenderer {
 

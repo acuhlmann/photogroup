@@ -282,7 +282,6 @@ class Gallery extends Component {
 }
 
 Gallery.propTypes = {
-    classes: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,
 };
 export default withSnackbar(withStyles(styles)(Gallery));

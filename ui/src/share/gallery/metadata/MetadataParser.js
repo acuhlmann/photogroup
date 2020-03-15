@@ -2,10 +2,10 @@ import moment from 'moment';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
 import * as exifr from 'exifr';
-import FileUtil from "../util/FileUtil";
+import FileUtil from "../../util/FileUtil";
 import Logger from 'js-logger';
 import * as mm from 'music-metadata-browser';
-import StringUtil from "../util/StringUtil";
+import StringUtil from "../../util/StringUtil";
 import _ from 'lodash';
 
 export default class MetadataParser {

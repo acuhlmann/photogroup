@@ -65,7 +65,8 @@ class SettingsView extends Component {
             messages: [],
             open: false,
             peerId: '',
-            showTopology: false, showMe: true, encrypt: false, strategyPreference: false
+            showTopology: false, showMe: true, encrypt: false,
+            strategyPreference: false, darkMode: props.prefersDarkMode,
         };
         this.logsBeforeMount = [];
 
@@ -84,6 +85,9 @@ class SettingsView extends Component {
 
             const strategyPreference = localStorage.getItem('strategyPreference') || this.state.strategyPreference;
             this.handleStrategyPreferenceChange(String(strategyPreference) == 'true');
+
+            const darkMode = localStorage.getItem('darkMode') || this.state.darkMode;
+            this.handleDarkModeChange(String(darkMode) == 'true');
 
             this.setState({peerId: this.master.client.peerId});
             this.checkConnection();
@@ -289,6 +293,13 @@ class SettingsView extends Component {
         this.setState({[field]: value});
     };
 
+    handleDarkModeChange(value) {
+        const field = 'darkMode';
+        localStorage.setItem(field, value);
+        this.master.emitter.emit(field, value);
+        this.setState({[field]: value});
+    };
+
     batchChangeName(event) {
 
         if(!event.target) return;
@@ -316,7 +327,7 @@ class SettingsView extends Component {
             {this.state.messages}
         </List>;
 
-        const {showMe, showTopology, encrypt, strategyPreference} = this.state;
+        const {showMe, showTopology, encrypt, strategyPreference, darkMode} = this.state;
         return (
             <div>
                 <IconButton
@@ -373,6 +384,30 @@ class SettingsView extends Component {
                                     label="Me View"
                                 />
                             </FormGroup>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        onChange={(event) =>
+                                            this.handleStrategyPreferenceChange(event.target.checked)}
+                                        checked={strategyPreference}
+                                        value="strategyPreference"
+                                        color="primary"
+                                    />
+                                }
+                                label="Prefer Sequential over Rarest-First Downloading?"
+                            />
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        onChange={(event) =>
+                                            this.handleDarkModeChange(event.target.checked)}
+                                        checked={darkMode}
+                                        value="darkMode"
+                                        color="primary"
+                                    />
+                                }
+                                label="Dark Theme"
+                            />
                         <span className={classes.horizontal}>
                             <IconButton
                                 aria-haspopup="true"
@@ -388,23 +423,11 @@ class SettingsView extends Component {
                                 onClick={this.handleClose.bind(this)}>
                                 <CloseRounded />
                             </IconButton>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        onChange={(event) =>
-                                            this.handleStrategyPreferenceChange(event.target.checked)}
-                                        checked={strategyPreference}
-                                        value="strategyPreference"
-                                        color="primary"
-                                    />
-                                }
-                                label="Prefer Sequential over Rarest-First Downloading?"
-                            />
                         </span>
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v6 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v7 {this.state.peerId}</Typography>
 
                         {messages}
 
@@ -422,6 +445,7 @@ SettingsView.propTypes = {
     classes: PropTypes.object.isRequired,
     emitter: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,
+    prefersDarkMode: PropTypes.bool.isRequired,
 };
 
 export default withSnackbar(withStyles(styles)(SettingsView));
