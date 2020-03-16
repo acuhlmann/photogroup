@@ -34,6 +34,40 @@ class RenderContent extends Component {
         super(props);
     }
 
+    componentDidMount() {
+        const {master, tile} = this.props;
+        const emitter = master.emitter;
+        emitter.on('blobDone-' + tile.infoHash, this.handleBlobDone, this);
+        tile.torrent.on('done', this.handleDone.bind(this, tile.torrent));
+    }
+
+    componentWillUnmount() {
+        const {master, tile} = this.props;
+        master.emitter.removeListener('blobDone-' + tile.infoHash, this.handleBlobDone, this);
+        tile.torrent.removeListener('done', this.handleDone, this);
+    }
+
+    handleBlobDone(photo) {
+        Logger.info('blobDone received ' + photo.fileName);
+        const {tile, master} = this.props;
+        tile.elem = photo.elem;
+        master.emitter.emit('photos', {type: 'update', item: [tile]});
+        this.readMetadata(tile);
+    }
+
+    async handleDone(torrent) {
+
+        const {tile, master} = this.props;
+
+        const blob = await fetch(torrent.torrentFileBlobURL)
+            .then(r => r.blob())
+            .then(blobFile => new File([blobFile], tile.fileName, { type: tile.fileType }));
+
+        tile.elem = blob;
+        master.emitter.emit('photos', {type: 'update', item: [tile]});
+        this.readMetadata(tile);
+    }
+
     handleContainerLoaded(tile, node, file) {
         if(!tile || !file || !node) {
             return;
@@ -56,6 +90,7 @@ class RenderContent extends Component {
     }
 
     handleWebamp(tile, node, file) {
+        //return;
         if(!tile || !file || !node || !tile.isAudio) {
             return;
         }
@@ -79,6 +114,7 @@ class RenderContent extends Component {
     }
 
     openInWebamp() {
+        //return;
         const webamp = this.webamp;
 
         const elem = this.props.tile.elem;

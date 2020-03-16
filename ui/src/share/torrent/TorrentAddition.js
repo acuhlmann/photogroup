@@ -370,8 +370,9 @@ export default class TorrentAddition {
         //Logger.info('Webtorrent peer ' + peer.id + ' ' + source);
     }
 
-    done(torrent) {
+    async done(torrent) {
         Logger.info('done ' + torrent.name);
+
         //Checks to make sure that ImmediateChunkStore has finished writing to store before destroying the torrent!
         /*const isMemStoreEmpty = setInterval(()=>{
             //Since client.seed is sequential, this is okay here.

@@ -1,4 +1,5 @@
 import moment from 'moment';
+import momentDurationFormatSetup  from 'moment-duration-format';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
 import * as exifr from 'exifr';
@@ -20,6 +21,7 @@ export default class MetadataParser {
                 .then(output => {
                     if(output) {
                         Logger.info('Camera:', output.Make, output.Model);
+                        delete output.Category;
                         const metadata = self.extractAndProcess(output, tile);
                         tile.metadata = metadata;
                         tile.hasMetadata = true;

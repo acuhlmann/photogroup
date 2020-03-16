@@ -77,7 +77,6 @@ class ContentTile extends Component {
         emitter.on('disconnectNode', this.handleDisconnectNode, this);
         emitter.on('downloadProgress', this.handleDownloadProgress, this);
         emitter.on('uploadProgress', this.handleUploadProgress, this);
-        emitter.on('blobDone-' + tile.infoHash, this.handleBlobDone, this);
         tile.torrent.on('done', this.handleDone.bind(this));
     }
 
@@ -127,12 +126,6 @@ class ContentTile extends Component {
         this.setState({
             progress: 100
         });
-    }
-
-    handleBlobDone(photo) {
-        Logger.info('blobDone received ' + photo.fileName);
-        const {master, tile} = this.props;
-        tile.elem = photo.elem;
     }
 
     /*addServerPeer(tile, action) {

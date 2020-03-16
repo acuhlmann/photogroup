@@ -265,7 +265,7 @@ class Gallery extends Component {
         const {classes, master} = this.props;
         const {tiles} = this.state;
 
-        const hasImages = tiles && tiles.find(tile => !tile.isLoading && !tile.secure && tile.img);
+        const hasImages = tiles && tiles.find(tile => !tile.isLoading && tile.img);
         if(hasImages) {
             master.emitter.emit('galleryHasImages', true);
         } else {
