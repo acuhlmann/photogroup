@@ -18,6 +18,7 @@ import PiecesLoadingView from "../torrent/PiecesLoadingView";
 import PasswordInput from "../security/PasswordInput";
 import WebCrypto from "../security/WebCrypto";
 import RenderContent from "./RenderContent";
+import StringUtil from "../util/StringUtil";
 
 const styles = theme => ({
     horizontal: {
@@ -289,9 +290,12 @@ class ContentTile extends Component {
 
     render() {
 
-        const {tile, name, master, classes} = this.props;
+        const {tile, master, classes} = this.props;
         const {open, localDownloaded, localDownloading, listView,
             isDecrypted, previewThumbnail} = this.state;
+
+        let name = StringUtil.addEmptySpaces([
+            tile.picSummary, tile.fileSize, tile.cameraSettings]) || this.props.name;
 
         const isLoading = !tile.torrentFile.done;
         let loadingDom, progressPercentage, downloaded;
@@ -338,10 +342,8 @@ class ContentTile extends Component {
                         <Collapse in={listView}>
                             <Paper className={classes.toolbar}>
 
-                                {previewThumbnail ? <span>
-                                    <img src={previewThumbnail} alt={'Preview ' + tile.fileName}
-                                         className={classes.wide}/>
-                                </span> : ''}
+                                {previewThumbnail ? <img src={previewThumbnail} alt={'Preview ' + tile.fileName}
+                                                         className={classes.wide}/> : ''}
 
                                 <div className={classes.horizontal} style={{width: '100%'}}>
 

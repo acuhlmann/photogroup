@@ -2,11 +2,11 @@ import Logger from 'js-logger';
 import shortid  from 'shortid';
 import StringUtil from "../util/StringUtil";
 import moment from "moment";
-import * as exifr from 'exifr';
+//import * as exifr from 'exifr';
+import exifr from 'exifr/dist/full.esm.mjs'
 import _ from 'lodash';
 import FileUtil from "../util/FileUtil";
 import * as musicMetadata from 'music-metadata-browser';
-import Typography from "@material-ui/core/Typography";
 import React from "react";
 
 export default class TorrentAddition {
@@ -127,7 +127,20 @@ export default class TorrentAddition {
         photos = photos.map((photo, index) => {
 
             if(paths) {
-                photo.torrentFile = files.find(file => file.path === paths[index]);
+
+                if(!photo.secure) {
+                    let localFiles = files;
+                    if(photo.isAudio) {
+                        localFiles = torrent.files;
+                    }
+                    const pathParts = paths[index].split('/');
+                    photo.torrentFileThumb = localFiles
+                        .find(file => file.path === pathParts[0] + '/' + 'Thumbnail ' + pathParts[1]);
+                    photo.torrentFile = files.find(file => file.path === paths[index]);
+                } else {
+                    photo.torrentFile = files.find(file => file.path === paths[index]);
+                }
+
             } else {
                 if(!photo.secure) {
                     let localFiles = files;
@@ -156,6 +169,10 @@ export default class TorrentAddition {
         try {
             const tUrls = filesArr.map(item => exifr.thumbnailUrl(item));
             thumbnailUrls = await Promise.all(tUrls);
+            //let exr = new Exifr(options)
+            //let buffer = await exr.extractThumbnail()
+            //const url = await exifr.thumbnailUrl(filesArr[0]);
+            //thumbnailUrls = [url];
         } catch(e) {
             Logger.warn('Cannot find thumbnail ' + e + ' ' + filesArr.map(item => item.name));
         }
@@ -211,11 +228,14 @@ export default class TorrentAddition {
             .filter(item => item)
             .map((item, index) => {
                 const picture = item.common.picture;
-                const pic = picture[0];
+                if(!picture) {
+                    return;
+                }
                 if(picture && picture.length > 1) {
-                    Logger.warn('Can only show one album art preview but found ' + picture.length)
+                    Logger.warn('Can only show one album art preview but found ' + picture.length);
                 }
                 let thumb;
+                const pic = picture[0];
                 if(pic) {
                     const file = filesArr[index];
                     const fileName = 'Thumbnail ' + file.name;
@@ -225,7 +245,7 @@ export default class TorrentAddition {
                     });
                 }
                 return thumb;
-            });
+            }).filter(item => item);
         return thumbnailBlobs;
     }
 
@@ -253,7 +273,7 @@ export default class TorrentAddition {
             } else {
                 Logger.warn('Cannot find thumbnail');
             }
-            files = _.zip(thumbnailFiles, filesArr)[0].filter(item => item);
+            files = _.zip(thumbnailFiles, filesArr).flatMap(item => item).filter(item => item);
             //origFilesArr = filesArr = files = thumbnailFiles;
         }
 

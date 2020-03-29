@@ -224,6 +224,7 @@ class RenderContent extends Component {
                     this.equalizerNode,
                     {
                         source: elem,
+                        showScale: false,
                         start: false
                     }
                 );
@@ -306,7 +307,7 @@ class RenderContent extends Component {
             ? <img src={tile.img} alt={tile.fileName}
                    className={classes.wide}
                    onLoad={this.imgLoaded.bind(this, tile)} />
-            : <div>
+            : <div className={classes.wide}>
                 <div className={classes.horizontal}>
                 {tile.isAudio ? <div className={classes.horizontal}>
                         <Typography variant={"caption"}>Open in</Typography>
@@ -325,7 +326,7 @@ class RenderContent extends Component {
                 {tile.isAudio ? <div ref={ref => this.handleWebamp(tile, ref, tile.torrentFile)}>
                     </div> : ''}
             </div>
-            {tile.isAudio ? <div ref={ref => this.registerEqualizerNode(ref)}>
+            {tile.isAudio ? <div className={classes.wide} ref={ref => this.registerEqualizerNode(ref)}>
             </div> : ''}
         </div>;
     }

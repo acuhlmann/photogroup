@@ -23,7 +23,7 @@ export default class TorrentMaster {
         this.service.master = this;
         this.emitter = emitter;
         this.peers = new Peers(emitter, [], service);
-        this.metadata = new MetadataParser();
+        this.metadata = new MetadataParser(this);
         this.STREAMING_VIDEO_FORMATS = ['mp4', 'm4v', 'm4a'];
         this.STREAMING_AUDIO_FORMATS = ['mp3'];
         this.STREAMING_FORMATS = [...this.STREAMING_VIDEO_FORMATS, ...this.STREAMING_AUDIO_FORMATS];

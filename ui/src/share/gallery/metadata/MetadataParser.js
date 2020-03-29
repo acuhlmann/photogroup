@@ -11,6 +11,10 @@ import _ from 'lodash';
 
 export default class MetadataParser {
 
+    constructor(master) {
+        this.master = master;
+    }
+
     async readMetadata(tile, callback) {
 
         if(tile.isImage) {
@@ -63,6 +67,7 @@ export default class MetadataParser {
 
                     tile.metadata = metadata;
                     tile.hasMetadata = true;
+                    this.master.emitter.emit('photos', {type: 'update', item: [tile]});
                     callback(tile, metadata);
                 }).catch(e => {
                     Logger.error('error parsing media metadata ' + e);
