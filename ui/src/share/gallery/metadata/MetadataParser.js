@@ -34,7 +34,8 @@ export default class MetadataParser {
             try {
                 const mmRef = mm;
                 mm.parseBlob(tile.elem).then(metadata => {
-                    Logger.info('metadata ' + metadata);
+                    const rating = _.get(metadata, ['common.rating']);
+                    Logger.info('MetadataParser ' + Object.keys(metadata).join(',') + ' ' + (rating || ''));
 
                     const duration = metadata.format.duration ? moment
                         .duration(metadata.format.duration, "seconds").format() + ' sec' : '';

@@ -48,7 +48,7 @@ class RenderContent extends Component {
     }
 
     handleBlobDone(photo) {
-        Logger.info('blobDone received ' + photo.fileName);
+        Logger.info('handleBlobDone ' + photo.fileName);
         const {tile, master} = this.props;
         tile.elem = photo.elem;
         master.emitter.emit('photos', {type: 'update', item: [tile]});
@@ -59,13 +59,29 @@ class RenderContent extends Component {
 
         const {tile, master} = this.props;
 
-        const blob = await fetch(torrent.torrentFileBlobURL)
+        fetch(torrent.torrentFileBlobURL)
             .then(r => r.blob())
-            .then(blobFile => new File([blobFile], tile.fileName, { type: tile.fileType }));
+            .then(blobFile => new File([blobFile], tile.fileName, { type: tile.fileType }))
+            .then(file => {
+                console.log('handleDone torrentFileBlobURL ' + file);
+                tile.elem = file;
+                master.emitter.emit('photos', {type: 'update', item: [tile]});
+                this.readMetadata(tile);
+            });
 
-        tile.elem = blob;
-        master.emitter.emit('photos', {type: 'update', item: [tile]});
-        this.readMetadata(tile);
+        /*const file = torrent.files.find(file => file.name === tile.fileName);
+        if(file) {
+            file.getBlob((err, elem) => {
+                Logger.info('handleDone getBlob done ' + file.name);
+                if (err) {
+                    Logger.error(err.message);
+                } else {
+                    tile.elem = new File([elem], tile.fileName, { type: tile.fileType });;
+                    master.emitter.emit('photos', {type: 'update', item: [tile]});
+                    this.readMetadata(tile);
+                }
+            });
+        }*/
     }
 
     handleContainerLoaded(tile, node, file) {
@@ -223,8 +239,11 @@ class RenderContent extends Component {
             this.readMetadata(tile);
         } else {
             master.emitter.on('blobDone-' + tile.infoHash, (photo) => {
-                tile.elem = photo.elem;
-                this.readMetadata(tile);
+                Logger.info('getBlobAndReadMetadata blobDone ' + tile.fileName);
+                if(!tile.elem) {
+                    tile.elem = photo.elem;
+                    this.readMetadata(tile);
+                }
             }, this);
         }
     }
@@ -233,7 +252,6 @@ class RenderContent extends Component {
         const master = this.props.master;
         if(tile.elem) {
             master.metadata.readMetadata(tile, (tile, metadata) => {
-                Logger.info('readMetadata');
                 master.emitter.emit('photos', {type: 'update', item: [tile]});
                 if(tile.seed) {
                     master.emitter.emit('photoRendered', tile);
@@ -285,6 +303,7 @@ class RenderContent extends Component {
     render() {
 
         const {tile, classes} = this.props;
+
         return (<span>
             {this.renderMediaDom(tile, classes)}
         </span>

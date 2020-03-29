@@ -2,6 +2,12 @@ import Logger from 'js-logger';
 import shortid  from 'shortid';
 import StringUtil from "../util/StringUtil";
 import moment from "moment";
+import * as exifr from 'exifr';
+import _ from 'lodash';
+import FileUtil from "../util/FileUtil";
+import * as musicMetadata from 'music-metadata-browser';
+import Typography from "@material-ui/core/Typography";
+import React from "react";
 
 export default class TorrentAddition {
 
@@ -116,12 +122,19 @@ export default class TorrentAddition {
 
     addTorrent(torrent, photos, fromCache, paths) {
 
+        const files = fromCache ? torrent.files.filter(item => !item.name.startsWith('Thumbnail ')) : torrent.files;
+
         photos = photos.map((photo, index) => {
 
             if(paths) {
-                photo.torrentFile = torrent.files.find(file => file.path === paths[index]);
+                photo.torrentFile = files.find(file => file.path === paths[index]);
             } else {
-                photo.torrentFile = torrent.files.find(file => file.name === torrent.name);
+                if(!photo.secure) {
+                    photo.torrentFileThumb = files.find(file => file.name === 'Thumbnail ' + photo.fileName);
+                    photo.torrentFile = files.find(file => file.name === photo.fileName);
+                } else {
+                    photo.torrentFile = files.find(file => file.name === torrent.name);
+                }
             }
             photo.fromCache = fromCache;
             photo.loading = true;
@@ -134,12 +147,93 @@ export default class TorrentAddition {
         this.emitter.emit('torrentReady', photos);
     }
 
-    seed(files, secure = false, origFiles = [], callback) {
+    async getPreviewFromImage(filesArr) {
+        let thumbnailUrls = [];
+        try {
+            const tUrls = filesArr.map(item => exifr.thumbnailUrl(item));
+            thumbnailUrls = await Promise.all(tUrls);
+        } catch(e) {
+            Logger.warn('Cannot find thumbnail ' + e + ' ' + filesArr.map(item => item.name));
+        }
+
+        const thumbnailBlobs = await Promise.all(thumbnailUrls
+            .filter(item => item)
+            .map(item => fetch(item)
+                .then(r => r.blob())));
+
+        const thumbnailFiles = thumbnailBlobs.map((item, index) => {
+            const file = filesArr[index];
+            const fileName = 'Thumbnail ' + file.name;
+            //const fileName = file.name;
+            const thumb = new File([item], fileName, {
+                type: file.type,
+                lastModified: file.lastModified
+            });
+            return thumb;
+        });
+        return thumbnailFiles;
+    }
+
+    async getPreviewFromAudio(filesArr) {
+        let metadatas = [];
+
+        try {
+            const results = filesArr.map(item => musicMetadata.parseBlob(item));
+            metadatas = await Promise.all(results);
+        } catch(e) {
+            Logger.warn('Cannot find thumbnail ' + e + ' ' + filesArr.map(item => item.name));
+        }
+
+        const thumbnailBlobs = metadatas
+            .filter(item => item)
+            .map((item, index) => {
+                const picture = item.common.picture;
+                const pic = picture[0];
+                if(picture && picture.length > 1) {
+                    Logger.warn('Can only show one album art preview but found ' + picture.length)
+                }
+                let thumb;
+                if(pic) {
+                    const file = filesArr[index];
+                    const fileName = 'Thumbnail ' + file.name;
+                    //const fileName = file.name;
+                    thumb = new File([pic.data], fileName, {
+                        type: pic.format,
+                    });
+                }
+                return thumb;
+            });
+        return thumbnailBlobs;
+    }
+
+    async seed(files, secure = false, origFiles = [], callback) {
 
         const self = this;
 
-        const filesArr = [...files];
-        const origFilesArr = [...origFiles];
+        let filesArr = [...files];
+        let origFilesArr = [...origFiles];
+
+        if(!secure && filesArr
+            .filter(item => item)
+            .every(item => (item.type.includes('image/') || item.type.includes('audio/')))
+        ) {
+
+            let thumbnailFiles = [];
+            if(filesArr.every(item => item.type.includes('image/'))) {
+                thumbnailFiles = await this.getPreviewFromImage(filesArr);
+            } else if(filesArr.every(item => item.type.includes('audio/'))) {
+                thumbnailFiles = await this.getPreviewFromAudio(filesArr);
+            }
+
+            if(thumbnailFiles.length > 0) {
+                Logger.info('thumbnailFile sizes ' + thumbnailFiles.map(item => FileUtil.formatBytes(item.size)));
+            } else {
+                Logger.warn('Cannot find thumbnail');
+            }
+            files = _.zip(thumbnailFiles, filesArr)[0].filter(item => item);
+            //origFilesArr = filesArr = files = thumbnailFiles;
+        }
+
         Logger.info('seed ' + filesArr.map(item => item.name).join(', '));
 
         const format = 'HH:mm:ss MMM Do YY';
@@ -158,16 +252,23 @@ export default class TorrentAddition {
 
         this.master.emitter.emit('photos', {type: 'add', item: photos});
 
+        /*const thumbnails = await Promise.all(filesArr.map(item => exifr.thumbnail(item)));
+        const thumbnailBlobs = thumbnails.map((item, index) => new Blob(item, {
+            type: filesArr[index].type
+        }));
+        const allFiles = [...thumbnailBlobs, ...filesArr];*/
+
         const torrent = this.master.addSeedOrGetTorrent('seed', files, torrent => {
 
             Logger.info('seed.done ' + torrent.infoHash);
 
             //this.storeTorrent(torrent);
 
+            const withoutThumbs = torrent.files.filter(item => !item.name.startsWith('Thumbnail '));
             const addedInfoHash = photos.map(photo => {
                 photo.infoHash = torrent.infoHash;
-                if(torrent.files.length > 1) {
-                    photo.infoHash += '-' + torrent.files.find(file => file.name === photo.file.name).path;
+                if(withoutThumbs.length > 1) {
+                    photo.infoHash += '-' + withoutThumbs.find(file => file.name === photo.file.name).path;
                 }
                 photo.url = torrent.magnetURI;
                 return photo;
@@ -191,16 +292,17 @@ export default class TorrentAddition {
                     photo.infoHash = torrent.infoHash;
                     photo.url = torrent.magnetURI;
                 });
-                torrent.files.forEach((file, index, files) => {
+                withoutThumbs.forEach((file, index) => {
                     const photo = photos[index];
                     photo.torrentFile = file;
-                    if(files.length > 1) {
+                    photo.torrentFileThumb = torrent.files.find(file => file.name === 'Thumbnail ' + photo.fileName);
+                    if(withoutThumbs.length > 1) {
                         photo.infoHash += '-' + file.path;
                     }
                     //self.emitter.emit('torrentReady', photo);
                 });
 
-                //torrent.files.forEach((file, index) => self.emitter.emit('torrentReady', photos[index]));
+                //withoutThumbs.forEach((file, index) => self.emitter.emit('torrentReady', photos[index]));
                 self.emitter.emit('torrentReady', photos);
             });
 
@@ -261,6 +363,7 @@ export default class TorrentAddition {
             delete serverPhoto.isDecrypted;
             delete serverPhoto.torrent;
             delete serverPhoto.torrentFile;
+            delete serverPhoto.torrentFileThumb;
             delete serverPhoto.picDateTakenDate;
             delete serverPhoto.picSummary;
             delete serverPhoto.metadata;
@@ -273,7 +376,7 @@ export default class TorrentAddition {
     }
 
     defineStrategy(files, opts) {
-        if(files.every(file => {
+        if(files.filter(item => !item.isThumbnail).every(file => {
             const ext = file.name.split('.').pop().toLowerCase();
             return !this.master.STREAMING_FORMATS.includes(ext);
         })) {

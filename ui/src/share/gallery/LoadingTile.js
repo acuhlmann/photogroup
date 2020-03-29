@@ -49,6 +49,9 @@ const styles = theme => ({
         left: '-17px',
         top: '-16px'
     },
+    wide: {
+        width: '100%',
+    },
 });
 
 class LoadingTile extends Component {
@@ -56,17 +59,19 @@ class LoadingTile extends Component {
     constructor(props) {
         super(props);
 
-        const {master} = props;
-        const emitter = master.emitter;
+        this.state = {
+            progress: null, timeRemaining: '',
+            downSpeed: '', upSpeed: '',
+            previewThumbnail: null
+        }
+    }
+
+    componentDidMount() {
+        const emitter = this.props.master.emitter;
 
         emitter.on('downloadProgress', this.handleDownloadProgress, this);
         emitter.on('uploadProgress', this.handleUploadProgress, this);
-
-        this.state = {
-            progress: null,
-            downSpeed: '', upSpeed: '',
-            timeRemaining: ''
-        }
+        emitter.on('torrentReady', this.listenToPreview, this);
     }
 
     handleDownloadProgress(event) {
@@ -92,8 +97,22 @@ class LoadingTile extends Component {
     }
 
     componentWillUnmount() {
-        this.props.master.emitter.removeListener('downloadProgress', this.handleDownloadProgress, this);
-        this.props.master.emitter.removeListener('uploadProgress', this.handleUploadProgress, this);
+        const emitter = this.props.master.emitter;
+        emitter.removeListener('downloadProgress', this.handleDownloadProgress, this);
+        emitter.removeListener('uploadProgress', this.handleUploadProgress, this);
+        emitter.removeListener('torrentReady', this.listenToPreview, this);
+    }
+
+    listenToPreview() {
+        const {tile} = this.props;
+        if(tile.loading && tile.torrentFileThumb) {
+            tile.torrentFileThumb.getBlobURL((err, url) => {
+                if(err) {
+                    Logger.error('preview ' + err);
+                }
+                this.setState({previewThumbnail: url});
+            });
+        }
     }
 
     async handleDelete(tile) {
@@ -105,7 +124,7 @@ class LoadingTile extends Component {
         const {tile, master, classes} = this.props;
         let {name} = this.props;
 
-        let {downSpeed, upSpeed, timeRemaining, progress} = this.state;
+        let {downSpeed, upSpeed, timeRemaining, progress, previewThumbnail} = this.state;
 
         //progress = 80;
         //downSpeed = '100kb/sec';
@@ -137,76 +156,81 @@ class LoadingTile extends Component {
                 margin: '10px',
                 padding: '10px'
             }}>
-                    <span className={classes.horizontal}>
-                        <span className={classes.horizontal} style={{
-                            position: 'relative', textAlign: 'center',
-                        }}>
-                            {have ? <CheckIcon
-                                        style={{marginTop: '-14px'}} /> : <ImageIcon
-                                                                    className={classes.imageIcon} />}
-                            {!have && <CircularProgress
-                                        color="secondary"
-                                        size={36} className={classes.fabProgress} />}
-                        </span>
-                        <Typography variant="caption" className={classes.wordwrap} style={{
-                            marginTop: '-14px'
-                        }}>
-                            {loadingText}
-                        </Typography>
-                        {isLoading ? <span className={classes.horizontal} style={{
-                            marginLeft: '10px'}}>
+                {previewThumbnail ? <span>
+                        <img src={previewThumbnail} alt={'Preview ' + tile.fileName}
+                             className={classes.wide}/>
+                    </span> : ''}
+
+                <span className={classes.horizontal}>
+                    <span className={classes.horizontal} style={{
+                        position: 'relative', textAlign: 'center',
+                    }}>
+                        {have ? <CheckIcon
+                                    style={{marginTop: '-14px'}} /> : <ImageIcon
+                                                                className={classes.imageIcon} />}
+                        {!have && <CircularProgress
+                                    color="secondary"
+                                    size={36} className={classes.fabProgress} />}
+                    </span>
+                    <Typography variant="caption" className={classes.wordwrap} style={{
+                        marginTop: '-14px'
+                    }}>
+                        {loadingText}
+                    </Typography>
+                    {isLoading ? <span className={classes.horizontal} style={{
+                        marginLeft: '10px'}}>
+                                <span className={classes.vertical}>
                                     <span className={classes.vertical}>
-                                        <span className={classes.vertical}>
-                                            <CircularProgress style={{
-                                                                  width: '35px', height: '35px'
-                                                              }}
-                                                              variant="static"
-                                                              value={progress}
-                                            />
-                                            <Typography className={classes.progressPercentageText}
-                                                        variant={"caption"}>{progressPercentage}</Typography>
-                                        </span>
+                                        <CircularProgress style={{
+                                                              width: '35px', height: '35px'
+                                                          }}
+                                                          variant="static"
+                                                          value={progress}
+                                        />
+                                        <Typography className={classes.progressPercentageText}
+                                                    variant={"caption"}>{progressPercentage}</Typography>
                                     </span>
-                                    <div className={classes.vertical} style={{ width: '80px', marginTop: '-14px'}}>
-                                            <Typography className={classes.progressSpeedText}
-                                                        variant={"caption"}>{downSpeed}</Typography>
-                                            <Typography className={classes.progressSpeedText}
-                                                        variant={"caption"}>{upSpeed}</Typography>
-                                    </div>
-                                    <div className={classes.vertical} style={{ width: '110px'}}>
+                                </span>
+                                <div className={classes.vertical} style={{ width: '80px', marginTop: '-14px'}}>
                                         <Typography className={classes.progressSpeedText}
-                                                    style={{
-                                                        marginTop: '-14px'
-                                                    }}
-                                                    variant={"caption"}>{timeRemaining}</Typography>
-                                    </div>
-                        </span> : ''}
-                        <IconButton onClick={this.handleDelete.bind(this, tile)}
-                                    style={{
-                                        marginTop: '-14px'
-                                    }}>
-                            <DeleteIcon />
-                        </IconButton>
-                    </span>
-                <Divider variant="middle" />
-                <span style={{
-                    position: 'relative',
-                    textAlign: 'center',
-                    marginRight: '10px'
-                }}>
-                        <Typography variant="caption" className={classes.wordwrap}>
-                            {name}
-                        </Typography>
-                    </span>
-                <Divider variant="middle" />
-                <div style={{width: '100%', height: '100%'}}>
-                    <PiecesLoadingView master={master} tile={tile} />
-                </div>
-                <Divider variant="middle" />
-                {!isRendering ? <OwnersList emitter={master.emitter}
-                            tile={tile} peers={master.peers} myPeerId={master.client.peerId}
-                /> : ''}
-            </Paper>
+                                                    variant={"caption"}>{downSpeed}</Typography>
+                                        <Typography className={classes.progressSpeedText}
+                                                    variant={"caption"}>{upSpeed}</Typography>
+                                </div>
+                                <div className={classes.vertical} style={{ width: '110px'}}>
+                                    <Typography className={classes.progressSpeedText}
+                                                style={{
+                                                    marginTop: '-14px'
+                                                }}
+                                                variant={"caption"}>{timeRemaining}</Typography>
+                                </div>
+                    </span> : ''}
+                    <IconButton onClick={this.handleDelete.bind(this, tile)}
+                                style={{
+                                    marginTop: '-14px'
+                                }}>
+                        <DeleteIcon />
+                    </IconButton>
+                </span>
+            <Divider variant="middle" />
+            <span style={{
+                position: 'relative',
+                textAlign: 'center',
+                marginRight: '10px'
+            }}>
+                    <Typography variant="caption" className={classes.wordwrap}>
+                        {name}
+                    </Typography>
+                </span>
+            <Divider variant="middle" />
+            <div style={{width: '100%', height: '100%'}}>
+                <PiecesLoadingView master={master} tile={tile} />
+            </div>
+            <Divider variant="middle" />
+            {!isRendering ? <OwnersList emitter={master.emitter}
+                        tile={tile} peers={master.peers} myPeerId={master.client.peerId}
+            /> : ''}
+        </Paper>
         );
     }
 }

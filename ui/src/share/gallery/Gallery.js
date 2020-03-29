@@ -130,7 +130,8 @@ class Gallery extends Component {
                                 Logger.error(err.message);
                                 reject(err.message);
                             } else {
-                                resolve(this.mergePostloadMetadata(photo, elem));
+                                const file = new File([elem], photo.fileName, { type: photo.fileType });
+                                resolve(this.mergePostloadMetadata(photo, file));
                             }
                         });
                     } else {

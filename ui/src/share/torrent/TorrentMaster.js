@@ -241,7 +241,7 @@ export default class TorrentMaster {
         const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true};
         opts.store = idb;
         if(addOrSeed === 'seed') {
-            const filesArr = [...input];
+            const filesArr = [...input].filter(item => !item.isThumbnail);
             if(filesArr.every(file => !file.type.includes('video/'))) {
                 opts.strategy = this.strategyPreference ? 'sequential' : 'rarest';
                 //opts.strategy = 'rarest';

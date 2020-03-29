@@ -65,7 +65,8 @@ class ContentTile extends Component {
             progress: null,
             downSpeed: '', upSpeed: '',
             timeRemaining: '',
-            password: '', isDecrypted: false
+            password: '', isDecrypted: false,
+            previewThumbnail: null
         };
     }
 
@@ -77,16 +78,35 @@ class ContentTile extends Component {
         emitter.on('disconnectNode', this.handleDisconnectNode, this);
         emitter.on('downloadProgress', this.handleDownloadProgress, this);
         emitter.on('uploadProgress', this.handleUploadProgress, this);
+        emitter.on('torrentReady', this.listenToPreview, this);
         tile.torrent.on('done', this.handleDone.bind(this));
+
+        this.listenToPreview();
     }
 
     componentWillUnmount() {
-        this.props.master.emitter.removeListener('galleryListView', this.handleGalleryListView, this);
-        this.props.master.emitter.removeListener('disconnectNode', this.handleDisconnectNode, this);
+        const emitter = this.props.master.emitter;
+        emitter.removeListener('galleryListView', this.handleGalleryListView, this);
+        emitter.removeListener('disconnectNode', this.handleDisconnectNode, this);
 
-        this.props.master.emitter.removeListener('downloadProgress', this.handleDownloadProgress, this);
-        this.props.master.emitter.removeListener('uploadProgress', this.handleUploadProgress, this);
+        emitter.removeListener('downloadProgress', this.handleDownloadProgress, this);
+        emitter.removeListener('uploadProgress', this.handleUploadProgress, this);
+        emitter.removeListener('torrentReady', this.listenToPreview, this);
         this.props.tile.torrent.removeListener('done', this.handleDone, this);
+    }
+
+    listenToPreview() {
+        const {tile} = this.props;
+        if(tile.torrentFileThumb && tile.isAudio) {
+            const file = tile.torrentFileThumb;
+            tile.torrentFileThumb.getBlobURL((err, url) => {
+                if(err) {
+                    Logger.error('preview ' + err);
+                }
+                console.log(file);
+                this.setState({previewThumbnail: url});
+            });
+        }
     }
 
     handleGalleryListView(isList) {
@@ -270,7 +290,8 @@ class ContentTile extends Component {
     render() {
 
         const {tile, name, master, classes} = this.props;
-        const {open, localDownloaded, localDownloading, listView, isDecrypted} = this.state;
+        const {open, localDownloaded, localDownloading, listView,
+            isDecrypted, previewThumbnail} = this.state;
 
         const isLoading = !tile.torrentFile.done;
         let loadingDom, progressPercentage, downloaded;
@@ -316,34 +337,40 @@ class ContentTile extends Component {
                         <RenderContent tile={tile} master={master} />
                         <Collapse in={listView}>
                             <Paper className={classes.toolbar}>
-                            <div className={classes.horizontal} style={{width: '100%'}}>
 
-                                {loadingDom}
+                                {previewThumbnail ? <span>
+                                    <img src={previewThumbnail} alt={'Preview ' + tile.fileName}
+                                         className={classes.wide}/>
+                                </span> : ''}
 
-                                <IconButton disabled={isDownloadingFile} onClick={this.downloadFromServer.bind(this, tile)}>
-                                    <CloudDownloadIcon/>
-                                </IconButton>
-                                {downloadedFile ? <Typography variant={"caption"}
-                                                          style={{marginRight: '5px'}}>Downloaded</Typography> : ''}
-                                {/*<IconButton onClick={this.handleOpen.bind(this, tile)}>
-                                    <InfoIcon />
-                                </IconButton>*/}
-                                {this.buildMetadataTitle(tile, name, classes)}
-                                <IconButton onClick={this.handleDelete.bind(this, tile)}>
-                                    <DeleteIcon />
-                                </IconButton>
-                                {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
-                                    <CloudUploadIcon/>
-                                </IconButton>*/}
-                            </div>
-                            <div style={{width: '100%'}}>
-                                <PiecesLoadingView master={master} tile={tile} />
-                            </div>
-                            <div style={{width: '100%', height: '100%'}}>
-                                <OwnersList emitter={master.emitter}
-                                            tile={tile} peers={master.peers} myPeerId={master.client.peerId}
-                                />
-                            </div>
+                                <div className={classes.horizontal} style={{width: '100%'}}>
+
+                                    {loadingDom}
+
+                                    <IconButton disabled={isDownloadingFile} onClick={this.downloadFromServer.bind(this, tile)}>
+                                        <CloudDownloadIcon/>
+                                    </IconButton>
+                                    {downloadedFile ? <Typography variant={"caption"}
+                                                              style={{marginRight: '5px'}}>Downloaded</Typography> : ''}
+                                    {/*<IconButton onClick={this.handleOpen.bind(this, tile)}>
+                                        <InfoIcon />
+                                    </IconButton>*/}
+                                    {this.buildMetadataTitle(tile, name, classes)}
+                                    <IconButton onClick={this.handleDelete.bind(this, tile)}>
+                                        <DeleteIcon />
+                                    </IconButton>
+                                    {/*<IconButton onClick={this.addServerPeer.bind(this, tile, label)}>
+                                        <CloudUploadIcon/>
+                                    </IconButton>*/}
+                                </div>
+                                <div style={{width: '100%'}}>
+                                    <PiecesLoadingView master={master} tile={tile} />
+                                </div>
+                                <div style={{width: '100%', height: '100%'}}>
+                                    <OwnersList emitter={master.emitter}
+                                                tile={tile} peers={master.peers} myPeerId={master.client.peerId}
+                                    />
+                                </div>
                             </Paper>
                             <PhotoDetails open={open}
                                           tile={tile}
