@@ -130,7 +130,11 @@ export default class TorrentAddition {
                 photo.torrentFile = files.find(file => file.path === paths[index]);
             } else {
                 if(!photo.secure) {
-                    photo.torrentFileThumb = files.find(file => file.name === 'Thumbnail ' + photo.fileName);
+                    let localFiles = files;
+                    if(photo.isAudio) {
+                        localFiles = torrent.files;
+                    }
+                    photo.torrentFileThumb = localFiles.find(file => file.name === 'Thumbnail ' + photo.fileName);
                     photo.torrentFile = files.find(file => file.name === photo.fileName);
                 } else {
                     photo.torrentFile = files.find(file => file.name === torrent.name);
@@ -154,6 +158,25 @@ export default class TorrentAddition {
             thumbnailUrls = await Promise.all(tUrls);
         } catch(e) {
             Logger.warn('Cannot find thumbnail ' + e + ' ' + filesArr.map(item => item.name));
+        }
+
+        thumbnailUrls = thumbnailUrls.filter(item => item);
+
+        if(thumbnailUrls.length < 1) {
+            Logger.warn('No thumbnail found. ');
+            /*
+            //credits to https://media.prod.mdn.mozit.cloud/attachments/2012/07/09/3698/391aef19653595a663cc601c42a67116/image_upload_preview.html
+            const thumbFilter = /^(?:image\/bmp|image\/cis\-cod|image\/gif|image\/ief|image\/jpeg|image\/jpeg|image\/jpeg|image\/pipeg|image\/png|image\/svg\+xml|image\/tiff|image\/x\-cmu\-raster|image\/x\-cmx|image\/x\-icon|image\/x\-portable\-anymap|image\/x\-portable\-bitmap|image\/x\-portable\-graymap|image\/x\-portable\-pixmap|image\/x\-rgb|image\/x\-xbitmap|image\/x\-xpixmap|image\/x\-xwindowdump)$/i;
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                Logger.info('event ' + event.target.result);
+            };
+            if (thumbFilter.test(filesArr[0].type)) {
+                reader.readAsDataURL(filesArr[0]);
+            } else {
+                Logger.warn('No valid image for thumbnail.');
+            }
+            */
         }
 
         const thumbnailBlobs = await Promise.all(thumbnailUrls

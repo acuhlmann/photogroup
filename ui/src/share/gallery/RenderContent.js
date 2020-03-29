@@ -9,6 +9,7 @@ import Webamp from 'webamp';
 import {Icon} from "@material-ui/core";
 import { withSnackbar } from 'notistack';
 import PropTypes from "prop-types";
+import AudioMotionAnalyzer from 'audiomotion-analyzer';
 
 const styles = theme => ({
     horizontal: {
@@ -129,6 +130,14 @@ class RenderContent extends Component {
         this.webampNode = node;
     }
 
+    registerEqualizerNode(node) {
+        if(!node) {
+            return;
+        }
+
+        this.equalizerNode = node;
+    }
+
     openInWebamp() {
         //return;
         const webamp = this.webamp;
@@ -210,6 +219,23 @@ class RenderContent extends Component {
                     elem.loop = true;
                     //elem.play();
                 }
+            } else if(tile.isAudio) {
+                const audioMotion = new AudioMotionAnalyzer(
+                    this.equalizerNode,
+                    {
+                        source: elem,
+                        start: false
+                    }
+                );
+                this.equalizerNode.style.display = 'none';
+                elem.addEventListener('play', () => {
+                    this.equalizerNode.style.display = '';
+                    audioMotion.toggleAnalyzer(true);
+                });
+                elem.addEventListener('pause', () => {
+                    this.equalizerNode.style.display = 'none';
+                    audioMotion.toggleAnalyzer(false);
+                });
             }
         });
     }
@@ -280,7 +306,8 @@ class RenderContent extends Component {
             ? <img src={tile.img} alt={tile.fileName}
                    className={classes.wide}
                    onLoad={this.imgLoaded.bind(this, tile)} />
-            : <div className={classes.horizontal}>
+            : <div>
+                <div className={classes.horizontal}>
                 {tile.isAudio ? <div className={classes.horizontal}>
                         <Typography variant={"caption"}>Open in</Typography>
                         <IconButton color="primary"
@@ -296,8 +323,11 @@ class RenderContent extends Component {
                        ref={ref => this.handleContainerLoaded(tile, ref, tile.torrentFile)}>
                     </div>
                 {tile.isAudio ? <div ref={ref => this.handleWebamp(tile, ref, tile.torrentFile)}>
-                    </div> : ''};
-                </div>;
+                    </div> : ''}
+            </div>
+            {tile.isAudio ? <div ref={ref => this.registerEqualizerNode(ref)}>
+            </div> : ''}
+        </div>;
     }
 
     render() {
