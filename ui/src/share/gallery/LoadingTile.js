@@ -151,6 +151,13 @@ class LoadingTile extends Component {
             have = false;
         }
 
+        if(isRendering && tile.thumbnailFiles) {
+            const thumbFile = tile.thumbnailFiles.find(item => 'Thumbnail ' + tile.fileName === item.name);
+            if(thumbFile) {
+                previewThumbnail = URL.createObjectURL(thumbFile);
+            }
+        }
+
         return (
             <Paper style={{
                 margin: '10px',

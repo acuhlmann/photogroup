@@ -88,6 +88,47 @@ export default class TorrentAddition {
             torrent.on('metadata', () => {
 
                 Logger.info('add metadata ' + torrent.name);
+
+                //const files = fromCache ? torrent.files.filter(item => !item.name.startsWith('Thumbnail ')) : torrent.files;
+                const files = torrent.files;
+                photos = photos.map((photo, index) => {
+
+                    if(paths) {
+
+                        if(!photo.secure) {
+                            let localFiles = files;
+                            if(photo.isAudio) {
+                                localFiles = torrent.files;
+                            }
+                            const pathParts = paths[index].split('/');
+                            photo.torrentFileThumb = localFiles
+                                .find(file => file.path === pathParts[0] + '/' + 'Thumbnail ' + pathParts[1]);
+                            photo.torrentFile = files.find(file => file.path === paths[index]);
+                        } else {
+                            photo.torrentFile = files.find(file => file.path === paths[index]);
+                        }
+
+                    } else {
+                        if(!photo.secure) {
+                            let localFiles = files;
+                            if(photo.isAudio) {
+                                localFiles = torrent.files;
+                            }
+                            photo.torrentFileThumb = localFiles.find(file => file.name === 'Thumbnail ' + photo.fileName);
+                            photo.torrentFile = files.find(file => file.name === photo.fileName);
+                        } else {
+                            photo.torrentFile = files.find(file => file.name === torrent.name);
+                        }
+                    }
+                    photo.fromCache = fromCache;
+                    photo.loading = true;
+                    photo.rendering = false;
+                    photo.torrent = torrent;
+                    photo.url = torrent.magnetURI;
+                    this.emitter.emit('thumbsReady', photo.torrentFileThumb);
+                    return photo;
+                });
+
                 this.defineStrategy(torrent.files, torrent);
                 this.storeTorrent(torrent).then(torrent => {
                     this.addTorrent(torrent, photos, fromCache, paths);
@@ -120,46 +161,7 @@ export default class TorrentAddition {
         });
     }
 
-    addTorrent(torrent, photos, fromCache, paths) {
-
-        const files = fromCache ? torrent.files.filter(item => !item.name.startsWith('Thumbnail ')) : torrent.files;
-
-        photos = photos.map((photo, index) => {
-
-            if(paths) {
-
-                if(!photo.secure) {
-                    let localFiles = files;
-                    if(photo.isAudio) {
-                        localFiles = torrent.files;
-                    }
-                    const pathParts = paths[index].split('/');
-                    photo.torrentFileThumb = localFiles
-                        .find(file => file.path === pathParts[0] + '/' + 'Thumbnail ' + pathParts[1]);
-                    photo.torrentFile = files.find(file => file.path === paths[index]);
-                } else {
-                    photo.torrentFile = files.find(file => file.path === paths[index]);
-                }
-
-            } else {
-                if(!photo.secure) {
-                    let localFiles = files;
-                    if(photo.isAudio) {
-                        localFiles = torrent.files;
-                    }
-                    photo.torrentFileThumb = localFiles.find(file => file.name === 'Thumbnail ' + photo.fileName);
-                    photo.torrentFile = files.find(file => file.name === photo.fileName);
-                } else {
-                    photo.torrentFile = files.find(file => file.name === torrent.name);
-                }
-            }
-            photo.fromCache = fromCache;
-            photo.loading = true;
-            photo.rendering = false;
-            photo.torrent = torrent;
-            photo.url = torrent.magnetURI;
-            return photo;
-        });
+    addTorrent(torrent, photos) {
 
         this.emitter.emit('torrentReady', photos);
     }
@@ -255,13 +257,13 @@ export default class TorrentAddition {
 
         let filesArr = [...files];
         let origFilesArr = [...origFiles];
+        let thumbnailFiles = [];
 
         if(!secure && filesArr
             .filter(item => item)
             .every(item => (item.type.includes('image/') || item.type.includes('audio/')))
         ) {
 
-            let thumbnailFiles = [];
             if(filesArr.every(item => item.type.includes('image/'))) {
                 thumbnailFiles = await this.getPreviewFromImage(filesArr);
             } else if(filesArr.every(item => item.type.includes('audio/'))) {
@@ -289,7 +291,7 @@ export default class TorrentAddition {
                 peerId: this.master.client.peerId, owners: [],
                 file: origFile, origFile: secure ? file : file, secure: secure,
                 picDateTaken: secure ? moment(origFile.lastModified).format(format) : moment(file.lastModified).format(format),
-                fileType: origFile.type, fileName: origFile.name,
+                fileType: origFile.type, fileName: origFile.name, thumbnailFiles: thumbnailFiles
             };
         });
 
@@ -407,6 +409,7 @@ export default class TorrentAddition {
             delete serverPhoto.torrent;
             delete serverPhoto.torrentFile;
             delete serverPhoto.torrentFileThumb;
+            delete serverPhoto.thumbnailFiles;
             delete serverPhoto.picDateTakenDate;
             delete serverPhoto.picSummary;
             delete serverPhoto.metadata;
