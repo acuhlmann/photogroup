@@ -1,6 +1,5 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import classNames from 'classnames';
 
 import { withStyles } from '@material-ui/core/styles';
 
@@ -95,7 +94,7 @@ class PasswordInput extends Component {
             <div>
                 <TextField
                     id="outlined-adornment-password"
-                    className={classNames(classes.margin, classes.textField)}
+                    className={classes.textField}
                     variant="outlined"
                     type={this.state.showPassword ? 'text' : 'password'}
                     label="Password"

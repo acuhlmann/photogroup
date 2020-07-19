@@ -1,5 +1,4 @@
-import moment from 'moment';
-import momentDurationFormatSetup  from 'moment-duration-format';
+import {format, parse, getTime, toDate} from 'date-fns';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
 import * as exifr from 'exifr';
@@ -8,6 +7,7 @@ import Logger from 'js-logger';
 import * as mm from 'music-metadata-browser';
 import StringUtil from "../../util/StringUtil";
 import _ from 'lodash';
+import humanizeDuration from 'humanize-duration';
 
 export default class MetadataParser {
 
@@ -41,8 +41,9 @@ export default class MetadataParser {
                     const rating = _.get(metadata, ['common.rating']);
                     Logger.info('MetadataParser ' + Object.keys(metadata).join(',') + ' ' + (rating || ''));
 
-                    const duration = metadata.format.duration ? moment
-                        .duration(metadata.format.duration, "seconds").format() + ' sec' : '';
+                    const duration = metadata.format.duration
+                        ? humanizeDuration(metadata.format.duration * 1000, { round: true })
+                        : '';
                     const sampleRate = metadata.format.sampleRate
                         ? 'sample rate ' + metadata.format.sampleRate : '';
                     const bitrate = metadata.format.bitrate ?
@@ -137,13 +138,14 @@ export default class MetadataParser {
     sortByDate(tile, allMetadata) {
 
         const tileItem = tile;
-        const DateTimeOriginal = allMetadata['DateTimeOriginal'];
-        const timestamp = MetadataParser.toTimeStamp(DateTimeOriginal);
 
-        if(tileItem) {
-            const picDateTaken = MetadataParser.formatDateFromTimeStamp(timestamp);
-            tileItem.picDateTaken = picDateTaken === 'Invalid date' ? '' : picDateTaken;
-            tileItem.picDateTakenDate = timestamp.toDate();
+        if(tileItem) {        const DateTimeOriginal = allMetadata['DateTimeOriginal'];
+            if(DateTimeOriginal) {
+                const timestamp = MetadataParser.toTimeStamp(DateTimeOriginal);
+                const picDateTaken = MetadataParser.formatDateFromTimeStamp(timestamp);
+                tileItem.picDateTaken = picDateTaken === 'Invalid date' ? '' : picDateTaken;
+                tileItem.picDateTakenDate = toDate(timestamp);
+            }
 
             tileItem.picTitle = allMetadata['Title XMP'] ? allMetadata['Title XMP'] + ' ' : '';
             tileItem.picDesc = allMetadata['x-Description'] ? allMetadata['x-Description'] + ' ' : '';
@@ -164,7 +166,8 @@ export default class MetadataParser {
     }
 
     static toTimeStamp(date) {
-        return moment(date, "YYYY:MM:DD HH:mm:ss");
+        return getTime(date);
+        //return parse(date, "yyyy:MM:dd HH:mm:ss", new Date());
     }
 
     static toDate(date) {
@@ -176,7 +179,7 @@ export default class MetadataParser {
     }
 
     static formatDateFromTimeStamp(date) {
-        return date.format("HH:mm:ss MMM Do YY");
+        return format(date, "H:m MMM d y");
     }
 
     createMetadataSummary(rawMetadata, tile) {

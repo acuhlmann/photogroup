@@ -9,7 +9,7 @@ import TorrentCreator from "./TorrentCreator";
 import FileUtil from '../util/FileUtil';
 import platform from 'platform';
 import _ from 'lodash';
-import moment from 'moment';
+import humanizeDuration from 'humanize-duration'
 import MetadataParser from "../gallery/metadata/MetadataParser";
 
 export default class TorrentMaster {
@@ -266,9 +266,7 @@ export default class TorrentMaster {
         torrent.on('download', bytes => {
             //Logger.trace('just downloaded: ' + bytes)
             //Logger.trace('total downloaded: ' + torrent.downloaded)
-            const timeRemaining = moment
-                .duration(Math.round(torrent.timeRemaining / 1000), 'seconds')
-                .humanize(true);
+            const timeRemaining = humanizeDuration(Math.round(torrent.timeRemaining));
             //console.log('total timeRemaining: ' + timeRemaining);
             const progress = Math.round(torrent.progress * 100);
             const downloadSpeed = Math.round(torrent.downloadSpeed);

@@ -1,7 +1,7 @@
 import Logger from 'js-logger';
 import shortid  from 'shortid';
 import StringUtil from "../util/StringUtil";
-import moment from "moment";
+import {format} from 'date-fns';
 //import * as exifr from 'exifr';
 import exifr from 'exifr/dist/full.esm.mjs'
 import _ from 'lodash';
@@ -281,7 +281,7 @@ export default class TorrentAddition {
 
         Logger.info('seed ' + filesArr.map(item => item.name).join(', '));
 
-        const format = 'HH:mm:ss MMM Do YY';
+        const formatToken = 'H:m MMM d y';
         const photos = filesArr.map((file, index) => {
             const origFile = secure ? origFilesArr[index] : file;
             return {
@@ -290,7 +290,7 @@ export default class TorrentAddition {
                 seed: true, rendering: true,
                 peerId: this.master.client.peerId, owners: [],
                 file: origFile, origFile: secure ? file : file, secure: secure,
-                picDateTaken: secure ? moment(origFile.lastModified).format(format) : moment(file.lastModified).format(format),
+                picDateTaken: secure ? format(origFile.lastModified, formatToken) : format(file.lastModified, formatToken),
                 fileType: origFile.type, fileName: origFile.name, thumbnailFiles: thumbnailFiles
             };
         });

@@ -24,7 +24,7 @@ import FormGroup from '@material-ui/core/FormGroup';
 import FormControlLabel from '@material-ui/core/FormControlLabel';
 
 import RoomsService from '../RoomsService';
-import moment from "moment";
+import {format} from 'date-fns';
 import Typography from "@material-ui/core/Typography/Typography";
 import {withSnackbar} from "notistack";
 import update from "immutability-helper";
@@ -57,7 +57,7 @@ class SettingsView extends Component {
         this.master = master;
 
         Logger.setHandler((messages, context) => {
-            const date = moment().format("HH:mm:ss:SSS");
+            const date = format(new Date(), "HH:mm:ss:SSS");
             this.log(date + ' ' + messages[0], context.level.name);
         });
 
@@ -427,7 +427,7 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v6 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v7 {this.state.peerId}</Typography>
 
                         {messages}
 

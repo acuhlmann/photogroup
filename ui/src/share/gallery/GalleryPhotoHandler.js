@@ -1,4 +1,4 @@
-import moment from "moment";
+import { format, parse } from 'date-fns'
 import update from "immutability-helper";
 
 export default class GalleryPhotoHandler {
@@ -8,11 +8,11 @@ export default class GalleryPhotoHandler {
         this.emitter = emitter;
     }
 
-    sortPictures(photos, format) {
+    sortPictures(photos, formatToken) {
         if(!photos) return;
         photos.sort((a, b) => {
-            const dateA = moment(a.picDateTaken, format).toDate();
-            const dateB = moment(b.picDateTaken, format).toDate();
+            const dateA = parse(a.picDateTaken, formatToken, new Date());
+            const dateB = parse(b.picDateTaken, formatToken, new Date());
             return dateB - dateA;
         });
     }
@@ -20,7 +20,7 @@ export default class GalleryPhotoHandler {
     sync() {
         this.emitter.on('photos', event => {
 
-            const format = 'HH:mm:ss MMM Do YY';
+            const format = 'H:m MMM d y';
             if(event.type === 'all') {
 
                 this.view.setState(() => {
@@ -45,7 +45,7 @@ export default class GalleryPhotoHandler {
                             const tile = photo;
                             tile.loading = true;
                             if(!tile.picDateTaken && tile.file && tile.file.lastModified) {
-                                tile.picDateTaken = moment(tile.file.lastModified).format(format);
+                                tile.picDateTaken = format(tile.file.lastModified, format);
                             }
                             tiles = update(oldTiles, {$unshift: [tile]});
                         }
