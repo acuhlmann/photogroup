@@ -122,7 +122,7 @@ class App extends Component {
                     <div className="App">
 
                         <header className="App-header">
-                            <AppBar color="default">
+                            <AppBar position="static" color="default">
                                 <Toolbar>
                                     <div edge="start" style={{flexGrow: 1}}>
                                         <Typography variant="button" component="h2">

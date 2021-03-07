@@ -10,6 +10,7 @@ import {Icon} from "@material-ui/core";
 import { withSnackbar } from 'notistack';
 import PropTypes from "prop-types";
 import AudioMotionAnalyzer from 'audiomotion-analyzer';
+import FileUtil from "../util/FileUtil";
 
 const styles = theme => ({
     horizontal: {
@@ -185,60 +186,76 @@ class RenderContent extends Component {
         };
 
         const self = this;
-        file.appendTo(node, opts, (err, elem) => {
-            // file failed to download or display in the DOM
-            if (err) {
-                //Unsupported file type
-                const msgNode = document.createElement("div");                 // Create a <li> node
-                const msgNodeText = document.createTextNode(err.message);         // Create a text node
-                msgNode.appendChild(msgNodeText);
-                node.appendChild(msgNode);
+        //const complete = this.state.complete;
+        if(FileUtil.largerThanMaxBlobSize(tile.torrentFile.length)) {
+            const msg = 'File is ' + FileUtil.formatBytes(tile.torrentFile.length) + ' and too large to render inline, just download instead.';
+            Logger.warn(msg);
 
-                Logger.error('webtorrent.appendTo ' + err.message);
-                const {enqueueSnackbar, closeSnackbar} = self.props;
-                enqueueSnackbar(err.message, {
-                    variant: 'error',
-                    persist: false,
-                    autoHideDuration: 4000,
-                    action: (key) => (<Button className={self.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
-                });
-            }
+            /*const {enqueueSnackbar, closeSnackbar} = self.props;
+            enqueueSnackbar(msg, {
+                variant: 'warn',
+                persist: false,
+                autoHideDuration: 4000,
+                action: (key) => (<Button className={self.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
+            });*/
 
-            Logger.info('New DOM node with the content', elem);
-            if(elem && elem.style) {
-                elem.style.width = '100%';
-                //elem.style.height = '100%';
-            }
+            //self.setState({complete: true})
+        } else {
+            file.appendTo(node, opts, (err, elem) => {
+                // file failed to download or display in the DOM
+                if (err) {
+                    //Unsupported file type
+                    const msgNode = document.createElement("div");                 // Create a <li> node
+                    const msgNodeText = document.createTextNode(err.message);         // Create a text node
+                    msgNode.appendChild(msgNodeText);
+                    node.appendChild(msgNode);
 
-            this.getBlobAndReadMetadata(tile);
-
-            if(tile.isVideo) {
-                if(elem) {
-                    //elem.preload = 'none';
-                    //elem.autoplay = true;
-                    elem.loop = true;
-                    //elem.play();
+                    Logger.error('webtorrent.appendTo ' + err.message);
+                    const {enqueueSnackbar, closeSnackbar} = self.props;
+                    enqueueSnackbar(err.message, {
+                        variant: 'error',
+                        persist: false,
+                        autoHideDuration: 4000,
+                        action: (key) => (<Button className={self.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
+                    });
                 }
-            } else if(tile.isAudio) {
-                const audioMotion = new AudioMotionAnalyzer(
-                    this.equalizerNode,
-                    {
-                        source: elem,
-                        showScale: false,
-                        start: false
+
+                Logger.info('New DOM node with the content', elem);
+                if(elem && elem.style) {
+                    elem.style.width = '100%';
+                    //elem.style.height = '100%';
+                }
+
+                this.getBlobAndReadMetadata(tile);
+
+                if(tile.isVideo) {
+                    if(elem) {
+                        //elem.preload = 'none';
+                        //elem.autoplay = true;
+                        elem.loop = true;
+                        //elem.play();
                     }
-                );
-                this.equalizerNode.style.display = 'none';
-                elem.addEventListener('play', () => {
-                    this.equalizerNode.style.display = '';
-                    audioMotion.toggleAnalyzer(true);
-                });
-                elem.addEventListener('pause', () => {
+                } else if(tile.isAudio) {
+                    const audioMotion = new AudioMotionAnalyzer(
+                        this.equalizerNode,
+                        {
+                            source: elem,
+                            showScale: false,
+                            start: false
+                        }
+                    );
                     this.equalizerNode.style.display = 'none';
-                    audioMotion.toggleAnalyzer(false);
-                });
-            }
-        });
+                    elem.addEventListener('play', () => {
+                        this.equalizerNode.style.display = '';
+                        audioMotion.toggleAnalyzer(true);
+                    });
+                    elem.addEventListener('pause', () => {
+                        this.equalizerNode.style.display = 'none';
+                        audioMotion.toggleAnalyzer(false);
+                    });
+                }
+            });
+        }
     }
 
     snack(payload, type = 'info', persist = false, vertical = 'bottom') {

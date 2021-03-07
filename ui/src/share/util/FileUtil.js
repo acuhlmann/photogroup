@@ -3,13 +3,18 @@ import prettyBytes from 'pretty-bytes';
 
 export default class FileUtil {
 
+    static largerThanMaxBlobSize(size) {
+        //return size >= 200;
+        return size >= 200 * 1000 * 1000;
+    }
+
     static getFileSuffix(name) {
         if(!name) return name;
         const matched = name.match(/\.[0-9a-z]+$/i);
         return matched ? matched[0] : '';
     }
 
-    static  getFileNameWithoutSuffix(name) {
+    static getFileNameWithoutSuffix(name) {
         if(name) {
             const suffix = FileUtil.getFileSuffix(name);
             return _.replace(name, suffix, '');

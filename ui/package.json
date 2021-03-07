@@ -9,7 +9,7 @@
     "@material-ui/core": "^4.11.3",
     "@material-ui/icons": "^4.11.2",
     "@material-ui/styles": "^4.11.3",
-    "audiomotion-analyzer": "^2.5.0",
+    "audiomotion-analyzer": "^3.1.0",
     "butterchurn": "^2.6.7",
     "butterchurn-presets": "^2.4.7",
     "chirp-js-sdk": "^3.2.0",
@@ -50,7 +50,7 @@
     "shortid": "^2.2.16",
     "vis-react": "^0.5.1",
     "visibilityjs": "^2.0.2",
-    "webamp": "^1.4.2",
+    "webamp": "^1.4.3-beta.4",
     "webtorrent": "^0.108.6",
     "zxcvbn": "^4.4.2"
   },
