@@ -132,7 +132,7 @@ class LoaderView extends Component {
                 {show ? <div className={classes.progressContainer}>
                     <CircularProgress id="progressBar"
                                       className={classes.progress}
-                                      variant="static"
+                                      variant="determinate"
                                       value={progress}
                     />
                     <div className={classes.vertical}>

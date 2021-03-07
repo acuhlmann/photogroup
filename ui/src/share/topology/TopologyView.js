@@ -1,9 +1,9 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import {withStyles } from '@material-ui/core/styles';
-import ExpansionPanel from '@material-ui/core/ExpansionPanel';
-import ExpansionPanelSummary from '@material-ui/core/ExpansionPanelSummary';
-import ExpansionPanelDetails from '@material-ui/core/ExpansionPanelDetails';
+import Accordion from '@material-ui/core/Accordion';
+import AccordionSummary from '@material-ui/core/AccordionSummary';
+import AccordionDetails from '@material-ui/core/AccordionDetails';
 import Typography from '@material-ui/core/Typography';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import GroupRounded from '@material-ui/icons/GroupRounded';
@@ -575,15 +575,15 @@ class TopologyView extends Component {
 
         return (
             <Slide direction="left" in={visible && showTopology} mountOnEnter unmountOnExit>
-                <ExpansionPanel expanded={expandedTopology}
+                <Accordion expanded={expandedTopology}
                                            onChange={this.handleExpand('expandedTopology')}
                                            style={{
                                                marginBottom: '5px'
                                             }}>
-                <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     {this.buildHeader(classes, wtNumPeers)}
-                </ExpansionPanelSummary>
-                <ExpansionPanelDetails className={classes.content} style={{
+                </AccordionSummary>
+                <AccordionDetails className={classes.content} style={{
                     display: 'flex',
                     flexDirection: 'column'
                 }}>
@@ -591,8 +591,8 @@ class TopologyView extends Component {
                     <Graph ref={node => this.graph = node} getNetwork={this.setNetworkInstance}
                            graph={graph} options={this.state.options} events={this.state.events}
                            style={{width: "100%", height: "400px"}}/>
-                </ExpansionPanelDetails>
-                </ExpansionPanel>
+                </AccordionDetails>
+                </Accordion>
             </Slide>
         );
     }

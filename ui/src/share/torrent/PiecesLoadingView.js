@@ -9,9 +9,9 @@ import Paper from "@material-ui/core/Paper";
 import Logger from 'js-logger';
 import _ from 'lodash';
 
-import ExpansionPanel from '@material-ui/core/ExpansionPanel';
-import ExpansionPanelSummary from '@material-ui/core/ExpansionPanelSummary';
-import ExpansionPanelDetails from '@material-ui/core/ExpansionPanelDetails';
+import Accordion from '@material-ui/core/Accordion';
+import AccordionSummary from '@material-ui/core/AccordionSummary';
+import AccordionDetails from '@material-ui/core/AccordionDetails';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import Badge from "@material-ui/core/Badge";
 import StringUtil from "../util/StringUtil";

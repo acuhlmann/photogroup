@@ -3,9 +3,9 @@ import PropTypes from 'prop-types';
 
 import {withStyles} from '@material-ui/core/styles';
 
-import ExpansionPanel from '@material-ui/core/ExpansionPanel';
-import ExpansionPanelSummary from '@material-ui/core/ExpansionPanelSummary';
-import ExpansionPanelDetails from '@material-ui/core/ExpansionPanelDetails';
+import Accordion from '@material-ui/core/Accordion';
+import AccordionSummary from '@material-ui/core/AccordionSummary';
+import AccordionDetails from '@material-ui/core/AccordionDetails';
 import Typography from '@material-ui/core/Typography';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 
@@ -215,11 +215,11 @@ class MeView extends Component {
         return (
             <Slide direction="left" in={showMe} mountOnEnter unmountOnExit>
                 <span>
-                    <ExpansionPanel expanded={expandedMe} onChange={this.handleExpand('expandedMe')}>
-                        <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
+                    <Accordion expanded={expandedMe} onChange={this.handleExpand('expandedMe')}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                             {this.buildHeader(galleryHasImages, listView, classes)}
-                        </ExpansionPanelSummary>
-                        <ExpansionPanelDetails className={classes.content}>
+                        </AccordionSummary>
+                        <AccordionDetails className={classes.content}>
                             <div className={classes.verticalAndWide}>
                                 <Paper style={{
                                     margin: '10px',
@@ -231,8 +231,8 @@ class MeView extends Component {
                                     </div>
                                 </Paper>
                             </div>
-                        </ExpansionPanelDetails>
-                    </ExpansionPanel>
+                        </AccordionDetails>
+                    </Accordion>
                 </span>
             </Slide>
         );

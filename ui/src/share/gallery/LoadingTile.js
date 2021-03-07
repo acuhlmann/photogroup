@@ -191,7 +191,7 @@ class LoadingTile extends Component {
                                         <CircularProgress style={{
                                                               width: '35px', height: '35px'
                                                           }}
-                                                          variant="static"
+                                                          variant="determinate"
                                                           value={progress}
                                         />
                                         <Typography className={classes.progressPercentageText}

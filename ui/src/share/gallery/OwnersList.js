@@ -9,9 +9,9 @@ import Paper from "@material-ui/core/Paper";
 import Logger from 'js-logger';
 import _ from 'lodash';
 
-import ExpansionPanel from '@material-ui/core/ExpansionPanel';
-import ExpansionPanelSummary from '@material-ui/core/ExpansionPanelSummary';
-import ExpansionPanelDetails from '@material-ui/core/ExpansionPanelDetails';
+import Accordion from '@material-ui/core/Accordion';
+import AccordionSummary from '@material-ui/core/AccordionSummary';
+import AccordionDetails from '@material-ui/core/AccordionDetails';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import Badge from "@material-ui/core/Badge";
 import StringUtil from "../util/StringUtil";
@@ -245,15 +245,15 @@ class OwnersList extends Component {
         //Logger.info('tile.owners ' + JSON.stringify(otherPeers));
         return (
             this.hasOwners(otherPeers, peers) ?
-                <ExpansionPanel expanded={expanded}
+                <Accordion expanded={expanded}
                                 style={{
                                     marginBottom: '10px', marginLeft: '10px', marginRight: '10px'
                                 }}
                                 onChange={this.handleExpand('expanded')}>
-                    <ExpansionPanelSummary expandIcon={<ExpandMoreIcon />}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                         {this.buildHeader(otherPeers, peers, connectionTypes, classes)}
-                    </ExpansionPanelSummary>
-                    <ExpansionPanelDetails className={classes.content}>
+                    </AccordionSummary>
+                    <AccordionDetails className={classes.content}>
                         <Paper style={{
                             margin: '10px',
                             //padding: '10px'
@@ -264,8 +264,8 @@ class OwnersList extends Component {
                                 }
                             </List>
                         </Paper>
-                    </ExpansionPanelDetails>
-                </ExpansionPanel> : <Typography variant="caption">No peer has this image</Typography>
+                    </AccordionDetails>
+                </Accordion> : <Typography variant="caption">No peer has this image</Typography>
         );
     }
 }
