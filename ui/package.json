@@ -13,7 +13,7 @@
     "idb-kv-store": "^4.4.0",
     "indexeddb-chunk-store": "^2.2.1",
     "js-logger": "^1.4.1",
-    "lodash": "^4.17.14",
+    "lodash": "^4.17.21",
     "moment": "^2.22.2",
     "qrcode.react": "^0.9.3",
     "react": "^16.4.2",
