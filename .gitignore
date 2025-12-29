@@ -1,0 +1,13 @@
+.idea
+NUL
+photogroup.iml
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+server/secret/*
+server/config/C0058F76E8481F8C207781B1834C9B0C.txt
+server/ui
+ui/build
+bin

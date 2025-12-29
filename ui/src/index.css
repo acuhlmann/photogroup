@@ -1,0 +1,17 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif;
+}
+
+video {
+  width: 100%    !important;
+  height: auto   !important;
+}
+
+audio {
+  filter: sepia(20%) saturate(70%) grayscale(1) contrast(99%) invert(12%);
+  width: 200px;
+  height: 25px;
+}
+

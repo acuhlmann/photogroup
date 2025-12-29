@@ -1,0 +1,99 @@
+      <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json">
+    <link rel="shortcut icon" href="%PUBLIC_URL%/favicon.ico">
+    <link rel="apple-touch-icon" href="icons-512.png">
+    <!-- Tell the browser it's a PWA -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <!-- Tell iOS it's a PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- Make sure theme-color is defined -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="theme-color" content="#000000">
+    <meta name="description" content="PhotoGroup - Zero Install, Peer-to-Peer, Lossless Photo Group Collaboration.">
+    <meta property="og:title" content="PhotoGroup - Zero Install, Peer-to-Peer Photo Group Collaboration." />
+    <meta property="og:url" content="https://www.photogroup.network" />
+    <meta property="og:description" content="PhotoGroup - Zero Install, Peer-to-Peer, Lossless Photo Group Collaboration.">
+    <meta property="og:image" content="%PUBLIC_URL%/favicon.ico">
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
+
+    <!--
+      Notice the use of %PUBLIC_URL% in the tags above.
+      It will be replaced with the URL of the `public` folder during the build.
+      Only files inside the `public` folder can be referenced from the HTML.
+
+      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
+      work correctly both with client-side routing and a non-root public URL.
+      Learn how to configure a non-root public URL by running `npm run build`.
+    -->
+    <title>PhotoGroup - Zero Install, Peer-to-Peer Photo Group Collaboration.</title>
+
+    <style>
+      #snackbar {
+        visibility: hidden;
+        min-width: 250px;
+        margin-left: -125px;
+        background-color: #ffc107;
+        color: #fff;
+        text-align: center;
+        border-radius: 10px;
+        padding: 16px;
+        position: fixed;
+        z-index: 1;
+        left: 50%;
+        bottom: 30px;
+      }
+      #snackbar.show {
+        visibility: visible;
+        -webkit-animation: fadein 0.5s;
+        animation: fadein 0.5s;
+      }
+      #snackbar.hide {
+        visibility: hidden;
+      }
+      @-webkit-keyframes fadein {
+        from {
+          bottom: 0;
+          opacity: 0;
+        }
+        to {
+          bottom: 30px;
+          opacity: 1;
+        }
+      }
+      @keyframes fadein {
+        from {
+          bottom: 0;
+          opacity: 0;
+        }
+        to {
+          bottom: 30px;
+          opacity: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+    <!--<script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>-->
+
+    <!--<script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>-->
+    <script src="parsetorrent.js"></script>
+    <!--<script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.4/piexif.js"></script>-->
+
+    <script type="text/javascript" src="quiet.js"></script>
+    <script async type="text/javascript" src="quiet-emscripten.js"></script>
+
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <div id="root"></div>
+
+    <div id="snackbar">A new version of this app is available. Click <a id="reload" href="javascript:void(0);">here</a> to update.</div>
+  </body>
+</html>
