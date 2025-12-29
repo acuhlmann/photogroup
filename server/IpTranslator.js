@@ -1,5 +1,5 @@
 //-----------------Custom WebTorrent Tracker - ICE Events
-const rp = require('request-promise');
+const axios = require('axios');
 const isLocal = require('is-local-ip');
 const _ = require('lodash');
 
@@ -45,10 +45,17 @@ module.exports = class IpTranslator {
                 if(isOnline) {
 
                     const key = '8f125144341210254a52ef8d24bcc4dc';
-                    return rp('https://api.ipstack.com/' + ip + '?access_key=' + key
-                        + '&hostname=1&security=1&output=json&fields=ip,type,hostname,country_code,city,region_name,location.country_flag_emoji,connection.isp')
-                        .then(function (result) {
-                            const json = JSON.parse(result);
+                    return axios.get('https://api.ipstack.com/' + ip, {
+                        params: {
+                            access_key: key,
+                            hostname: 1,
+                            security: 1,
+                            output: 'json',
+                            fields: 'ip,type,hostname,country_code,city,region_name,location.country_flag_emoji,connection.isp'
+                        }
+                    })
+                        .then(function (response) {
+                            const json = response.data;
                             IpTranslator.lookedUpIPs.set(ip, json);
                             return resolve(json);
                         })

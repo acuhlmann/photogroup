@@ -84,10 +84,6 @@ class FrontView extends Component {
                     </span>
                     <span className={classes.horizontal}>
                         <Typography variant={"body2"}>Listening to an audio signal</Typography>
-                        <IconButton color="primary"
-                            onClick={() => master.emitter.emit('openRecorderChirp')}>
-                            <SettingsVoiceRounded />
-                        </IconButton>
                         <IconButton color="secondary"
                             onClick={() => master.emitter.emit('openRecorder')}>
                             <SettingsVoiceRounded />

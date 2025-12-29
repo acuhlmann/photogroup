@@ -19,7 +19,6 @@ import AudiotrackRounded from '@material-ui/icons/AudiotrackRounded';
 import copy from "clipboard-copy";
 import QrReader from 'react-qr-reader'
 import Logger from 'js-logger';
-import ChirpSDK from 'chirp-js-sdk';
 import Uploader from "./Uploader";
 //import Slide from '@material-ui/core/Slide';
 import Fade from '@material-ui/core/Fade';
@@ -102,12 +101,13 @@ class AddPeersView extends Component {
             });
         });
 
+        // ChirpSDK removed - feature no longer available
         props.master.emitter.on('openRecorderChirp', () => {
-            this.listenAudioChirp();
+            Logger.warn('ChirpSDK feature has been removed');
             this.setState({
                 visible: true,
                 open: true,
-                openRecorder: true,
+                openRecorder: false,
                 audioType: 'primary'
             });
         });
@@ -121,55 +121,13 @@ class AddPeersView extends Component {
         this.handleScanOrSound = this.handleScanOrSound.bind(this)
     }
 
+    // ChirpSDK methods removed - feature no longer available
     listenAudioChirp() {
-
-        const { Chirp, toAscii, CHIRP_SDK_STATE } = window.ChirpSDK;
-
-        const self = this;
-        Chirp({
-            key: '62c52CE2027c8eac9A4D6Add1',
-            onStateChanged: (previous, current) => {
-                if (current === CHIRP_SDK_STATE.STOPPED) {
-                    Logger.info('ChirpSDK has stopped')
-                }
-            },
-            onSending: data => {
-                Logger.info('Sending data...')
-            },
-            onSent: data => {
-                Logger.info('Sent data')
-            },
-            onReceiving: () => {
-                Logger.info('Receiving data...')
-            },
-            onReceived: data => {
-                if (data.length > 0) {
-                    const result = toAscii(data);
-                    Logger.info(result);
-                    const url = self.getFullUrl(result);
-                    self.handleScanOrSound(url, true);
-                } else {
-                    Logger.error('Decode failed');
-                }
-            }
-        }).then(sdk => sdk.start()).catch(Logger.error);
+        Logger.warn('ChirpSDK feature has been removed');
     }
 
     sendAudioChirp(id) {
-        //const { Chirp } = window.ChirpSDK;
-
-        const chirp = new ChirpSDK('62c52CE2027c8eac9A4D6Add1');
-        const payload = new TextEncoder('utf-8').encode(id);
-        chirp.send(payload).then(() => {
-            Logger.info('sent ' + payload);
-        }).catch(Logger.error);
-        /*Chirp({ key: '62c52CE2027c8eac9A4D6Add1' })
-            .then(sdk => { sdk.start()
-                .then(() => {
-                const rc = sdk.send(id);
-                if (rc !== 0) Logger.error(sdk.errorToString(rc))
-            }).catch(Logger.error)
-        }).catch(Logger.error);*/
+        Logger.warn('ChirpSDK feature has been removed');
     }
 
     listenOrPlaySound(play = false, text = '', profileName = 'audible') {
@@ -399,10 +357,6 @@ class AddPeersView extends Component {
                                     </span> : ''}
                                     <span className={classes.horizontal}>
                                         <Typography variant={"body2"}>Play Audio Signal to Listening Peers</Typography>
-                                        <IconButton color="primary"
-                                            onClick={() => this.sendAudioChirp(master.service.id) }>
-                                            <AudiotrackRounded />
-                                        </IconButton>
                                         <IconButton color="secondary"
                                                     onClick={() => this.listenOrPlaySound(true, url, 'audible') }>
                                             <AudiotrackRounded />
