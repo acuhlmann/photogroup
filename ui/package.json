@@ -57,6 +57,10 @@
     "build": "cross-env NODE_OPTIONS=--openssl-legacy-provider react-scripts build",
     "test": "react-scripts test --env=jsdom",
     "test:debug": "react-scripts --inspect-brk test --runInBand",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:headed": "playwright test --headed",
     "eject": "react-scripts eject"
   },
   "license": "MIT",
@@ -67,6 +71,7 @@
     "not op_mini all"
   ],
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "cross-env": "^10.1.0"
   }
 }
