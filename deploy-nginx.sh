@@ -2,20 +2,56 @@
 
 ZONE=asia-east2-a
 INSTANCE=main
-PROJECT=photogroup-223501
-
+PROJECT=photogroup-215600
 DOMAIN=photogroup.network
-DOMAIN_=photogroup_network
 
-#configure ssl
-gcloud compute scp ./server/secret/cert/$DOMAIN_.crt $INSTANCE:./ --zone $ZONE
-gcloud compute scp ./server/secret/cert/$DOMAIN_.key $INSTANCE:./ --zone $ZONE
-gcloud compute ssh $INSTANCE --zone $ZONE --command "sudo mv ./$DOMAIN_.crt /etc/ssl/private/$DOMAIN"
-gcloud compute ssh $INSTANCE --zone $ZONE --command "sudo mv ./$DOMAIN_.key /etc/ssl/private/$DOMAIN"
+echo "Deploying nginx configuration..."
+echo "Project: $PROJECT"
+echo "Instance: $INSTANCE"
+echo "Zone: $ZONE"
+echo "Domain: $DOMAIN"
+echo ""
 
-#configure nginx
-#gcloud compute ssh $INSTANCE --zone $ZONE --command "sudo mkdir /etc/nginx/sites-enabled/$DOMAIN"
-gcloud compute scp ./server/config/$DOMAIN $INSTANCE:/etc/nginx/sites-available --zone $ZONE
-gcloud compute ssh $INSTANCE --zone $ZONE --command "sudo systemctl restart nginx"
+# Verify instance exists
+if ! gcloud compute instances describe $INSTANCE --project $PROJECT --zone $ZONE &>/dev/null; then
+    echo "ERROR: VM instance '$INSTANCE' not found in project '$PROJECT' zone '$ZONE'"
+    echo "Create the VM first using: ./create-vm.sh"
+    exit 1
+fi
 
-#sudo systemctl enable nginx
+# Verify nginx config file exists
+if [ ! -f "./server/config/$DOMAIN" ]; then
+    echo "ERROR: nginx config file not found: ./server/config/$DOMAIN"
+    exit 1
+fi
+
+# Copy nginx config to sites-available
+echo "Uploading nginx configuration..."
+gcloud compute scp ./server/config/$DOMAIN $INSTANCE:/tmp/$DOMAIN --project $PROJECT --zone $ZONE
+
+# Move config to sites-available
+echo "Installing nginx configuration..."
+gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo mv /tmp/$DOMAIN /etc/nginx/sites-available/$DOMAIN"
+
+# Remove default nginx site if it exists
+gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo rm -f /etc/nginx/sites-enabled/default" || true
+
+# Enable site if not already enabled
+echo "Enabling nginx site..."
+gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/$DOMAIN"
+
+# Test nginx configuration
+echo "Testing nginx configuration..."
+if ! gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo nginx -t"; then
+    echo "ERROR: nginx configuration test failed!"
+    exit 1
+fi
+
+# Restart nginx
+echo "Restarting nginx..."
+gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo systemctl restart nginx"
+
+echo ""
+echo "Nginx configuration deployed successfully!"
+echo ""
+echo "Note: If SSL certificates are not yet set up, run: ./setup-ssl.sh"
