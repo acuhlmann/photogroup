@@ -23,7 +23,7 @@ module.exports = class Topology {
             connection.toPort = typeTo.port;
         }
 
-        if(!connection.from && !typeFrom && typeTo.type) {
+        if(!connection.from && !typeFrom && typeTo?.type) {
             typeFrom = fromPeer.networkChain.find(item => item.type === typeTo.type);
             connection.from = typeFrom.ip;
             connection.fromPort = typeFrom.port;

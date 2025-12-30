@@ -41,33 +41,40 @@ module.exports = class IpTranslator {
 
             } else {
 
-                const isOnline = true;
-                if(isOnline) {
-
-                    const key = '8f125144341210254a52ef8d24bcc4dc';
-                    return axios.get('https://api.ipstack.com/' + ip, {
-                        params: {
-                            access_key: key,
-                            hostname: 1,
-                            security: 1,
-                            output: 'json',
-                            fields: 'ip,type,hostname,country_code,city,region_name,location.country_flag_emoji,connection.isp'
-                        }
-                    })
-                        .then(function (response) {
-                            const json = response.data;
-                            IpTranslator.lookedUpIPs.set(ip, json);
-                            return resolve(json);
-                        })
-                        .catch(function (err) {
-                            // Crawling failed...
-                            console.error('api.ipstack err' + err);
-                            reject(err)
-                        });
-                } else {
-
-                    Promise.resolve(IpTranslator.createEmptyIpObj(ip));
-                }
+                // IP to DNS translation via ipstack.com is disabled due to rate limiting
+                // This is optional functionality - just return empty IP object
+                // const isOnline = true;
+                // if(isOnline) {
+                //
+                //     const key = '8f125144341210254a52ef8d24bcc4dc';
+                //     return axios.get('https://api.ipstack.com/' + ip, {
+                //         params: {
+                //             access_key: key,
+                //             hostname: 1,
+                //             security: 1,
+                //             output: 'json',
+                //             fields: 'ip,type,hostname,country_code,city,region_name,location.country_flag_emoji,connection.isp'
+                //         }
+                //     })
+                //         .then(function (response) {
+                //             const json = response.data;
+                //             IpTranslator.lookedUpIPs.set(ip, json);
+                //             return resolve(json);
+                //         })
+                //         .catch(function (err) {
+                //             // Crawling failed...
+                //             console.error('api.ipstack err' + err);
+                //             reject(err)
+                //         });
+                // } else {
+                //
+                //     Promise.resolve(IpTranslator.createEmptyIpObj(ip));
+                // }
+                
+                // Return empty IP object instead of calling ipstack API
+                const ipObj = IpTranslator.createEmptyIpObj(ip);
+                IpTranslator.lookedUpIPs.set(ip, ipObj);
+                return resolve(ipObj);
             }
         });
     }
