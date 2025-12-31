@@ -12,3 +12,5 @@ server/ui
 ui/build
 bin
 google-cloud-sdk
+github-actions-key.json
+*.json.key
