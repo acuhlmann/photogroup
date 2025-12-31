@@ -79,6 +79,10 @@ module.exports = class Rooms {
         app.post('/api/rooms/', (request, response) => {
 
             const id = request.body.id;
+            if (!request.body.peer) {
+                return response.status(400).send({ error: 'Peer data is required' });
+            }
+
             const room = {
                 id: id,
                 photos: [],

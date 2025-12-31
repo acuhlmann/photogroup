@@ -61,6 +61,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:headed": "playwright test --headed",
+    "test:e2e:side-by-side": "cross-env SIDE_BY_SIDE=true HEADED=true playwright test --headed",
+    "test:e2e:ci": "cross-env CI=true playwright test --project=chromium",
     "eject": "react-scripts eject"
   },
   "license": "MIT",
@@ -91,6 +93,7 @@
     },
     "semver": "^7.6.3",
     "braces": "^3.0.3",
-    "micromatch": "^4.0.8"
+    "micromatch": "^4.0.8",
+    "ejs": "^3.1.10"
   }
 }
