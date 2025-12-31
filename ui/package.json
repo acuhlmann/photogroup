@@ -76,5 +76,21 @@
   },
   "engines": {
     "node": ">=24.0.0"
+  },
+  "overrides": {
+    "immer": "^10.0.0",
+    "shell-quote": "^1.8.1",
+    "tmp": "^0.2.1",
+    "loader-utils": "^2.0.4",
+    "minimatch": "^3.1.2",
+    "browserslist": "^4.23.0",
+    "cross-spawn": "^7.0.6",
+    "axios": "^1.7.9",
+    "online-js": {
+      "axios": "^1.7.9"
+    },
+    "semver": "^7.6.3",
+    "braces": "^3.0.3",
+    "micromatch": "^4.0.8"
   }
 }
