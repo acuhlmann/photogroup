@@ -45,7 +45,7 @@
     "react-window": "^1.8.6",
     "render-media": "^3.4.3",
     "sdp-transform": "^2.14.1",
-    "shortid": "^2.2.16",
+    "shortid": "^2.2.17",
     "vis-react": "^0.5.1",
     "visibilityjs": "^2.0.2",
     "webamp": "^1.4.3-beta.4",
