@@ -17,22 +17,19 @@ if ! gcloud compute instances describe $INSTANCE --project $PROJECT --zone $ZONE
     exit 1
 fi
 
-# Clean up old deployment directory
-echo "Cleaning up old deployment..."
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "rm -rf ~/pg" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
+# Clean up old deployment directory and stop processes (combined for efficiency)
+echo "Cleaning up old deployment and stopping processes..."
+gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "
+  rm -rf ~/pg && mkdir -p ~/pg
+  sudo lsof -ti:8081 | sudo xargs kill -9 2>/dev/null || true
+  sudo lsof -ti:9000 | sudo xargs kill -9 2>/dev/null || true
+  sudo pm2 stop app 2>/dev/null || true
+  sudo pm2 delete app 2>/dev/null || true
+" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
 
-# Create deployment directory
-echo "Creating deployment directory..."
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "mkdir -p ~/pg" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
-
-# Upload application files
-echo "Uploading application files..."
-gcloud compute scp --recurse ./bin/* $INSTANCE:~/pg/ --project $PROJECT --zone $ZONE 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
-
-# Stop any existing processes on ports 8081 and 9000
-echo "Stopping existing processes..."
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo lsof -ti:8081 | sudo xargs kill -9 2>/dev/null || true" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo lsof -ti:9000 | sudo xargs kill -9 2>/dev/null || true" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
+# Upload application files with compression
+echo "Uploading application files (this may take 1-2 minutes)..."
+gcloud compute scp --recurse --compress ./bin/* $INSTANCE:~/pg/ --project $PROJECT --zone $ZONE 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
 
 # Check and update Node.js version if needed (requires >=24.0.0)
 echo "Checking Node.js version..."
@@ -47,22 +44,14 @@ else
     echo "Node.js version is $NODE_VERSION_OUTPUT (OK)"
 fi
 
-# Install dependencies
-echo "Installing dependencies..."
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "cd ~/pg && npm install --production" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
-
-# Stop and remove existing PM2 process
-echo "Stopping existing PM2 process..."
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo pm2 stop app 2>/dev/null || true" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo pm2 delete app 2>/dev/null || true" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
-
-# Start application with PM2
-echo "Starting application with PM2..."
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "cd ~/pg && sudo pm2 start app.js --name app" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
-
-# Save PM2 configuration
-echo "Saving PM2 configuration..."
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo pm2 save" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
+# Install dependencies and start application (combined for efficiency)
+echo "Installing dependencies and starting application..."
+gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "
+  cd ~/pg
+  npm install --production --prefer-offline --no-audit --no-fund
+  sudo pm2 start app.js --name app
+  sudo pm2 save
+" 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
 
 echo ""
 echo "Application deployed successfully!"
