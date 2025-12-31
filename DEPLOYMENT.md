@@ -27,7 +27,7 @@ This script will:
 - Create an e2-micro VM instance named `main` in zone `asia-east2-a`
 - Create a static IP address
 - Set up firewall rules for ports 80, 443, 8081, and 9000
-- Install Node.js 18.x LTS, PM2, nginx, and build tools via startup script
+- Install Node.js 24.x LTS (latest stable LTS), PM2, nginx, and build tools via startup script
 - Display the static IP address for DNS configuration
 
 **Alternative manual creation** (if you prefer not to use the script):

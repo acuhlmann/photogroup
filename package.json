@@ -16,5 +16,8 @@
     "deploy-only": "cd server && npm run deploy"
   },
   "author": "Alex Uhlmann",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  }
 }
