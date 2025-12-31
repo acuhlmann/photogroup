@@ -103,6 +103,76 @@ This will:
 
 ## Deployment Process
 
+### Automated Deployment via GitHub Actions
+
+The project includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that automatically deploys the application to the GCP VM on:
+- Push to `main` or `master` branch
+- Pull request merge to `main` or `master`
+- Manual trigger via `workflow_dispatch`
+
+#### Setup GitHub Actions
+
+1. **Create a GCP Service Account**:
+   ```bash
+   gcloud iam service-accounts create github-actions-deploy \
+     --project photogroup-215600 \
+     --display-name "GitHub Actions Deploy"
+   ```
+
+2. **Grant necessary permissions**:
+   ```bash
+   gcloud projects add-iam-policy-binding photogroup-215600 \
+     --member="serviceAccount:github-actions-deploy@photogroup-215600.iam.gserviceaccount.com" \
+     --role="roles/compute.instanceAdmin.v1"
+   
+   gcloud projects add-iam-policy-binding photogroup-215600 \
+     --member="serviceAccount:github-actions-deploy@photogroup-215600.iam.gserviceaccount.com" \
+     --role="roles/compute.osLogin"
+   ```
+
+3. **Create and download service account key**:
+   ```bash
+   gcloud iam service-accounts keys create github-actions-key.json \
+     --iam-account=github-actions-deploy@photogroup-215600.iam.gserviceaccount.com \
+     --project photogroup-215600
+   ```
+
+4. **Add secret to GitHub**:
+   - Go to your GitHub repository → Settings → Secrets and variables → Actions
+   - Click "New repository secret"
+   - Name: `GCP_SA_KEY`
+   - Value: Copy the entire contents of `github-actions-key.json`
+   - Click "Add secret"
+
+5. **Delete the local key file** (for security):
+   ```bash
+   rm github-actions-key.json
+   ```
+
+6. **Add Twilio secrets to GitHub** (required for WebRTC/TURN functionality):
+   - Go to your GitHub repository → Settings → Secrets and variables → Actions
+   - Click "New repository secret"
+   - Name: `TWILIO_ACCOUNT_SID`
+   - Value: Your Twilio Account SID (from `server/secret/index.js` or Twilio console)
+   - Click "Add secret"
+   - Click "New repository secret" again
+   - Name: `TWILIO_AUTH_TOKEN`
+   - Value: Your Twilio Auth Token (from `server/secret/index.js` or Twilio console)
+   - Click "Add secret"
+
+   **Note**: The workflow will automatically create `server/secret/index.js` from these secrets during deployment. This file is gitignored and should never be committed to the repository.
+
+The workflow will automatically:
+- Install dependencies
+- Create `server/secret/index.js` from GitHub Secrets
+- Build the UI
+- Prepare deployment files
+- Authenticate with GCP
+- Deploy nginx configuration
+- Deploy the application
+
+### Manual Deployment
+
 ### 1. Build the UI
 ```bash
 npm run build
