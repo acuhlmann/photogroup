@@ -41,40 +41,50 @@ module.exports = class IpTranslator {
 
             } else {
 
-                // IP to DNS translation via ipstack.com is disabled due to rate limiting
-                // This is optional functionality - just return empty IP object
-                // const isOnline = true;
-                // if(isOnline) {
-                //
-                //     const key = '8f125144341210254a52ef8d24bcc4dc';
-                //     return axios.get('https://api.ipstack.com/' + ip, {
-                //         params: {
-                //             access_key: key,
-                //             hostname: 1,
-                //             security: 1,
-                //             output: 'json',
-                //             fields: 'ip,type,hostname,country_code,city,region_name,location.country_flag_emoji,connection.isp'
-                //         }
-                //     })
-                //         .then(function (response) {
-                //             const json = response.data;
-                //             IpTranslator.lookedUpIPs.set(ip, json);
-                //             return resolve(json);
-                //         })
-                //         .catch(function (err) {
-                //             // Crawling failed...
-                //             console.error('api.ipstack err' + err);
-                //             reject(err)
-                //         });
-                // } else {
-                //
-                //     Promise.resolve(IpTranslator.createEmptyIpObj(ip));
-                // }
-                
-                // Return empty IP object instead of calling ipstack API
-                const ipObj = IpTranslator.createEmptyIpObj(ip);
-                IpTranslator.lookedUpIPs.set(ip, ipObj);
-                return resolve(ipObj);
+                // Using ip-api.com (free tier: 45 requests/minute, no API key required)
+                // Alternative free services: ipapi.co (30k/month), ipwhois.io (10k/month)
+                const isOnline = true;
+                if(isOnline) {
+                    
+                    return axios.get('https://ip-api.com/json/' + ip, {
+                        params: {
+                            fields: 'status,message,country,countryCode,region,regionName,city,isp,org,as,query,reverse'
+                        },
+                        timeout: 5000 // 5 second timeout
+                    })
+                        .then(function (response) {
+                            const json = response.data;
+                            
+                            // Transform ip-api.com response to match expected format
+                            const transformed = {
+                                ip: json.query || ip,
+                                hostname: json.reverse || '',
+                                country_code: json.countryCode || null,
+                                city: json.city || null,
+                                region_name: json.regionName || null,
+                                location: {
+                                    country_flag_emoji: json.countryCode ? IpTranslator.getCountryFlagEmoji(json.countryCode) : null
+                                },
+                                connection: {
+                                    isp: json.isp || json.org || null
+                                }
+                            };
+                            
+                            IpTranslator.lookedUpIPs.set(ip, transformed);
+                            return resolve(transformed);
+                        })
+                        .catch(function (err) {
+                            // API call failed - return empty IP object instead of failing
+                            console.warn('ip-api.com lookup failed for ' + ip + ':', err.message);
+                            const ipObj = IpTranslator.createEmptyIpObj(ip);
+                            IpTranslator.lookedUpIPs.set(ip, ipObj);
+                            return resolve(ipObj);
+                        });
+                } else {
+                    const ipObj = IpTranslator.createEmptyIpObj(ip);
+                    IpTranslator.lookedUpIPs.set(ip, ipObj);
+                    return resolve(ipObj);
+                }
             }
         });
     }
@@ -84,11 +94,28 @@ module.exports = class IpTranslator {
             "ip": ip,
             "hostname": isLocal(ip) ? 'localhost' : '',
             "country_code": null,
+            "city": null,
             "region_name": null,
             "location": {
                 "country_flag_emoji": null
+            },
+            "connection": {
+                "isp": null
             }
         };
+    }
+
+    static getCountryFlagEmoji(countryCode) {
+        // Convert ISO 3166-1 alpha-2 country code to flag emoji
+        // Each letter is converted to its regional indicator symbol
+        if (!countryCode || countryCode.length !== 2) return null;
+        
+        const codePoints = countryCode
+            .toUpperCase()
+            .split('')
+            .map(char => 127397 + char.charCodeAt(0));
+        
+        return String.fromCodePoint(...codePoints);
     }
 
     static enrichNetworkChainIPs(chain) {
