@@ -52,11 +52,26 @@ class FrontView extends Component {
         const master = this.props.master;
         master.emitter.emit('openRoomStart');
 
-        await master.findExistingContent(master.service.createRoom, true);
-        master.service.changeUrl('room', master.service.id);
+        try {
+            await master.findExistingContent(master.service.createRoom, true);
+            master.service.changeUrl('room', master.service.id);
 
-        master.emitter.emit('openRoomEnd');
-        master.emitter.emit('readyToUpload');
+            master.emitter.emit('openRoomEnd');
+            master.emitter.emit('readyToUpload');
+        } catch (error) {
+            console.error('Failed to create room:', error);
+            // Emit error event so other components can show user feedback
+            master.emitter.emit('roomCreationError', error);
+            // Still emit openRoomEnd to reset UI state
+            master.emitter.emit('openRoomEnd');
+            
+            // Show error message to user
+            if (error.message && error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                master.emitter.emit('showError', 'Cannot connect to server. Please make sure the backend server is running on port 8081.');
+            } else {
+                master.emitter.emit('showError', `Failed to create room: ${error.message || 'Unknown error'}`);
+            }
+        }
     }
 
     buildView(master, show, classes) {

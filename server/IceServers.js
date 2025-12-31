@@ -19,6 +19,11 @@ module.exports = class IceServers {
     }
 
     start() {
+        // Skip Twilio initialization in test mode
+        if (process.env.NODE_ENV === 'test') {
+            this.registerGet();
+            return;
+        }
 
         const secret = require('./secret');
 

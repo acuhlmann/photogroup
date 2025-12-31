@@ -11,7 +11,7 @@ import FrontView from "./FrontView";
 import MeView from "./MeView";
 import TopologyView from './topology/TopologyView';
 import WebTorrent from 'webtorrent';
-import Online from 'online-js'
+// import Online from 'online-js' // Commented out - not currently used and causes axios import issues
 
 const styles = theme => ({
     typography: {
@@ -51,6 +51,14 @@ class ShareCanvas extends Component {
             });
         }
 
+        // Listen for error events to show user feedback
+        props.master.emitter.on('showError', (message) => {
+            enqueueSnackbar(message, {
+                variant: 'error',
+                autoHideDuration: 6000
+            });
+        });
+
         //this.checkOnline();
 
         window.addEventListener('beforeinstallprompt', e => {
@@ -82,19 +90,18 @@ class ShareCanvas extends Component {
     }
 
     checkOnline() {
-
-        const statusChecker = Online();
-
-        const onlineCallback = (status) => {
-            if (status === true) {
-                Logger.info('Connected!')
-                //this.snack('Connected', 'warn', false, 'top');
-            } else {
-                Logger.warn('Disconnected!')
-                this.snack('Disconnected', 'warning', false, 'top');
-            }
-        };
-        statusChecker.onUpdateStatus(onlineCallback);
+        // Online import is commented out due to axios compatibility issues
+        // const statusChecker = Online();
+        // const onlineCallback = (status) => {
+        //     if (status === true) {
+        //         Logger.info('Connected!')
+        //         //this.snack('Connected', 'warn', false, 'top');
+        //     } else {
+        //         Logger.warn('Disconnected!')
+        //         this.snack('Disconnected', 'warning', false, 'top');
+        //     }
+        // };
+        // statusChecker.onUpdateStatus(onlineCallback);
 
         window.addEventListener('load', () => {
             const online = navigator.onLine;

@@ -19,14 +19,18 @@ module.exports = class Topology {
             typeTo = toPeer.networkChain.find(item => item.ip === connection.to);
         } else if(!connection.to && typeFrom && typeFrom.type) {
             typeTo = toPeer.networkChain.find(item => item.type === typeFrom.type);
-            connection.to = typeTo.ip;
-            connection.toPort = typeTo.port;
+            if(typeTo) {
+                connection.to = typeTo.ip;
+                connection.toPort = typeTo.port;
+            }
         }
 
-        if(!connection.from && !typeFrom && typeTo.type) {
+        if(!connection.from && !typeFrom && typeTo && typeTo.type) {
             typeFrom = fromPeer.networkChain.find(item => item.type === typeTo.type);
-            connection.from = typeFrom.ip;
-            connection.fromPort = typeFrom.port;
+            if(typeFrom) {
+                connection.from = typeFrom.ip;
+                connection.fromPort = typeFrom.port;
+            }
         }
         if(typeFrom && typeTo) {
             if(typeFrom.typeDetail === 'host' && typeTo.typeDetail === 'host') {

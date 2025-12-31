@@ -85,6 +85,20 @@ class Gallery extends Component {
 
         this.photoHandler = new GalleryPhotoHandler(this, emitter);
         this.photoHandler.sync();
+        
+        // Emit initial gallery state
+        this.updateGalleryState();
+    }
+
+    updateGalleryState() {
+        const {master} = this.props;
+        const {tiles} = this.state;
+        const hasImages = tiles && tiles.find(tile => !tile.isLoading && tile.img);
+        if(hasImages) {
+            master.emitter.emit('galleryHasImages', true);
+        } else {
+            master.emitter.emit('galleryHasImages', false);
+        }
     }
 
     addMediaToDom(photos) {
@@ -264,16 +278,17 @@ class Gallery extends Component {
         }
     }
 
+    componentDidUpdate(prevProps, prevState) {
+        // Emit gallery state changes after render, not during render
+        if (prevState.tiles !== this.state.tiles) {
+            this.updateGalleryState();
+        }
+    }
+
     render() {
         const {classes, master} = this.props;
         const {tiles} = this.state;
 
-        const hasImages = tiles && tiles.find(tile => !tile.isLoading && tile.img);
-        if(hasImages) {
-            master.emitter.emit('galleryHasImages', true);
-        } else {
-            master.emitter.emit('galleryHasImages', false);
-        }
         return (
             <div>
                 <div>

@@ -44,7 +44,12 @@ const started = new Promise((resolve, reject) => {
             const host = server.address().address;
             const actualPort = server.address().port;
             console.log(`App started at ${host}:${actualPort}`);
+            resolve();
         });
+    } else {
+        // When required as a module (e.g., in tests), resolve immediately
+        // Give a small delay to allow initialization to complete
+        setImmediate(() => resolve());
     }
 });
 

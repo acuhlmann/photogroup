@@ -38,7 +38,7 @@ class App extends Component {
     constructor(props) {
         super(props);
 
-        const { classes } = props;
+        const { classes, theme } = props;
         this.classes = classes;
 
         //Logger.useDefaults();
@@ -48,11 +48,19 @@ class App extends Component {
         this.master = new TorrentMaster(new RoomsService(this.emitter), this.emitter);
         this.master.service.master = this.master;
         this.state = {
-            theme: props.theme
+            theme: theme || createMuiTheme({
+                palette: {
+                    type: 'light'
+                }
+            })
         }
     }
 
     componentDidMount() {
+        // Ensure theme is set from props if available
+        if (this.props.theme && !this.state.theme) {
+            this.setState({ theme: this.props.theme });
+        }
 
         this.emitter.on('addPeerDone', () => {
 
@@ -70,6 +78,13 @@ class App extends Component {
             });
             this.setState({theme: theme});
         });
+    }
+
+    componentDidUpdate(prevProps) {
+        // Update theme if props.theme changes
+        if (this.props.theme && this.props.theme !== prevProps.theme) {
+            this.setState({ theme: this.props.theme });
+        }
     }
 
     reactToTouchInOut() {
@@ -111,8 +126,14 @@ class App extends Component {
     }
 
     render() {
+        // Use state theme if available, otherwise fall back to props theme or default
+        const theme = this.state.theme || this.props.theme || createMuiTheme({
+            palette: {
+                type: 'light'
+            }
+        });
 
-        return (<ThemeProvider theme={this.state.theme}>
+        return (<ThemeProvider theme={theme}>
                 <SnackbarProvider
                     anchorOrigin={{
                         vertical: 'bottom',

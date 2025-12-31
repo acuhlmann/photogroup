@@ -1,0 +1,99 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            ui/package-lock.json
+            server/package-lock.json
+      
+      - name: Install root dependencies
+        run: npm ci
+      
+      - name: Install UI dependencies
+        run: |
+          cd ui
+          npm ci
+      
+      - name: Install server dependencies
+        run: |
+          cd server
+          npm ci
+      
+      - name: Create secret file from GitHub Secrets
+        run: |
+          mkdir -p server/secret
+          cat > server/secret/index.js << EOF
+          exports.twilio = {
+              accountSid: '${{ secrets.TWILIO_ACCOUNT_SID || '' }}',
+              authToken: '${{ secrets.TWILIO_AUTH_TOKEN || '' }}'
+            };
+          EOF
+      
+      - name: Run UI unit tests
+        run: |
+          cd ui
+          npm test -- --watchAll=false --coverage=false
+      
+      - name: Run server unit tests
+        run: |
+          cd server
+          npm test
+      
+      - name: Run server API tests
+        run: |
+          cd server
+          npm run test:api
+      
+      - name: Run server integration tests
+        run: |
+          cd server
+          npm run test:integration
+      
+      - name: Install Playwright browsers
+        run: |
+          cd ui
+          npx playwright install --with-deps chromium
+      
+      - name: Run E2E tests (Chromium only for CI speed)
+        run: |
+          cd ui
+          npx playwright test --project=chromium
+        env:
+          CI: true
+          # Playwright's webServer config will automatically start both frontend and backend servers
+      
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: ui/playwright-report/
+          retention-days: 30
+      
+      - name: Upload Playwright test videos
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-videos
+          path: ui/test-results/
+          retention-days: 7
+

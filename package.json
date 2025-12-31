@@ -13,7 +13,13 @@
     "build-deploy": "npm run build && npm run deploy",
     "copy-ui": "npm run clean && mkdir -p ./server/ui && cp -R ./ui/build/ ./server/ui/ && mv ./server/ui/build/* ./server/ui/ && rm -rf ./server/ui/build/",
     "deploy": "npm run copy-ui && cd server && npm run deploy",
-    "deploy-only": "cd server && npm run deploy"
+    "deploy-only": "cd server && npm run deploy",
+    "test": "node test-all.js",
+    "test:server": "cd server && npm test",
+    "test:ui": "cd ui && npm test -- --watchAll=false",
+    "test:e2e": "cd ui && npm run test:e2e",
+    "test:e2e:side-by-side": "cd ui && npm run test:e2e:side-by-side",
+    "test:watch": "node test-all.js --watch"
   },
   "author": "Alex Uhlmann",
   "license": "MIT",

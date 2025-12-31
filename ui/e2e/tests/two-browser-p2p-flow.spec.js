@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 const http = require('http');
+const { launchSideBySideBrowsers } = require('../helpers/test-helpers');
 
 // Helper function to check if server is running
 async function checkServerRunning(port) {
@@ -28,15 +29,27 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
       'Please start it with "npm run start-server" from the project root before running tests.'
     );
   }
-  // Browser 1: Create room with clipboard permissions
-  const context1 = await browser.newContext({
-    permissions: ['clipboard-read', 'clipboard-write']
-  });
-  const page1 = await context1.newPage();
-  
-  // Browser 2: Join room (will be created after we get the URL)
-  const context2 = await browser.newContext();
-  const page2 = await context2.newPage();
+  let context1, context2, page1, page2, browser1, browser2;
+
+  // For side-by-side mode, launch separate browser instances
+  if (process.env.SIDE_BY_SIDE === 'true') {
+    const result = await launchSideBySideBrowsers();
+    browser1 = result.browser1;
+    browser2 = result.browser2;
+    context1 = result.context1;
+    context2 = result.context2;
+    page1 = result.page1;
+    page2 = result.page2;
+  } else {
+    // Normal mode: use contexts from the same browser
+    context1 = await browser.newContext({
+      permissions: ['clipboard-read', 'clipboard-write'],
+    });
+    page1 = await context1.newPage();
+    
+    context2 = await browser.newContext();
+    page2 = await context2.newPage();
+  }
 
   // Step 1: Browser 1 - Navigate to app
   await page1.goto('/');
@@ -270,7 +283,12 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
   }
   
   // Clean up
-  await context1.close();
-  await context2.close();
+  if (process.env.SIDE_BY_SIDE === 'true') {
+    await browser1.close();
+    await browser2.close();
+  } else {
+    await context1.close();
+    await context2.close();
+  }
 });
 

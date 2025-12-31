@@ -7,6 +7,10 @@
   "scripts": {
     "clean": "rimraf ui/*",
     "start": "node app.js",
+    "test": "cross-env NODE_ENV=test mocha app.test.js tests/**/*.test.js --timeout 10000 --exit",
+    "test:unit": "cross-env NODE_ENV=test mocha tests/unit/**/*.test.js --timeout 10000 --exit",
+    "test:api": "cross-env NODE_ENV=test mocha tests/api/**/*.test.js --timeout 10000 --exit",
+    "test:integration": "cross-env NODE_ENV=test mocha tests/integration/**/*.test.js --timeout 30000 --exit",
     "deploy": "gcloud app deploy"
   },
   "dependencies": {
@@ -37,6 +41,7 @@
     "node": ">=24.0.0"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "rimraf": "^3.0.2"
   },
   "license": "MIT",
