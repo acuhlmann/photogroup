@@ -104,12 +104,13 @@ module.exports = defineConfig({
     },
     /* Backend server (Node.js API server) */
     {
-      command: 'cd ../server && npm start',
+      command: 'npm start',
+      cwd: path.resolve(__dirname, '../server'), // Use cwd instead of cd in command
       url: 'http://localhost:8081/api/__rtcConfig__',
       reuseExistingServer: !isCI,
-      timeout: isCI ? 90 * 1000 : 60 * 1000, // Longer timeout in CI
-      stdout: isCI ? 'ignore' : 'pipe', // Reduce noise in CI logs
-      stderr: isCI ? 'ignore' : 'pipe',
+      timeout: isCI ? 120 * 1000 : 60 * 1000, // Increased timeout in CI to 120s
+      stdout: 'pipe', // Enable logging to see startup issues
+      stderr: 'pipe', // Enable logging to see startup errors
       env: {
         PORT: '8081',
         WS_PORT: '9000',
