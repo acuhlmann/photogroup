@@ -141,8 +141,8 @@ else
         apt-get update
         apt-get install -y curl gnupg2 software-properties-common
         
-        # Install Node.js 18.x LTS
-        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+        # Install Node.js 24.x LTS (latest stable LTS)
+        curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
         apt-get install -y nodejs
         
         # Install PM2 globally

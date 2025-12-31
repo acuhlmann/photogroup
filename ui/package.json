@@ -22,7 +22,7 @@
     "event-source-polyfill": "^1.0.22",
     "eventemitter3": "^4.0.7",
     "exifr": "^6.1.0",
-    "fast-xml-parser": "^3.18.0",
+    "fast-xml-parser": "^4.3.5",
     "from2": "^2.3.0",
     "humanize-duration": "^3.25.1",
     "idb-kv-store": "^4.5.0",
@@ -73,5 +73,8 @@
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "cross-env": "^10.1.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   }
 }
