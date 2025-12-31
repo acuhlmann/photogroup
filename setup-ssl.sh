@@ -8,7 +8,7 @@ ZONE=asia-east2-a
 INSTANCE=main
 PROJECT=photogroup-215600
 DOMAIN=photogroup.network
-EMAIL= # Update this with your email
+EMAIL=acuhlmann@gmail.com
 
 echo "Setting up Let's Encrypt SSL certificates for $DOMAIN"
 echo "Project: $PROJECT"
