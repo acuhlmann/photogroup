@@ -130,26 +130,41 @@ The project includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) 
      --role="roles/compute.osLogin"
    ```
 
-3. **Create and download service account key**:
+3. **Grant service account user permission** (required for SSH access to VMs):
+   ```bash
+   # Get the compute service account email (usually PROJECT_NUMBER-compute@developer.gserviceaccount.com)
+   # You can find it in the GCP Console or by running:
+   gcloud projects describe photogroup-215600 --format="value(projectNumber)"
+   
+   # Then grant the serviceAccountUser role (replace PROJECT_NUMBER with actual number)
+   gcloud iam service-accounts add-iam-policy-binding PROJECT_NUMBER-compute@developer.gserviceaccount.com \
+     --member="serviceAccount:github-actions-deploy@photogroup-215600.iam.gserviceaccount.com" \
+     --role="roles/iam.serviceAccountUser" \
+     --project photogroup-215600
+   ```
+   
+   **Note**: For project `photogroup-215600`, the compute service account is `990406861533-compute@developer.gserviceaccount.com`
+
+4. **Create and download service account key**:
    ```bash
    gcloud iam service-accounts keys create github-actions-key.json \
      --iam-account=github-actions-deploy@photogroup-215600.iam.gserviceaccount.com \
      --project photogroup-215600
    ```
 
-4. **Add secret to GitHub**:
+5. **Add secret to GitHub**:
    - Go to your GitHub repository → Settings → Secrets and variables → Actions
    - Click "New repository secret"
    - Name: `GCP_SA_KEY`
    - Value: Copy the entire contents of `github-actions-key.json`
    - Click "Add secret"
 
-5. **Delete the local key file** (for security):
+6. **Delete the local key file** (for security):
    ```bash
    rm github-actions-key.json
    ```
 
-6. **Add Twilio secrets to GitHub** (required for WebRTC/TURN functionality):
+7. **Add Twilio secrets to GitHub** (required for WebRTC/TURN functionality):
    - Go to your GitHub repository → Settings → Secrets and variables → Actions
    - Click "New repository secret"
    - Name: `TWILIO_ACCOUNT_SID`
