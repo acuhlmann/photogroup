@@ -71,15 +71,36 @@ jobs:
       - name: Install Playwright browsers
         run: |
           cd ui
+          echo "Installing Playwright browsers..."
           npx playwright install --with-deps chromium
+          echo "Verifying Playwright installation..."
+          npx playwright --version
+        continue-on-error: false
+      
+      - name: Verify Playwright setup
+        run: |
+          cd ui
+          echo "Checking Playwright configuration..."
+          ls -la node_modules/@playwright/test || echo "Playwright not found in node_modules"
+          npx playwright test --list --project=chromium || echo "Failed to list tests"
       
       - name: Run E2E tests (Chromium only for CI speed)
         run: |
           cd ui
-          npx playwright test --project=chromium
+          echo "Starting E2E tests..."
+          echo "Current directory: $(pwd)"
+          echo "Playwright version: $(npx playwright --version || echo 'Not found')"
+          echo "CI environment: $CI"
+          echo "Node version: $(node --version)"
+          echo "NPM version: $(npm --version)"
+          # Run with explicit CI flags and better error reporting
+          npx playwright test --project=chromium --reporter=list,github
         env:
           CI: true
+          NODE_ENV: test
           # Playwright's webServer config will automatically start both frontend and backend servers
+        timeout-minutes: 20  # Increased timeout for server startup + tests
+        continue-on-error: false
       
       - name: Upload Playwright test results
         if: always()

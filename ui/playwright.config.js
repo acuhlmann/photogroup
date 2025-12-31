@@ -11,6 +11,8 @@ const isSideBySide = process.env.SIDE_BY_SIDE === 'true';
  */
 module.exports = defineConfig({
   testDir: './e2e/tests',
+  /* Global timeout for all tests - longer for P2P tests */
+  timeout: isCI ? 120000 : 60000, // 2 minutes in CI, 1 minute locally
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -26,13 +28,27 @@ module.exports = defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: 'http://localhost:3000',
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    trace: isCI ? 'on-first-retry' : 'off',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: isCI ? 'retain-on-failure' : 'off',
     /* Grant clipboard permissions for copy/paste operations */
     permissions: ['clipboard-read', 'clipboard-write'],
-    /* Headless mode - false for local development, true for CI */
-    headless: isCI || !isHeaded,
+    /* Headless mode - always true in CI, configurable locally */
+    headless: isCI ? true : !isHeaded,
+    /* CI-specific browser args for better stability */
+    ...(isCI && {
+      launchOptions: {
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+        ],
+      },
+    }),
   },
 
   /* Configure projects for major browsers */
@@ -43,8 +59,19 @@ module.exports = defineConfig({
         ...devices['Desktop Chrome'],
         /* For side-by-side viewing, use smaller viewport */
         viewport: isSideBySide ? { width: 375, height: 667 } : devices['Desktop Chrome'].viewport,
-        /* Launch args for side-by-side window positioning */
-        launchOptions: isSideBySide ? {
+        /* Launch args - merge CI args with side-by-side args if needed */
+        launchOptions: isCI ? {
+          // CI-specific args (already set in use section, but ensure they're here too)
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu',
+          ],
+        } : isSideBySide ? {
           args: [
             '--window-size=400,700',
             '--window-position=50,50'
@@ -61,12 +88,18 @@ module.exports = defineConfig({
       command: 'npm start',
       url: 'http://localhost:3000',
       reuseExistingServer: !isCI,
-      timeout: 120 * 1000,
-      stdout: 'pipe',
-      stderr: 'pipe',
+      timeout: isCI ? 180 * 1000 : 120 * 1000, // Longer timeout in CI
+      stdout: isCI ? 'ignore' : 'pipe', // Reduce noise in CI logs
+      stderr: isCI ? 'ignore' : 'pipe',
       env: {
         BROWSER: 'none',
-        CI: 'true'
+        CI: 'true',
+        NODE_ENV: 'test',
+        // Disable React dev server optimizations in CI for faster startup
+        ...(isCI && {
+          SKIP_PREFLIGHT_CHECK: 'true',
+          DISABLE_ESLINT_PLUGIN: 'true',
+        }),
       },
     },
     /* Backend server (Node.js API server) */
@@ -74,12 +107,13 @@ module.exports = defineConfig({
       command: 'cd ../server && npm start',
       url: 'http://localhost:8081/api/__rtcConfig__',
       reuseExistingServer: !isCI,
-      timeout: 60 * 1000,
-      stdout: 'pipe',
-      stderr: 'pipe',
+      timeout: isCI ? 90 * 1000 : 60 * 1000, // Longer timeout in CI
+      stdout: isCI ? 'ignore' : 'pipe', // Reduce noise in CI logs
+      stderr: isCI ? 'ignore' : 'pipe',
       env: {
         PORT: '8081',
-        WS_PORT: '9000'
+        WS_PORT: '9000',
+        NODE_ENV: isCI ? 'test' : 'development',
       },
       // Ignore port conflicts - if server is already running, that's fine
       ignoreHTTPSErrors: true,
