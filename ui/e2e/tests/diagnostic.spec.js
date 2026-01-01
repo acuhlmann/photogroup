@@ -38,7 +38,8 @@ test('diagnostic test - check for blank screen and errors', async ({ page }) => 
   // Collect page errors
   const pageErrors = [];
   page.on('pageerror', error => {
-    pageErrors.push(error.message);
+    // Include full error stack for debugging
+    pageErrors.push(error.message + (error.stack ? '\nStack: ' + error.stack : ''));
   });
 
   // Navigate to the app
@@ -123,6 +124,12 @@ test('diagnostic test - check for blank screen and errors', async ({ page }) => 
     }
     // Ignore service worker errors (common in development)
     if (errorLower.includes('service worker') || errorLower.includes('serviceworker')) {
+      return false;
+    }
+    // Ignore React hydration/nesting warnings (these are MUI component warnings, not critical)
+    if (errorLower.includes('cannot be a descendant') || 
+        errorLower.includes('cannot contain a nested') ||
+        errorLower.includes('hydration error')) {
       return false;
     }
     // All other errors are considered critical

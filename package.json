@@ -18,7 +18,7 @@
     "deploy-only": "cd server && npm run deploy",
     "test": "node test-all.js",
     "test:server": "cd server && npm test",
-    "test:ui": "cd ui && npm test -- --watchAll=false",
+    "test:ui": "cd ui && npm test -- --run",
     "test:e2e": "cd ui && npm run test:e2e",
     "test:e2e:side-by-side": "cd ui && npm run test:e2e:side-by-side",
     "test:watch": "node test-all.js --watch"
