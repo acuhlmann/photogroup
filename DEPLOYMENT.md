@@ -4,6 +4,7 @@
 
 - **Project ID**: `photogroup-215600`
 - **Domain**: `photogroup.network`
+- **Additional service**: `hackernews.photogroup.network` (reverse-proxied to a Docker container on the same VM)
 - **Zone**: `asia-east2-a`
 - **Instance Name**: `main`
 
@@ -58,6 +59,7 @@ After the VM is created, you need to point your domain to the VM's static IP add
 2. **Update DNS records** at your domain registrar:
    - Create an **A record** for `photogroup.network` pointing to the VM's external IP
    - Optionally create an **A record** for `www.photogroup.network` pointing to the same IP
+   - Create an **A record** for `hackernews.photogroup.network` pointing to the same IP
    
    **Common DNS providers:**
    - **Google Domains/Cloud DNS**: Add A record in DNS settings
@@ -95,7 +97,7 @@ The project is configured to use Let's Encrypt SSL certificates. Set up SSL cert
 
 This will:
 - Install certbot on the VM
-- Obtain SSL certificates from Let's Encrypt
+- Obtain SSL certificates from Let's Encrypt (including `hackernews.photogroup.network`)
 - Configure automatic renewal
 - Update nginx configuration for HTTPS
 
@@ -225,6 +227,26 @@ gcloud compute ssh main --project photogroup-215600 --zone asia-east2-a --comman
 - **deploy-app.sh**: Uploads application files to VM and restarts with PM2
 - **deploy-nginx.sh**: Deploys nginx configuration
 - **setup-ssl.sh**: One-time SSL certificate setup script (run from local machine, executes remotely on VM)
+
+## Additional service: Hackersbot (Docker) on `hackernews.photogroup.network`
+
+This repository's nginx config is set up to route:
+
+- `photogroup.network` → Node app on `127.0.0.1:8081` (PM2)
+- `hackernews.photogroup.network` → a Dockerized Python service on `127.0.0.1:18080`
+
+### Expected Docker contract (VM side)
+
+Run your Hackersbot container so it is **only exposed locally** and nginx can reach it:
+
+```bash
+docker run -d --name hackersbot --restart unless-stopped \
+  -p 127.0.0.1:18080:8000 \
+  ghcr.io/acuhlmann/hackersbot:latest
+```
+
+- If Hackersbot listens on a different container port than `8000`, adjust the right side of the port mapping.
+- No additional firewall rules are required, since the service is not exposed publicly (only nginx is).
 
 ## SSL Certificate Renewal
 
