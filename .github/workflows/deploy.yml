@@ -53,7 +53,9 @@ jobs:
       - name: Install UI dependencies
         run: |
           cd ui
-          npm ci
+          # UI has known peer-dependency conflicts (e.g. transitive deps requiring older React),
+          # so we install with legacy peer dependency resolution (same as the test workflow).
+          npm ci --legacy-peer-deps
       
       - name: Install server dependencies
         run: |
