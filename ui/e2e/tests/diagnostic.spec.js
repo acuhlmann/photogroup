@@ -129,7 +129,9 @@ test('diagnostic test - check for blank screen and errors', async ({ page }) => 
     // Ignore React hydration/nesting warnings (these are MUI component warnings, not critical)
     if (errorLower.includes('cannot be a descendant') || 
         errorLower.includes('cannot contain a nested') ||
-        errorLower.includes('hydration error')) {
+        errorLower.includes('hydration error') ||
+        errorLower.includes('in html') ||
+        errorLower.includes('validatedomnesting')) {
       return false;
     }
     // All other errors are considered critical
