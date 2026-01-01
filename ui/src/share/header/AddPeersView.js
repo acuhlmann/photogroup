@@ -17,7 +17,8 @@ import ShareRounded from '@mui/icons-material/ShareRounded';
 import EqualizerRounded from '@mui/icons-material/EqualizerRounded';
 import AudiotrackRounded from '@mui/icons-material/AudiotrackRounded';
 import copy from "clipboard-copy";
-import QrReader from 'react-qr-reader'
+// QrReader import removed - react-qr-reader is not compatible with React 19
+// import QrReader from 'react-qr-reader'
 import Logger from 'js-logger';
 import Uploader from "./Uploader";
 //import Slide from '@mui/material/Slide';
@@ -373,13 +374,8 @@ class AddPeersView extends Component {
                             !openQr ?
                                     '' :
                                 <div>
-                                    <QrReader
-                                        delay={this.state.scannerDelay}
-                                        facingMode={"environment"}
-                                        showViewFinder={true}
-                                        style={scannerStyle}
-                                        onError={this.handleScanError}
-                                        onScan={this.handleScanOrSound}/>
+                                    {/* QrReader removed - react-qr-reader is not compatible with React 19 */}
+                                    <Typography variant={"body2"}>QR Scanner temporarily unavailable</Typography>
                                     <Typography variant={"caption"}>{this.state.scannerResult}</Typography>
                                 </div>
                         }

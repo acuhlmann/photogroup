@@ -1,7 +1,6 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import {ThemeProvider, createTheme} from '@mui/material/styles';
-import {withStyles, withTheme} from '@mui/styles';
 
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
@@ -22,22 +21,10 @@ import { SnackbarProvider } from 'notistack';
 import Visibility from "visibilityjs";
 import AddPeersView from "./share/header/AddPeersView";
 
-const styles = {
-    root: {
-        flexGrow: 1,
-    },
-    white: {
-        color: '#ffffff'
-    },
-};
-
 class App extends Component {
 
     constructor(props) {
         super(props);
-
-        const { classes, theme } = props;
-        this.classes = classes;
 
         //Logger.useDefaults();
         Logger.setLevel(Logger.INFO);
@@ -46,7 +33,7 @@ class App extends Component {
         this.master = new TorrentMaster(new RoomsService(this.emitter), this.emitter);
         this.master.service.master = this.master;
         this.state = {
-            theme: theme || createTheme({
+            theme: props.theme || createTheme({
                 palette: {
                     mode: 'light'
                 }
@@ -143,7 +130,7 @@ class App extends Component {
                         <header className="App-header">
                             <AppBar position="static" color="default">
                                 <Toolbar>
-                                    <div edge="start" style={{flexGrow: 1}}>
+                                    <div style={{flexGrow: 1}}>
                                         <Typography variant="button" component="h2">
                                             PhotoGroup
                                         </Typography>
@@ -174,5 +161,5 @@ App.propTypes = {
     prefersDarkMode: PropTypes.bool.isRequired,
 };
 
-export default withTheme(withStyles(styles)(App));
+export default App;
 
