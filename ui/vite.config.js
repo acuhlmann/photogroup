@@ -7,16 +7,35 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // https://vitejs.dev/config/
+// Custom plugin to inject process polyfill early
+const processPolyfillPlugin = () => {
+  return {
+    name: 'process-polyfill',
+    transformIndexHtml(html) {
+      // Inject process polyfill at the very beginning of head
+      const polyfillScript = `
+<script>
+// Process polyfill for Node.js modules
+window.global = window.globalThis = window;
+window.process = window.process || {
+  env: { NODE_ENV: 'development' },
+  browser: true,
+  version: 'v20.0.0',
+  nextTick: function(fn) { queueMicrotask(fn); },
+  title: 'browser',
+  platform: 'browser',
+  cwd: function() { return '/'; }
+};
+</script>`;
+      return html.replace('<head>', '<head>' + polyfillScript);
+    }
+  };
+};
+
 export default defineConfig({
   plugins: [
-    react({
-      include: '**/*.{jsx,tsx}',
-      babel: {
-        plugins: [
-          ['@babel/plugin-transform-react-jsx', { runtime: 'automatic' }]
-        ]
-      }
-    })
+    processPolyfillPlugin(),
+    react()
   ],
   server: {
     port: 3000,
@@ -39,7 +58,10 @@ export default defineConfig({
         '.js': 'jsx',
       },
       define: {
-        global: 'window',
+        global: 'globalThis',
+        'process.env.NODE_ENV': '"development"',
+        'process.browser': 'true',
+        'process.version': '"v20.0.0"',
       },
     },
     exclude: ['bittorrent-dht', 'load-ip-set'],
@@ -55,38 +77,13 @@ export default defineConfig({
       'bittorrent-dht': path.resolve(__dirname, 'src/compatibility/bittorrent-dht-stub.js'),
       'load-ip-set': path.resolve(__dirname, 'src/compatibility/load-ip-set-stub.js'),
       'path': 'path-browserify',
+      '@mui/styles': path.resolve(__dirname, 'src/share/compatibility/muiStyles.js'),
     },
     conditions: ['browser', 'module', 'import'],
   },
   build: {
     outDir: 'build',
     sourcemap: true,
-    rollupOptions: {
-      external: (id) => {
-        // Exclude Node.js-only modules that shouldn't be bundled for browser
-        const nodeOnlyModules = [
-          'bittorrent-dht',
-          'events',
-          'stream',
-          'util',
-          'buffer',
-          'crypto',
-          'fs',
-          'os',
-          'net',
-          'tls',
-          'dgram',
-          'dns',
-          'http',
-          'https',
-          'url',
-          'querystring',
-          'zlib',
-          'child_process',
-        ];
-        return nodeOnlyModules.some(module => id === module || id.startsWith(module + '/'));
-      },
-    },
   },
   test: {
     globals: true,

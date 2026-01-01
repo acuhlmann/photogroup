@@ -313,9 +313,10 @@ async function main() {
 
   if (!serverOnly && !e2eOnly) {
     // 4. UI Unit Tests
-    const watchFlag = isWatch ? '--watch' : '--watchAll=false';
+    // Note: vitest uses --run instead of --watchAll=false
+    const watchFlag = isWatch ? '' : '--run';
     results.uiUnit = await runCommand(
-      `npm test -- ${watchFlag} --coverage=false`,
+      `npm test -- ${watchFlag}`,
       uiDir,
       'UI Unit Tests'
     );
