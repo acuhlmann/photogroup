@@ -6,6 +6,24 @@ test('diagnostic test - check for blank screen and errors', async ({ page }) => 
   const consoleWarnings = [];
   const consoleLogs = [];
   
+  const failedRequests = [];
+  page.on('requestfailed', request => {
+    failedRequests.push({
+      url: request.url(),
+      failure: request.failure()?.errorText || 'Unknown',
+      resourceType: request.resourceType()
+    });
+  });
+  page.on('response', response => {
+    if (response.status() >= 400) {
+      failedRequests.push({
+        url: response.url(),
+        status: response.status(),
+        statusText: response.statusText()
+      });
+    }
+  });
+  
   page.on('console', msg => {
     const text = msg.text();
     if (msg.type() === 'error') {
@@ -59,6 +77,7 @@ test('diagnostic test - check for blank screen and errors', async ({ page }) => 
 
   // Log all findings
   console.log('\n=== DIAGNOSTIC RESULTS ===');
+  console.log('\nFailed Requests:', JSON.stringify(failedRequests, null, 2));
   console.log('\nConsole Errors:', consoleErrors);
   console.log('\nConsole Warnings:', consoleWarnings);
   console.log('\nPage Errors:', pageErrors);

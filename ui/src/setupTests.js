@@ -1,5 +1,20 @@
-// Mock audiomotion-analyzer - it's an ES module that Jest can't parse
-jest.mock('audiomotion-analyzer', () => {
+import { vi } from 'vitest';
+
+// Mock localStorage for jsdom
+const localStorageMock = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+};
+global.localStorage = localStorageMock;
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+});
+
+// Mock audiomotion-analyzer - it's an ES module that Vitest can't parse
+vi.mock('audiomotion-analyzer', () => {
   return {
     __esModule: true,
     default: class MockAudioMotionAnalyzer {
@@ -9,7 +24,7 @@ jest.mock('audiomotion-analyzer', () => {
       setOptions() {}
     }
   };
-}, { virtual: true });
+});
 
 // Mock window.matchMedia for jsdom
 window.matchMedia = window.matchMedia || function(query) {
@@ -17,11 +32,11 @@ window.matchMedia = window.matchMedia || function(query) {
     matches: false,
     media: query,
     onchange: null,
-    addListener: jest.fn(), // deprecated
-    removeListener: jest.fn(), // deprecated
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-    dispatchEvent: jest.fn(),
+    addListener: vi.fn(), // deprecated
+    removeListener: vi.fn(), // deprecated
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
   };
 };
 

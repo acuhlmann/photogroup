@@ -1,8 +1,8 @@
 //------------------Twillio ICE STUN/TURN
 /** Inspired by https://instant.io */
-const twilio = require('twilio');
-const cors = require('cors');
-const util = require('util');
+import twilio from 'twilio';
+import cors from 'cors';
+import { inspect } from 'util';
 
 const CORS_WHITELIST = [
     // Official WebTorrent site
@@ -10,7 +10,7 @@ const CORS_WHITELIST = [
     'https://www.photogroup.network/'
 ];
 
-module.exports = class IceServers {
+export default class IceServers {
 
     constructor(updateChannel, remoteLog, app) {
         this.updateChannel = updateChannel;
@@ -18,19 +18,28 @@ module.exports = class IceServers {
         this.app = app;
     }
 
-    start() {
+    async start() {
         // Skip Twilio initialization in test mode
         if (process.env.NODE_ENV === 'test') {
             this.registerGet();
             return;
         }
 
-        const secret = require('./secret');
+        let secret;
+        try {
+            const secretModule = await import('./secret.js');
+            secret = secretModule.default || secretModule;
+        } catch (err) {
+            // Secret file might not exist or might not have credentials
+            secret = { twilio: { accountSid: '', authToken: '' } };
+        }
 
         // Fetch new iceServers from twilio token regularly
         let twilioClient;
         try {
-            twilioClient = twilio(secret.twilio.accountSid, secret.twilio.authToken)
+            if (secret?.twilio?.accountSid && secret?.twilio?.authToken) {
+                twilioClient = twilio(secret.twilio.accountSid, secret.twilio.authToken);
+            }
         } catch (err) { }
 
         if (twilioClient) {
@@ -101,7 +110,7 @@ module.exports = class IceServers {
             });
 
             console.log('ice.length ' + self.iceServers.length);
-            console.log('ice ' + util.inspect(self.iceServers));
+            console.log('ice ' + inspect(self.iceServers));
         })
     }
 };

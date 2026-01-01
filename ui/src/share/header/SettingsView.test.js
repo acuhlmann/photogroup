@@ -1,32 +1,44 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
-import { createMuiTheme, ThemeProvider } from '@material-ui/core/styles';
+import { createRoot } from 'react-dom/client';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { SnackbarProvider } from 'notistack';
+import { vi } from 'vitest';
+
+// Mock withSnackbar from notistack
+vi.mock('notistack', async () => {
+  const actual = await vi.importActual('notistack');
+  return {
+    ...actual,
+    withSnackbar: (Component) => Component,
+  };
+});
+
 import SettingsView from './SettingsView';
 
 // Mock dependencies
 const mockMaster = {
   emitter: {
-    on: jest.fn(),
-    emit: jest.fn()
+    on: vi.fn(),
+    emit: vi.fn()
   },
   client: {
     peerId: 'test-peer-id'
   },
-  restartTrackers: jest.fn()
+  restartTrackers: vi.fn()
 };
 
 const mockEmitter = {
-  on: jest.fn(),
-  emit: jest.fn()
+  on: vi.fn(),
+  emit: vi.fn()
 };
 
 describe('SettingsView', () => {
-  const theme = createMuiTheme();
+  const theme = createTheme();
 
   it('renders without crashing', () => {
     const div = document.createElement('div');
-    ReactDOM.render(
+    const root = createRoot(div);
+    root.render(
       <ThemeProvider theme={theme}>
         <SnackbarProvider>
           <SettingsView 
@@ -36,15 +48,15 @@ describe('SettingsView', () => {
             prefersDarkMode={false}
           />
         </SnackbarProvider>
-      </ThemeProvider>,
-      div
+      </ThemeProvider>
     );
-    ReactDOM.unmountComponentAtNode(div);
+    root.unmount();
   });
 
   it('renders settings icon button', () => {
     const div = document.createElement('div');
-    ReactDOM.render(
+    const root = createRoot(div);
+    root.render(
       <ThemeProvider theme={theme}>
         <SnackbarProvider>
           <SettingsView 
@@ -54,16 +66,16 @@ describe('SettingsView', () => {
             prefersDarkMode={false}
           />
         </SnackbarProvider>
-      </ThemeProvider>,
-      div
+      </ThemeProvider>
     );
     // Settings icon should be present
-    ReactDOM.unmountComponentAtNode(div);
+    root.unmount();
   });
 
   it('opens dialog when settings button is clicked', () => {
     const div = document.createElement('div');
-    ReactDOM.render(
+    const root = createRoot(div);
+    root.render(
       <ThemeProvider theme={theme}>
         <SnackbarProvider>
           <SettingsView 
@@ -73,8 +85,7 @@ describe('SettingsView', () => {
             prefersDarkMode={false}
           />
         </SnackbarProvider>
-      </ThemeProvider>,
-      div
+      </ThemeProvider>
     );
     
     // Simulate settings button click
@@ -84,7 +95,7 @@ describe('SettingsView', () => {
       // Dialog should open
     }
     
-    ReactDOM.unmountComponentAtNode(div);
+    root.unmount();
   });
 });
 

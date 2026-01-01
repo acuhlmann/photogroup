@@ -1,12 +1,12 @@
 //----------------Domain - Content rooms
 
-const ServerPeer = require('./ServerPeer');
-const Topology = require('./Topology');
-const Peers = require('./Peers');
-const MyDht = require('./MyDht');
-const _ = require('lodash');
+import ServerPeer from './ServerPeer.js';
+import Topology from './Topology.js';
+import Peers from './Peers.js';
+import MyDht from './MyDht.js';
+import _ from 'lodash';
 
-module.exports = class Rooms {
+export default class Rooms {
 
     constructor(updateChannel, remoteLog, app, emitter, ice, tracker) {
         this.updateChannel = updateChannel;

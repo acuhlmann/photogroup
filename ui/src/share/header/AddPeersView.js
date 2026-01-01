@@ -1,27 +1,27 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
-import { withStyles } from '@material-ui/core/styles';
-import CloseRounded from '@material-ui/icons/CloseRounded';
-import ExitToAppOutlined from '@material-ui/icons/ExitToAppOutlined';
-import IconButton from '@material-ui/core/IconButton';
-import GroupAddRounded from '@material-ui/icons/GroupAddRounded';
-import Badge from '@material-ui/core/Badge';
-import Dialog from '@material-ui/core/Dialog';
-import DialogContent from '@material-ui/core/DialogContent';
-import DialogActions from '@material-ui/core/DialogActions';
-import QRCode from "qrcode.react";
-import {Typography} from "@material-ui/core";
-import LinkRounded from '@material-ui/icons/LinkRounded';
-import ShareRounded from '@material-ui/icons/ShareRounded';
-import EqualizerRounded from '@material-ui/icons/EqualizerRounded';
-import AudiotrackRounded from '@material-ui/icons/AudiotrackRounded';
+import { withStyles } from '@mui/styles';
+import CloseRounded from '@mui/icons-material/CloseRounded';
+import ExitToAppOutlined from '@mui/icons-material/ExitToAppOutlined';
+import IconButton from '@mui/material/IconButton';
+import GroupAddRounded from '@mui/icons-material/GroupAddRounded';
+import Badge from '@mui/material/Badge';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import { QRCodeSVG } from "qrcode.react";
+import {Typography} from "@mui/material";
+import LinkRounded from '@mui/icons-material/LinkRounded';
+import ShareRounded from '@mui/icons-material/ShareRounded';
+import EqualizerRounded from '@mui/icons-material/EqualizerRounded';
+import AudiotrackRounded from '@mui/icons-material/AudiotrackRounded';
 import copy from "clipboard-copy";
 import QrReader from 'react-qr-reader'
 import Logger from 'js-logger';
 import Uploader from "./Uploader";
-//import Slide from '@material-ui/core/Slide';
-import Fade from '@material-ui/core/Fade';
+//import Slide from '@mui/material/Slide';
+import Fade from '@mui/material/Fade';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     //return <Slide direction="down" ref={ref} {...props} />;
@@ -338,7 +338,7 @@ class AddPeersView extends Component {
 
                                     <span className={classes.vertical}>
                                         <Typography variant={"caption"}>{master.service.id}</Typography>
-                                        <QRCode value={url} />
+                                        <QRCodeSVG value={url} />
                                     </span>
                                     <span className={classes.horizontal}>
                                         <Typography variant={"body2"}>Copy/Paste Link</Typography>

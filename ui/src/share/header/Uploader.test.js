@@ -1,19 +1,20 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
-import { createMuiTheme } from '@material-ui/core/styles';
+import { createRoot } from 'react-dom/client';
+import { createTheme } from '@mui/material/styles';
+import { vi } from 'vitest';
 import Uploader from './Uploader';
 
 // Mock dependencies
 const mockModel = {
   emitter: {
-    on: jest.fn(),
-    emit: jest.fn()
+    on: vi.fn(),
+    emit: vi.fn()
   },
-  seed: jest.fn()
+  seed: vi.fn()
 };
 
 describe('Uploader', () => {
-  const theme = createMuiTheme();
+  const theme = createTheme();
 
   beforeEach(() => {
     delete window.location;
@@ -22,41 +23,41 @@ describe('Uploader', () => {
 
   it('renders without crashing', () => {
     const div = document.createElement('div');
-    ReactDOM.render(
-      <Uploader model={mockModel} emitter={mockModel.emitter} classes={{}} theme={theme} />,
-      div
+    const root = createRoot(div);
+    root.render(
+      <Uploader model={mockModel} emitter={mockModel.emitter} classes={{}} theme={theme} />
     );
-    ReactDOM.unmountComponentAtNode(div);
+    root.unmount();
   });
 
   it('renders upload button when room is in URL', () => {
     window.location.search = '?room=test123';
     const div = document.createElement('div');
-    ReactDOM.render(
-      <Uploader model={mockModel} emitter={mockModel.emitter} classes={{}} theme={theme} />,
-      div
+    const root = createRoot(div);
+    root.render(
+      <Uploader model={mockModel} emitter={mockModel.emitter} classes={{}} theme={theme} />
     );
     // Uploader should render when room is present
-    ReactDOM.unmountComponentAtNode(div);
+    root.unmount();
   });
 
   it('does not render when no room and not ready', () => {
     window.location.search = '';
     const div = document.createElement('div');
-    ReactDOM.render(
-      <Uploader model={mockModel} emitter={mockModel.emitter} classes={{}} theme={theme} />,
-      div
+    const root = createRoot(div);
+    root.render(
+      <Uploader model={mockModel} emitter={mockModel.emitter} classes={{}} theme={theme} />
     );
     // Uploader should not render when no room and not ready
-    ReactDOM.unmountComponentAtNode(div);
+    root.unmount();
   });
 
   it('handles file upload', () => {
     window.location.search = '?room=test123';
     const div = document.createElement('div');
-    ReactDOM.render(
-      <Uploader model={mockModel} emitter={mockModel.emitter} classes={{}} theme={theme} />,
-      div
+    const root = createRoot(div);
+    root.render(
+      <Uploader model={mockModel} emitter={mockModel.emitter} classes={{}} theme={theme} />
     );
     
     // Simulate file input change
@@ -67,7 +68,7 @@ describe('Uploader', () => {
       // Trigger handleUpload
     }
     
-    ReactDOM.unmountComponentAtNode(div);
+    root.unmount();
   });
 });
 

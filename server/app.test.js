@@ -1,8 +1,8 @@
 // Suppress console output before loading app
-require('./tests/test-setup');
+import './tests/test-setup.js';
 
-const request = require('supertest');
-const {app, started} = require('./app');
+import request from 'supertest';
+import { app, started } from './app.js';
 
 describe('App Tests', () => {
 

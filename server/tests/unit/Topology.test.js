@@ -1,5 +1,5 @@
-const assert = require('assert');
-const Topology = require('../../Topology');
+import assert from 'assert';
+import Topology from '../../Topology.js';
 
 describe('Topology', () => {
   let topology;

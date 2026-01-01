@@ -1,13 +1,14 @@
 //-----------------Custom WebTorrent Tracker - ICE Events
-const util = require('util');
-const IpTranslator = require('./IpTranslator');
-const transform = require('sdp-transform');
-const _ = require('lodash');
+import { inspect } from 'util';
+import IpTranslator from './IpTranslator.js';
+import transform from 'sdp-transform';
+import _ from 'lodash';
+import { Server } from 'bittorrent-tracker';
 
 const wsPort = process.env.WS_PORT || 9000;
 const hostname = '0.0.0.0';
 
-module.exports = class Tracker {
+export default class Tracker {
 
     constructor(updateChannel, remoteLog, app, emitter) {
         this.updateChannel = updateChannel;
@@ -16,12 +17,10 @@ module.exports = class Tracker {
         this.emitter = emitter;
     }
 
-    start() {
+    async start() {
         const onlistening = this.handleEvent.bind(this);
         const remoteLog = this.remoteLog;
         const app = this.app;
-
-        const Server = require('bittorrent-tracker').Server;
 
         const server = new Server({
             udp: true, // enable udp server? [default=true]
@@ -49,7 +48,7 @@ module.exports = class Tracker {
         server.on('listening', (...theArgs) => {
             // fired when all requested servers are listening
             console.log('listening on http port:' + server.http.address().port);
-            console.log('listening ' + util.inspect(theArgs));
+            console.log('listening ' + inspect(theArgs));
             //console.log('listening on udp port:' + server.udp.address().port)
         });
 
@@ -118,7 +117,7 @@ module.exports = class Tracker {
             this.sendIceMsg('iceDone', peerId, event, null, data.addr, data.info_hash);
             remoteLog(listener);
         } else {
-            remoteLog(util.inspect(theArgs));
+            remoteLog(inspect(theArgs));
         }
 
         //console.log('onlistening ' + util.inspect(theArgs));

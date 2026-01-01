@@ -1,7 +1,7 @@
-const IpTranslator = require('./IpTranslator');
-const _ = require('lodash');
+import IpTranslator from './IpTranslator.js';
+import _ from 'lodash';
 
-module.exports = class Peers {
+export default class Peers {
 
     constructor(updateChannel, remoteLog, app, emitter) {
         this.updateChannel = updateChannel;

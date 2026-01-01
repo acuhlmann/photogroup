@@ -1,10 +1,11 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import {ThemeProvider, withStyles, withTheme, createMuiTheme} from '@material-ui/core/styles';
+import {ThemeProvider, createTheme} from '@mui/material/styles';
+import {withStyles, withTheme} from '@mui/styles';
 
-import AppBar from '@material-ui/core/AppBar';
-import Toolbar from '@material-ui/core/Toolbar';
-import Typography from '@material-ui/core/Typography'
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import Typography from '@mui/material/Typography'
 import './App.css';
 
 import EventEmitter from 'eventemitter3';
@@ -22,9 +23,6 @@ import Visibility from "visibilityjs";
 import AddPeersView from "./share/header/AddPeersView";
 
 const styles = {
-    typography: {
-        useNextVariants: true,
-    },
     root: {
         flexGrow: 1,
     },
@@ -48,9 +46,9 @@ class App extends Component {
         this.master = new TorrentMaster(new RoomsService(this.emitter), this.emitter);
         this.master.service.master = this.master;
         this.state = {
-            theme: theme || createMuiTheme({
+            theme: theme || createTheme({
                 palette: {
-                    type: 'light'
+                    mode: 'light'
                 }
             })
         }
@@ -70,10 +68,10 @@ class App extends Component {
         this.emitter.on('darkMode', isDark => {
 
             console.log('fllkj')
-            //this.props.theme.palette.type = isDark ? 'dark' : 'light';
-            const theme = createMuiTheme({
+            //this.props.theme.palette.mode = isDark ? 'dark' : 'light';
+            const theme = createTheme({
                 palette: {
-                    type: isDark ? 'dark' : 'light'
+                    mode: isDark ? 'dark' : 'light'
                 }
             });
             this.setState({theme: theme});
@@ -127,9 +125,9 @@ class App extends Component {
 
     render() {
         // Use state theme if available, otherwise fall back to props theme or default
-        const theme = this.state.theme || this.props.theme || createMuiTheme({
+        const theme = this.state.theme || this.props.theme || createTheme({
             palette: {
-                type: 'light'
+                mode: 'light'
             }
         });
 

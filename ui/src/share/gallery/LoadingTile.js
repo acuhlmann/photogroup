@@ -1,18 +1,18 @@
 import React, { Component } from 'react';
-import {withStyles} from '@material-ui/core/styles';
-import Typography from "@material-ui/core/Typography";
-import Paper from "@material-ui/core/Paper";
+import {withStyles} from '@mui/styles';
+import Typography from "@mui/material/Typography";
+import Paper from "@mui/material/Paper";
 import _ from 'lodash';
 
-import CheckIcon from "@material-ui/icons/CheckRounded";
-import ImageIcon from "@material-ui/icons/ImageRounded";
-import CircularProgress from "@material-ui/core/CircularProgress";
-import Divider from "@material-ui/core/Divider";
+import CheckIcon from "@mui/icons-material/CheckRounded";
+import ImageIcon from "@mui/icons-material/ImageRounded";
+import CircularProgress from "@mui/material/CircularProgress";
+import Divider from "@mui/material/Divider";
 import OwnersList from "./OwnersList";
 import FileUtil from "../util/FileUtil";
 import StringUtil from "../util/StringUtil";
-import IconButton from "@material-ui/core/IconButton";
-import DeleteIcon from "@material-ui/icons/Delete";
+import IconButton from "@mui/material/IconButton";
+import DeleteIcon from "@mui/icons-material/Delete";
 import Logger from "js-logger";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
 

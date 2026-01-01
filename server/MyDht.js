@@ -1,10 +1,9 @@
-const DHT = require('bittorrent-dht');
-const IpTranslator = require('./IpTranslator');
+import IpTranslator from './IpTranslator.js';
+import DHT from 'bittorrent-dht';
 
-module.exports = class MyDht {
+export default class MyDht {
 
-    start() {
-
+    async start() {
         this.dht = new DHT();
 
         this.dht.listen(20000, () => {

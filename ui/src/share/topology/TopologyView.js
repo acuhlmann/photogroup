@@ -1,26 +1,23 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import {withStyles } from '@material-ui/core/styles';
-import Accordion from '@material-ui/core/Accordion';
-import AccordionSummary from '@material-ui/core/AccordionSummary';
-import AccordionDetails from '@material-ui/core/AccordionDetails';
-import Typography from '@material-ui/core/Typography';
-import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
-import GroupRounded from '@material-ui/icons/GroupRounded';
-import { withSnackbar } from 'notistack';
+import {withStyles } from '@mui/styles';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import Typography from '@mui/material/Typography';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import GroupRounded from '@mui/icons-material/GroupRounded';
+import { withSnackbar } from '../compatibility/withSnackbar';
 
 import Graph from 'vis-react';
 import Logger from 'js-logger';
 import _ from "lodash";
 import update from "immutability-helper";
 import StringUtil from "../util/StringUtil";
-import Badge from "@material-ui/core/Badge";
-import Slide from "@material-ui/core/Slide";
+import Badge from "@mui/material/Badge";
+import Slide from "@mui/material/Slide";
 
 const styles = theme => ({
-    typography: {
-        useNextVariants: true,
-    },
     horizontal: {
         display: 'flex',
         flexDirection: 'row',

@@ -1,5 +1,5 @@
-const assert = require('assert');
-const Tracker = require('../../Tracker');
+import assert from 'assert';
+import Tracker from '../../Tracker.js';
 
 describe('Tracker', () => {
   let tracker;

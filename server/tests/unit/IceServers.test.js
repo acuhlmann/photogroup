@@ -1,38 +1,12 @@
-const assert = require('assert');
-
-// Mock twilio before requiring IceServers
-const mockTwilioClient = {
-  tokens: {
-    create: function(options, callback) {
-      // Simulate async response without making real API call
-      setImmediate(() => {
-        callback(null, {
-          iceServers: [
-            { urls: 'stun:test.stun.server:3478' },
-            { urls: 'turn:test.turn.server:3478', username: 'test', credential: 'test' }
-          ]
-        });
-      });
-    }
-  }
-};
-
-// Mock the twilio module in require cache
-const Module = require('module');
-const twilioPath = require.resolve('twilio');
-delete require.cache[twilioPath];
-require.cache[twilioPath] = {
-  id: twilioPath,
-  exports: function(accountSid, authToken) {
-    return mockTwilioClient;
-  }
-};
+import assert from 'assert';
 
 // Suppress console.log during tests to avoid ICE server config output
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
 
-const IceServers = require('../../IceServers');
+// In ESM, we can't mock modules the same way, but since NODE_ENV=test,
+// IceServers should skip Twilio initialization
+import IceServers from '../../IceServers.js';
 
 describe('IceServers', () => {
   let iceServers;

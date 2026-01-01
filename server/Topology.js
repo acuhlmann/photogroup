@@ -1,5 +1,4 @@
-
-module.exports = class Topology {
+export default class Topology {
 
     constructor(peers, updateChannel) {
         this.peers = peers;

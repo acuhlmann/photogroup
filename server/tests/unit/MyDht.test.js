@@ -1,5 +1,5 @@
-const assert = require('assert');
-const MyDht = require('../../MyDht');
+import assert from 'assert';
+import MyDht from '../../MyDht.js';
 
 describe('MyDht', () => {
   let myDht;
