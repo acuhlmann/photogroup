@@ -8,9 +8,11 @@ ZONE=asia-east2-a
 INSTANCE=main
 PROJECT=photogroup-215600
 DOMAIN=photogroup.network
+HACKERNEWS_SUBDOMAIN=hackernews.$DOMAIN
 EMAIL=acuhlmann@gmail.com
 
 echo "Setting up Let's Encrypt SSL certificates for $DOMAIN"
+echo "Also configuring certificate for: $HACKERNEWS_SUBDOMAIN"
 echo "Project: $PROJECT"
 echo "Instance: $INSTANCE"
 echo "Zone: $ZONE"
@@ -57,7 +59,7 @@ gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo sys
 # Obtain certificates using certbot with nginx plugin
 echo "Obtaining SSL certificates from Let's Encrypt..."
 echo "Note: This requires DNS to be pointing to the VM's external IP"
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos --email $EMAIL --redirect"
+gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN -d $HACKERNEWS_SUBDOMAIN --non-interactive --agree-tos --email $EMAIL --redirect"
 
 # Set up automatic renewal
 echo "Setting up automatic certificate renewal..."
