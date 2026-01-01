@@ -153,6 +153,11 @@ else
         
         # Enable nginx
         systemctl enable nginx
+
+        # Install Docker (for additional services like Hackersbot)
+        # Using Docker official install script to get current stable Docker Engine + Compose plugin.
+        curl -fsSL https://get.docker.com | sh
+        systemctl enable docker
         
         # Install build tools (needed for native modules)
         apt-get install -y build-essential python3
