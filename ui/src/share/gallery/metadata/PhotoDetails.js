@@ -1,18 +1,18 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
-import Dialog from '@material-ui/core/Dialog';
-import DialogContent from '@material-ui/core/DialogContent';
-import DialogTitle from '@material-ui/core/DialogTitle';
-import DialogActions from '@material-ui/core/DialogActions';
-import CloseRounded from '@material-ui/icons/CloseRounded';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogActions from '@mui/material/DialogActions';
+import CloseRounded from '@mui/icons-material/CloseRounded';
 
-import List from '@material-ui/core/List';
-import { withStyles } from '@material-ui/core/styles';
+import List from '@mui/material/List';
+import { withStyles } from '@mui/styles';
 import PhotoDetailsRenderer from "./PhotoDetailsRenderer";
-import IconButton from "@material-ui/core/IconButton";
+import IconButton from "@mui/material/IconButton";
 import MetadataParser from "./MetadataParser";
-import Slide from '@material-ui/core/Slide';
+import Slide from '@mui/material/Slide';
 import FileUtil from "../../util/FileUtil";
 import Logger from 'js-logger';
 

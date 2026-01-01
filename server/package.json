@@ -2,6 +2,7 @@
   "name": "photogroup-server",
   "version": "0.0.2",
   "description": "Zero Install, Peer-to-Peer Photo Group Collaboration.",
+  "type": "module",
   "main": "app.js",
   "private": true,
   "scripts": {
@@ -14,35 +15,31 @@
     "deploy": "gcloud app deploy"
   },
   "dependencies": {
-    "bittorrent-dht": "^9.0.3",
-    "bittorrent-tracker": "^9.16.1",
-    "body-parser": "^1.20.3",
-    "compression": "^1.7.4",
+    "bittorrent-dht": "^11.0.11",
+    "bittorrent-tracker": "^11.2.2",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
-    "eventemitter3": "^4.0.7",
-    "events": "^3.3.0",
-    "express": "^4.21.1",
-    "express-request-id": "^1.4.1",
+    "eventemitter3": "^5.0.1",
+    "express": "^5.2.1",
+    "express-request-id": "^3.0.0",
     "is-local-ip": "^1.1.0",
-    "magnet-uri": "^5.4.0",
+    "lodash": "^4.17.21",
+    "magnet-uri": "^7.0.7",
     "mocha": "^11.7.5",
-    "path": "^0.12.7",
-    "axios": "^1.7.9",
-    "sdp-transform": "^2.14.1",
-    "sse-channel": "^3.1.1",
-    "supertest": "^7.0.0",
+    "axios": "^1.13.2",
+    "sdp-transform": "^3.0.0",
+    "sse-channel": "^4.0.0",
+    "supertest": "^7.1.4",
     "twilio": "^5.11.1",
-    "url": "^0.11.0",
-    "util": "^0.12.3",
-    "webtorrent-hybrid": "^4.0.3",
+    "webtorrent": "^2.8.5",
     "wrtc": "^0.4.7"
   },
   "engines": {
     "node": ">=24.0.0"
   },
   "devDependencies": {
-    "cross-env": "^7.0.3",
-    "rimraf": "^3.0.2"
+    "cross-env": "^10.1.0",
+    "rimraf": "^6.1.2"
   },
   "license": "MIT",
   "overrides": {

@@ -3,32 +3,32 @@ import PropTypes from 'prop-types';
 
 import Logger from 'js-logger';
 
-import { withStyles } from '@material-ui/core/styles';
-import Button from '@material-ui/core/Button';
-import IconButton from '@material-ui/core/IconButton';
-import Settings from '@material-ui/icons/Settings';
-import Bluetooth from '@material-ui/icons/BluetoothSearching';
-import CloseRounded from '@material-ui/icons/CloseRounded';
-import Dialog from '@material-ui/core/Dialog';
-import DialogContent from '@material-ui/core/DialogContent';
-import DialogTitle from '@material-ui/core/DialogTitle';
-import DialogActions from '@material-ui/core/DialogActions';
+import { withStyles } from '@mui/styles';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Settings from '@mui/icons-material/Settings';
+import Bluetooth from '@mui/icons-material/BluetoothSearching';
+import CloseRounded from '@mui/icons-material/CloseRounded';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogActions from '@mui/material/DialogActions';
 
-import List from '@material-ui/core/List';
-/*import ListItem from '@material-ui/core/ListItem';
-import ListItemText from '@material-ui/core/ListItemText';
+import List from '@mui/material/List';
+/*import ListItem from '@mui/material/ListItem';
+import ListItemText from '@mui/material/ListItemText';
 import { FixedSizeList } from 'react-window';*/
 
-import Switch from '@material-ui/core/Switch';
-import FormGroup from '@material-ui/core/FormGroup';
-import FormControlLabel from '@material-ui/core/FormControlLabel';
+import Switch from '@mui/material/Switch';
+import FormGroup from '@mui/material/FormGroup';
+import FormControlLabel from '@mui/material/FormControlLabel';
 
 import RoomsService from '../RoomsService';
 import {format} from 'date-fns';
-import Typography from "@material-ui/core/Typography/Typography";
-import {withSnackbar} from "notistack";
+import Typography from "@mui/material/Typography";
+import {withSnackbar} from "../compatibility/withSnackbar";
 import update from "immutability-helper";
-import Slide from '@material-ui/core/Slide';
+import Slide from '@mui/material/Slide';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Slide direction="down" ref={ref} {...props} />;

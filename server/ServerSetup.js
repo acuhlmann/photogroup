@@ -1,12 +1,18 @@
 //------------Utils and Setup - Logs, SSE, express setup
-const express = require('express');
-const compress = require('compression');
-const path = require('path');
+import express from 'express';
+import compress from 'compression';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import SseChannel from 'sse-channel';
+import expressRequestId from 'express-request-id';
 
-module.exports = class ServerSetup {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+export default class ServerSetup {
 
     start() {
-        const SseChannel = require('sse-channel');
         this.updateChannel = new SseChannel({
             retryTimeout: 1000,
             historySize: 500,
@@ -47,13 +53,12 @@ module.exports = class ServerSetup {
         // Use GZIP
         app.use(compress());
 
-        const bodyParser = require('body-parser');
         app.use(express.static(path.join(__dirname, 'ui'), {
             etag: false
         }));
-        app.use(bodyParser.json());
+        app.use(express.json());
 
-        const addRequestId = require('express-request-id')();
+        const addRequestId = (expressRequestId.default || expressRequestId)();
         app.use(addRequestId);
 
         app.use((request, response, next) => {

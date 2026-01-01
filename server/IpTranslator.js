@@ -1,9 +1,9 @@
 //-----------------Custom WebTorrent Tracker - ICE Events
-const axios = require('axios');
-const isLocal = require('is-local-ip');
-const _ = require('lodash');
+import axios from 'axios';
+import isLocal from 'is-local-ip';
+import _ from 'lodash';
 
-module.exports = class IpTranslator {
+export default class IpTranslator {
 
     static reset() {
         IpTranslator.lookedUpIPs.clear();

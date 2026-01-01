@@ -2,17 +2,17 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
 import Logger from 'js-logger';
-import { withStyles } from '@material-ui/core/styles';
+import { withStyles } from '@mui/styles';
 
 import LoaderView from './LoaderView';
 
-import IconButton from "@material-ui/core/IconButton/IconButton";
-import CloudUploadRounded from '@material-ui/icons/CloudUploadRounded';
-import Dialog from "@material-ui/core/Dialog/Dialog";
-import DialogContent from "@material-ui/core/DialogContent/DialogContent";
-import DialogActions from "@material-ui/core/DialogActions/DialogActions";
-import CloseRounded from "@material-ui/core/SvgIcon/SvgIcon";
-import Button from "@material-ui/core/Button";
+import IconButton from "@mui/material/IconButton";
+import CloudUploadRounded from '@mui/icons-material/CloudUploadRounded';
+import Dialog from "@mui/material/Dialog";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import CloseRounded from "@mui/icons-material/CloseRounded";
+import Button from "@mui/material/Button";
 
 import PasswordInput from "../security/PasswordInput";
 import WebCrypto from "../security/WebCrypto";

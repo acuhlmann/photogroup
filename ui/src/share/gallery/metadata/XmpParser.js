@@ -1,6 +1,6 @@
 import {get} from 'lodash';
 import Logger from 'js-logger';
-import xmlParser from 'fast-xml-parser';
+import {XMLParser} from 'fast-xml-parser';
 
 export default class XmpParser {
 
@@ -9,9 +9,10 @@ export default class XmpParser {
         if(!xmp) return allMetadata;
 
         const opts = {ignoreAttributes: false}
+        const xmlParser = new XMLParser(opts);
         let xmpdata;
         try{
-            xmpdata = xmlParser.parse(xmp, opts);
+            xmpdata = xmlParser.parse(xmp);
         }catch(error){
             Logger.error(error.message);
             return allMetadata;

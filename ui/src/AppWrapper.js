@@ -1,6 +1,6 @@
 import React from 'react';
-import useMediaQuery from '@material-ui/core/useMediaQuery';
-import { createMuiTheme, ThemeProvider } from '@material-ui/core/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import App from "./App";
 
 export default function AppWrapper() {
@@ -8,9 +8,9 @@ export default function AppWrapper() {
 
     const theme = React.useMemo(
         () =>
-            createMuiTheme({
+            createTheme({
                 palette: {
-                    type: prefersDarkMode ? 'dark' : 'light',
+                    mode: prefersDarkMode ? 'dark' : 'light',
                 },
             }),
         [prefersDarkMode],

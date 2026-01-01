@@ -1,8 +1,8 @@
 import React, { Component } from 'react';
-import {withStyles} from '@material-ui/core/styles';
-import Typography from "@material-ui/core/Typography";
+import {withStyles} from '@mui/styles';
+import Typography from "@mui/material/Typography";
 import StringUtil from "./StringUtil";
-import AccountCircleRounded from "@material-ui/icons/AccountCircleRounded";
+import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
 
 const styles = theme => ({
     horizontal: {

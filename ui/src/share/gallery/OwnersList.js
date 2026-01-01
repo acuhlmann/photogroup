@@ -1,21 +1,21 @@
 import React, { Component } from 'react';
-import {withStyles} from '@material-ui/core/styles';
-import Typography from "@material-ui/core/Typography";
-import List from "@material-ui/core/List";
-import ListItem from "@material-ui/core/ListItem";
-import AccountCircleRounded from "@material-ui/icons/AccountCircleRounded";
-import GroupRounded from "@material-ui/icons/GroupRounded";
-import Paper from "@material-ui/core/Paper";
+import {withStyles} from '@mui/styles';
+import Typography from "@mui/material/Typography";
+import List from "@mui/material/List";
+import ListItem from "@mui/material/ListItem";
+import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
+import GroupRounded from "@mui/icons-material/GroupRounded";
+import Paper from "@mui/material/Paper";
 import Logger from 'js-logger';
 import _ from 'lodash';
 
-import Accordion from '@material-ui/core/Accordion';
-import AccordionSummary from '@material-ui/core/AccordionSummary';
-import AccordionDetails from '@material-ui/core/AccordionDetails';
-import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
-import Badge from "@material-ui/core/Badge";
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import Badge from "@mui/material/Badge";
 import StringUtil from "../util/StringUtil";
-import CheckIcon from "@material-ui/icons/CheckRounded";
+import CheckIcon from "@mui/icons-material/CheckRounded";
 import NatListItem from "../util/NatListItem";
 import UserListItem from "../util/UserListItem";
 

@@ -1,18 +1,19 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
-import { createMuiTheme } from '@material-ui/core/styles';
+import { createRoot } from 'react-dom/client';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { vi } from 'vitest';
 import App from './App';
 
 // Mock dependencies
-jest.mock('./share/torrent/TorrentMaster', () => {
+vi.mock('./share/torrent/TorrentMaster', () => {
   class MockTorrentMaster {
     constructor(roomsService, emitter) {
       // Ensure service is always a proper object
       // Use the passed roomsService if it exists, otherwise create a mock
       const service = roomsService || {
         master: null,
-        createRoom: jest.fn(),
-        changeUrl: jest.fn(),
+        createRoom: vi.fn(),
+        changeUrl: vi.fn(),
         id: 'test-room-id'
       };
       
@@ -23,70 +24,91 @@ jest.mock('./share/torrent/TorrentMaster', () => {
       
       this.service = service;
       this.emitter = emitter || {
-        on: jest.fn(),
-        emit: jest.fn()
+        on: vi.fn(),
+        emit: vi.fn()
       };
       this.torrentAddition = {
         emitter: {
-          on: jest.fn()
+          on: vi.fn()
         }
       };
-      this.findExistingContent = jest.fn();
-      this.reload = jest.fn();
-      this.restartTrackers = jest.fn();
+      this.findExistingContent = vi.fn();
+      this.reload = vi.fn();
+      this.restartTrackers = vi.fn();
       this.client = {
         peerId: 'test-peer-id'
       };
     }
   }
   
-  return MockTorrentMaster;
+  return {
+    default: MockTorrentMaster
+  };
 });
 
-jest.mock('visibilityjs', () => ({
-  isSupported: jest.fn(() => true),
-  change: jest.fn()
+vi.mock('visibilityjs', () => ({
+  isSupported: vi.fn(() => true),
+  change: vi.fn()
 }));
 
-// Mock audiomotion-analyzer - it's an ES module that Jest can't parse
+// Mock audiomotion-analyzer - it's an ES module that Vitest can't parse
 // Mock is now in setupTests.js
 
-jest.mock('online-js', () => ({
+vi.mock('online-js', () => ({
   __esModule: true,
-  default: jest.fn()
+  default: vi.fn()
 }));
 
-jest.mock('webtorrent', () => ({
+vi.mock('webtorrent', () => ({
   __esModule: true,
-  default: jest.fn().mockImplementation(() => ({
-    add: jest.fn(),
-    remove: jest.fn(),
-    destroy: jest.fn(),
-    on: jest.fn(),
-    off: jest.fn()
-  }))
+  default: vi.fn().mockImplementation(() => ({
+    add: vi.fn(),
+    remove: vi.fn(),
+    destroy: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn()
+  })),
+  WEBRTC_SUPPORT: true
+}));
+
+vi.mock('notistack', async () => {
+  const actual = await vi.importActual('notistack');
+  return {
+    ...actual,
+    withSnackbar: (Component) => Component,
+  };
+});
+
+vi.mock('./share/ShareCanvas', () => ({
+  __esModule: true,
+  default: () => React.createElement('div', null, 'ShareCanvas')
 }));
 
 describe('App', () => {
-  const theme = createMuiTheme();
+  const theme = createTheme();
 
   it('renders without crashing', () => {
     const div = document.createElement('div');
-    ReactDOM.render(<App prefersDarkMode={false} theme={theme} />, div);
-    ReactDOM.unmountComponentAtNode(div);
+    const root = createRoot(div);
+    root.render(<App prefersDarkMode={false} theme={theme} />);
+    root.unmount();
   });
 
-  it('renders PhotoGroup header', () => {
+  it('renders PhotoGroup header', async () => {
     const div = document.createElement('div');
-    ReactDOM.render(<App prefersDarkMode={false} theme={theme} />, div);
+    const root = createRoot(div);
+    root.render(<App prefersDarkMode={false} theme={theme} />);
+    // Wait for next tick to allow rendering
+    await new Promise(resolve => setTimeout(resolve, 10));
     expect(div.textContent).toContain('PhotoGroup');
-    ReactDOM.unmountComponentAtNode(div);
+    root.unmount();
   });
 
   it('handles dark mode preference', () => {
-    const darkTheme = createMuiTheme({ palette: { type: 'dark' } });
+    const darkTheme = createTheme({ palette: { mode: 'dark' } });
     const div = document.createElement('div');
-    ReactDOM.render(<App prefersDarkMode={true} theme={darkTheme} />, div);
-    ReactDOM.unmountComponentAtNode(div);
+    const root = createRoot(div);
+    root.render(<App prefersDarkMode={true} theme={darkTheme} />);
+    root.unmount();
   });
 });

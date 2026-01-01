@@ -4,10 +4,12 @@
   "description": "PhotoGroup - Zero Install, Peer-to-Peer Photo Collaboration.",
   "scripts": {
     "clean": "cdn server && npm run clean",
-    "install-all": "cd server && npm install & cd ui && npm install",
+    "install:server": "cd server && npm install",
+    "install:ui": "cd ui && npm install",
+    "install-all": "npm-run-all --parallel install:server install:ui",
     "start-server": "cd server && npm start",
     "start-ui": "cd ui && npm start",
-    "start": "npm run start-server & npm run start-ui",
+    "start": "npm-run-all --parallel start-server start-ui",
     "install-start": "npm run install-all && npm run start",
     "build": "cd ui && npm run build",
     "build-deploy": "npm run build && npm run deploy",
@@ -25,5 +27,8 @@
   "license": "MIT",
   "engines": {
     "node": ">=24.0.0"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
   }
 }

@@ -1,12 +1,12 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
-import { withStyles } from '@material-ui/core/styles';
+import { withStyles } from '@mui/styles';
 
-import CircularProgress from '@material-ui/core/CircularProgress';
+import CircularProgress from '@mui/material/CircularProgress';
 import FileUtil from '../util/FileUtil';
 //import Logger from "js-logger";
-import Typography from '@material-ui/core/Typography';
+import Typography from '@mui/material/Typography';
 
 const styles = theme => ({
     button: {

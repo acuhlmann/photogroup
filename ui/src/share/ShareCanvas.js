@@ -1,11 +1,11 @@
 import React, { Component } from 'react';
 import Gallery from "./gallery/Gallery";
 
-import Button from '@material-ui/core/Button';
-import {withStyles, withTheme } from '@material-ui/core/styles';
+import Button from '@mui/material/Button';
+import {withStyles, withTheme } from '@mui/styles';
 
 import Logger from 'js-logger';
-import { withSnackbar } from 'notistack';
+import { withSnackbar } from './compatibility/withSnackbar';
 
 import FrontView from "./FrontView";
 import MeView from "./MeView";
@@ -14,9 +14,6 @@ import WebTorrent from 'webtorrent';
 // import Online from 'online-js' // Commented out - not currently used and causes axios import issues
 
 const styles = theme => ({
-    typography: {
-        useNextVariants: true,
-    },
     heading: {
         fontSize: theme.typography.pxToRem(15),
         fontWeight: theme.typography.fontWeightRegular,

@@ -1,5 +1,5 @@
-const assert = require('assert');
-const IpTranslator = require('../../IpTranslator');
+import assert from 'assert';
+import IpTranslator from '../../IpTranslator.js';
 
 describe('IpTranslator', () => {
   beforeEach(() => {

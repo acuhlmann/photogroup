@@ -1,9 +1,10 @@
 //------------------Twillio ICE STUN/TURN
 
-const IpTranslator = require("./IpTranslator");
-const util = require('util');
+import IpTranslator from "./IpTranslator.js";
+import { inspect } from 'util';
+import WebTorrent from 'webtorrent';
 
-module.exports = class ServerPeer {
+export default class ServerPeer {
 
     constructor(topology, remoteLog, peers, roomManager, ice, emitter) {
 
@@ -23,7 +24,6 @@ module.exports = class ServerPeer {
         const webtorrent = this.webtorrent;
 
         if(!webtorrent.client) {
-            const WebTorrent = require('webtorrent-hybrid');
             webtorrent.client = new WebTorrent({tracker: {
                     rtcConfig: this.ice.iceServers
                 }});
@@ -34,7 +34,7 @@ module.exports = class ServerPeer {
         this.addTorrent(url, request, response);
 
         webtorrent.client.on('torrent', torrent => {
-            this.remoteLog('torrent ' + torrent.dn);
+            this.remoteLog('torrent ' + torrent.name);
         });
 
         webtorrent.client.on('error', (err) => {
@@ -100,25 +100,25 @@ module.exports = class ServerPeer {
 
         const isProd = process.env.args && process.env.args.includes('prod') || false;
         console.info('prd ' + isProd);
-        console.info('process.env ' + util.inspect(process.argv));
+        console.info('process.env ' + inspect(process.argv));
         const tracker = isProd ? 'wss://photogroup.network/ws' : 'ws://localhost:9000';
         //const tracker = 'wss://photogroup.network/ws';
 
         this.webtorrent.client.add(url, { 'announce': tracker }, torrent => {
-            remoteLog('wt.add ' + torrent.dn);
+            remoteLog('wt.add ' + torrent.name);
 
             this.connect(torrent);
 
             torrent.on('download', bytes => {
-                console.log('wt.download ' + torrent.dn + ' bytes ' + bytes);
-                //remoteLog('wt.download ' + torrent.dn + ' bytes ' + bytes);
+                console.log('wt.download ' + torrent.name + ' bytes ' + bytes);
+                //remoteLog('wt.download ' + torrent.name + ' bytes ' + bytes);
             });
             torrent.on('upload', bytes => {
-                console.log('wt.upload ' + torrent.dn + ' bytes ' + bytes);
-                //remoteLog('wt.upload ' + torrent.dn + ' bytes ' + bytes);
+                console.log('wt.upload ' + torrent.name + ' bytes ' + bytes);
+                //remoteLog('wt.upload ' + torrent.name + ' bytes ' + bytes);
             });
             torrent.on('done', () => {
-                remoteLog('wt.done ' + torrent.dn);
+                remoteLog('wt.done ' + torrent.name);
 
                 if(!response.headersSent) {
 
@@ -138,17 +138,17 @@ module.exports = class ServerPeer {
                 console.log('ready ');
             });
             torrent.on('wire', wire => {
-                remoteLog('wt.wire ' + torrent.dn + ' wire ' + wire);
+                remoteLog('wt.wire ' + torrent.name + ' wire ' + wire);
             });
 
             torrent.on('noPeers', announceType => {
-                remoteLog('wt.noPeers ' + torrent.dn + ' announceType ' + announceType);
+                remoteLog('wt.noPeers ' + torrent.name + ' announceType ' + announceType);
             });
             torrent.on('warning', err => {
-                remoteLog('wt.warning ' + torrent.dn + ' err ' + err);
+                remoteLog('wt.warning ' + torrent.name + ' err ' + err);
             });
             torrent.on('error', err => {
-                remoteLog('wt.error ' + torrent.dn + ' err ' + err);
+                remoteLog('wt.error ' + torrent.name + ' err ' + err);
             });
         });
     }

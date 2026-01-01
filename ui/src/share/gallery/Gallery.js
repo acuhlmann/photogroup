@@ -1,9 +1,9 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import {withStyles} from '@material-ui/core/styles';
+import {withStyles} from '@mui/styles';
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
-import {withSnackbar} from "notistack";
+import {withSnackbar} from "../compatibility/withSnackbar";
 import update from "immutability-helper";
 import _ from "lodash";
 import LoadingTile from "./LoadingTile";

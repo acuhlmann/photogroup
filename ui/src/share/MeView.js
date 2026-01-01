@@ -1,26 +1,26 @@
 import React, {Component} from 'react';
 import PropTypes from 'prop-types';
 
-import {withStyles} from '@material-ui/core/styles';
+import {withStyles} from '@mui/styles';
 
-import Accordion from '@material-ui/core/Accordion';
-import AccordionSummary from '@material-ui/core/AccordionSummary';
-import AccordionDetails from '@material-ui/core/AccordionDetails';
-import Typography from '@material-ui/core/Typography';
-import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import Typography from '@mui/material/Typography';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
-import Paper from "@material-ui/core/Paper";
-import AccountCircleRounded from '@material-ui/icons/AccountCircleRounded';
-import TextField from "@material-ui/core/TextField";
+import Paper from "@mui/material/Paper";
+import AccountCircleRounded from '@mui/icons-material/AccountCircleRounded';
+import TextField from "@mui/material/TextField";
 import update from "immutability-helper";
-import ViewListRounded from '@material-ui/icons/ViewListRounded';
-import ViewAgendaRounded from '@material-ui/icons/ViewAgendaRounded';
-import IconButton from '@material-ui/core/IconButton';
+import ViewListRounded from '@mui/icons-material/ViewListRounded';
+import ViewAgendaRounded from '@mui/icons-material/ViewAgendaRounded';
+import IconButton from '@mui/material/IconButton';
 import StringUtil from "./util/StringUtil";
 import NatListItem from "./util/NatListItem";
 import UserListItem from "./util/UserListItem";
-import Slide from "@material-ui/core/Slide";
-import {Fade} from "@material-ui/core";
+import Slide from "@mui/material/Slide";
+import {Fade} from "@mui/material";
 
 const styles = theme => ({
     content: {

@@ -1,15 +1,15 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
-import { withStyles } from '@material-ui/core/styles';
+import { withStyles } from '@mui/styles';
 
-import Button from '@material-ui/core/Button';
-import PlayCircleFilledWhiteRoundedIcon from '@material-ui/icons/PlayCircleFilledWhiteRounded';
-import {Typography} from "@material-ui/core";
-import CropFreeRounded from '@material-ui/icons/CropFreeRounded';
-import SettingsVoiceRounded from '@material-ui/icons/SettingsVoiceRounded';
-import IconButton from "@material-ui/core/IconButton";
-import Slide from "@material-ui/core/Slide";
+import Button from '@mui/material/Button';
+import PlayCircleFilledWhiteRoundedIcon from '@mui/icons-material/PlayCircleFilledWhiteRounded';
+import {Typography} from "@mui/material";
+import CropFreeRounded from '@mui/icons-material/CropFreeRounded';
+import SettingsVoiceRounded from '@mui/icons-material/SettingsVoiceRounded';
+import IconButton from "@mui/material/IconButton";
+import Slide from "@mui/material/Slide";
 
 const styles = theme => ({
     button: {

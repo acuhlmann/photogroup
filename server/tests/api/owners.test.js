@@ -1,9 +1,9 @@
 // Suppress console output before loading app
-require('../test-setup');
+import '../test-setup.js';
 
-const request = require('supertest');
-const assert = require('assert');
-const {app, started} = require('../../app');
+import request from 'supertest';
+import assert from 'assert';
+import { app, started } from '../../app.js';
 
 describe('Photo Owners API', () => {
     let testRoomId;
