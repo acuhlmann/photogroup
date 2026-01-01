@@ -48,17 +48,17 @@ jobs:
             server/package-lock.json
       
       - name: Install root dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
       
       - name: Install UI dependencies
         run: |
           cd ui
-          npm ci
+          npm ci --legacy-peer-deps
       
       - name: Install server dependencies
         run: |
           cd server
-          npm ci
+          npm ci --legacy-peer-deps
       
       - name: Create secret file from GitHub Secrets
         run: |
