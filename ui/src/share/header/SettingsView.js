@@ -30,9 +30,17 @@ import {withSnackbar} from "../compatibility/withSnackbar";
 import update from "immutability-helper";
 import Slide from '@mui/material/Slide';
 
+/* global __APP_VERSION__ */
+
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Slide direction="down" ref={ref} {...props} />;
 });
+
+function getAppVersionString() {
+    const base = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) ? __APP_VERSION__ : 'dev';
+    const build = import.meta?.env?.VITE_APP_VERSION;
+    return build ? `${base}.${build}` : base;
+}
 
 const styles = theme => ({
     horizontal: {
@@ -427,7 +435,7 @@ class SettingsView extends Component {
                     </DialogActions>
                     <DialogContent>
                         <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v0.3 {this.state.peerId}</Typography>
+                        <Typography variant={"caption"}>v{getAppVersionString()} {this.state.peerId}</Typography>
 
                         {messages}
 
