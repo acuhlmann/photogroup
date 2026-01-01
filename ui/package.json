@@ -44,7 +44,6 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-promise": "^3.0.2",
-    "react-qr-reader": "^2.2.1",
     "react-window": "^2.2.3",
     "render-media": "^4.1.0",
     "sdp-transform": "^3.0.0",
