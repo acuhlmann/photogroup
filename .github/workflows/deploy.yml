@@ -53,7 +53,9 @@ jobs:
       - name: Install UI dependencies
         run: |
           cd ui
-          npm ci
+          # UI has known peer-dependency conflicts (e.g. transitive deps requiring older React),
+          # so we install with legacy peer dependency resolution (same as the test workflow).
+          npm ci --legacy-peer-deps
       
       - name: Install server dependencies
         run: |
@@ -72,6 +74,9 @@ jobs:
       
       - name: Build UI
         run: npm run build
+        env:
+          # Auto-incrementing build number for Settings view (exposed via import.meta.env)
+          VITE_APP_VERSION: ${{ github.run_number }}
       
       - name: Prepare deployment files
         run: |
