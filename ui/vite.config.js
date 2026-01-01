@@ -2,9 +2,12 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+const pkg = require('./package.json');
 
 // https://vitejs.dev/config/
 // Custom plugin to inject process polyfill early
@@ -70,6 +73,7 @@ export default defineConfig({
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
     'global': 'window',
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   resolve: {
     alias: {
