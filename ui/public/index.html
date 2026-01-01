@@ -96,9 +96,22 @@
 
     <div id="snackbar">A new version of this app is available. Click <a id="reload" href="javascript:void(0);">here</a> to update.</div>
     <script>
-      // Polyfill global for Node.js modules that expect it
+      // Polyfill global and process for Node.js modules that expect it
       if (typeof global === 'undefined') {
         var global = window;
+      }
+      if (typeof process === 'undefined') {
+        var process = {
+          env: { NODE_ENV: 'development' },
+          browser: true,
+          nextTick: function(fn) {
+            setTimeout(fn, 0);
+          }
+        };
+      } else if (!process.nextTick) {
+        process.nextTick = function(fn) {
+          setTimeout(fn, 0);
+        };
       }
     </script>
     <script type="module" src="/src/index.js"></script>
