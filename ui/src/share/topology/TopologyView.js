@@ -653,7 +653,7 @@ class TopologyView extends Component {
                                             }}>
                 <AccordionSummary 
                     expandIcon={<ExpandMoreIcon />}
-                    iconButtonProps={{ component: 'div' }}>
+                    slotProps={{ iconButton: { component: 'div' } }}>
                     {this.buildHeader(classes, wtNumPeers)}
                 </AccordionSummary>
                 <AccordionDetails className={classes.content} style={{

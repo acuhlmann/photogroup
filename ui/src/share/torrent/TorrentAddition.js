@@ -175,42 +175,99 @@ export default class TorrentAddition {
         try {
             const tUrls = filesArr.map(item => exifr.thumbnailUrl(item));
             thumbnailUrls = await Promise.all(tUrls);
-            //let exr = new Exifr(options)
-            //let buffer = await exr.extractThumbnail()
-            //const url = await exifr.thumbnailUrl(filesArr[0]);
-            //thumbnailUrls = [url];
         } catch(e) {
-            Logger.warn('Cannot find thumbnail ' + e + ' ' + filesArr.map(item => item.name));
+            Logger.warn('Cannot find thumbnail from EXIF ' + e + ' ' + filesArr.map(item => item.name));
         }
 
         thumbnailUrls = thumbnailUrls.filter(item => item);
 
+        // Fallback: For images without EXIF thumbnails (like PNGs), create thumbnails from the image itself
+        if(thumbnailUrls.length < filesArr.length) {
+            Logger.info('Creating fallback thumbnails for images without EXIF data');
+            const fallbackThumbnails = await Promise.all(
+                filesArr.map(async (file, index) => {
+                    // If we already have a thumbnail for this file, skip it
+                    if(thumbnailUrls[index]) {
+                        return null;
+                    }
+                    try {
+                        // Create a thumbnail by loading the image and creating a canvas
+                        return new Promise((resolve, reject) => {
+                            const img = new Image();
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            
+                            img.onload = () => {
+                                // Create a thumbnail (max 200x200)
+                                const maxSize = 200;
+                                let width = img.width;
+                                let height = img.height;
+                                
+                                if(width > height) {
+                                    if(width > maxSize) {
+                                        height = (height * maxSize) / width;
+                                        width = maxSize;
+                                    }
+                                } else {
+                                    if(height > maxSize) {
+                                        width = (width * maxSize) / height;
+                                        height = maxSize;
+                                    }
+                                }
+                                
+                                canvas.width = width;
+                                canvas.height = height;
+                                ctx.drawImage(img, 0, 0, width, height);
+                                
+                                canvas.toBlob((blob) => {
+                                    if(blob) {
+                                        const url = URL.createObjectURL(blob);
+                                        resolve(url);
+                                    } else {
+                                        reject(new Error('Failed to create thumbnail blob'));
+                                    }
+                                }, file.type, 0.9);
+                            };
+                            
+                            img.onerror = () => {
+                                reject(new Error('Failed to load image for thumbnail'));
+                            };
+                            
+                            img.src = URL.createObjectURL(file);
+                        });
+                    } catch(e) {
+                        Logger.warn('Failed to create fallback thumbnail for ' + file.name + ': ' + e);
+                        return null;
+                    }
+                })
+            );
+            
+            // Add fallback thumbnails to the array
+            fallbackThumbnails.forEach((thumb, index) => {
+                if(thumb && !thumbnailUrls[index]) {
+                    thumbnailUrls[index] = thumb;
+                }
+            });
+        }
+
         if(thumbnailUrls.length < 1) {
-            Logger.warn('No thumbnail found. ');
-            /*
-            //credits to https://media.prod.mdn.mozit.cloud/attachments/2012/07/09/3698/391aef19653595a663cc601c42a67116/image_upload_preview.html
-            const thumbFilter = /^(?:image\/bmp|image\/cis\-cod|image\/gif|image\/ief|image\/jpeg|image\/jpeg|image\/jpeg|image\/pipeg|image\/png|image\/svg\+xml|image\/tiff|image\/x\-cmu\-raster|image\/x\-cmx|image\/x\-icon|image\/x\-portable\-anymap|image\/x\-portable\-bitmap|image\/x\-portable\-graymap|image\/x\-portable\-pixmap|image\/x\-rgb|image\/x\-xbitmap|image\/x\-xpixmap|image\/x\-xwindowdump)$/i;
-            const reader = new FileReader();
-            reader.onload = function (event) {
-                Logger.info('event ' + event.target.result);
-            };
-            if (thumbFilter.test(filesArr[0].type)) {
-                reader.readAsDataURL(filesArr[0]);
-            } else {
-                Logger.warn('No valid image for thumbnail.');
-            }
-            */
+            Logger.warn('No thumbnail found for any image.');
+            return [];
         }
 
         const thumbnailBlobs = await Promise.all(thumbnailUrls
             .filter(item => item)
-            .map(item => fetch(item)
-                .then(r => r.blob())));
+            .map(item => {
+                // If it's already a blob URL, fetch it; otherwise it's already a blob
+                if(typeof item === 'string' && item.startsWith('blob:')) {
+                    return fetch(item).then(r => r.blob());
+                }
+                return Promise.resolve(item);
+            }));
 
         const thumbnailFiles = thumbnailBlobs.map((item, index) => {
             const file = filesArr[index];
             const fileName = 'Thumbnail ' + file.name;
-            //const fileName = file.name;
             const thumb = new File([item], fileName, {
                 type: file.type,
                 lastModified: file.lastModified
@@ -307,99 +364,139 @@ export default class TorrentAddition {
         }));
         const allFiles = [...thumbnailBlobs, ...filesArr];*/
 
-        const torrent = this.master.addSeedOrGetTorrent('seed', files, torrent => {
+        let torrent;
+        try {
+            torrent = this.master.addSeedOrGetTorrent('seed', files, torrent => {
 
-            Logger.info('seed.done ' + torrent.infoHash);
+                Logger.info('seed.done ' + torrent.infoHash);
 
-            //this.storeTorrent(torrent);
+                //this.storeTorrent(torrent);
 
-            const withoutThumbs = torrent.files.filter(item => !item.name.startsWith('Thumbnail '));
-            const addedInfoHash = photos.map(photo => {
-                photo.infoHash = torrent.infoHash;
-                if(withoutThumbs.length > 1) {
-                    photo.infoHash += '-' + withoutThumbs.find(file => file.name === photo.file.name).path;
+                const withoutThumbs = torrent.files.filter(item => !item.name.startsWith('Thumbnail '));
+                const addedInfoHash = photos.map(photo => {
+                    photo.infoHash = torrent.infoHash;
+                    if(withoutThumbs.length > 1) {
+                        photo.infoHash += '-' + withoutThumbs.find(file => file.name === photo.file.name).path;
+                    }
+                    photo.url = torrent.magnetURI;
+                    return photo;
+                });
+
+                const toBeShared = this.stripClientOnlyPhotoFields(addedInfoHash);
+
+                Logger.info('seed.infoHash photo sharing');
+                this.service.share(toBeShared).then(result => {
+                    Logger.info('photo shared ' + result);
+                }).catch(err => {
+                    Logger.error('Failed to share photo: ' + err);
+                    self.emitter.emit('showError', 'Failed to share photo: ' + (err.message || err));
+                });
+
+                this.storeTorrent(torrent).then(torrent => {
+
+                    if(photos[0].deleted) {
+                        return;
+                    }
+                    photos.forEach(photo => {
+                        photo.isFake = photo.loading = false;
+                        // Don't clear rendering here - it should be cleared when photoRendered event is emitted
+                        // photo.rendering = false;
+                        photo.torrent = torrent;
+                        photo.infoHash = torrent.infoHash;
+                        photo.url = torrent.magnetURI;
+                    });
+                    withoutThumbs.forEach((file, index) => {
+                        const photo = photos[index];
+                        photo.torrentFile = file;
+                        photo.torrentFileThumb = torrent.files.find(file => file.name === 'Thumbnail ' + photo.fileName);
+                        if(withoutThumbs.length > 1) {
+                            photo.infoHash += '-' + file.path;
+                        }
+                        //self.emitter.emit('torrentReady', photo);
+                    });
+
+                    // Emit update to refresh UI with new state
+                    self.emitter.emit('photos', {type: 'update', item: photos});
+                    //withoutThumbs.forEach((file, index) => self.emitter.emit('torrentReady', photos[index]));
+                    self.emitter.emit('torrentReady', photos);
+                }).catch(err => {
+                    Logger.error('Failed to store torrent: ' + err);
+                    self.emitter.emit('showError', 'Failed to store torrent: ' + (err.message || err));
+                });
+
+                if(callback) {
+                    callback(torrent);
                 }
-                photo.url = torrent.magnetURI;
-                return photo;
             });
 
-            const toBeShared = this.stripClientOnlyPhotoFields(addedInfoHash);
-
-            Logger.info('seed.infoHash photo sharing');
-            this.service.share(toBeShared).then(result => {
-                Logger.info('photo shared ' + result);
+            torrent.on('infoHash', async () => {
+                Logger.info('seed.infoHash');
             });
 
-            this.storeTorrent(torrent).then(torrent => {
+            torrent.on('metadata', async () => {
+                Logger.info('seed.metadata');
+            });
 
-                if(photos[0].deleted) {
+            torrent.on('error', err => {
+                Logger.error('Torrent error: ' + err.message);
+                // Mark photos as failed
+                photos.forEach(photo => {
+                    photo.uploadError = err.message;
+                    photo.rendering = false;
+                    photo.loading = false;
+                });
+                self.emitter.emit('photos', {type: 'update', item: photos});
+                self.emitter.emit('showError', 'Failed to upload image: ' + err.message);
+            });
+
+            this.emitter.on('torrentError', err => {
+
+                console.error('torrent ' + err.message);
+
+                if(!this.isDuplicateError(err)) {
+                    // Not a duplicate error, show it to the user
+                    photos.forEach(photo => {
+                        photo.uploadError = err.message;
+                        photo.rendering = false;
+                        photo.loading = false;
+                    });
+                    self.emitter.emit('photos', {type: 'update', item: photos});
+                    self.emitter.emit('showError', 'Upload error: ' + err.message);
                     return;
                 }
-                photos.forEach(photo => {
-                    photo.isFake = photo.loading = false;
-                    // Don't clear rendering here - it should be cleared when photoRendered event is emitted
-                    // photo.rendering = false;
-                    photo.torrent = torrent;
-                    photo.infoHash = torrent.infoHash;
-                    photo.url = torrent.magnetURI;
-                });
-                withoutThumbs.forEach((file, index) => {
-                    const photo = photos[index];
-                    photo.torrentFile = file;
-                    photo.torrentFileThumb = torrent.files.find(file => file.name === 'Thumbnail ' + photo.fileName);
-                    if(withoutThumbs.length > 1) {
-                        photo.infoHash += '-' + file.path;
-                    }
-                    //self.emitter.emit('torrentReady', photo);
-                });
 
-                // Emit update to refresh UI with new state
-                self.emitter.emit('photos', {type: 'update', item: photos});
-                //withoutThumbs.forEach((file, index) => self.emitter.emit('torrentReady', photos[index]));
-                self.emitter.emit('torrentReady', photos);
+                const msg = err.message;
+                const torrentId = msg.substring(msg.lastIndexOf('torrent ') + 8, msg.length);
+                const torrent = self.master.client.get(torrentId);
+                if(torrent) {
+                    self.emitter.emit('duplicate', {
+                        torrent: torrent,
+                        torrentId: torrentId,
+                        photos: photos,
+                        file: files});
+                } else {
+                    //self.master.torrentAddition.seed(file, undefined, file, () => {
+                    //    Logger.info('seeded duplicate');
+                    //});
+                }
+
+                if(callback) {
+                    callback(torrent);
+                }
+
+            }, this);
+        } catch(err) {
+            Logger.error('Failed to create torrent: ' + err);
+            // Mark photos as failed
+            photos.forEach(photo => {
+                photo.uploadError = err.message || 'Failed to create torrent';
+                photo.rendering = false;
+                photo.loading = false;
             });
-
-            if(callback) {
-                callback(torrent);
-            }
-        });
-
-        torrent.on('infoHash', async () => {
-            Logger.info('seed.infoHash');
-        });
-
-        torrent.on('metadata', async () => {
-            Logger.info('seed.metadata');
-        });
-
-        this.emitter.on('torrentError', err => {
-
-            console.error('torrent ' + err.message);
-
-            if(!this.isDuplicateError(err)) {
-                return;
-            }
-
-            const msg = err.message;
-            const torrentId = msg.substring(msg.lastIndexOf('torrent ') + 8, msg.length);
-            const torrent = self.master.client.get(torrentId);
-            if(torrent) {
-                self.emitter.emit('duplicate', {
-                    torrent: torrent,
-                    torrentId: torrentId,
-                    photos: photos,
-                    file: files});
-            } else {
-                //self.master.torrentAddition.seed(file, undefined, file, () => {
-                //    Logger.info('seeded duplicate');
-                //});
-            }
-
-            if(callback) {
-                callback(torrent);
-            }
-
-        }, this);
+            self.emitter.emit('photos', {type: 'update', item: photos});
+            self.emitter.emit('showError', 'Failed to upload image: ' + (err.message || err));
+            return null;
+        }
 
         return torrent;
     }

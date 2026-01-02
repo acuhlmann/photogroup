@@ -218,7 +218,7 @@ class MeView extends Component {
                     <Accordion expanded={expandedMe} onChange={this.handleExpand('expandedMe')}>
                         <AccordionSummary 
                             expandIcon={<ExpandMoreIcon />}
-                            iconButtonProps={{ component: 'div' }}>
+                            slotProps={{ iconButton: { component: 'div' } }}>
                             {this.buildHeader(galleryHasImages, listView, classes)}
                         </AccordionSummary>
                         <AccordionDetails className={classes.content}>
