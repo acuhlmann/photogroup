@@ -43,81 +43,103 @@ function RenderContent(props) {
     const readMetadataRef = useRef(null);
 
     // Define readMetadata first so it can be used by other callbacks
-    const readMetadata = useCallback((tile) => {
+    // Use a ref to access the current tile without including it in dependencies
+    const tileRef = useRef(tile);
+    tileRef.current = tile;
+    
+    const readMetadata = useCallback((tileParam) => {
+        const currentTile = tileParam || tileRef.current;
         // For seeded images, try to use tile.file if elem is not set
-        const elemToUse = tile.elem || (tile.seed && tile.isImage && tile.file ? tile.file : null);
+        const elemToUse = currentTile.elem || (currentTile.seed && currentTile.isImage && currentTile.file ? currentTile.file : null);
         if(elemToUse) {
             // Ensure elem is set for metadata reading
-            if(!tile.elem) {
-                tile.elem = elemToUse;
+            if(!currentTile.elem) {
+                currentTile.elem = elemToUse;
             }
-            // Ensure img is set for display
-            if(tile.isImage && !tile.img && tile.elem) {
-                tile.img = URL.createObjectURL(tile.elem);
+            // Ensure img is set for display - but don't recreate if it already exists
+            if(currentTile.isImage && !currentTile.img && currentTile.elem) {
+                currentTile.img = URL.createObjectURL(currentTile.elem);
             }
-            Logger.info('readMetadata called for ' + tile.fileName + ' seed=' + tile.seed + ' elem=' + !!tile.elem);
-            master.metadata.readMetadata(tile, (tile, metadata) => {
+            Logger.info('readMetadata called for ' + currentTile.fileName + ' seed=' + currentTile.seed + ' elem=' + !!currentTile.elem);
+            master.metadata.readMetadata(currentTile, (tile, metadata) => {
                 Logger.info('readMetadata callback for ' + tile.fileName + ' seed=' + tile.seed);
-                master.emitter.emit('photos', {type: 'update', item: [tile]});
+                // Preserve img property when emitting update
+                const updateTile = {...tile};
+                if(tile.img) {
+                    updateTile.img = tile.img;
+                }
+                master.emitter.emit('photos', {type: 'update', item: [updateTile]});
                 if(tile.seed) {
                     Logger.info('Emitting photoRendered for ' + tile.fileName);
                     master.emitter.emit('photoRendered', tile);
                 }
             });
         } else {
-            Logger.info('readMetadata waiting for blobDone for ' + tile.fileName);
-            master.emitter.on('blobDone-' + tile.infoHash, (photo) => {
-                tile.elem = photo.elem;
+            Logger.info('readMetadata waiting for blobDone for ' + currentTile.fileName);
+            master.emitter.on('blobDone-' + currentTile.infoHash, (photo) => {
+                currentTile.elem = photo.elem;
                 if(readMetadataRef.current) {
-                    readMetadataRef.current(tile);
+                    readMetadataRef.current(currentTile);
                 }
             });
         }
-    }, [tile, master]);
+    }, [master]);
 
     // Store readMetadata in ref
     readMetadataRef.current = readMetadata;
 
     // Memoize handlers to avoid recreating them on every render
     const handleBlobDone = useCallback((photo) => {
+        const currentTile = tileRef.current;
         Logger.info('handleBlobDone ' + photo.fileName);
-        tile.elem = photo.elem || tile.elem;
-        // Ensure img is set for images when elem becomes available
-        if(tile.isImage && tile.elem && !tile.img) {
-            tile.img = URL.createObjectURL(tile.elem);
+        currentTile.elem = photo.elem || currentTile.elem;
+        // Ensure img is set for images when elem becomes available - but don't recreate if it exists
+        if(currentTile.isImage && currentTile.elem && !currentTile.img) {
+            currentTile.img = URL.createObjectURL(currentTile.elem);
         }
-        master.emitter.emit('photos', {type: 'update', item: [tile]});
+        // Preserve img property when emitting update
+        const updateTile = {...currentTile};
+        if(currentTile.img) {
+            updateTile.img = currentTile.img;
+        }
+        master.emitter.emit('photos', {type: 'update', item: [updateTile]});
         // Read metadata when elem is available - this will emit photoRendered for seeded images
         if(readMetadataRef.current) {
-            readMetadataRef.current(tile);
+            readMetadataRef.current(currentTile);
         }
-    }, [tile, master]);
+    }, [master]);
 
     const handleTorrentReady = useCallback((photos) => {
+        const currentTile = tileRef.current;
         // Check if this torrentReady event is for our tile
-        const photo = photos.find(p => p.infoHash === tile.infoHash);
-        if(photo && photo.torrent && !tile.torrent) {
+        const photo = photos.find(p => p.infoHash === currentTile.infoHash);
+        if(photo && photo.torrent && !currentTile.torrent) {
             // Torrent just became available, attach the listener
-            tile.torrent = photo.torrent;
+            currentTile.torrent = photo.torrent;
             if(handleDoneRef.current) {
-                tile.torrent.on('done', handleDoneRef.current);
+                currentTile.torrent.on('done', handleDoneRef.current);
             }
         }
-    }, [tile]);
+    }, []);
 
     const handleDone = useCallback((torrent) => {
+        const currentTile = tileRef.current;
         fetch(torrent.torrentFileBlobURL)
             .then(r => r.blob())
-            .then(blobFile => new File([blobFile], tile.fileName, { type: tile.fileType }))
+            .then(blobFile => new File([blobFile], currentTile.fileName, { type: currentTile.fileType }))
             .then(file => {
                 console.log('handleDone torrentFileBlobURL ' + file);
-                tile.elem = file;
-                master.emitter.emit('photos', {type: 'update', item: [tile]});
+                currentTile.elem = file;
+                // Don't recreate img URL if it already exists
+                if(currentTile.isImage && !currentTile.img) {
+                    currentTile.img = URL.createObjectURL(file);
+                }
+                master.emitter.emit('photos', {type: 'update', item: [currentTile]});
                 if(readMetadataRef.current) {
-                    readMetadataRef.current(tile);
+                    readMetadataRef.current(currentTile);
                 }
             });
-    }, [tile, master]);
+    }, [master]);
 
     // Store handleDone in ref so it can be used in handleTorrentReady
     handleDoneRef.current = handleDone;
@@ -309,44 +331,52 @@ function RenderContent(props) {
     }, [tile]);
 
     // Set up event listeners and initialize seeded images
+    // Only run this effect when infoHash changes (when a new tile is added)
     useEffect(() => {
-        const infoHash = tile.infoHash;
-        const isSeededImage = tile.seed && (tile.isImage || (tile.fileType && tile.fileType.includes('image/')));
+        const currentTile = tileRef.current;
+        const infoHash = currentTile.infoHash;
+        const isSeededImage = currentTile.seed && (currentTile.isImage || (currentTile.fileType && currentTile.fileType.includes('image/')));
         
         emitter.on('blobDone-' + infoHash, handleBlobDone);
         emitter.on('torrentReady', handleTorrentReady);
         
         // Only attach torrent listener if torrent exists (may not be set yet for seeded images)
-        if(tile.torrent) {
-            tile.torrent.on('done', handleDone);
+        if(currentTile.torrent) {
+            currentTile.torrent.on('done', handleDone);
         }
         
         // For seeded images, if elem is already set (from mergePostloadMetadata), ensure img is set and read metadata
         if(isSeededImage) {
             // Ensure isImage is set for consistency
-            if(!tile.isImage) {
-                tile.isImage = true;
+            if(!currentTile.isImage) {
+                currentTile.isImage = true;
             }
-            if(tile.elem && !tile.img) {
-                tile.img = URL.createObjectURL(tile.elem);
-                master.emitter.emit('photos', {type: 'update', item: [tile]});
+            // Only create img URL if it doesn't exist - don't recreate it
+            if(currentTile.elem && !currentTile.img) {
+                currentTile.img = URL.createObjectURL(currentTile.elem);
+                master.emitter.emit('photos', {type: 'update', item: [currentTile]});
             }
             // If elem is set, read metadata immediately (blobDone may have already fired)
-            if(tile.elem) {
-                Logger.info('useEffect: seeded image has elem, calling readMetadata for ' + tile.fileName);
-                if(readMetadataRef.current) {
-                    readMetadataRef.current(tile);
-                }
-            } else if(tile.file) {
+            if(currentTile.elem) {
+                Logger.info('useEffect: seeded image has elem, calling readMetadata for ' + currentTile.fileName);
+                // Use a small delay to ensure the component is fully mounted
+                setTimeout(() => {
+                    if(readMetadataRef.current) {
+                        readMetadataRef.current(currentTile);
+                    }
+                }, 0);
+            } else if(currentTile.file) {
                 // Fallback: use tile.file if elem is not set
-                tile.elem = tile.file;
-                if(!tile.img) {
-                    tile.img = URL.createObjectURL(tile.file);
+                currentTile.elem = currentTile.file;
+                if(!currentTile.img) {
+                    currentTile.img = URL.createObjectURL(currentTile.file);
                 }
-                master.emitter.emit('photos', {type: 'update', item: [tile]});
-                if(readMetadataRef.current) {
-                    readMetadataRef.current(tile);
-                }
+                master.emitter.emit('photos', {type: 'update', item: [currentTile]});
+                setTimeout(() => {
+                    if(readMetadataRef.current) {
+                        readMetadataRef.current(currentTile);
+                    }
+                }, 0);
             }
         }
 
@@ -355,20 +385,27 @@ function RenderContent(props) {
             emitter.removeListener('blobDone-' + infoHash, handleBlobDone);
             emitter.removeListener('torrentReady', handleTorrentReady);
             // Only remove torrent listener if torrent exists
-            if(tile.torrent) {
-                tile.torrent.removeListener('done', handleDone);
+            const cleanupTile = tileRef.current;
+            if(cleanupTile && cleanupTile.torrent) {
+                cleanupTile.torrent.removeListener('done', handleDone);
             }
         };
-    }, [tile.infoHash, tile.seed, tile.isImage, tile.fileType, tile.elem, tile.file, tile.img, tile.torrent, emitter, handleBlobDone, handleTorrentReady, handleDone, readMetadata, master, tile.fileName]);
+    }, [tile.infoHash]); // Only depend on infoHash - when it changes, it's a new tile
 
     const renderMediaDom = () => {
-        return tile.isImage
-            ? <img src={tile.img} alt={tile.fileName}
+        const currentTile = tileRef.current;
+        // Ensure img is set if we have elem but no img (defensive check)
+        if(currentTile.isImage && currentTile.elem && !currentTile.img) {
+            currentTile.img = URL.createObjectURL(currentTile.elem);
+        }
+        return currentTile.isImage && currentTile.img
+            ? <img src={currentTile.img} alt={currentTile.fileName}
                    className={classes.wide}
-                   onLoad={imgLoaded} />
+                   onLoad={imgLoaded} 
+                   key={currentTile.infoHash} />
             : <div className={classes.wide}>
                 <div className={classes.horizontal}>
-                {tile.isAudio ? <div className={classes.horizontal}>
+                {currentTile.isAudio ? <div className={classes.horizontal}>
                         <Typography variant={"caption"}>Open in</Typography>
                         <IconButton color="primary"
                                     onClick={openInWebamp}>
@@ -380,12 +417,12 @@ function RenderContent(props) {
                     </div> : ''}
                     <div style={{
                     width: '100%', marginTop: '10px'}}
-                       ref={ref => handleContainerLoaded(ref, tile.torrentFile)}>
+                       ref={ref => handleContainerLoaded(ref, currentTile.torrentFile)}>
                     </div>
-                {tile.isAudio ? <div ref={ref => handleWebamp(ref, tile.torrentFile)}>
+                {currentTile.isAudio ? <div ref={ref => handleWebamp(ref, currentTile.torrentFile)}>
                     </div> : ''}
             </div>
-            {tile.isAudio ? <div className={classes.wide} ref={registerEqualizerNode}>
+            {currentTile.isAudio ? <div className={classes.wide} ref={registerEqualizerNode}>
             </div> : ''}
         </div>;
     };

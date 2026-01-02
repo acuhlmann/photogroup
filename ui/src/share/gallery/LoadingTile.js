@@ -116,8 +116,18 @@ class LoadingTile extends Component {
     }
 
     async handleDelete(tile) {
-        const result = await this.props.master.torrentDeletion.deleteItem(tile);
-        Logger.info('handleDelete ' + result);
+        try {
+            const result = await this.props.master.torrentDeletion.deleteItem(tile);
+            Logger.info('handleDelete ' + result);
+        } catch(err) {
+            Logger.error('Failed to delete: ' + err);
+            // Even if deletion fails, remove from UI if torrent doesn't exist
+            if(!tile.torrent) {
+                this.props.master.emitter.emit('photos', {
+                    type: 'delete', item: tile.infoHash
+                });
+            }
+        }
     }
 
     render() {
@@ -136,8 +146,9 @@ class LoadingTile extends Component {
         const progressPercentage = progress ? Math.round(progress) + '%' : progress;
         let have = tile.owners.find(owner => owner.peerId === master.client.peerId && !owner.loading);
         const isLoading = !!progress;
-        let loadingText = tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path');
+        let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
         const isRendering = loadingText === 'Rendering';
+        const hasError = !!tile.uploadError;
         if(tile.rendering && !name) {
             const fileSize = _.get(tile, 'file.size');
             if(fileSize && !tile.fileSize) {
@@ -180,9 +191,11 @@ class LoadingTile extends Component {
                                     size={36} className={classes.fabProgress} />}
                     </span>
                     <Typography variant="caption" className={classes.wordwrap} style={{
-                        marginTop: '-14px'
+                        marginTop: '-14px',
+                        color: hasError ? '#d32f2f' : 'inherit'
                     }}>
                         {loadingText}
+                        {hasError && tile.uploadError ? ': ' + tile.uploadError : ''}
                     </Typography>
                     {isLoading ? <span className={classes.horizontal} style={{
                         marginLeft: '10px'}}>
