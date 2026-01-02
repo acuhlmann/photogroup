@@ -8,7 +8,8 @@ import Uploader from './Uploader';
 const mockModel = {
   emitter: {
     on: vi.fn(),
-    emit: vi.fn()
+    emit: vi.fn(),
+    removeListener: vi.fn()
   },
   seed: vi.fn()
 };
