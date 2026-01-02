@@ -21,6 +21,9 @@ const styles = theme => ({
     },
     wide: {
         width: '100%',
+        maxWidth: '100%',
+        height: 'auto',
+        display: 'block',
     },
     imageIcon: {
         height: '100%'
@@ -150,6 +153,88 @@ function RenderContent(props) {
         }
     }, []);
 
+    // Define doAppendFile and related functions first
+    const doAppendFile = useCallback((tile, file, node) => {
+        const opts = {
+            autoplay: !tile.isAudio,
+            muted: !tile.isAudio, loop: true,
+        };
+
+        if(FileUtil.largerThanMaxBlobSize(tile.torrentFile.length)) {
+            const msg = 'File is ' + FileUtil.formatBytes(tile.torrentFile.length) + ' and too large to render inline, just download instead.';
+            Logger.warn(msg);
+        } else {
+            file.appendTo(node, opts, (err, elem) => {
+                if (err) {
+                    const msgNode = document.createElement("div");
+                    const msgNodeText = document.createTextNode(err.message);
+                    msgNode.appendChild(msgNodeText);
+                    node.appendChild(msgNode);
+
+                    Logger.error('webtorrent.appendTo ' + err.message);
+                    enqueueSnackbar(err.message, {
+                        variant: 'error',
+                        persist: false,
+                        autoHideDuration: 4000,
+                        action: (key) => (<Button className={classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
+                    });
+                }
+
+                Logger.info('New DOM node with the content', elem);
+                if(elem && elem.style) {
+                    elem.style.width = '100%';
+                }
+
+                if(getBlobAndReadMetadataRef.current) {
+                    getBlobAndReadMetadataRef.current(tile);
+                }
+
+                if(tile.isVideo) {
+                    if(elem) {
+                        elem.loop = true;
+                    }
+                } else if(tile.isAudio) {
+                    const audioMotion = new AudioMotionAnalyzer(
+                        equalizerNodeRef.current,
+                        {
+                            source: elem,
+                            showScale: false,
+                            start: false
+                        }
+                    );
+                    equalizerNodeRef.current.style.display = 'none';
+                    elem.addEventListener('play', () => {
+                        equalizerNodeRef.current.style.display = '';
+                        audioMotion.toggleAnalyzer(true);
+                    });
+                    elem.addEventListener('pause', () => {
+                        equalizerNodeRef.current.style.display = 'none';
+                        audioMotion.toggleAnalyzer(false);
+                    });
+                }
+            });
+        }
+    }, [tile, classes, enqueueSnackbar, closeSnackbar]);
+
+    const doAppendFileRef = useRef(null);
+    doAppendFileRef.current = doAppendFile;
+
+    const appendFile = useCallback((tile, node, file) => {
+        if(tile.secure) {
+            const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true};
+            master.client.seed(tile.file, opts, (torrent) => {
+                if(doAppendFileRef.current) {
+                    doAppendFileRef.current(tile, torrent.files[0], node);
+                }
+            });
+        } else {
+            if(doAppendFileRef.current) {
+                doAppendFileRef.current(tile, file, node);
+            }
+            Logger.info('streaming start ' + tile.torrentFile?.progress);
+        }
+    }, [tile, master]);
+
     const handleContainerLoaded = useCallback((node, file) => {
         if(!tile || !file || !node) {
             return;
@@ -219,68 +304,6 @@ function RenderContent(props) {
         }
     }, [tile]);
 
-    const doAppendFile = useCallback((tile, file, node) => {
-        const opts = {
-            autoplay: !tile.isAudio,
-            muted: !tile.isAudio, loop: true,
-        };
-
-        if(FileUtil.largerThanMaxBlobSize(tile.torrentFile.length)) {
-            const msg = 'File is ' + FileUtil.formatBytes(tile.torrentFile.length) + ' and too large to render inline, just download instead.';
-            Logger.warn(msg);
-        } else {
-            file.appendTo(node, opts, (err, elem) => {
-                if (err) {
-                    const msgNode = document.createElement("div");
-                    const msgNodeText = document.createTextNode(err.message);
-                    msgNode.appendChild(msgNodeText);
-                    node.appendChild(msgNode);
-
-                    Logger.error('webtorrent.appendTo ' + err.message);
-                    enqueueSnackbar(err.message, {
-                        variant: 'error',
-                        persist: false,
-                        autoHideDuration: 4000,
-                        action: (key) => (<Button className={classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
-                    });
-                }
-
-                Logger.info('New DOM node with the content', elem);
-                if(elem && elem.style) {
-                    elem.style.width = '100%';
-                }
-
-                if(getBlobAndReadMetadataRef.current) {
-                    getBlobAndReadMetadataRef.current(tile);
-                }
-
-                if(tile.isVideo) {
-                    if(elem) {
-                        elem.loop = true;
-                    }
-                } else if(tile.isAudio) {
-                    const audioMotion = new AudioMotionAnalyzer(
-                        equalizerNodeRef.current,
-                        {
-                            source: elem,
-                            showScale: false,
-                            start: false
-                        }
-                    );
-                    equalizerNodeRef.current.style.display = 'none';
-                    elem.addEventListener('play', () => {
-                        equalizerNodeRef.current.style.display = '';
-                        audioMotion.toggleAnalyzer(true);
-                    });
-                    elem.addEventListener('pause', () => {
-                        equalizerNodeRef.current.style.display = 'none';
-                        audioMotion.toggleAnalyzer(false);
-                    });
-                }
-            });
-        }
-    }, [tile, classes, enqueueSnackbar, closeSnackbar]);
-
     const getBlobAndReadMetadata = useCallback((tile) => {
         Logger.info('streaming done ' + tile.torrentFile?.progress);
         if(tile.elem) {
@@ -303,25 +326,6 @@ function RenderContent(props) {
 
     const getBlobAndReadMetadataRef = useRef(null);
     getBlobAndReadMetadataRef.current = getBlobAndReadMetadata;
-
-    const doAppendFileRef = useRef(null);
-    doAppendFileRef.current = doAppendFile;
-
-    const appendFile = useCallback((tile, node, file) => {
-        if(tile.secure) {
-            const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true};
-            master.client.seed(tile.file, opts, (torrent) => {
-                if(doAppendFileRef.current) {
-                    doAppendFileRef.current(tile, torrent.files[0], node);
-                }
-            });
-        } else {
-            if(doAppendFileRef.current) {
-                doAppendFileRef.current(tile, file, node);
-            }
-            Logger.info('streaming start ' + tile.torrentFile?.progress);
-        }
-    }, [tile, master]);
 
     const imgLoaded = useCallback(() => {
         // For images, when the img tag loads, try to read metadata
@@ -400,18 +404,19 @@ function RenderContent(props) {
         }
         return currentTile.isImage && currentTile.img
             ? <img src={currentTile.img} alt={currentTile.fileName}
-                   className={classes.wide}
+                   className={classes?.wide || ''}
+                   style={{width: '100%', maxWidth: '100%', height: 'auto', display: 'block'}}
                    onLoad={imgLoaded} 
                    key={currentTile.infoHash} />
-            : <div className={classes.wide}>
-                <div className={classes.horizontal}>
-                {currentTile.isAudio ? <div className={classes.horizontal}>
+            : <div className={classes?.wide || ''} style={{width: '100%', maxWidth: '100%'}}>
+                <div className={classes?.horizontal || ''}>
+                {currentTile.isAudio ? <div className={classes?.horizontal || ''}>
                         <Typography variant={"caption"}>Open in</Typography>
                         <IconButton color="primary"
                                     onClick={openInWebamp}>
 
-                            <Icon classes={{root: classes.iconRoot}}>
-                                <img className={classes.imageIcon} src="./webamp.svg"/>
+                            <Icon classes={classes?.iconRoot ? {root: classes.iconRoot} : undefined}>
+                                <img className={classes?.imageIcon || ''} src="./webamp.svg"/>
                             </Icon>
                         </IconButton>
                     </div> : ''}
@@ -422,15 +427,15 @@ function RenderContent(props) {
                 {currentTile.isAudio ? <div ref={ref => handleWebamp(ref, currentTile.torrentFile)}>
                     </div> : ''}
             </div>
-            {currentTile.isAudio ? <div className={classes.wide} ref={registerEqualizerNode}>
+            {currentTile.isAudio ? <div className={classes?.wide || ''} ref={registerEqualizerNode}>
             </div> : ''}
         </div>;
     };
 
     return (
-        <span>
+        <div style={{width: '100%', maxWidth: '100%', overflow: 'hidden'}}>
             {renderMediaDom()}
-        </span>
+        </div>
     );
 }
 

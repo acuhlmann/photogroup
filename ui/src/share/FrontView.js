@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 
 import { withStyles } from '@mui/styles';
@@ -27,29 +27,34 @@ const styles = theme => ({
     }
 });
 
-class FrontView extends Component {
+function FrontView({classes, master}) {
+    const [show, setShow] = useState(false);
+    const [visible, setVisible] = useState(false);
 
-    constructor(props) {
-        super(props);
-        this.state = {
-            show: false,
-            visible: false
+    useEffect(() => {
+        const handleOpenRoomEnd = () => {
+            setShow(true);
+        };
+        const handleHideFrontView = () => {
+            setShow(false);
+            setVisible(false);
+        };
+        const handleIceDone = () => {
+            setVisible(true);
         };
 
-        props.master.emitter.on('openRoomEnd', () => {
-            this.setState({show: true});
-        });
-        props.master.emitter.on('hideFrontView', () => {
-            this.setState({show: false, visible: false});
-        });
-        props.master.emitter.on('iceDone', () => {
-            this.setState({visible: true});
-        });
-    }
+        master.emitter.on('openRoomEnd', handleOpenRoomEnd);
+        master.emitter.on('hideFrontView', handleHideFrontView);
+        master.emitter.on('iceDone', handleIceDone);
 
-    async openRoom() {
+        return () => {
+            master.emitter.removeListener('openRoomEnd', handleOpenRoomEnd);
+            master.emitter.removeListener('hideFrontView', handleHideFrontView);
+            master.emitter.removeListener('iceDone', handleIceDone);
+        };
+    }, [master.emitter]);
 
-        const master = this.props.master;
+    const openRoom = useCallback(async () => {
         master.emitter.emit('openRoomStart');
 
         try {
@@ -72,21 +77,26 @@ class FrontView extends Component {
                 master.emitter.emit('showError', `Failed to create room: ${error.message || 'Unknown error'}`);
             }
         }
-    }
+    }, [master]);
 
-    buildView(master, show, classes) {
-        return <div style={{
-                            marginTop: '50px'
-                        }}>
-                    <Typography variant={"body2"}>One peer needs to...</Typography>
-                    <Button onClick={this.openRoom.bind(this)}
-                            variant="contained"
-                            color="primary"
-                            className={classes.button}
-                            endIcon={<PlayCircleFilledWhiteRoundedIcon/>}
-                    >
-                        start a Private Room
-                    </Button>
+    const hasRoom = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.has('room');
+    };
+
+    const buildView = (master, show, classes) => {
+        return (
+            <div style={{ marginTop: '50px' }}>
+                <Typography variant={"body2"}>One peer needs to...</Typography>
+                <Button 
+                    onClick={openRoom}
+                    variant="contained"
+                    color="primary"
+                    className={classes.button}
+                    endIcon={<PlayCircleFilledWhiteRoundedIcon/>}
+                >
+                    start a Private Room
+                </Button>
                 <Typography variant={"body2"}>or join another room via</Typography>
                 <span className={classes.vertical}>
                     <span className={classes.horizontal}>
@@ -99,39 +109,29 @@ class FrontView extends Component {
                     </span>
                     <span className={classes.horizontal}>
                         <Typography variant={"body2"}>Listening to an audio signal</Typography>
-                        <IconButton color="secondary"
+                        <IconButton 
+                            color="secondary"
                             onClick={() => master.emitter.emit('openRecorder')}>
                             <SettingsVoiceRounded />
                         </IconButton>
-                        <IconButton color="inherit"
-                                    onClick={() => master.emitter.emit('openRecorderUltrasonic')}>
+                        <IconButton 
+                            color="inherit"
+                            onClick={() => master.emitter.emit('openRecorderUltrasonic')}>
                             <SettingsVoiceRounded />
                         </IconButton>
                     </span>
                 </span>
             </div>
-    }
-
-    hasRoom() {
-        const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.has('room');
-    }
-
-    render() {
-
-        const {classes, master} = this.props;
-        const {show, visible} = this.state;
-
-        const hasRoom = this.hasRoom();
-
-        return (
-            <Slide direction="up" in={!hasRoom && visible} mountOnEnter unmountOnExit>
-                <div>
-                    {this.buildView(master, show, classes)}
-                </div>
-            </Slide>
         );
-    }
+    };
+
+    return (
+        <Slide direction="up" in={!hasRoom() && visible} mountOnEnter unmountOnExit>
+            <div>
+                {buildView(master, show, classes)}
+            </div>
+        </Slide>
+    );
 }
 
 FrontView.propTypes = {

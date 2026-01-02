@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import {withStyles} from '@mui/styles';
 import Logger from 'js-logger';
@@ -34,80 +34,89 @@ const styles = theme => ({
     },
 });
 
-class Gallery extends Component {
+function Gallery(props) {
+    const {master, classes} = props;
+    const [tiles, setTiles] = useState([]);
+    const photoHandlerRef = useRef(null);
 
-    constructor(props) {
-        super(props);
+    const getBlob = useCallback((photo) => {
+        if(photo.file && photo.file instanceof Blob) {
+            photo.elem = photo.file;
+            Logger.info('blobDone dispatch ' + photo.fileName);
+            master.emitter.emit('blobDone-' + photo.infoHash, photo);
+        } else {
+            photo.torrentFile.getBlob((err, elem) => {
+                photo.elem = elem;
+                Logger.info('blobDone dispatch ' + photo.fileName);
+                master.emitter.emit('blobDone-' + photo.infoHash, photo);
+            });
+        }
+    }, [master.emitter]);
 
-        this.state = {
-           tiles : [],
-        };
+    const mergeStreamingMetadata = useCallback((photo, extention) => {
+        photo.loading = false;
+        photo.elem = null;
+        photo.img = null;
+        photo.fileSize = photo.fileSize || FileUtil.formatBytes(photo.torrentFile.length);
+        photo.isVideo = master.STREAMING_VIDEO_FORMATS.includes(extention);
+        photo.isAudio = master.STREAMING_AUDIO_FORMATS.includes(extention);
+        photo.isImage = false;
+        return photo;
+    }, [master]);
 
-        this.classes = props.classes;
-    }
+    const mergePreloadMetadata = useCallback((photo) => {
+        //photo.fileName = FileUtil.truncateFileName(photo.torrentFile.name);
+        //photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
+    }, []);
 
-    componentDidMount() {
+    const mergePostloadMetadata = useCallback((photo, file, noElem) => {
+        photo.loading = false;
+        const isImage = photo.fileType.includes('image/');
+        photo.elem = (noElem && !isImage) ? null : file;
+        photo.img = URL.createObjectURL(file);
+        photo.fileSize = photo.fileSize || FileUtil.formatBytes(noElem ? photo.torrentFile.length : (photo.elem ? photo.elem.size : file.size));
+        photo.isVideo = photo.fileType.includes('video/');
+        photo.isImage = isImage;
+        photo.isAudio = photo.fileType.includes('audio/');
+        return photo;
+    }, []);
 
-        const emitter = this.props.master.emitter;
-
-        emitter.on('torrentReady', photos => {
-            this.addMediaToDom(photos);
-        }, this);
-
-        //When webtorrent errors on a duplicated add, try to remove and re-seed.
-        //This may happen if client state is lost
-        //i.e. due to removal of browser (indexeddb cache)
-        emitter.on('duplicate', duplicated => {
-
-            this.setState(state => {
-                let tiles = state.tiles;
-                duplicated.photos.forEach(photo => {
-                    const index = tiles.findIndex(item => item.infoHash === photo.infoHash);
-                    if(index > -1) {
-                        tiles = update(tiles, {$splice: [[index, 1]]});
-                    }
-                });
-                return {tiles: tiles};
+    const renderTile = useCallback((photos, isSeeding, updateOwner) => {
+        setTiles(state => {
+            const oldTiles = state;
+            let newTiles = oldTiles;
+            photos.forEach(photo => {
+                const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
+                if(index > -1) {
+                    photo = _.merge(oldTiles[index], photo);
+                    update(oldTiles, {$splice: [[index, 1, photo]]});
+                } else {
+                    newTiles = update(oldTiles, {$unshift: [photo]});
+                }
             });
 
-            //const tile = tiles.find(item => item.infoHash === duplicated.torrentId);
-            /*if(tile) {
-                Logger.info('duplicate ' + tile.infoHash);
-                duplicated.torrent.client.remove(duplicated.torrentId, () => {
-                    if(duplicated.file) {
-                        self.props.master.torrentAddition.seed(duplicated.file, undefined, duplicated.file, () => {
-                            Logger.info('seeded duplicate');
-                        });
-                    }
+            if(!isSeeding && updateOwner) {
+                newTiles.forEach(photo => {
+                    master.service.updateOwner([{
+                        infoHash: photo.infoHash,
+                        peerId: master.client.peerId,
+                        loading: false
+                    }]).then(() => {
+                        //Logger.info('owner registered ' + photo.torrent.name)
+                    })
                 });
-            }*/
-        }, this);
+            }
 
-        this.photoHandler = new GalleryPhotoHandler(this, emitter);
-        this.photoHandler.sync();
-        
-        // Emit initial gallery state
-        this.updateGalleryState();
-    }
+            return newTiles;
+        });
+    }, [master]);
 
-    updateGalleryState() {
-        const {master} = this.props;
-        const {tiles} = this.state;
-        const hasImages = tiles && tiles.find(tile => !tile.isLoading && tile.img);
-        if(hasImages) {
-            master.emitter.emit('galleryHasImages', true);
-        } else {
-            master.emitter.emit('galleryHasImages', false);
-        }
-    }
-
-    addMediaToDom(photos) {
-
+    const addMediaToDom = useCallback((photos) => {
         const isSeeding = photos[0].seed;
         if(isSeeding) {
             photos.forEach(photo => {
-                this.mergePreloadMetadata(photo);
-                this.mergePostloadMetadata(photo, photo.file, true);
+                mergePreloadMetadata(photo);
+                mergePostloadMetadata(photo, photo.file, true);
                 // For images, ensure elem and img are set so rendering can proceed
                 if(photo.isImage && photo.elem && !photo.img) {
                     photo.img = URL.createObjectURL(photo.elem);
@@ -116,41 +125,21 @@ class Gallery extends Component {
                 // This ensures readMetadata is called and photoRendered is emitted
                 if(photo.isImage && photo.elem) {
                     Logger.info('Seeded image ready, emitting blobDone for ' + photo.fileName);
-                    this.props.master.emitter.emit('blobDone-' + photo.infoHash, photo);
+                    master.emitter.emit('blobDone-' + photo.infoHash, photo);
                 }
                 // getBlob will also emit blobDone event (may be redundant but safe)
-                this.getBlob(photo);
+                getBlob(photo);
             });
-            this.renderTile(photos, isSeeding);
+            renderTile(photos, isSeeding);
         } else {
-
             const photoPromises = photos.map(photo => {
                 return new Promise((resolve, reject) => {
-
-                    /*const stream = photo.torrentFile.createReadStream();
-                    stream.on('data', (chunk) => {
-                        console.log(`Received ${chunk.length} bytes of data.`);
-
-                        exifr.thumbnailUrl(chunk)
-                            .then(output => {
-                                if(output) {
-                                    Logger.info('FOOOOUUUUND:', output);
-                                }
-                            })
-                            .catch(e => {
-                                Logger.error('exifr.thumbnail:', e);
-                            })
-                    });
-                    stream.on('end', () => {
-                        console.log('There will be no more data.');
-                    });*/
-
                     const extention = photo.torrentFile.name.split('.').pop().toLowerCase();
-                    const isNoStreamingOrTooLarge = !this.props.master.STREAMING_FORMATS.includes(extention)
+                    const isNoStreamingOrTooLarge = !master.STREAMING_FORMATS.includes(extention)
                         || FileUtil.largerThanMaxBlobSize(photo.torrentFile.length);
                     if(isNoStreamingOrTooLarge || photo.secure) {
                         Logger.info('getBlob ' + photo.torrent.name);
-                        this.mergePreloadMetadata(photo);
+                        mergePreloadMetadata(photo);
                         photo.torrentFile.getBlob((err, elem) => {
                             Logger.info('getBlob done ' + photo.torrent.name);
                             if (err) {
@@ -158,163 +147,92 @@ class Gallery extends Component {
                                 reject(err.message);
                             } else {
                                 const file = new File([elem], photo.fileName, { type: photo.fileType });
-                                resolve(this.mergePostloadMetadata(photo, file));
+                                resolve(mergePostloadMetadata(photo, file));
                             }
                         });
                     } else {
-                        /*
-                        const stream = photo.torrentFile.createReadStream();
-                        stream.on('data', (chunk) => {
-                            console.log(`Received ${chunk.length} bytes of data.`);
-                        });
-                        stream.on('end', () => {
-                            console.log('There will be no more data.');
-                        });
-                        */
-                        this.getBlob(photo);
-                        resolve(this.mergeStreamingMetadata(photo, extention));
+                        getBlob(photo);
+                        resolve(mergeStreamingMetadata(photo, extention));
                     }
                 });
             });
 
-            this.renderTile(photos, false, false);
+            renderTile(photos, false, false);
 
             Promise.all(photoPromises).then(results => {
-                this.renderTile(results, false, true);
+                renderTile(results, false, true);
             });
         }
-    }
+    }, [master, getBlob, mergePreloadMetadata, mergePostloadMetadata, renderTile, mergeStreamingMetadata]);
 
-    getBlob(photo) {
-        const self = this;
-        if(photo.file && photo.file instanceof Blob) {
-            photo.elem = photo.file;
-            Logger.info('blobDone dispatch ' + photo.fileName);
-            self.props.master.emitter.emit('blobDone-' + photo.infoHash, photo);
+    const updateGalleryState = useCallback(() => {
+        const hasImages = tiles && tiles.find(tile => !tile.isLoading && tile.img);
+        if(hasImages) {
+            master.emitter.emit('galleryHasImages', true);
         } else {
-            photo.torrentFile.getBlob((err, elem) => {
-                photo.elem = elem;
-                Logger.info('blobDone dispatch ' + photo.fileName);
-                self.props.master.emitter.emit('blobDone-' + photo.infoHash, photo);
-            });
+            master.emitter.emit('galleryHasImages', false);
         }
-    }
+    }, [tiles, master.emitter]);
 
-    mergeStreamingMetadata(photo, extention) {
-        photo.loading = false;
-        // Don't clear rendering here - it should be cleared when photoRendered event is emitted
-        // photo.rendering = false;
-        photo.elem = null;
-        photo.img = null;
-        photo.fileSize = photo.fileSize || FileUtil.formatBytes(photo.torrentFile.length);
-        photo.isVideo = this.props.master.STREAMING_VIDEO_FORMATS.includes(extention);
-        photo.isAudio = this.props.master.STREAMING_AUDIO_FORMATS.includes(extention);
-        photo.isImage = false;
-        //photo.fileName = FileUtil.truncateFileName(photo.torrentFile.name);
-        //photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
-        return photo;
-    }
+    useEffect(() => {
+        const emitter = master.emitter;
 
-    mergePreloadMetadata(photo) {
-        //photo.fileName = FileUtil.truncateFileName(photo.torrentFile.name);
-        //photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
-    }
+        const handleTorrentReady = (photos) => {
+            addMediaToDom(photos);
+        };
 
-    mergePostloadMetadata(photo, file, noElem) {
-        photo.loading = false;
-        // Don't clear rendering here - it should be cleared when photoRendered event is emitted
-        // photo.rendering = false;
-        // For images, we need elem to be set so readMetadata can process it
-        // Only set elem to null for non-images when noElem is true
-        const isImage = photo.fileType.includes('image/');
-        photo.elem = (noElem && !isImage) ? null : file;
-        photo.img = URL.createObjectURL(file);
-        photo.fileSize = photo.fileSize || FileUtil.formatBytes(noElem ? photo.torrentFile.length : (photo.elem ? photo.elem.size : file.size));
-        photo.isVideo = photo.fileType.includes('video/');
-        photo.isImage = isImage;
-        photo.isAudio = photo.fileType.includes('audio/');
-        //photo.fileName = FileUtil.truncateFileName(file.name);
-        //photo.fileType = file.type;
-        //photo.fileNameFull = file.name;
-        //photo.picSummary = photo.picSummary || (StringUtil.addEmptySpaces([photo.picDateTaken, photo.fileName]));
-        return photo;
-    }
-
-    renderTile(photos, isSeeding, updateOwner) {
-
-        this.setState((state, props) => {
-
-            const oldTiles = state.tiles;
-            let tiles = oldTiles;
-            photos.forEach(photo => {
-                const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
-                if(index > -1) {
-                    photo = _.merge(oldTiles[index], photo);
-                    update(oldTiles, {$splice: [[index, 1, photo]]});
-                } else {
-                    tiles = update(oldTiles, {$unshift: [photo]});
-                }
-            });
-
-            if(!isSeeding && updateOwner) {
-
-                tiles.forEach(photo => {
-                    this.props.master.service.updateOwner([{
-                        infoHash: photo.infoHash,
-                        peerId: this.props.master.client.peerId,
-                        loading: false
-                    }]).then(() => {
-                        //Logger.info('owner registered ' + photo.torrent.name)
-                    })
+        const handleDuplicate = (duplicated) => {
+            setTiles(state => {
+                let newTiles = state;
+                duplicated.photos.forEach(photo => {
+                    const index = newTiles.findIndex(item => item.infoHash === photo.infoHash);
+                    if(index > -1) {
+                        newTiles = update(newTiles, {$splice: [[index, 1]]});
+                    }
                 });
-            }
+                return newTiles;
+            });
+        };
 
-            return {tiles: tiles};
-        });
-    }
+        emitter.on('torrentReady', handleTorrentReady);
+        emitter.on('duplicate', handleDuplicate);
 
-    async handleDelete(tile) {
-        const result = await this.props.master.torrentDeletion.deleteItem(tile);
-        Logger.info('handleDelete ' + result);
-    }
+        photoHandlerRef.current = new GalleryPhotoHandler({ addMediaToDom, setTiles, master }, emitter);
+        photoHandlerRef.current.sync();
+        
+        // Emit initial gallery state
+        updateGalleryState();
 
-    buildTile(tile, index, classes, master) {
+        return () => {
+            emitter.removeListener('torrentReady', handleTorrentReady);
+            emitter.removeListener('duplicate', handleDuplicate);
+        };
+    }, [master, updateGalleryState, addMediaToDom]);
 
+    useEffect(() => {
+        updateGalleryState();
+    }, [tiles, updateGalleryState]);
+
+    const buildTile = useCallback((tile, index, classes, master) => {
         tile.picSummary = StringUtil.addEmptySpaces([tile.picDateTaken, FileUtil.truncateFileName(tile.fileName)]);
         let name = StringUtil.addEmptySpaces([tile.picSummary, tile.fileSize, tile.cameraSettings]);
-        //tile.loading = true;
 
         if(tile.loading) {
-
             return <LoadingTile key={index} name={name} tile={tile}
                                 master={master}/>
-
         } else {
-
             return <ContentTile key={index} name={name} tile={tile}
                                 master={master} />
         }
-    }
+    }, []);
 
-    componentDidUpdate(prevProps, prevState) {
-        // Emit gallery state changes after render, not during render
-        if (prevState.tiles !== this.state.tiles) {
-            this.updateGalleryState();
-        }
-    }
-
-    render() {
-        const {classes, master} = this.props;
-        const {tiles} = this.state;
-
-        return (
+    return (
+        <div>
             <div>
-                <div>
-                    {tiles.map((tile, index) => this.buildTile(tile, index, classes, master))}
-                </div>
+                {tiles.map((tile, index) => buildTile(tile, index, classes, master))}
             </div>
-        );
-    }
+        </div>
+    );
 }
 
 Gallery.propTypes = {

@@ -104,7 +104,13 @@ export default class TorrentMaster {
                 this.service.addOwner(toBeAdded).then(result => {
                     Logger.warn('found missing owners and filled ' + result);
                     resolve(result)
+                }).catch(err => {
+                    Logger.error('Error adding owners: ' + err);
+                    reject(err);
                 });
+            } else {
+                // No missing owners to fill, resolve immediately
+                resolve([]);
             }
         });
     }
@@ -113,9 +119,10 @@ export default class TorrentMaster {
         //check for missing owners - can happen after re-connections.
         const peerId = this.client.peerId;
         const torrent = this.client.get(item.infoHash);
-        const isOwner = torrent && torrent.files.length > 0;
+        // Check that torrent exists, has files array, and files array has items
+        const isOwner = torrent && torrent.files && torrent.files.length > 0;
         if(isOwner) {
-            const found = item.owners.find(owner => owner.peerId === peerId);
+            const found = item.owners && item.owners.find(owner => owner.peerId === peerId);
             if(!found) {
                 return {
                     infoHash: item.infoHash,
@@ -124,6 +131,7 @@ export default class TorrentMaster {
                 }
             }
         }
+        return null;
     }
 
     //more on the approach: https://github.com/SilentBot1/webtorrent-examples/blob/master/resurrection/index.js
@@ -240,20 +248,89 @@ export default class TorrentMaster {
 
         const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true};
         opts.store = idb;
+        let validInput = input;
+        
         if(addOrSeed === 'seed') {
-            const filesArr = [...input].filter(item => !item.isThumbnail);
-            if(filesArr.every(file => !file.type.includes('video/'))) {
-                opts.strategy = this.strategyPreference ? 'sequential' : 'rarest';
-                //opts.strategy = 'rarest';
+            // Handle FileList objects (from input[type="file"])
+            if(input && typeof input[Symbol.iterator] === 'function' && !Array.isArray(input) && !(input instanceof File) && !(input instanceof Blob)) {
+                // Convert iterable (like FileList) to array
+                try {
+                    validInput = Array.from(input);
+                } catch(e) {
+                    Logger.error('Failed to convert input to array: ' + e);
+                    const error = new Error('Invalid torrent identifier: cannot convert input to array');
+                    if(callback) {
+                        callback(null, error);
+                    }
+                    return null;
+                }
+            }
+            
+            // Ensure input is an array and filter out any invalid items
+            if(Array.isArray(validInput)) {
+                // Filter out invalid items and ensure all are File objects
+                validInput = validInput.filter(item => {
+                    return item && (item instanceof File || item instanceof Blob);
+                });
+                
+                if(validInput.length === 0) {
+                    const error = new Error('No valid files to seed');
+                    Logger.error(error.message);
+                    if(callback) {
+                        callback(null, error);
+                    }
+                    return null;
+                }
+                
+                // Filter out thumbnails for strategy determination (thumbnails are identified by name prefix)
+                const filesArr = validInput.filter(item => {
+                    if(item instanceof File) {
+                        return !item.name.startsWith('Thumbnail ');
+                    }
+                    return true;
+                });
+                
+                if(filesArr.length > 0 && filesArr.every(file => {
+                    // Check if file has type property and it's not a video
+                    return file.type && !file.type.includes('video/');
+                })) {
+                    opts.strategy = this.strategyPreference ? 'sequential' : 'rarest';
+                    //opts.strategy = 'rarest';
+                }
+            } else if(validInput && (validInput instanceof File || validInput instanceof Blob)) {
+                // Single File or Blob is valid
+                // No need to change validInput
+            } else if(!validInput) {
+                // Input is null, undefined, or falsy
+                const error = new Error('Invalid torrent identifier: input is null or undefined');
+                Logger.error(error.message);
+                if(callback) {
+                    callback(null, error);
+                }
+                return null;
+            } else {
+                // If input is not a valid file/blob and not an array, it's invalid
+                const error = new Error('Invalid torrent identifier: input must be a File, Blob, or array of Files/Blobs');
+                Logger.error(error.message);
+                if(callback) {
+                    callback(null, error);
+                }
+                return null;
             }
         } else if(addOrSeed === 'add' && input && input.files) {
 
             this.torrentAddition.defineStrategy(input.files, opts);
         }
-        const torrent = this.client[addOrSeed](input, opts, callback);
+        
+        const torrent = this.client[addOrSeed](validInput, opts, callback);
         //const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE}, callback);
 
-        Logger.info('addSeedOrGetTorrent ' + torrent.infoHash + ' ' + torrent.name);
+        if(torrent) {
+            Logger.info('addSeedOrGetTorrent ' + torrent.infoHash + ' ' + torrent.name);
+        } else {
+            Logger.warn('addSeedOrGetTorrent returned null/undefined torrent');
+            return null;
+        }
 
         const self = this;
         const debouncedServerPublish = _.throttle(self.publishLoadingStatus.bind(self), 1000,

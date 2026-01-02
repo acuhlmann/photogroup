@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 
 import Logger from 'js-logger';
@@ -55,190 +55,126 @@ const styles = theme => ({
     },
 });
 
-class SettingsView extends Component {
+function SettingsView(props) {
+    const {classes, master, enqueueSnackbar, closeSnackbar, prefersDarkMode} = props;
+    const masterRef = useRef(master);
+    masterRef.current = master;
 
-    constructor(props) {
-        super(props);
+    const [messages, setMessages] = useState([]);
+    const [open, setOpen] = useState(false);
+    const [peerId, setPeerId] = useState('');
+    const [showTopology, setShowTopology] = useState(true);
+    const [showMe, setShowMe] = useState(true);
+    const [encrypt, setEncrypt] = useState(false);
+    const [strategyPreference, setStrategyPreference] = useState(false);
+    const [darkMode, setDarkMode] = useState(prefersDarkMode);
+    const logsBeforeMountRef = useRef([]);
+    const mountedRef = useRef(false);
 
-        const { classes, master } = props;
-        this.classes = classes;
-        this.master = master;
-
-        Logger.setHandler((messages, context) => {
-            const date = format(new Date(), "HH:mm:ss:SSS");
-            this.log(date + ' ' + messages[0], context.level.name);
-        });
-
-        this.state = {
-            messages: [],
-            open: false,
-            peerId: '',
-            showTopology: true, showMe: true, encrypt: false,
-            strategyPreference: false, darkMode: props.prefersDarkMode,
-        };
-        this.logsBeforeMount = [];
-
-        Logger.info('platform ' + navigator.platform + ' cpu ' + navigator.oscpu);
-
-        this.master.emitter.on('addPeerDone', () => {
-
-            const showMe = localStorage.getItem('showMe') || this.state.showMe;
-            this.handleShowMeChange(String(showMe) == 'true');
-
-            const showTopology = localStorage.getItem('showTopology');
-            const showTopologyValue = showTopology !== null ? showTopology === 'true' : this.state.showTopology;
-            this.handleTopologyChange(showTopologyValue);
-
-            const encrypt = localStorage.getItem('encrypt') || this.state.encrypt;
-            this.handleEncryptChange(String(encrypt) == 'true');
-
-            const strategyPreference = localStorage.getItem('strategyPreference') || this.state.strategyPreference;
-            this.handleStrategyPreferenceChange(String(strategyPreference) == 'true');
-
-            const darkMode = localStorage.getItem('darkMode') || this.state.darkMode;
-            this.handleDarkModeChange(String(darkMode) == 'true');
-
-            this.setState({peerId: this.master.client.peerId});
-            this.checkConnection();
-        });
-    }
-
-    checkConnection() {
-        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-        if(connection) {
-            let type = connection.effectiveType;
-            Logger.info("Connection type is " + type);
-            this.master.emitter.emit('connectionSpeedType', type);
-            this.master.service.updatePeer({
-                connectionSpeedType: type
-            });
-            function updateConnectionStatus() {
-                Logger.info("Connection type changed from " + type + " to " + connection.effectiveType);
-                type = connection.effectiveType;
-                this.master.emitter.emit('connectionSpeedType', type);
-                this.master.service.updatePeer({
-                    connectionSpeedType: type
-                });
-            }
-
-            connection.addEventListener('change', updateConnectionStatus.bind(this));
-        }
-    }
-
-    snack(payload, type = 'info', persist = false) {
-
-        const {enqueueSnackbar, closeSnackbar} = this.props;
-
-        enqueueSnackbar(payload, {
-            variant: type,
-            persist: persist,
-            autoHideDuration: 4000,
-            action: (key) => (<Button className={this.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
-            anchorOrigin: {
-                vertical: 'bottom',
-                horizontal: 'right'
-            }
-        });
-    }
-
-    componentDidMount() {
-        this.mounted = true;
-        this.logsBeforeMount.forEach(missedMessage => this.log(missedMessage));
-        this.logsBeforeMount = [];
-    }
-
-    log(message, level) {
-        if(this.mounted) {
+    const log = useCallback((message, level) => {
+        if(mountedRef.current) {
             const msg = <div key={Math.random()}>
                 <Typography variant="caption">{level + ': ' + message}</Typography>
             </div>;
             console.info(level, message);
 
             if(level === 'DEBUG' || level === 'INFO' || level === 'WARN' || level === 'ERROR') {
-                this.setState(state => {
-                    const messages = update(state.messages, {$unshift: [msg]});
-                    return {messages: messages};
-                });
+                setMessages(state => update(state, {$unshift: [msg]}));
             }
         } else {
-            this.logsBeforeMount.push({message: message, level: level});
+            logsBeforeMountRef.current.push({message: message, level: level});
         }
-    }
+    }, []);
 
-    showLogs() {
-        this.setState({
-            open: true
+    useEffect(() => {
+        Logger.setHandler((messages, context) => {
+            const date = format(new Date(), "HH:mm:ss:SSS");
+            log(date + ' ' + messages[0], context.level.name);
         });
-    }
 
-    handleClose() {
-        this.setState({ open: false });
-    }
+        Logger.info('platform ' + navigator.platform + ' cpu ' + navigator.oscpu);
 
-    async handleReset() {
-        await RoomsService.deleteAll();
-        this.master.leaveRoomAndReload();
-    }
+        const handleAddPeerDone = () => {
+            const showMeValue = localStorage.getItem('showMe') || showMe;
+            handleShowMeChange(String(showMeValue) == 'true');
 
-    requestBLE() {
+            const showTopologyValue = localStorage.getItem('showTopology');
+            const showTopologyVal = showTopologyValue !== null ? showTopologyValue === 'true' : showTopology;
+            handleTopologyChange(showTopologyVal);
 
-        if(!navigator.bluetooth) {
-            Logger.info('navigator.bluetooth not available');
-        } else {
-            if(navigator.bluetooth.getAvailability && typeof navigator.bluetooth.getAvailability === 'function') {
-                navigator.bluetooth.getAvailability()
-                    .then(availability => {
-                        // availability.value may be kept up-to-date by the UA as long as the availability
-                        // object is alive. It is advised for web developers to discard the object as soon
-                        // as it's not needed.
-                        Logger.info('bluetooth.availability ' + availability);
-                    })
-                    .catch((e) => {
-                        Logger.info('bluetooth.availability.e ' + JSON.stringify(e));
-                    });
-            } else {
-                Logger.info('bluetooth.getAvailability() not available');
-            }
+            const encryptValue = localStorage.getItem('encrypt') || encrypt;
+            handleEncryptChange(String(encryptValue) == 'true');
 
-            this.requestLES();
+            const strategyPreferenceValue = localStorage.getItem('strategyPreference') || strategyPreference;
+            handleStrategyPreferenceChange(String(strategyPreferenceValue) == 'true');
 
-            navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                //optionalServices: ['battery_service']
-            })
-                .then(device => {
-                    Logger.info('bluetooth.device ' + device.name + ' ' + device.id);
+            const darkModeValue = localStorage.getItem('darkMode') || darkMode;
+            handleDarkModeChange(String(darkModeValue) == 'true');
 
-                    // Set up event listener for when device gets disconnected.
-                    device.addEventListener('gattserverdisconnected', this.onDisconnected);
+            setPeerId(masterRef.current.client.peerId);
+            checkConnection();
+        };
 
-                    return device.gatt.connect();
-                })
-                .then(server => {
-                    // Getting Battery Service...
-                    return server.getPrimaryService('battery_service');
-                })
-                .then(service => {
-                    // Getting Battery Level Characteristic...
-                    return service.getCharacteristic('battery_level');
-                })
-                .then(characteristic => {
-                    // Set up event listener for when characteristic value changes.
-                    characteristic.addEventListener('characteristicvaluechanged',
-                        this.handleBatteryLevelChanged);
-                    // Reading Battery Level...
-                    return characteristic.readValue();
-                })
-                .then(value => {
-                    Logger.info('Battery percentage is ' + value.getUint8(0));
-                })
-                .catch(error => {
-                    Logger.error('bluetooth.error ' + error.name + ' ' + error.message);
+        master.emitter.on('addPeerDone', handleAddPeerDone);
+
+        return () => {
+            master.emitter.removeListener('addPeerDone', handleAddPeerDone);
+        };
+    }, [showMe, showTopology, encrypt, strategyPreference, darkMode, log]);
+
+    const checkConnection = useCallback(() => {
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if(connection) {
+            let type = connection.effectiveType;
+            Logger.info("Connection type is " + type);
+            masterRef.current.emitter.emit('connectionSpeedType', type);
+            masterRef.current.service.updatePeer({
+                connectionSpeedType: type
+            });
+            const updateConnectionStatus = () => {
+                Logger.info("Connection type changed from " + type + " to " + connection.effectiveType);
+                type = connection.effectiveType;
+                masterRef.current.emitter.emit('connectionSpeedType', type);
+                masterRef.current.service.updatePeer({
+                    connectionSpeedType: type
                 });
-        }
-    }
+            };
 
-    requestLES() {
+            connection.addEventListener('change', updateConnectionStatus);
+        }
+    }, []);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        logsBeforeMountRef.current.forEach(missedMessage => log(missedMessage.message, missedMessage.level));
+        logsBeforeMountRef.current = [];
+    }, [log]);
+
+    const showLogs = useCallback(() => {
+        setOpen(true);
+    }, []);
+
+    const handleClose = useCallback(() => {
+        setOpen(false);
+    }, []);
+
+    const handleReset = useCallback(async () => {
+        await RoomsService.deleteAll();
+        masterRef.current.leaveRoomAndReload();
+    }, []);
+
+    const onDisconnected = useCallback((event) => {
+        let device = event.target;
+        Logger.info('Device ' + device.name + ' is disconnected.');
+    }, []);
+
+    const handleBatteryLevelChanged = useCallback((event) => {
+        let value = event.target.value.getUint8(0);
+        Logger.info('handleBatteryLevelChanges ' + JSON.stringify(event));
+        Logger.info('handleBatteryLevelChanges value ' + value);
+    }, []);
+
+    const requestLES = useCallback(() => {
         if(!navigator.bluetooth.requestLEScan && typeof navigator.bluetooth.requestLEScan !== 'function')
             return;
 
@@ -252,7 +188,7 @@ class SettingsView extends Component {
             navigator.bluetooth.addEventListener('advertisementreceived', event => {
                 let appleData = event.manufacturerData.get(0x004C);
                 if (appleData.byteLength !== 23) {
-                    // Isn’t an iBeacon.
+                    // Isn't an iBeacon.
                     return;
                 }
                 let major = appleData.getUint16(18, false);
@@ -263,193 +199,201 @@ class SettingsView extends Component {
                 Logger.info(major, minor, pathLossVs1m);
             });
         })
-    }
+    }, []);
 
-    onDisconnected(event) {
-        let device = event.target;
-        Logger.info('Device ' + device.name + ' is disconnected.');
-    }
+    const requestBLE = useCallback(() => {
+        if(!navigator.bluetooth) {
+            Logger.info('navigator.bluetooth not available');
+        } else {
+            if(navigator.bluetooth.getAvailability && typeof navigator.bluetooth.getAvailability === 'function') {
+                navigator.bluetooth.getAvailability()
+                    .then(availability => {
+                        Logger.info('bluetooth.availability ' + availability);
+                    })
+                    .catch((e) => {
+                        Logger.info('bluetooth.availability.e ' + JSON.stringify(e));
+                    });
+            } else {
+                Logger.info('bluetooth.getAvailability() not available');
+            }
 
-    handleBatteryLevelChanged(event) {
-        let value = event.target.value.getUint8(0);
-        Logger.info('handleBatteryLevelChanges ' + JSON.stringify(event));
-        Logger.info('handleBatteryLevelChanges value ' + value);
-    }
+            requestLES();
 
-    handleTopologyChange(value) {
+            navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+            })
+                .then(device => {
+                    Logger.info('bluetooth.device ' + device.name + ' ' + device.id);
+                    device.addEventListener('gattserverdisconnected', onDisconnected);
+                    return device.gatt.connect();
+                })
+                .then(server => {
+                    return server.getPrimaryService('battery_service');
+                })
+                .then(service => {
+                    return service.getCharacteristic('battery_level');
+                })
+                .then(characteristic => {
+                    characteristic.addEventListener('characteristicvaluechanged', handleBatteryLevelChanged);
+                    return characteristic.readValue();
+                })
+                .then(value => {
+                    Logger.info('Battery percentage is ' + value.getUint8(0));
+                })
+                .catch(error => {
+                    Logger.error('bluetooth.error ' + error.name + ' ' + error.message);
+                });
+        }
+    }, [requestLES, onDisconnected, handleBatteryLevelChanged]);
+
+    const handleTopologyChange = useCallback((value) => {
         localStorage.setItem('showTopology', String(value));
-        this.master.emitter.emit('showTopology', value);
-        this.setState({showTopology: value});
-    };
+        masterRef.current.emitter.emit('showTopology', value);
+        setShowTopology(value);
+    }, []);
 
-    handleShowMeChange(value) {
+    const handleShowMeChange = useCallback((value) => {
         localStorage.setItem('showMe', value);
-        this.master.emitter.emit('showMe', value);
-        this.setState({showMe: value});
-    };
+        masterRef.current.emitter.emit('showMe', value);
+        setShowMe(value);
+    }, []);
 
-    handleEncryptChange(value) {
-        const field = 'encrypt';
-        localStorage.setItem(field, value);
-        this.master.emitter.emit(field, value);
-        this.setState({[field]: value});
-    };
+    const handleEncryptChange = useCallback((value) => {
+        localStorage.setItem('encrypt', value);
+        masterRef.current.emitter.emit('encrypt', value);
+        setEncrypt(value);
+    }, []);
 
-    handleStrategyPreferenceChange(value) {
-        const field = 'strategyPreference';
-        localStorage.setItem(field, value);
-        this.master.emitter.emit(field, value);
-        this.setState({[field]: value});
-    };
+    const handleStrategyPreferenceChange = useCallback((value) => {
+        localStorage.setItem('strategyPreference', value);
+        masterRef.current.emitter.emit('strategyPreference', value);
+        setStrategyPreference(value);
+    }, []);
 
-    handleDarkModeChange(value) {
-        const field = 'darkMode';
-        localStorage.setItem(field, value);
-        this.master.emitter.emit(field, value);
-        this.setState({[field]: value});
-    };
+    const handleDarkModeChange = useCallback((value) => {
+        localStorage.setItem('darkMode', value);
+        masterRef.current.emitter.emit('darkMode', value);
+        setDarkMode(value);
+    }, []);
 
-    batchChangeName(event) {
-
+    const batchChangeName = useCallback((event) => {
         if(!event.target) return;
-
         console.log('change name ' + event.target.value);
-        this.master.service.updatePeer( {
+        masterRef.current.service.updatePeer({
             name: event.target.value
         });
-    }
+    }, []);
 
-    render() {
-        const {classes} = this.props;
+    const messagesList = <List>
+        {messages}
+    </List>;
 
-        /*const Row = ({ index, style }) => (
-            <ListItem>
-                <Typography variant="caption" key={index}>{this.state.messages[index]}</Typography>
-            </ListItem>
-        );*/
+    return (
+        <div>
+            <IconButton
+                aria-haspopup="true"
+                onClick={showLogs}
+                color="inherit"
+            >
+                <Settings />
+            </IconButton>
 
-        //const messages = <FixedSizeList height={200} width={300} itemSize={10} itemCount={100}>
-        //    {Row}
-        //</FixedSizeList>;
-
-        const messages = <List>
-            {this.state.messages}
-        </List>;
-
-        const {showMe, showTopology, encrypt, strategyPreference, darkMode} = this.state;
-        return (
-            <div>
-                <IconButton
-                    aria-haspopup="true"
-                    onClick={this.showLogs.bind(this)}
-                    color="inherit"
-                >
-                    <Settings />
-                </IconButton>
-
-                <Dialog
-                    open={this.state.open}
-                    onClose={this.handleClose.bind(this)}
-                    TransitionComponent={Transition}
-                    keepMounted
-                    maxWidth="md"
-                    fullWidth
-                >
-                    <DialogTitle>Settings</DialogTitle>
-                    <DialogActions className={classes.vertical}>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        onChange={(event) =>
-                                            this.handleEncryptChange(event.target.checked)}
-                                        checked={encrypt}
-                                        value="encrypt"
-                                        color="primary"
-                                    />
-                                }
-                                label="Encrypt End-to-end"
-                            />
-                            <FormGroup row>
-                                <FormControlLabel
-                                control={
-                                    <Switch
-                                        onChange={(event) =>
-                                            this.handleTopologyChange(event.target.checked)}
-                                        checked={showTopology}
-                                        value="showTopology"
-                                        color="primary"
-                                    />
-                                }
-                                label="Topology View"
-                            />
-                                <FormControlLabel
-                                    control={
-                                        <Switch
-                                            onChange={(event) =>
-                                                this.handleShowMeChange(event.target.checked)}
-                                            checked={showMe}
-                                            value="showMe"
-                                            color="primary"
-                                        />
-                                    }
-                                    label="Me View"
+            <Dialog
+                open={open}
+                onClose={handleClose}
+                TransitionComponent={Transition}
+                keepMounted
+                maxWidth="md"
+                fullWidth
+            >
+                <DialogTitle>Settings</DialogTitle>
+                <DialogActions className={classes.vertical}>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    onChange={(event) => handleEncryptChange(event.target.checked)}
+                                    checked={encrypt}
+                                    value="encrypt"
+                                    color="primary"
                                 />
-                            </FormGroup>
+                            }
+                            label="Encrypt End-to-end"
+                        />
+                        <FormGroup row>
+                            <FormControlLabel
+                            control={
+                                <Switch
+                                    onChange={(event) => handleTopologyChange(event.target.checked)}
+                                    checked={showTopology}
+                                    value="showTopology"
+                                    color="primary"
+                                />
+                            }
+                            label="Topology View"
+                        />
                             <FormControlLabel
                                 control={
                                     <Switch
-                                        onChange={(event) =>
-                                            this.handleStrategyPreferenceChange(event.target.checked)}
-                                        checked={strategyPreference}
-                                        value="strategyPreference"
+                                        onChange={(event) => handleShowMeChange(event.target.checked)}
+                                        checked={showMe}
+                                        value="showMe"
                                         color="primary"
                                     />
                                 }
-                                label="Prefer Sequential over Rarest-First Downloading?"
+                                label="Me View"
                             />
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        onChange={(event) =>
-                                            this.handleDarkModeChange(event.target.checked)}
-                                        checked={darkMode}
-                                        value="darkMode"
-                                        color="primary"
-                                    />
-                                }
-                                label="Dark Theme"
-                            />
-                        <span className={classes.horizontal}>
-                            <IconButton
-                                aria-haspopup="true"
-                                onClick={this.requestBLE.bind(this)}
-                                color="inherit"
-                            >
-                                <Bluetooth />
-                            </IconButton>
-                            <Button onClick={this.master.restartTrackers.bind(this.master)} color="secondary">
-                                restart trackers
-                            </Button>
-                            <IconButton
-                                onClick={this.handleClose.bind(this)}>
-                                <CloseRounded />
-                            </IconButton>
-                        </span>
-                    </DialogActions>
-                    <DialogContent>
-                        <Typography variant="subtitle2">{this.state.urls}</Typography>
-                        <Typography variant={"caption"}>v{getAppVersionString()} {this.state.peerId}</Typography>
-
-                        {messages}
-
-                        <Button key='delete' onClick={this.handleReset.bind(this)} color="primary">
-                            Del server state
+                        </FormGroup>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    onChange={(event) => handleStrategyPreferenceChange(event.target.checked)}
+                                    checked={strategyPreference}
+                                    value="strategyPreference"
+                                    color="primary"
+                                />
+                            }
+                            label="Prefer Sequential over Rarest-First Downloading?"
+                        />
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    onChange={(event) => handleDarkModeChange(event.target.checked)}
+                                    checked={darkMode}
+                                    value="darkMode"
+                                    color="primary"
+                                />
+                            }
+                            label="Dark Theme"
+                        />
+                    <span className={classes.horizontal}>
+                        <IconButton
+                            aria-haspopup="true"
+                            onClick={requestBLE}
+                            color="inherit"
+                        >
+                            <Bluetooth />
+                        </IconButton>
+                        <Button onClick={() => masterRef.current.restartTrackers()} color="secondary">
+                            restart trackers
                         </Button>
-                    </DialogContent>
-                </Dialog>
-            </div>
-        );
-    }
+                        <IconButton
+                            onClick={handleClose}>
+                            <CloseRounded />
+                        </IconButton>
+                    </span>
+                </DialogActions>
+                <DialogContent>
+                    <Typography variant={"caption"}>v{getAppVersionString()} {peerId}</Typography>
+
+                    {messagesList}
+
+                    <Button key='delete' onClick={handleReset} color="primary">
+                        Del server state
+                    </Button>
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
 }
 
 SettingsView.propTypes = {

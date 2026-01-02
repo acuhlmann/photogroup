@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 
 import Logger from 'js-logger';
@@ -28,168 +28,149 @@ const styles = theme => ({
     },
 });
 
-class Uploader extends Component {
+function Uploader({classes, model, emitter}) {
+    const [visible, setVisible] = useState(false);
+    const [open, setOpen] = useState(false);
+    const [disabled, setDisabled] = useState(true);
+    const [loadedAnything, setLoadedAnything] = useState(false);
+    const [password, setPassword] = useState('');
+    const [files, setFiles] = useState(null);
+    const [secure, setSecure] = useState(false);
+    const uploaderDomRef = useRef(null);
 
-    constructor(props) {
-        super(props);
-
-        const { classes, model } = props;
-
-        this.classes = classes;
-        this.model = model;
-
-        this.state = {
-            visible: false,
-            open: false,
-            disabled: true, loadedAnything: false,
-            password: '', files: null
+    useEffect(() => {
+        const handleReadyToUpload = () => {
+            setVisible(true);
+            setDisabled(false);
         };
-    }
 
-    componentDidMount() {
-        const { model } = this.props;
+        const handleLoadedAnything = () => {
+            setLoadedAnything(true);
+        };
 
-        model.emitter.on('readyToUpload', () => {
-            this.setState({
-                visible: true,
-                disabled: false
-            });
+        const handleEncrypt = (value) => {
+            setSecure(value);
+        };
+
+        model.emitter.on('readyToUpload', handleReadyToUpload);
+        model.emitter.on('loadedAnything', handleLoadedAnything);
+        model.emitter.on('encrypt', handleEncrypt);
+
+        return () => {
+            model.emitter.removeListener('readyToUpload', handleReadyToUpload);
+            model.emitter.removeListener('loadedAnything', handleLoadedAnything);
+            model.emitter.removeListener('encrypt', handleEncrypt);
+        };
+    }, [model.emitter]);
+
+    const share = useCallback((files, isSecure, origFiles) => {
+        model.seed(files, isSecure, origFiles, () => {
+            if (uploaderDomRef.current) {
+                uploaderDomRef.current.value = '';
+            }
         });
+    }, [model]);
 
-        model.emitter.on('loadedAnything', () => {
-            this.setState({
-                loadedAnything: true
-            });
-        });
-
-        model.emitter.on('encrypt', (value) => {
-            this.setState({
-                secure: value
-            });
-        });
-    }
-
-    handleUpload(event) {
-
-        const files = event.target.files;
-        if(!files[0]) {
-            return;
-        }
-
-        this.uploaderDom = event.target || event.srcElement;
-
-        if(this.state.secure) {
-            this.setState({files: files, open: true});
-        } else {
-            this.share(files);
-        }
-    }
-
-    share(files, isSecure, origFiles) {
-        const self = this;
-        this.model.seed(files, isSecure, origFiles, () => {
-            self.uploaderDom.value = '';
-        });
-    }
-
-    async secureShare() {
-        const {files, password} = this.state;
-
+    const secureShare = useCallback(async () => {
         const crypto = new WebCrypto();
         const result = await crypto.encryptFile(files, password);
         //const text = await result.blob.text();
 
         Logger.info('secureShare ' + result);
-        this.share([result].map((item, index) => item.blob), true, files);
-        this.show(false);
-    }
+        share([result].map((item, index) => item.blob), true, files);
+        setOpen(false);
+    }, [files, password, share]);
 
-    cancel() {
-        this.show(false);
-        this.uploaderDom.value = '';
-    }
+    const handleUpload = useCallback((event) => {
+        const uploadedFiles = event.target.files;
+        if(!uploadedFiles[0]) {
+            return;
+        }
 
-    show(open) {
-        this.setState({open: open});
-    }
+        uploaderDomRef.current = event.target || event.srcElement;
 
-    hasRoom() {
+        if(secure) {
+            setFiles(uploadedFiles);
+            setOpen(true);
+        } else {
+            share(uploadedFiles);
+        }
+    }, [secure, share]);
+
+    const hasRoom = () => {
         const urlParams = new URLSearchParams(window.location.search);
         return urlParams.has('room');
+    };
+
+    if (!visible && !hasRoom()) {
+        return null;
     }
 
-    render() {
-        const {classes, emitter} = this.props;
-        const {visible, disabled, loadedAnything} = this.state;
-        const hasRoom = this.hasRoom();
-
-        return (
-            visible || hasRoom ? <div>
-
-                <LoaderView emitter={emitter}/>
-                <input
-                    accept="image/*,video/*,audio/*"
-                    //accept="image/*"
-                    multiple
+    return (
+        <div>
+            <LoaderView emitter={emitter}/>
+            <input
+                accept="image/*,video/*,audio/*"
+                multiple
+                style={{
+                    position: 'absolute',
+                    top: loadedAnything ? '-15px' : '0px',
+                    width: 0,
+                    height: 0,
+                    opacity: 0,
+                    overflow: 'hidden',
+                    zIndex: -1,
+                }}
+                className={classes.input}
+                id="contained-button-file" 
+                disabled={disabled}
+                type="file" 
+                onChange={handleUpload}
+                ref={uploaderDomRef}
+            />
+            <label htmlFor="contained-button-file" style={{cursor: disabled ? 'not-allowed' : 'pointer'}}>
+                <IconButton
+                    aria-haspopup="true"
+                    color="inherit" 
+                    variant="contained"
+                    component="span"
                     style={{
-                        position: 'absolute',
+                        position: 'relative',
                         top: loadedAnything ? '-15px' : '0px',
-                        width: 0,
-                        height: 0,
-                        opacity: 0,
-                        overflow: 'hidden',
-                        zIndex: -1,
                     }}
-                    className={classes.input}
-                    id="contained-button-file" disabled={disabled}
-                    type="file" onChange={this.handleUpload.bind(this)}
-                />
-                <label htmlFor="contained-button-file" style={{cursor: disabled ? 'not-allowed' : 'pointer'}}>
-                    <IconButton
-                        aria-haspopup="true"
-                        color="inherit" variant="contained"
-                        component="span"
-                        style={{
-                            position: 'relative',
-                            //top: '-15px',
-                            top: loadedAnything ? '-15px' : '0px',
-                        }}
-                        disabled={disabled}
-                    >
-                        <CloudUploadRounded />
-                    </IconButton>
-                </label>
-
-                <Dialog
-                    open={this.state.open}
-                    onClose={this.show.bind(this, false)}
-                    //TransitionComponent={Transition}
-                    keepMounted
+                    disabled={disabled}
                 >
-                    <DialogContent>
-                        <span style={{display: 'flex'}}>
-                            <PasswordInput onChange={value => this.setState({password: value})} />
-                            <Button onClick={this.secureShare.bind(this)} color="primary">
-                                Encrypt
-                            </Button>
-                        </span>
-                    </DialogContent>
-                    <DialogActions>
-                        <IconButton
-                            onClick={this.show.bind(this, false)}
-                        >
-                            <CloseRounded />
-                        </IconButton>
-                    </DialogActions>
-                </Dialog>
-            </div> : <div></div>
-        );
-    }
+                    <CloudUploadRounded />
+                </IconButton>
+            </label>
+
+            <Dialog
+                open={open}
+                onClose={() => setOpen(false)}
+                keepMounted
+            >
+                <DialogContent>
+                    <span style={{display: 'flex'}}>
+                        <PasswordInput onChange={setPassword} />
+                        <Button onClick={secureShare} color="primary">
+                            Encrypt
+                        </Button>
+                    </span>
+                </DialogContent>
+                <DialogActions>
+                    <IconButton onClick={() => setOpen(false)}>
+                        <CloseRounded />
+                    </IconButton>
+                </DialogActions>
+            </Dialog>
+        </div>
+    );
 }
 
 Uploader.propTypes = {
     classes: PropTypes.object.isRequired,
     model: PropTypes.object.isRequired,
+    emitter: PropTypes.object.isRequired,
 };
 
 export default withStyles(styles)(Uploader);

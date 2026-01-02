@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 import Dialog from '@mui/material/Dialog';
@@ -27,75 +27,54 @@ const styles = theme => ({
     },
 });
 
-class PhotoDetails extends Component {
+function PhotoDetails({master, classes, tile, open, parser, handleClose}) {
+    const [fileName, setFileName] = useState(() => FileUtil.getFileNameWithoutSuffix(tile.fileName));
+    const [metadata, setMetadata] = useState(null);
+    const componentRef = useRef(null);
 
-    constructor(props) {
-        super(props);
-        this.state = {
-            fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)
-        }
-    }
+    useEffect(() => {
+        setFileName(FileUtil.getFileNameWithoutSuffix(tile.fileName));
+    }, [tile.fileName]);
 
-    componentDidMount() {
-        this.setState((state, props) => {
-            return {fileName: FileUtil.getFileNameWithoutSuffix(props.tile.fileName)}
-        });
-    }
-
-    componentDidUpdate(nextProps) {
-        const { tile, open } = this.props;
-        const fileName = tile.fileName;
-        if (nextProps.tile.fileName !== fileName) {
-            if (fileName) {
-                this.setState({ fileName: fileName })
+    useEffect(() => {
+        if (!open && tile.metadata) {
+            if (tile.metadata) {
+                const summaryMetadata = parser.createMetadataSummary(tile.metadata, tile);
+                setMetadata(summaryMetadata);
+                setFileName(FileUtil.getFileNameWithoutSuffix(tile.fileName));
+            } else {
+                setFileName(FileUtil.getFileNameWithoutSuffix(tile.fileName));
             }
         }
-        if (!nextProps.open && open && tile.metadata) {
-            this.setState((state, props) => {
-                if(tile.metadata) {
-                    const summaryMetadata = props.parser.createMetadataSummary(tile.metadata, tile);
-                    return {metadata: summaryMetadata, fileName: FileUtil.getFileNameWithoutSuffix(tile.fileName)};
-                } else {
-                    return {fileName: FileUtil.getFileNameWithoutSuffix(tile.fileName)};
-                }
-            });
-        }
-    }
+    }, [open, tile, parser]);
 
-    render() {
-        const {master, classes, tile, open} = this.props;
-        const {metadata, fileName} = this.state;
+    const details = new PhotoDetailsRenderer(master.service, componentRef.current);
+    const metadataList = details.render(metadata, tile, fileName);
 
-        const details = new PhotoDetailsRenderer(master.service, this);
-        const metadataList = details.render(metadata, tile, fileName);
-
-        return (
-            <div className={classes.root}>
-                <Dialog
-                    fullScreen={true}
-                    TransitionComponent={Transition}
-                    open={open}
-                    onClose={() => this.handleClose()}
-                    aria-labelledby="alert-dialog-title"
-                    aria-describedby="alert-dialog-description"
-                >
-                    <DialogTitle id="alert-dialog-title">{"All that metadata"}</DialogTitle>
-                    <DialogActions>
-                        <IconButton
-                            onClick={() => this.props.handleClose()}
-                        >
-                            <CloseRounded />
-                        </IconButton>
-                    </DialogActions>
-                    <DialogContent>
-                        <List>
-                            {metadataList}
-                        </List>
-                    </DialogContent>
-                </Dialog>
-            </div>
-        );
-    }
+    return (
+        <div className={classes.root} ref={componentRef}>
+            <Dialog
+                fullScreen={true}
+                TransitionComponent={Transition}
+                open={open}
+                onClose={handleClose}
+                aria-labelledby="alert-dialog-title"
+                aria-describedby="alert-dialog-description"
+            >
+                <DialogTitle id="alert-dialog-title">{"All that metadata"}</DialogTitle>
+                <DialogActions>
+                    <IconButton onClick={handleClose}>
+                        <CloseRounded />
+                    </IconButton>
+                </DialogActions>
+                <DialogContent>
+                    <List>
+                        {metadataList}
+                    </List>
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
 }
 
 PhotoDetails.propTypes = {

@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {withStyles} from '@mui/styles';
 import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
@@ -54,205 +54,212 @@ const styles = theme => ({
     },
 });
 
-class LoadingTile extends Component {
+function LoadingTile({tile, master, classes, name}) {
+    const [progress, setProgress] = useState(null);
+    const [timeRemaining, setTimeRemaining] = useState('');
+    const [downSpeed, setDownSpeed] = useState('');
+    const [upSpeed, setUpSpeed] = useState('');
+    const [previewThumbnail, setPreviewThumbnail] = useState(null);
 
-    constructor(props) {
-        super(props);
-
-        this.state = {
-            progress: null, timeRemaining: '',
-            downSpeed: '', upSpeed: '',
-            previewThumbnail: null
-        }
-    }
-
-    componentDidMount() {
-        const emitter = this.props.master.emitter;
-
-        emitter.on('downloadProgress', this.handleDownloadProgress, this);
-        emitter.on('uploadProgress', this.handleUploadProgress, this);
-        emitter.on('torrentReady', this.listenToPreview, this);
-    }
-
-    handleDownloadProgress(event) {
-        const torrent = event.torrent;
-        if(torrent.infoHash === this.props.tile.infoHash) {
-            const progress = event.progress;
-            this.setState({
-                progress: progress,
-                downSpeed: event.speed,
-                timeRemaining: event.timeRemaining});
-        }
-    }
-
-    handleUploadProgress(event) {
-        const torrent = event.torrent;
-        if(torrent.infoHash === this.props.tile.infoHash) {
-            const progress = event.progress;
-            this.setState({
-                progress: progress,
-                upSpeed: event.speed,
-                timeRemaining: event.timeRemaining});
-        }
-    }
-
-    componentWillUnmount() {
-        const emitter = this.props.master.emitter;
-        emitter.removeListener('downloadProgress', this.handleDownloadProgress, this);
-        emitter.removeListener('uploadProgress', this.handleUploadProgress, this);
-        emitter.removeListener('torrentReady', this.listenToPreview, this);
-    }
-
-    listenToPreview() {
-        const {tile} = this.props;
+    const listenToPreview = useCallback(() => {
         if(tile.loading && tile.torrentFileThumb) {
             tile.torrentFileThumb.getBlobURL((err, url) => {
                 if(err) {
                     Logger.error('preview ' + err);
+                } else {
+                    setPreviewThumbnail(url);
                 }
-                this.setState({previewThumbnail: url});
             });
         }
-    }
+    }, [tile]);
 
-    async handleDelete(tile) {
+    useEffect(() => {
+        const emitter = master.emitter;
+
+        const handleDownloadProgress = (event) => {
+            const torrent = event.torrent;
+            if(torrent.infoHash === tile.infoHash) {
+                const progressValue = event.progress;
+                setProgress(progressValue);
+                setDownSpeed(event.speed);
+                setTimeRemaining(event.timeRemaining);
+            }
+        };
+
+        const handleUploadProgress = (event) => {
+            const torrent = event.torrent;
+            if(torrent.infoHash === tile.infoHash) {
+                const progressValue = event.progress;
+                setProgress(progressValue);
+                setUpSpeed(event.speed);
+                setTimeRemaining(event.timeRemaining);
+            }
+        };
+
+        emitter.on('downloadProgress', handleDownloadProgress);
+        emitter.on('uploadProgress', handleUploadProgress);
+        emitter.on('torrentReady', listenToPreview);
+
+        listenToPreview();
+
+        return () => {
+            emitter.removeListener('downloadProgress', handleDownloadProgress);
+            emitter.removeListener('uploadProgress', handleUploadProgress);
+            emitter.removeListener('torrentReady', listenToPreview);
+        };
+    }, [master.emitter, tile.infoHash, listenToPreview]);
+
+    const handleDelete = useCallback(async (tile) => {
         try {
-            const result = await this.props.master.torrentDeletion.deleteItem(tile);
+            // If tile doesn't have infoHash, just remove from UI
+            if(!tile || !tile.infoHash) {
+                Logger.warn('Cannot delete tile: missing infoHash, removing from UI only');
+                master.emitter.emit('photos', {
+                    type: 'delete', item: tile?.infoHash || tile?.file?.name || 'unknown'
+                });
+                return;
+            }
+            
+            const result = await master.torrentDeletion.deleteItem(tile);
             Logger.info('handleDelete ' + result);
         } catch(err) {
             Logger.error('Failed to delete: ' + err);
-            // Even if deletion fails, remove from UI if torrent doesn't exist
-            if(!tile.torrent) {
-                this.props.master.emitter.emit('photos', {
-                    type: 'delete', item: tile.infoHash
-                });
-            }
+            // Even if deletion fails, remove from UI
+            const infoHash = tile?.infoHash || tile?.file?.name || 'unknown';
+            master.emitter.emit('photos', {
+                type: 'delete', item: infoHash
+            });
+        }
+    }, [master]);
+
+    let displayName = name;
+    const currentProgress = tile.torrentFile ? Math.round(tile.torrentFile.progress * 100) : progress;
+    const progressPercentage = currentProgress ? Math.round(currentProgress) + '%' : currentProgress;
+    let have = tile.owners?.find(owner => owner.peerId === master.client.peerId && !owner.loading);
+    const isLoading = !!currentProgress;
+    let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
+    const isRendering = loadingText === 'Rendering';
+    const hasError = !!tile.uploadError;
+    
+    if(tile.rendering && !displayName) {
+        const fileSize = _.get(tile, 'file.size');
+        if(fileSize && !tile.fileSize) {
+            tile.fileSize = FileUtil.formatBytes(fileSize);
+        }
+        displayName = StringUtil.addEmptySpaces([_.get(tile, 'file.name'), tile.fileSize, tile.picDateTaken]);
+    }
+
+    if(isRendering && tile.fromCache) {
+        loadingText = 'Restoring from Cache';
+        have = false;
+    }
+
+    let displayPreviewThumbnail = previewThumbnail;
+    if(isRendering && tile.thumbnailFiles) {
+        const thumbFile = tile.thumbnailFiles.find(item => 'Thumbnail ' + tile.fileName === item.name);
+        if(thumbFile) {
+            displayPreviewThumbnail = URL.createObjectURL(thumbFile);
         }
     }
 
-    render() {
-        const {tile, master, classes} = this.props;
-        let {name} = this.props;
-
-        let {downSpeed, upSpeed, timeRemaining, progress, previewThumbnail} = this.state;
-
-        //progress = 80;
-        //downSpeed = '100kb/sec';
-        //upSpeed = '0kb/sec';
-        //timeRemaining = 'in 1 minute';
-
-        //let owners = tile.owners ? tile.owners : [];
-        progress = tile.torrentFile ? Math.round(tile.torrentFile.progress * 100) : progress;
-        const progressPercentage = progress ? Math.round(progress) + '%' : progress;
-        let have = tile.owners.find(owner => owner.peerId === master.client.peerId && !owner.loading);
-        const isLoading = !!progress;
-        let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
-        const isRendering = loadingText === 'Rendering';
-        const hasError = !!tile.uploadError;
-        if(tile.rendering && !name) {
-            const fileSize = _.get(tile, 'file.size');
-            if(fileSize && !tile.fileSize) {
-                tile.fileSize = FileUtil.formatBytes(fileSize);
-            }
-            name = StringUtil.addEmptySpaces([_.get(tile, 'file.name'), tile.fileSize, tile.picDateTaken]);
-        }
-
-        if(isRendering && tile.fromCache) {
-            loadingText = 'Restoring from Cache';
-            have = false;
-        }
-
-        if(isRendering && tile.thumbnailFiles) {
-            const thumbFile = tile.thumbnailFiles.find(item => 'Thumbnail ' + tile.fileName === item.name);
-            if(thumbFile) {
-                previewThumbnail = URL.createObjectURL(thumbFile);
-            }
-        }
-
-        return (
-            <Paper style={{
-                margin: '10px',
-                padding: '10px'
-            }}>
-                {previewThumbnail ? <span>
-                        <img src={previewThumbnail} alt={'Preview ' + tile.fileName}
-                             className={classes.wide}/>
-                    </span> : ''}
-
-                <span className={classes.horizontal}>
-                    <span className={classes.horizontal} style={{
-                        position: 'relative', textAlign: 'center',
-                    }}>
-                        {have ? <CheckIcon
-                                    style={{marginTop: '-14px'}} /> : <ImageIcon
-                                                                className={classes.imageIcon} />}
-                        {!have && <CircularProgress
-                                    color="secondary"
-                                    size={36} className={classes.fabProgress} />}
-                    </span>
-                    <Typography variant="caption" className={classes.wordwrap} style={{
-                        marginTop: '-14px',
-                        color: hasError ? '#d32f2f' : 'inherit'
-                    }}>
-                        {loadingText}
-                        {hasError && tile.uploadError ? ': ' + tile.uploadError : ''}
-                    </Typography>
-                    {isLoading ? <span className={classes.horizontal} style={{
-                        marginLeft: '10px'}}>
-                                <span className={classes.vertical}>
-                                    <span className={classes.vertical}>
-                                        <CircularProgress style={{
-                                                              width: '35px', height: '35px'
-                                                          }}
-                                                          variant="determinate"
-                                                          value={progress}
-                                        />
-                                        <Typography className={classes.progressPercentageText}
-                                                    variant={"caption"}>{progressPercentage}</Typography>
-                                    </span>
-                                </span>
-                                <div className={classes.vertical} style={{ width: '80px', marginTop: '-14px'}}>
-                                        <Typography className={classes.progressSpeedText}
-                                                    variant={"caption"}>{downSpeed}</Typography>
-                                        <Typography className={classes.progressSpeedText}
-                                                    variant={"caption"}>{upSpeed}</Typography>
-                                </div>
-                                <div className={classes.vertical} style={{ width: '110px'}}>
-                                    <Typography className={classes.progressSpeedText}
-                                                style={{
-                                                    marginTop: '-14px'
-                                                }}
-                                                variant={"caption"}>{timeRemaining}</Typography>
-                                </div>
-                    </span> : ''}
-                    <IconButton onClick={this.handleDelete.bind(this, tile)}
-                                style={{
-                                    marginTop: '-14px'
-                                }}>
-                        <DeleteIcon />
-                    </IconButton>
+    return (
+        <Paper style={{
+            margin: '10px',
+            padding: '10px'
+        }}>
+            {displayPreviewThumbnail ? (
+                <span>
+                    <img src={displayPreviewThumbnail} alt={'Preview ' + tile.fileName}
+                         className={classes.wide}/>
                 </span>
+            ) : null}
+
+            <span className={classes.horizontal}>
+                <span className={classes.horizontal} style={{
+                    position: 'relative', 
+                    textAlign: 'center',
+                }}>
+                    {have ? (
+                        <CheckIcon style={{marginTop: '-14px'}} />
+                    ) : (
+                        <ImageIcon className={classes.imageIcon} />
+                    )}
+                    {!have && (
+                        <CircularProgress
+                            color="secondary"
+                            size={36} 
+                            className={classes.fabProgress} 
+                        />
+                    )}
+                </span>
+                <Typography variant="caption" className={classes.wordwrap} style={{
+                    marginTop: '-14px',
+                    color: hasError ? '#d32f2f' : 'inherit'
+                }}>
+                    {loadingText}
+                    {hasError && tile.uploadError ? ': ' + tile.uploadError : ''}
+                </Typography>
+                {isLoading ? (
+                    <span className={classes.horizontal} style={{marginLeft: '10px'}}>
+                        <span className={classes.vertical}>
+                            <span className={classes.vertical}>
+                                <CircularProgress 
+                                    style={{width: '35px', height: '35px'}}
+                                    variant="determinate"
+                                    value={currentProgress}
+                                />
+                                <Typography className={classes.progressPercentageText} variant={"caption"}>
+                                    {progressPercentage}
+                                </Typography>
+                            </span>
+                        </span>
+                        <div className={classes.vertical} style={{ width: '80px', marginTop: '-14px'}}>
+                            <Typography className={classes.progressSpeedText} variant={"caption"}>
+                                {downSpeed}
+                            </Typography>
+                            <Typography className={classes.progressSpeedText} variant={"caption"}>
+                                {upSpeed}
+                            </Typography>
+                        </div>
+                        <div className={classes.vertical} style={{ width: '110px'}}>
+                            <Typography className={classes.progressSpeedText} style={{marginTop: '-14px'}} variant={"caption"}>
+                                {timeRemaining}
+                            </Typography>
+                        </div>
+                    </span>
+                ) : null}
+                <IconButton 
+                    onClick={() => handleDelete(tile)}
+                    style={{marginTop: '-14px'}}
+                >
+                    <DeleteIcon />
+                </IconButton>
+            </span>
             <Divider variant="middle" />
             <span style={{
                 position: 'relative',
                 textAlign: 'center',
                 marginRight: '10px'
             }}>
-                    <Typography variant="caption" className={classes.wordwrap}>
-                        {name}
-                    </Typography>
-                </span>
+                <Typography variant="caption" className={classes.wordwrap}>
+                    {displayName}
+                </Typography>
+            </span>
             <Divider variant="middle" />
             <div style={{width: '100%', height: '100%'}}>
                 <PiecesLoadingView master={master} tile={tile} />
             </div>
             <Divider variant="middle" />
-            {!isRendering ? <OwnersList emitter={master.emitter}
-                        tile={tile} peers={master.peers} myPeerId={master.client.peerId}
-            /> : ''}
+            {!isRendering ? (
+                <OwnersList 
+                    emitter={master.emitter}
+                    tile={tile} 
+                    peers={master.peers} 
+                    myPeerId={master.client.peerId}
+                />
+            ) : null}
         </Paper>
-        );
-    }
+    );
 }
 
 export default withStyles(styles)(LoadingTile);

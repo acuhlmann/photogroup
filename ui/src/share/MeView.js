@@ -1,4 +1,4 @@
-import React, {Component} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import PropTypes from 'prop-types';
 
 import {withStyles} from '@mui/styles';
@@ -45,200 +45,195 @@ const styles = theme => ({
     },
 });
 
-class MeView extends Component {
+function MeView({classes, master}) {
+    const expandedMeFromStorage = localStorage.getItem('expandedMe') || false;
+    const [expandedMe, setExpandedMe] = useState(String(expandedMeFromStorage) === 'true');
+    const [showMe, setShowMe] = useState(false);
+    const [galleryHasImages, setGalleryHasImages] = useState(false);
+    const [listView, setListView] = useState(true);
+    const [me, setMe] = useState({});
+    const [myNat, setMyNat] = useState(null);
+    const [connectionSpeedType, setConnectionSpeedType] = useState('');
+    const [originPlatform, setOriginPlatform] = useState('');
 
-    constructor(props) {
-        super(props);
+    const findNat = useCallback((chain) => {
+        return chain?.find(item => item.typeDetail?.includes('srflx') || item.typeDetail?.includes('prflx'));
+    }, []);
 
-        this.master = props.master;
+    useEffect(() => {
+        const emitter = master.emitter;
 
-        const expandedMe = localStorage.getItem('expandedMe') || false;
-        this.state = {
-            expandedMe: String(expandedMe) == 'true',
-            showMe: false, galleryHasImages: false, listView: true,
-            me: {}, myNat: null, connectionSpeedType: ''
+        const handleLocalNetwork = (chain) => {
+            if(me?.label && myNat?.network?.hostname) return;
+            if(!chain?.find) return;
+            
+            const meItem = chain.find(item => item.typeDetail === 'host');
+            if(meItem) {
+                meItem.label = originPlatform + ' ' + meItem.ip;
+            }
+            const natItem = findNat(chain);
+            if(natItem) {
+                natItem.label = natItem.typeDetail + ' ' + natItem.ip;
+                natItem.network = {};
+            }
+
+            setMe(meItem || {});
+            setMyNat(natItem);
         };
-    }
 
-    componentDidMount() {
-
-        const emitter = this.master.emitter;
-        emitter.on('localNetwork', chain => {
-
-            //if(this.master.service.hasRoom) return;
-            if(this.state.me && this.state.me.label
-                && this.state.myNat && this.state.myNat.network && this.state.myNat.network.hostname) return;
-
-            if(!chain.find) return;
-            const me = chain
-                .find(item => item.typeDetail === 'host');
-
-            if(me) {
-                me.label = this.state.originPlatform + ' ' + me.ip;
-            }
-            const myNat = this.findNat(chain);
-            if(myNat) {
-                myNat.label = myNat.typeDetail + ' ' + myNat.ip;
-                myNat.network = {};
-            }
-
-            this.setState({
-                me: me ? me : {},
-                myNat: myNat
-            });
-        });
-
-        emitter.on('peers', event => {
-
+        const handlePeers = (event) => {
             if(event.type === 'update') {
                 const myPeer = event.item;
-                if(myPeer && myPeer.peerId === this.master.client.peerId && myPeer.networkChain) {
-
-                    this.setState(state => {
-                        const myNat = this.findNat(myPeer.networkChain);
-                        if(myNat && !myNat.network) {
-                            myNat.network = {};
-                        }
-                        if(myNat) {
-                            myNat.label = StringUtil.createNetworkLabel(myNat);
-                        }
-                        const me = myPeer.networkChain.find(item => item.typeDetail === 'host');
-                        if(me) {
-                            me.label = state.originPlatform + ' ' + me.ip;
-                        }
-                        return {
-                            myNat: myNat,
-                            me: me ? me : {},
-                        };
-                    });
+                if(myPeer && myPeer.peerId === master.client.peerId && myPeer.networkChain) {
+                    const natItem = findNat(myPeer.networkChain);
+                    if(natItem && !natItem.network) {
+                        natItem.network = {};
+                    }
+                    if(natItem) {
+                        natItem.label = StringUtil.createNetworkLabel(natItem);
+                    }
+                    const meItem = myPeer.networkChain.find(item => item.typeDetail === 'host');
+                    if(meItem) {
+                        meItem.label = originPlatform + ' ' + meItem.ip;
+                    }
+                    setMyNat(natItem);
+                    setMe(meItem || {});
                 }
             }
-        });
+        };
 
-        emitter.on('connectionSpeedType', type => {
-            this.setState({
-                connectionSpeedType: type + ' '
-            });
-        });
+        const handleConnectionSpeedType = (type) => {
+            setConnectionSpeedType(type + ' ');
+        };
 
-        emitter.on('addPeerDone', peer => {
+        const handleAddPeerDone = (peer) => {
+            const platform = StringUtil.slimPlatform(peer.originPlatform);
+            setOriginPlatform(platform);
+            setMe({label: platform});
+        };
 
-            this.setState({
-                originPlatform: StringUtil.slimPlatform(peer.originPlatform),
-                me: {label: StringUtil.slimPlatform(peer.originPlatform)},
-            });
-        });
+        const handleShowMe = (value) => {
+            setShowMe(value);
+        };
 
-        emitter.on('showMe', value => {
-            this.setState({showMe: value});
-        });
+        const handleGalleryHasImages = (hasImages) => {
+            setGalleryHasImages(hasImages);
+        };
 
-        emitter.on('galleryHasImages', hasImages => {
-            this.setState({galleryHasImages: hasImages});
-        });
-    }
+        emitter.on('localNetwork', handleLocalNetwork);
+        emitter.on('peers', handlePeers);
+        emitter.on('connectionSpeedType', handleConnectionSpeedType);
+        emitter.on('addPeerDone', handleAddPeerDone);
+        emitter.on('showMe', handleShowMe);
+        emitter.on('galleryHasImages', handleGalleryHasImages);
 
-    findNat(chain) {
-        return chain
-            .find(item => item.typeDetail.includes('srflx') || item.typeDetail.includes('prflx'));
-    }
+        return () => {
+            emitter.removeListener('localNetwork', handleLocalNetwork);
+            emitter.removeListener('peers', handlePeers);
+            emitter.removeListener('connectionSpeedType', handleConnectionSpeedType);
+            emitter.removeListener('addPeerDone', handleAddPeerDone);
+            emitter.removeListener('showMe', handleShowMe);
+            emitter.removeListener('galleryHasImages', handleGalleryHasImages);
+        };
+    }, [master, findNat, me, myNat, originPlatform]);
 
-    handleExpand = panel => (event, expanded) => {
+    const handleExpand = useCallback((panel) => (event, expanded) => {
         localStorage.setItem(panel, expanded);
-        this.setState({
-            [panel]: expanded,
-        });
-    };
+        if (panel === 'expandedMe') {
+            setExpandedMe(expanded);
+        }
+    }, []);
 
-    batchChangeName(event) {
-
+    const batchChangeName = useCallback((event) => {
         if(!event.target) return;
-
         console.log('change name ' + event.target.value);
-        this.master.service.updatePeer({
+        master.service.updatePeer({
             name: event.target.value
         });
-    }
+    }, [master]);
 
-    buildHeader(galleryHasImages, listView, classes) {
-        const init = this.master && this.master.client && this.master.client.peerId && this.master.me;
-        return init ? <span style={{
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            width: '100%'
-        }}>
-            <TextField
-                placeholder="Your Nickname"
-                margin="normal"
-                variant="outlined"
-                defaultValue={this.master.me.name}
-                onClick={event => {
-                    event.stopPropagation();
-                }}
-                onChange={
-                    this.batchChangeName.bind(this)
-                    //_.debounce(this.batchChangeName.bind(this), 2000)
-                }
-            />
-            <Fade in={galleryHasImages}><span className={classes.horizontal}>
-                <IconButton color={listView ? 'primary' : 'inherit'}
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            this.master.emitter.emit('galleryListView', true);
-                            this.setState({listView: true});
-                        }}>
-                    <ViewListRounded />
-                </IconButton>
-                <IconButton color={!listView ? 'primary' : 'inherit'}
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            this.master.emitter.emit('galleryListView', false);
-                            this.setState({listView: false});
-                        }}>
-                    <ViewAgendaRounded />
-                </IconButton>
-            </span></Fade>
-        </span> : '';
-    }
-
-    render() {
-
-        const { classes } = this.props;
-        const {expandedMe, showMe, galleryHasImages, listView, me, myNat, connectionSpeedType} = this.state;
-
-        const peer = {
-            connectionSpeedType: connectionSpeedType,
-            name: '', originPlatform: me.label
-        };
+    const buildHeader = useCallback((galleryHasImages, listView, classes) => {
+        const init = master && master.client && master.client.peerId && master.me;
+        if (!init) return null;
+        
         return (
-            <Slide direction="left" in={showMe} mountOnEnter unmountOnExit>
-                <span>
-                    <Accordion expanded={expandedMe} onChange={this.handleExpand('expandedMe')}>
-                        <AccordionSummary 
-                            expandIcon={<ExpandMoreIcon />}
-                            slotProps={{ iconButton: { component: 'div' } }}>
-                            {this.buildHeader(galleryHasImages, listView, classes)}
-                        </AccordionSummary>
-                        <AccordionDetails className={classes.content}>
-                            <div className={classes.verticalAndWide}>
-                                <Paper style={{
-                                    margin: '10px',
-                                    padding: '10px'}}>
-                                    <div
-                                        className={classes.vertical}>
-                                        <UserListItem peer={peer} />
-                                        <NatListItem nat={myNat} />
-                                    </div>
-                                </Paper>
-                            </div>
-                        </AccordionDetails>
-                    </Accordion>
-                </span>
-            </Slide>
+            <span style={{
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%'
+            }}>
+                <TextField
+                    placeholder="Your Nickname"
+                    margin="normal"
+                    variant="outlined"
+                    defaultValue={master.me.name}
+                    onClick={event => {
+                        event.stopPropagation();
+                    }}
+                    onChange={batchChangeName}
+                />
+                <Fade in={galleryHasImages}>
+                    <span className={classes.horizontal}>
+                        <IconButton 
+                            component="div"
+                            color={listView ? 'primary' : 'inherit'}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                master.emitter.emit('galleryListView', true);
+                                setListView(true);
+                            }}>
+                            <ViewListRounded />
+                        </IconButton>
+                        <IconButton 
+                            component="div"
+                            color={!listView ? 'primary' : 'inherit'}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                master.emitter.emit('galleryListView', false);
+                                setListView(false);
+                            }}>
+                            <ViewAgendaRounded />
+                        </IconButton>
+                    </span>
+                </Fade>
+            </span>
         );
-    }
+    }, [master, batchChangeName, classes]);
+
+    const peer = {
+        connectionSpeedType: connectionSpeedType,
+        name: '', 
+        originPlatform: me.label
+    };
+
+    return (
+        <Slide direction="left" in={showMe} mountOnEnter unmountOnExit>
+            <span>
+                <Accordion expanded={expandedMe} onChange={handleExpand('expandedMe')}>
+                    <AccordionSummary 
+                        expandIcon={<ExpandMoreIcon />}
+                        slotProps={{ iconButton: { component: 'div' } }}>
+                        {buildHeader(galleryHasImages, listView, classes)}
+                    </AccordionSummary>
+                    <AccordionDetails className={classes.content}>
+                        <div className={classes.verticalAndWide}>
+                            <Paper style={{
+                                margin: '10px',
+                                padding: '10px'
+                            }}>
+                                <div className={classes.vertical}>
+                                    <UserListItem peer={peer} />
+                                    <NatListItem nat={myNat} />
+                                </div>
+                            </Paper>
+                        </div>
+                    </AccordionDetails>
+                </Accordion>
+            </span>
+        </Slide>
+    );
 }
 
 MeView.propTypes = {

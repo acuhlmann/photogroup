@@ -3,6 +3,12 @@ if (typeof global === 'undefined') {
   var global = window;
 }
 
+// Make Buffer available globally
+import { Buffer } from 'buffer';
+window.Buffer = Buffer;
+global.Buffer = Buffer;
+globalThis.Buffer = Buffer;
+
 import * as serviceWorker from './serviceWorker';
 
 import 'core-js';
