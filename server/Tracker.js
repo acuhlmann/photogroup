@@ -6,7 +6,8 @@ import _ from 'lodash';
 import { Server } from 'bittorrent-tracker';
 
 const wsPort = process.env.WS_PORT || 9000;
-const hostname = '0.0.0.0';
+// Use localhost instead of 0.0.0.0 to avoid binding issues on Windows
+const hostname = process.env.WS_HOST || '127.0.0.1';
 
 export default class Tracker {
 
@@ -35,11 +36,6 @@ export default class Tracker {
         server.udp;
         server.ws;
 
-        server.on('error', function (err) {
-            // fatal server error!
-            remoteLog(err.message)
-        });
-
         server.on('warning', function (err) {
             // client sent bad data. probably not a problem, just a buggy client.
             remoteLog(err.message)
@@ -63,7 +59,58 @@ export default class Tracker {
         //server.listen(8080);
 
         // start tracker server listening! Use 0 to listen on a random free port.
-        server.listen(wsPort, hostname, onlistening);
+        // Note: bittorrent-tracker's listen() signature is: listen(port, hostname, callback)
+        // But the callback is actually the 'listening' event handler, not a parameter
+        server.on('listening', onlistening);
+        
+        // Track if we've already tried the fallback to prevent double listening
+        let hasTriedFallback = false;
+        
+        server.on('error', function(err) {
+            // Ignore "server already listening" errors as they're expected during retry
+            if (err.message && err.message.includes('server already listening')) {
+                console.log('Tracker: Server already listening (expected during retry), ignoring error');
+                return;
+            }
+            
+            if ((err.code === 'EADDRINUSE' || err.message.includes('EINVAL') || err.code === 'EINVAL') && !hasTriedFallback) {
+                console.error(`Tracker: Port ${wsPort} is in use or invalid. Trying random port...`);
+                hasTriedFallback = true;
+                // Try to listen on random port, catch any errors including "already listening"
+                try {
+                    server.listen(0, hostname);
+                } catch (listenErr) {
+                    if (listenErr.message && listenErr.message.includes('server already listening')) {
+                        console.log('Tracker: Server already listening, continuing with current state');
+                    } else {
+                        console.error(`Tracker: Failed to listen on random port:`, listenErr.message);
+                        remoteLog('Tracker error: ' + listenErr.message);
+                    }
+                }
+            } else {
+                remoteLog('Tracker error: ' + err.message);
+            }
+        });
+        
+        try {
+            server.listen(wsPort, hostname);
+            console.log(`Tracker attempting to listen on ${hostname}:${wsPort}`);
+        } catch (err) {
+            if (!hasTriedFallback) {
+                console.error(`Tracker: Failed to bind to ${hostname}:${wsPort}, trying random port:`, err.message);
+                hasTriedFallback = true;
+                try {
+                    server.listen(0, hostname);
+                } catch (listenErr) {
+                    if (listenErr.message && listenErr.message.includes('server already listening')) {
+                        console.log('Tracker: Server already listening, continuing with current state');
+                    } else {
+                        console.error(`Tracker: Failed to listen on random port:`, listenErr.message);
+                        remoteLog('Tracker error: ' + listenErr.message);
+                    }
+                }
+            }
+        }
 
         // listen for individual tracker messages from peers:
 

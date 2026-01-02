@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import {withStyles} from '@mui/styles';
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
@@ -30,37 +30,82 @@ const styles = theme => ({
     }
 });
 
-class RenderContent extends Component {
+function RenderContent(props) {
+    const {master, tile, classes, enqueueSnackbar, closeSnackbar} = props;
+    const emitter = master.emitter;
+    
+    // Use refs for instance variables
+    const webampRef = useRef(null);
+    const webampNodeRef = useRef(null);
+    const equalizerNodeRef = useRef(null);
+    const openedWebampRef = useRef(false);
+    const handleDoneRef = useRef(null);
+    const readMetadataRef = useRef(null);
 
-    constructor(props) {
-        super(props);
-    }
+    // Define readMetadata first so it can be used by other callbacks
+    const readMetadata = useCallback((tile) => {
+        // For seeded images, try to use tile.file if elem is not set
+        const elemToUse = tile.elem || (tile.seed && tile.isImage && tile.file ? tile.file : null);
+        if(elemToUse) {
+            // Ensure elem is set for metadata reading
+            if(!tile.elem) {
+                tile.elem = elemToUse;
+            }
+            // Ensure img is set for display
+            if(tile.isImage && !tile.img && tile.elem) {
+                tile.img = URL.createObjectURL(tile.elem);
+            }
+            Logger.info('readMetadata called for ' + tile.fileName + ' seed=' + tile.seed + ' elem=' + !!tile.elem);
+            master.metadata.readMetadata(tile, (tile, metadata) => {
+                Logger.info('readMetadata callback for ' + tile.fileName + ' seed=' + tile.seed);
+                master.emitter.emit('photos', {type: 'update', item: [tile]});
+                if(tile.seed) {
+                    Logger.info('Emitting photoRendered for ' + tile.fileName);
+                    master.emitter.emit('photoRendered', tile);
+                }
+            });
+        } else {
+            Logger.info('readMetadata waiting for blobDone for ' + tile.fileName);
+            master.emitter.on('blobDone-' + tile.infoHash, (photo) => {
+                tile.elem = photo.elem;
+                if(readMetadataRef.current) {
+                    readMetadataRef.current(tile);
+                }
+            });
+        }
+    }, [tile, master]);
 
-    componentDidMount() {
-        const {master, tile} = this.props;
-        const emitter = master.emitter;
-        emitter.on('blobDone-' + tile.infoHash, this.handleBlobDone, this);
-        tile.torrent.on('done', this.handleDone.bind(this, tile.torrent));
-    }
+    // Store readMetadata in ref
+    readMetadataRef.current = readMetadata;
 
-    componentWillUnmount() {
-        const {master, tile} = this.props;
-        master.emitter.removeListener('blobDone-' + tile.infoHash, this.handleBlobDone, this);
-        tile.torrent.removeListener('done', this.handleDone, this);
-    }
-
-    handleBlobDone(photo) {
+    // Memoize handlers to avoid recreating them on every render
+    const handleBlobDone = useCallback((photo) => {
         Logger.info('handleBlobDone ' + photo.fileName);
-        const {tile, master} = this.props;
-        tile.elem = photo.elem;
+        tile.elem = photo.elem || tile.elem;
+        // Ensure img is set for images when elem becomes available
+        if(tile.isImage && tile.elem && !tile.img) {
+            tile.img = URL.createObjectURL(tile.elem);
+        }
         master.emitter.emit('photos', {type: 'update', item: [tile]});
-        this.readMetadata(tile);
-    }
+        // Read metadata when elem is available - this will emit photoRendered for seeded images
+        if(readMetadataRef.current) {
+            readMetadataRef.current(tile);
+        }
+    }, [tile, master]);
 
-    async handleDone(torrent) {
+    const handleTorrentReady = useCallback((photos) => {
+        // Check if this torrentReady event is for our tile
+        const photo = photos.find(p => p.infoHash === tile.infoHash);
+        if(photo && photo.torrent && !tile.torrent) {
+            // Torrent just became available, attach the listener
+            tile.torrent = photo.torrent;
+            if(handleDoneRef.current) {
+                tile.torrent.on('done', handleDoneRef.current);
+            }
+        }
+    }, [tile]);
 
-        const {tile, master} = this.props;
-
+    const handleDone = useCallback((torrent) => {
         fetch(torrent.torrentFileBlobURL)
             .then(r => r.blob())
             .then(blobFile => new File([blobFile], tile.fileName, { type: tile.fileType }))
@@ -68,54 +113,51 @@ class RenderContent extends Component {
                 console.log('handleDone torrentFileBlobURL ' + file);
                 tile.elem = file;
                 master.emitter.emit('photos', {type: 'update', item: [tile]});
-                this.readMetadata(tile);
-            });
-
-        /*const file = torrent.files.find(file => file.name === tile.fileName);
-        if(file) {
-            file.getBlob((err, elem) => {
-                Logger.info('handleDone getBlob done ' + file.name);
-                if (err) {
-                    Logger.error(err.message);
-                } else {
-                    tile.elem = new File([elem], tile.fileName, { type: tile.fileType });;
-                    master.emitter.emit('photos', {type: 'update', item: [tile]});
-                    this.readMetadata(tile);
+                if(readMetadataRef.current) {
+                    readMetadataRef.current(tile);
                 }
             });
-        }*/
-    }
+    }, [tile, master]);
 
-    handleContainerLoaded(tile, node, file) {
+    // Store handleDone in ref so it can be used in handleTorrentReady
+    handleDoneRef.current = handleDone;
+
+    const removeFile = useCallback((node) => {
+        while (node.firstChild) {
+            node.removeChild(node.firstChild);
+        }
+    }, []);
+
+    const handleContainerLoaded = useCallback((node, file) => {
         if(!tile || !file || !node) {
             return;
         }
 
         if(node.hasChildNodes()) {
-            const tileInfoHash = tile.torrent.infoHash;
+            const tileInfoHash = tile.torrent?.infoHash;
             const nodeInfoHash = node.infoHash;
-            if(tileInfoHash !== nodeInfoHash) {
-                this.removeFile(node);
+            if(tileInfoHash && tileInfoHash !== nodeInfoHash) {
+                removeFile(node);
                 node.infoHash = tile.torrent.infoHash;
-                this.appendFile(tile, node, file);
+                appendFile(tile, node, file);
             }
-
             return;
         }
 
-        node.infoHash = tile.torrent.infoHash;
-        this.appendFile(tile, node, file);
-    }
+        if(tile.torrent) {
+            node.infoHash = tile.torrent.infoHash;
+            appendFile(tile, node, file);
+        }
+    }, [tile, removeFile, appendFile]);
 
-    handleWebamp(tile, node, file) {
-        //return;
+    const handleWebamp = useCallback((node, file) => {
         if(!tile || !file || !node || !tile.isAudio) {
             return;
         }
 
         if(!Webamp.browserIsSupported()) {
-            Logger.error("Oh no! Webamp does not work!")
-            throw new Error("What's the point of anything?")
+            Logger.error("Oh no! Webamp does not work!");
+            throw new Error("What's the point of anything?");
         }
         const webamp = new Webamp({
             initialTracks: [{
@@ -127,209 +169,209 @@ class RenderContent extends Component {
             }],
             zIndex: 99999,
         });
-        this.webamp = webamp;
-        this.webampNode = node;
-    }
+        webampRef.current = webamp;
+        webampNodeRef.current = node;
+    }, [tile]);
 
-    registerEqualizerNode(node) {
+    const registerEqualizerNode = useCallback((node) => {
         if(!node) {
             return;
         }
+        equalizerNodeRef.current = node;
+    }, []);
 
-        this.equalizerNode = node;
-    }
-
-    openInWebamp() {
-        //return;
-        const webamp = this.webamp;
-
-        const elem = this.props.tile.elem;
-        if(!this.openedWebamp) {
-            if(elem) {
-                this.openedWebamp = true;
+    const openInWebamp = useCallback(() => {
+        const webamp = webampRef.current;
+        const elem = tile.elem;
+        if(!openedWebampRef.current) {
+            if(elem && webamp) {
+                openedWebampRef.current = true;
                 webamp.appendTracks([{blob: elem}]);
-                webamp.renderWhenReady(this.webampNode).then(() => {
+                webamp.renderWhenReady(webampNodeRef.current).then(() => {
                     webamp.play();
                 });
             }
-        } else {
+        } else if(webamp) {
             webamp.setTracksToPlay([{blob: elem}]);
             webamp.reopen();
         }
-    }
+    }, [tile]);
 
-    appendFile(tile, node, file) {
-
-        if(tile.secure) {
-
-            const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true};
-            this.props.master.client.seed(tile.file, opts, (torrent) => {
-                this.doAppendFile(tile, torrent.files[0], node);
-            });
-
-        } else {
-            this.doAppendFile(tile, file, node);
-            Logger.info('streaming start ' + tile.torrentFile.progress);
-        }
-
-        /*
-        tile.torrent.critical(0, tile.torrent.pieces.length - 1);
-        tile.torrent._rechoke();
-        */
-    }
-
-    doAppendFile(tile, file, node) {
-
+    const doAppendFile = useCallback((tile, file, node) => {
         const opts = {
             autoplay: !tile.isAudio,
             muted: !tile.isAudio, loop: true,
         };
 
-        const self = this;
-        //const complete = this.state.complete;
         if(FileUtil.largerThanMaxBlobSize(tile.torrentFile.length)) {
             const msg = 'File is ' + FileUtil.formatBytes(tile.torrentFile.length) + ' and too large to render inline, just download instead.';
             Logger.warn(msg);
-
-            /*const {enqueueSnackbar, closeSnackbar} = self.props;
-            enqueueSnackbar(msg, {
-                variant: 'warn',
-                persist: false,
-                autoHideDuration: 4000,
-                action: (key) => (<Button className={self.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
-            });*/
-
-            //self.setState({complete: true})
         } else {
             file.appendTo(node, opts, (err, elem) => {
-                // file failed to download or display in the DOM
                 if (err) {
-                    //Unsupported file type
-                    const msgNode = document.createElement("div");                 // Create a <li> node
-                    const msgNodeText = document.createTextNode(err.message);         // Create a text node
+                    const msgNode = document.createElement("div");
+                    const msgNodeText = document.createTextNode(err.message);
                     msgNode.appendChild(msgNodeText);
                     node.appendChild(msgNode);
 
                     Logger.error('webtorrent.appendTo ' + err.message);
-                    const {enqueueSnackbar, closeSnackbar} = self.props;
                     enqueueSnackbar(err.message, {
                         variant: 'error',
                         persist: false,
                         autoHideDuration: 4000,
-                        action: (key) => (<Button className={self.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
+                        action: (key) => (<Button className={classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
                     });
                 }
 
                 Logger.info('New DOM node with the content', elem);
                 if(elem && elem.style) {
                     elem.style.width = '100%';
-                    //elem.style.height = '100%';
                 }
 
-                this.getBlobAndReadMetadata(tile);
+                if(getBlobAndReadMetadataRef.current) {
+                    getBlobAndReadMetadataRef.current(tile);
+                }
 
                 if(tile.isVideo) {
                     if(elem) {
-                        //elem.preload = 'none';
-                        //elem.autoplay = true;
                         elem.loop = true;
-                        //elem.play();
                     }
                 } else if(tile.isAudio) {
                     const audioMotion = new AudioMotionAnalyzer(
-                        this.equalizerNode,
+                        equalizerNodeRef.current,
                         {
                             source: elem,
                             showScale: false,
                             start: false
                         }
                     );
-                    this.equalizerNode.style.display = 'none';
+                    equalizerNodeRef.current.style.display = 'none';
                     elem.addEventListener('play', () => {
-                        this.equalizerNode.style.display = '';
+                        equalizerNodeRef.current.style.display = '';
                         audioMotion.toggleAnalyzer(true);
                     });
                     elem.addEventListener('pause', () => {
-                        this.equalizerNode.style.display = 'none';
+                        equalizerNodeRef.current.style.display = 'none';
                         audioMotion.toggleAnalyzer(false);
                     });
                 }
             });
         }
-    }
+    }, [tile, classes, enqueueSnackbar, closeSnackbar]);
 
-    snack(payload, type = 'info', persist = false, vertical = 'bottom') {
-
-        const {enqueueSnackbar, closeSnackbar} = this.props;
-
-        enqueueSnackbar(payload, {
-            variant: type,
-            persist: persist,
-            autoHideDuration: 4000,
-            action: (key) => (<Button className={this.props.classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
-            anchorOrigin: {
-                vertical: vertical,
-                horizontal: 'right'
-            }
-        });
-    }
-
-    getBlobAndReadMetadata(tile) {
-        Logger.info('streaming done ' + tile.torrentFile.progress);
-        const master = this.props.master;
-
+    const getBlobAndReadMetadata = useCallback((tile) => {
+        Logger.info('streaming done ' + tile.torrentFile?.progress);
         if(tile.elem) {
             Logger.info('streaming getBlob ' + tile.torrentFile);
-            this.readMetadata(tile);
+            if(readMetadataRef.current) {
+                readMetadataRef.current(tile);
+            }
         } else {
             master.emitter.on('blobDone-' + tile.infoHash, (photo) => {
                 Logger.info('getBlobAndReadMetadata blobDone ' + tile.fileName);
                 if(!tile.elem) {
                     tile.elem = photo.elem;
-                    this.readMetadata(tile);
+                    if(readMetadataRef.current) {
+                        readMetadataRef.current(tile);
+                    }
                 }
-            }, this);
+            });
         }
-    }
+    }, [tile, master]);
 
-    readMetadata(tile) {
-        const master = this.props.master;
-        if(tile.elem) {
-            master.metadata.readMetadata(tile, (tile, metadata) => {
-                master.emitter.emit('photos', {type: 'update', item: [tile]});
-                if(tile.seed) {
-                    master.emitter.emit('photoRendered', tile);
+    const getBlobAndReadMetadataRef = useRef(null);
+    getBlobAndReadMetadataRef.current = getBlobAndReadMetadata;
+
+    const doAppendFileRef = useRef(null);
+    doAppendFileRef.current = doAppendFile;
+
+    const appendFile = useCallback((tile, node, file) => {
+        if(tile.secure) {
+            const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true};
+            master.client.seed(tile.file, opts, (torrent) => {
+                if(doAppendFileRef.current) {
+                    doAppendFileRef.current(tile, torrent.files[0], node);
                 }
             });
         } else {
-            master.emitter.on('blobDone-' + tile.infoHash, (photo) => {
-                tile.elem = photo.elem;
-                this.readMetadata(tile);
-            }, this);
+            if(doAppendFileRef.current) {
+                doAppendFileRef.current(tile, file, node);
+            }
+            Logger.info('streaming start ' + tile.torrentFile?.progress);
         }
-    }
+    }, [tile, master]);
 
-    imgLoaded(tile) {
-        this.readMetadata(tile);
-    }
-
-    removeFile(node) {
-        while (node.firstChild) {
-            node.removeChild(node.firstChild);
+    const imgLoaded = useCallback(() => {
+        // For images, when the img tag loads, try to read metadata
+        if(readMetadataRef.current) {
+            readMetadataRef.current(tile);
         }
-    }
+    }, [tile]);
 
-    renderMediaDom(tile, classes) {
+    // Set up event listeners and initialize seeded images
+    useEffect(() => {
+        const infoHash = tile.infoHash;
+        const isSeededImage = tile.seed && (tile.isImage || (tile.fileType && tile.fileType.includes('image/')));
+        
+        emitter.on('blobDone-' + infoHash, handleBlobDone);
+        emitter.on('torrentReady', handleTorrentReady);
+        
+        // Only attach torrent listener if torrent exists (may not be set yet for seeded images)
+        if(tile.torrent) {
+            tile.torrent.on('done', handleDone);
+        }
+        
+        // For seeded images, if elem is already set (from mergePostloadMetadata), ensure img is set and read metadata
+        if(isSeededImage) {
+            // Ensure isImage is set for consistency
+            if(!tile.isImage) {
+                tile.isImage = true;
+            }
+            if(tile.elem && !tile.img) {
+                tile.img = URL.createObjectURL(tile.elem);
+                master.emitter.emit('photos', {type: 'update', item: [tile]});
+            }
+            // If elem is set, read metadata immediately (blobDone may have already fired)
+            if(tile.elem) {
+                Logger.info('useEffect: seeded image has elem, calling readMetadata for ' + tile.fileName);
+                if(readMetadataRef.current) {
+                    readMetadataRef.current(tile);
+                }
+            } else if(tile.file) {
+                // Fallback: use tile.file if elem is not set
+                tile.elem = tile.file;
+                if(!tile.img) {
+                    tile.img = URL.createObjectURL(tile.file);
+                }
+                master.emitter.emit('photos', {type: 'update', item: [tile]});
+                if(readMetadataRef.current) {
+                    readMetadataRef.current(tile);
+                }
+            }
+        }
+
+        // Cleanup function
+        return () => {
+            emitter.removeListener('blobDone-' + infoHash, handleBlobDone);
+            emitter.removeListener('torrentReady', handleTorrentReady);
+            // Only remove torrent listener if torrent exists
+            if(tile.torrent) {
+                tile.torrent.removeListener('done', handleDone);
+            }
+        };
+    }, [tile.infoHash, tile.seed, tile.isImage, tile.fileType, tile.elem, tile.file, tile.img, tile.torrent, emitter, handleBlobDone, handleTorrentReady, handleDone, readMetadata, master, tile.fileName]);
+
+    const renderMediaDom = () => {
         return tile.isImage
             ? <img src={tile.img} alt={tile.fileName}
                    className={classes.wide}
-                   onLoad={this.imgLoaded.bind(this, tile)} />
+                   onLoad={imgLoaded} />
             : <div className={classes.wide}>
                 <div className={classes.horizontal}>
                 {tile.isAudio ? <div className={classes.horizontal}>
                         <Typography variant={"caption"}>Open in</Typography>
                         <IconButton color="primary"
-                                    onClick={() => this.openInWebamp()}>
+                                    onClick={openInWebamp}>
 
                             <Icon classes={{root: classes.iconRoot}}>
                                 <img className={classes.imageIcon} src="./webamp.svg"/>
@@ -338,25 +380,21 @@ class RenderContent extends Component {
                     </div> : ''}
                     <div style={{
                     width: '100%', marginTop: '10px'}}
-                       ref={ref => this.handleContainerLoaded(tile, ref, tile.torrentFile)}>
+                       ref={ref => handleContainerLoaded(ref, tile.torrentFile)}>
                     </div>
-                {tile.isAudio ? <div ref={ref => this.handleWebamp(tile, ref, tile.torrentFile)}>
+                {tile.isAudio ? <div ref={ref => handleWebamp(ref, tile.torrentFile)}>
                     </div> : ''}
             </div>
-            {tile.isAudio ? <div className={classes.wide} ref={ref => this.registerEqualizerNode(ref)}>
+            {tile.isAudio ? <div className={classes.wide} ref={registerEqualizerNode}>
             </div> : ''}
         </div>;
-    }
+    };
 
-    render() {
-
-        const {tile, classes} = this.props;
-
-        return (<span>
-            {this.renderMediaDom(tile, classes)}
+    return (
+        <span>
+            {renderMediaDom()}
         </span>
-        );
-    }
+    );
 }
 
 RenderContent.propTypes = {

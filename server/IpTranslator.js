@@ -26,6 +26,34 @@ export default class IpTranslator {
         return ips;
     }
 
+    static shouldSkipLookup(ip) {
+        // Skip lookups for:
+        // - Local IPs (already handled by isLocal check)
+        // - .local addresses (mDNS/local network)
+        // - Invalid IP formats
+        // - IPv6 link-local addresses
+        if (!ip || typeof ip !== 'string') {
+            return true;
+        }
+        
+        // Skip .local addresses (mDNS)
+        if (ip.includes('.local')) {
+            return true;
+        }
+        
+        // Skip IPv6 link-local addresses (fe80::)
+        if (ip.startsWith('fe80::') || ip.startsWith('fd00::')) {
+            return true;
+        }
+        
+        // Skip if it looks like a UUID or non-IP format
+        if (ip.includes('-') && ip.length > 15) {
+            return true;
+        }
+        
+        return false;
+    }
+
     static getLookupIp(ip) {
 
         return new Promise((resolve, reject) => {
@@ -33,7 +61,7 @@ export default class IpTranslator {
 
                 return resolve(IpTranslator.lookedUpIPs.get(ip));
 
-            } else if(isLocal(ip) || ip === 'fd00::1') {
+            } else if(isLocal(ip) || ip === 'fd00::1' || IpTranslator.shouldSkipLookup(ip)) {
 
                 const ipObj = IpTranslator.createEmptyIpObj(ip);
                 IpTranslator.lookedUpIPs.set(ip, ipObj);
@@ -43,14 +71,15 @@ export default class IpTranslator {
 
                 // Using ip-api.com (free tier: 45 requests/minute, no API key required)
                 // Alternative free services: ipapi.co (30k/month), ipwhois.io (10k/month)
-                const isOnline = true;
+                // Can be disabled by setting ENABLE_IP_LOOKUP=false
+                const isOnline = process.env.ENABLE_IP_LOOKUP !== 'false';
                 if(isOnline) {
                     
                     return axios.get('https://ip-api.com/json/' + ip, {
                         params: {
                             fields: 'status,message,country,countryCode,region,regionName,city,isp,org,as,query,reverse'
                         },
-                        timeout: 5000 // 5 second timeout
+                        timeout: 3000 // Reduced to 3 second timeout to fail faster
                     })
                         .then(function (response) {
                             const json = response.data;
@@ -75,7 +104,15 @@ export default class IpTranslator {
                         })
                         .catch(function (err) {
                             // API call failed - return empty IP object instead of failing
-                            console.warn('ip-api.com lookup failed for ' + ip + ':', err.message);
+                            // Only log unexpected errors, not rate limiting (403) or timeouts
+                            const isRateLimit = err.response && err.response.status === 403;
+                            const isTimeout = err.code === 'ECONNABORTED' || err.message.includes('timeout');
+                            
+                            if (!isRateLimit && !isTimeout) {
+                                // Only log unexpected errors
+                                console.warn('ip-api.com lookup failed for ' + ip + ':', err.message);
+                            }
+                            
                             const ipObj = IpTranslator.createEmptyIpObj(ip);
                             IpTranslator.lookedUpIPs.set(ip, ipObj);
                             return resolve(ipObj);

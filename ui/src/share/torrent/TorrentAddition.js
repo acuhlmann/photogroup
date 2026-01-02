@@ -27,6 +27,10 @@ export default class TorrentAddition {
         const result = await this.master.service.update(toBeShared);
         Logger.info('fully rendered, update photo ' + result.length + ' '
             + result.map(item => item.fileName));
+        
+        // Clear rendering flag when photo is fully rendered
+        photo.rendering = false;
+        this.emitter.emit('photos', {type: 'update', item: [photo]});
     }
 
     handlePhotoAddEvent(serverPhotos) {
@@ -332,7 +336,9 @@ export default class TorrentAddition {
                     return;
                 }
                 photos.forEach(photo => {
-                    photo.isFake = photo.loading = photo.rendering = false;
+                    photo.isFake = photo.loading = false;
+                    // Don't clear rendering here - it should be cleared when photoRendered event is emitted
+                    // photo.rendering = false;
                     photo.torrent = torrent;
                     photo.infoHash = torrent.infoHash;
                     photo.url = torrent.magnetURI;
@@ -347,6 +353,8 @@ export default class TorrentAddition {
                     //self.emitter.emit('torrentReady', photo);
                 });
 
+                // Emit update to refresh UI with new state
+                self.emitter.emit('photos', {type: 'update', item: photos});
                 //withoutThumbs.forEach((file, index) => self.emitter.emit('torrentReady', photos[index]));
                 self.emitter.emit('torrentReady', photos);
             });

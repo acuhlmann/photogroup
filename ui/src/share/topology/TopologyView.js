@@ -61,6 +61,81 @@ class TopologyView extends Component {
             });
         });
 
+        // Listen for localNetwork to show current user's node in topology
+        // This ensures the current user's node is visible even if not yet in peers.items
+        // Temporarily disabled to prevent crashes - will be re-enabled with proper error handling
+        /*
+        emitter.on('localNetwork', chain => {
+            try {
+                if(chain && chain.length > 0 && this.master && this.master.client && this.master.client.peerId) {
+                    const myPeerId = this.master.client.peerId;
+                    const self = this;
+                    
+                    this.setState(state => {
+                        // Check if current user's node already exists in graph
+                        const existingNode = state.graph && state.graph.nodes ? state.graph.nodes.find(n => n.id === myPeerId) : null;
+                        if(!existingNode) {
+                            const tempPeer = {
+                                peerId: myPeerId,
+                                networkChain: chain,
+                                name: 'You'
+                            };
+                            
+                            const nodes = [];
+                            const edges = [];
+                            const isMe = true;
+                            
+                            try {
+                                const host = self.addHosts(tempPeer, nodes, isMe);
+                                const nat = self.addNats(tempPeer, nodes, isMe);
+                                const relays = self.addRelays(tempPeer, nodes, isMe);
+                                
+                                if(nat) {
+                                    const edge = {
+                                        from: tempPeer.peerId,
+                                        to: nat.id || nat.ip,
+                                        width: 2,
+                                        dashes: true,
+                                        arrows: '',
+                                        color: self.isMeColor(isMe),
+                                        network: host
+                                    };
+                                    edges.push(edge);
+                                    
+                                    relays.forEach(relay => {
+                                        const edge = {
+                                            from: nat.id || nat.ip,
+                                            to: relay.id || relay.ip,
+                                            width: 2,
+                                            dashes: true,
+                                            arrows: '',
+                                            color: self.isMeColor(isMe)
+                                        };
+                                        edges.push(edge);
+                                    });
+                                }
+                                
+                                // Merge with existing graph
+                                return {
+                                    graph: {
+                                        nodes: [...(state.graph?.nodes || []), ...nodes],
+                                        edges: [...(state.graph?.edges || []), ...edges]
+                                    }
+                                };
+                            } catch(e) {
+                                Logger.error('Error adding local network node: ' + e);
+                                return state;
+                            }
+                        }
+                        return state;
+                    });
+                }
+            } catch(e) {
+                Logger.error('Error in localNetwork handler: ' + e);
+            }
+        });
+        */
+
         const self = this;
 
         const expandedTopology = localStorage.getItem('expandedTopology') || true;
@@ -201,53 +276,53 @@ class TopologyView extends Component {
             },
         };
 
-        emitter.on('addPeerDone', () => {
-
+        // Register peers event listener immediately, not inside addPeerDone
+        // This ensures we catch all peer updates, not just those after addPeerDone
+        emitter.on('peers', event => {
             const myPeerId = this.master.client.peerId;
             const peers = this.master.peers;
-            emitter.on('peers', event => {
-                const nodes = [];
+            const nodes = [];
 
-                this.setState(state => {
-                    const edges = state.graph.edges.filter(item => item.type === 'connection');
-                    peers.items.forEach(peer => {
-                        if(peer.networkChain) {
+            this.setState(state => {
+                const edges = state.graph.edges.filter(item => item.type === 'connection');
+                peers.items.forEach(peer => {
+                    if(peer.networkChain) {
 
-                            const isMe = peer.peerId === myPeerId;
+                        const isMe = peer.peerId === myPeerId;
 
-                            const host = this.addHosts(peer, nodes, isMe);
-                            const nat = this.addNats(peer, nodes, isMe);
-                            const relays = this.addRelays(peer, nodes, isMe);
+                        const host = this.addHosts(peer, nodes, isMe);
+                        const nat = this.addNats(peer, nodes, isMe);
+                        const relays = this.addRelays(peer, nodes, isMe);
 
-                            if(nat) {
+                        if(nat) {
 
+                            const edge = {
+                                from: peer.peerId,
+                                to: nat.id || nat.ip,
+                                width: 2,
+                                dashes: true,
+                                arrows: '',
+                                color: this.isMeColor(isMe),
+                                network: host
+                            };
+                            edges.push(edge);
+
+                            relays.forEach(relay => {
                                 const edge = {
-                                    from: peer.peerId,
-                                    to: nat.id || nat.ip,
+                                    from: nat.id || nat.ip,
+                                    to: relay.id || relay.ip,
                                     width: 2,
                                     dashes: true,
                                     arrows: '',
-                                    color: this.isMeColor(isMe),
-                                    network: host
+                                    color: this.isMeColor(isMe)
                                 };
                                 edges.push(edge);
-
-                                relays.forEach(relay => {
-                                    const edge = {
-                                        from: nat.id || nat.ip,
-                                        to: relay.id || relay.ip,
-                                        width: 2,
-                                        dashes: true,
-                                        arrows: '',
-                                        color: this.isMeColor(isMe)
-                                    };
-                                    edges.push(edge);
-                                });
-                            }
+                            });
                         }
-                    });
-                    return {graph: {nodes : nodes, edges: edges}};
+                    }
                 });
+                return {graph: {nodes : nodes, edges: edges}};
+            });
 
                 /*const edges = this.state.graph.edges.filter(item => item.type === 'connection');
                 peers.items.forEach(peer => {
@@ -363,7 +438,6 @@ class TopologyView extends Component {
                 });
                 this.setState({graph: {nodes: nodes, edges: edges}});*/
             });
-        });
     }
 
     addHosts(peer, nodes, isMe) {
@@ -577,7 +651,9 @@ class TopologyView extends Component {
                                            style={{
                                                marginBottom: '5px'
                                             }}>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <AccordionSummary 
+                    expandIcon={<ExpandMoreIcon />}
+                    iconButtonProps={{ component: 'div' }}>
                     {this.buildHeader(classes, wtNumPeers)}
                 </AccordionSummary>
                 <AccordionDetails className={classes.content} style={{

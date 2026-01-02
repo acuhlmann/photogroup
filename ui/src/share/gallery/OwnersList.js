@@ -250,7 +250,9 @@ class OwnersList extends Component {
                                     marginBottom: '10px', marginLeft: '10px', marginRight: '10px'
                                 }}
                                 onChange={this.handleExpand('expanded')}>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <AccordionSummary 
+                        expandIcon={<ExpandMoreIcon />}
+                        iconButtonProps={{ component: 'div' }}>
                         {this.buildHeader(otherPeers, peers, connectionTypes, classes)}
                     </AccordionSummary>
                     <AccordionDetails className={classes.content}>

@@ -216,7 +216,9 @@ class MeView extends Component {
             <Slide direction="left" in={showMe} mountOnEnter unmountOnExit>
                 <span>
                     <Accordion expanded={expandedMe} onChange={this.handleExpand('expandedMe')}>
-                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <AccordionSummary 
+                            expandIcon={<ExpandMoreIcon />}
+                            iconButtonProps={{ component: 'div' }}>
                             {this.buildHeader(galleryHasImages, listView, classes)}
                         </AccordionSummary>
                         <AccordionDetails className={classes.content}>
