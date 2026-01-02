@@ -35,9 +35,26 @@ window.process = window.process || {
   };
 };
 
+// Plugin to resolve Node.js built-in modules to browser stubs
+const nodePolyfillPlugin = () => {
+  return {
+    name: 'node-polyfill',
+    resolveId(id) {
+      if (id === 'fs') {
+        return path.resolve(__dirname, 'src/compatibility/fs-stub.js');
+      }
+      if (id === 'os') {
+        return path.resolve(__dirname, 'src/compatibility/os-stub.js');
+      }
+      return null;
+    },
+  };
+};
+
 export default defineConfig({
   plugins: [
     processPolyfillPlugin(),
+    nodePolyfillPlugin(),
     react()
   ],
   server: {
@@ -68,7 +85,7 @@ export default defineConfig({
       },
     },
     exclude: ['bittorrent-dht', 'load-ip-set'],
-    include: ['queue-microtask', 'streamx', 'webtorrent'],
+    include: ['queue-microtask', 'streamx', 'webtorrent', 'buffer'],
   },
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
@@ -81,6 +98,9 @@ export default defineConfig({
       'bittorrent-dht': path.resolve(__dirname, 'src/compatibility/bittorrent-dht-stub.js'),
       'load-ip-set': path.resolve(__dirname, 'src/compatibility/load-ip-set-stub.js'),
       'path': 'path-browserify',
+      'fs': path.resolve(__dirname, 'src/compatibility/fs-stub.js'),
+      'os': path.resolve(__dirname, 'src/compatibility/os-stub.js'),
+      'buffer': 'buffer',
       '@mui/styles': path.resolve(__dirname, 'src/share/compatibility/muiStyles.js'),
     },
     conditions: ['browser', 'module', 'import'],

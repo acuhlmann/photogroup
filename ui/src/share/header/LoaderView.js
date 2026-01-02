@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 import { withStyles } from '@mui/styles';
@@ -45,113 +45,115 @@ const styles = theme => ({
     }
 });
 
-class LoaderView extends Component {
+function LoaderView({classes, emitter}) {
+    const [show, setShow] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [down, setDown] = useState('');
+    const [up, setUp] = useState('');
+    const [downSpeed, setDownSpeed] = useState('');
+    const [upSpeed, setUpSpeed] = useState('');
+    const [ratio, setRatio] = useState('');
+    const intervalRef = useRef(null);
 
-    constructor(props) {
-        super(props);
-
-        this.state = {
-            show: false,
-            progress: 0,
-            down: '', up: '', downSpeed: '', upSpeed: ''
+    useEffect(() => {
+        const handleDownloadProgress = (event) => {
+            const progressValue = event.progress;
+            const showValue = (progressValue > 0 && progressValue < 100);
+            // Can update state here if needed
         };
 
-        const { classes, emitter } = props;
-        this.classes = classes;
+        const handleUploadProgress = (event) => {
+            const progressValue = event.progress;
+            const showValue = (progressValue > 0 && progressValue < 100);
+            // Can update state here if needed
+        };
 
-        const self = this;
+        emitter.on('downloadProgress', handleDownloadProgress);
+        emitter.on('uploadProgress', handleUploadProgress);
 
-        emitter.on('downloadProgress', event => {
-            const progress = event.progress;
-            const show = (progress > 0 && progress < 100);
-            //self.setState({show: show, progress: progress, downSpeed: event.speed});
-        });
-        emitter.on('uploadProgress', event => {
-            const progress = event.progress;
-            const show = (progress > 0 && progress < 100);
-            //self.setState({show: show, progress: progress, upSpeed: event.speed});
-        });
-
-        //let progressRunner;
-        emitter.on('wtInitialized', client => {
+        const handleWtInitialized = (client) => {
             let lastDownload = 0;
             let lastUpload = 0;
             let lastProgress = 0;
-            setInterval(() => {
-
-                const progress = client.progress * 100;
-                const show = (progress > 0 && progress < 100);
+            
+            intervalRef.current = setInterval(() => {
+                const progressValue = client.progress * 100;
+                const showValue = (progressValue > 0 && progressValue < 100);
                 const uploadSpeedLabel = FileUtil.formatBytes(client.uploadSpeed) + '/sec';
                 const downloadSpeedLabel = FileUtil.formatBytes(client.downloadSpeed) + '/sec';
-                const ratio = client.ratio === 0 ? '' : client.ratio / 1000;
-                self.setState({show: show, progress: progress,
-                    upSpeed: uploadSpeedLabel, downSpeed: downloadSpeedLabel, ratio: ratio});
+                const ratioValue = client.ratio === 0 ? '' : client.ratio / 1000;
+                
+                setShow(showValue);
+                setProgress(progressValue);
+                setUpSpeed(uploadSpeedLabel);
+                setDownSpeed(downloadSpeedLabel);
+                setRatio(ratioValue);
 
                 if(client.torrents && client.torrents.length > 0) {
-
-                    //const progress = client.progress.toFixed(1) * 100;
-                    //const show = (progress > 0 && progress < 100);
-                    lastProgress = progress;
-                    //Logger.debug('client.progress ' + progress
-                    //    + ' show ' + show);
-                    //self.setState({progress: progress, show: show});
+                    lastProgress = progressValue;
 
                     const totalDownloaded = client.torrents.map(item => item.downloaded).reduce((a, b) => a + b, 0);
                     const totalUploaded = client.torrents.map(item => item.uploaded).reduce((a, b) => a + b, 0);
                     if(totalDownloaded !== lastDownload || totalUploaded !== lastUpload) {
-                        const down = FileUtil.formatBytes(totalDownloaded);
-                        const up = FileUtil.formatBytes(totalUploaded);
-                        //Logger.debug('downloaded ' + down
-                        //    + ' uploaded ' + up);
-                        //Logger.debug('client.progress ' + progress
-                        //    + ' show ' + show);
+                        const downValue = FileUtil.formatBytes(totalDownloaded);
+                        const upValue = FileUtil.formatBytes(totalUploaded);
                         lastDownload = totalDownloaded;
                         lastUpload = totalUploaded;
-                        //const progress = client.progress.toFixed(1) * 100;
-                        //const downSpeed = FileUtil.formatBytes(client.downloadSpeed) + '/sec';
-                        //const upSpeed = FileUtil.formatBytes(client.uploadSpeed) + '/sec';
-                        self.setState({ down: 'down ' + down, up: 'up ' + up});
+                        setDown('down ' + downValue);
+                        setUp('up ' + upValue);
 
                         emitter.emit('loadedAnything');
-                        //self.setState({ down: down, up: up,
-                        //    downSpeed: downSpeed, upSpeed: upSpeed,
-                        //    progress: progress });
                     }
                 }
-
             }, 200);
-        });
-    }
+        };
 
-    render() {
-        const {classes, emitter} = this.props;
-        const {show, down, up, downSpeed, upSpeed, progress, ratio} = this.state;
+        emitter.on('wtInitialized', handleWtInitialized);
 
-        return (
-            <div>
-                {show ? <div className={classes.progressContainer}>
-                    <CircularProgress id="progressBar"
-                                      className={classes.progress}
-                                      variant="determinate"
-                                      value={progress}
+        return () => {
+            emitter.removeListener('downloadProgress', handleDownloadProgress);
+            emitter.removeListener('uploadProgress', handleUploadProgress);
+            emitter.removeListener('wtInitialized', handleWtInitialized);
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        };
+    }, [emitter]);
+
+    return (
+        <div>
+            {show ? (
+                <div className={classes.progressContainer}>
+                    <CircularProgress 
+                        id="progressBar"
+                        className={classes.progress}
+                        variant="determinate"
+                        value={progress}
                     />
                     <div className={classes.vertical}>
-                        <Typography className={classes.progressText}
-                                    variant={"caption"}>{down} {downSpeed}</Typography>
-                        <Typography className={classes.progressText}
-                                    variant={"caption"}>{up} {upSpeed}</Typography>
+                        <Typography className={classes.progressText} variant={"caption"}>
+                            {down} {downSpeed}
+                        </Typography>
+                        <Typography className={classes.progressText} variant={"caption"}>
+                            {up} {upSpeed}
+                        </Typography>
                     </div>
-                </div> : <div className={classes.vertical}>
-                    <Typography className={classes.progressTextTop}
-                                variant={"caption"}>{ratio}</Typography>
-                    <Typography className={classes.progressText}
-                                variant={"caption"}>{down}</Typography>
-                    <Typography className={classes.progressText}
-                                variant={"caption"}>{up}</Typography>
-                </div>}
-            </div>
-        );
-    }
+                </div>
+            ) : (
+                <div className={classes.vertical}>
+                    <Typography className={classes.progressTextTop} variant={"caption"}>
+                        {ratio}
+                    </Typography>
+                    <Typography className={classes.progressText} variant={"caption"}>
+                        {down}
+                    </Typography>
+                    <Typography className={classes.progressText} variant={"caption"}>
+                        {up}
+                    </Typography>
+                </div>
+            )}
+        </div>
+    );
 }
 
 LoaderView.propTypes = {

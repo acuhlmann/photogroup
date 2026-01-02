@@ -316,8 +316,57 @@ export default class TorrentAddition {
 
         const self = this;
 
-        let filesArr = [...files];
-        let origFilesArr = [...origFiles];
+        // Ensure files is an array (handle FileList and other iterables)
+        let filesArr;
+        if(!files) {
+            const error = new Error('No files provided to seed');
+            Logger.error(error.message);
+            if(callback) {
+                callback(null, error);
+            }
+            return null;
+        } else if(Array.isArray(files)) {
+            filesArr = [...files];
+        } else if(files instanceof File || files instanceof Blob) {
+            filesArr = [files];
+        } else if(typeof files[Symbol.iterator] === 'function') {
+            // Handle FileList and other iterables
+            try {
+                filesArr = Array.from(files);
+            } catch(e) {
+                const error = new Error('Failed to convert files to array: ' + e.message);
+                Logger.error(error.message);
+                if(callback) {
+                    callback(null, error);
+                }
+                return null;
+            }
+        } else {
+            const error = new Error('Invalid files input: must be File, Blob, array, or iterable');
+            Logger.error(error.message);
+            if(callback) {
+                callback(null, error);
+            }
+            return null;
+        }
+        
+        // Ensure origFiles is an array
+        let origFilesArr;
+        if(Array.isArray(origFiles)) {
+            origFilesArr = [...origFiles];
+        } else if(origFiles instanceof File || origFiles instanceof Blob) {
+            origFilesArr = [origFiles];
+        } else if(origFiles && typeof origFiles[Symbol.iterator] === 'function') {
+            try {
+                origFilesArr = Array.from(origFiles);
+            } catch(e) {
+                Logger.warn('Failed to convert origFiles to array: ' + e.message);
+                origFilesArr = [];
+            }
+        } else {
+            origFilesArr = [];
+        }
+        
         let thumbnailFiles = [];
 
         if(!secure && filesArr
@@ -333,14 +382,38 @@ export default class TorrentAddition {
 
             if(thumbnailFiles.length > 0) {
                 Logger.info('thumbnailFile sizes ' + thumbnailFiles.map(item => FileUtil.formatBytes(item.size)));
+                // Combine thumbnails and original files, ensuring we only include valid File objects
+                const combinedFiles = [];
+                for(let i = 0; i < Math.max(thumbnailFiles.length, filesArr.length); i++) {
+                    if(thumbnailFiles[i] && thumbnailFiles[i] instanceof File) {
+                        combinedFiles.push(thumbnailFiles[i]);
+                    }
+                    if(filesArr[i] && filesArr[i] instanceof File) {
+                        combinedFiles.push(filesArr[i]);
+                    }
+                }
+                files = combinedFiles.filter(item => item instanceof File);
             } else {
                 Logger.warn('Cannot find thumbnail');
+                // Ensure files array only contains valid File objects
+                files = filesArr.filter(item => item instanceof File);
             }
-            files = _.zip(thumbnailFiles, filesArr).flatMap(item => item).filter(item => item);
-            //origFilesArr = filesArr = files = thumbnailFiles;
+        } else {
+            // For secure files or non-image/audio, ensure we only pass valid File objects
+            files = filesArr.filter(item => item instanceof File);
         }
 
-        Logger.info('seed ' + filesArr.map(item => item.name).join(', '));
+        // Final validation: ensure all files are valid File objects
+        if(!files || files.length === 0) {
+            const error = new Error('No valid files to seed');
+            Logger.error(error.message);
+            if(callback) {
+                callback(null, error);
+            }
+            return;
+        }
+
+        Logger.info('seed ' + files.map(item => item.name).join(', '));
 
         const formatToken = 'H:m MMM d y';
         const photos = filesArr.map((file, index) => {
@@ -366,9 +439,47 @@ export default class TorrentAddition {
 
         let torrent;
         try {
-            torrent = this.master.addSeedOrGetTorrent('seed', files, torrent => {
+            // Validate files before attempting to seed
+            if(!files || files.length === 0) {
+                const error = new Error('No valid files to seed');
+                Logger.error(error.message);
+                photos.forEach(photo => {
+                    photo.uploadError = error.message;
+                    photo.rendering = false;
+                    photo.loading = false;
+                });
+                self.emitter.emit('photos', {type: 'update', item: photos});
+                self.emitter.emit('showError', 'Upload Failed: ' + error.message);
+                if(callback) {
+                    callback(null, error);
+                }
+                return;
+            }
+            
+            // Define helper function to process torrent when ready
+            const processTorrentReady = (torrent) => {
+                if(!torrent || !torrent.infoHash) {
+                    Logger.error('processTorrentReady called with invalid torrent');
+                    photos.forEach(photo => {
+                        photo.uploadError = 'Torrent failed to initialize';
+                        photo.rendering = false;
+                        photo.loading = false;
+                    });
+                    self.emitter.emit('photos', {type: 'update', item: photos});
+                    self.emitter.emit('showError', 'Failed to upload image: Torrent failed to initialize');
+                    return;
+                }
 
                 Logger.info('seed.done ' + torrent.infoHash);
+
+                // Ensure torrent.files is available
+                if(!torrent.files || torrent.files.length === 0) {
+                    Logger.warn('Torrent has no files, waiting for metadata event');
+                    torrent.once('metadata', () => {
+                        processTorrentReady(torrent);
+                    });
+                    return;
+                }
 
                 //this.storeTorrent(torrent);
 
@@ -376,7 +487,10 @@ export default class TorrentAddition {
                 const addedInfoHash = photos.map(photo => {
                     photo.infoHash = torrent.infoHash;
                     if(withoutThumbs.length > 1) {
-                        photo.infoHash += '-' + withoutThumbs.find(file => file.name === photo.file.name).path;
+                        const matchingFile = withoutThumbs.find(file => file.name === photo.file.name);
+                        if(matchingFile) {
+                            photo.infoHash += '-' + matchingFile.path;
+                        }
                     }
                     photo.url = torrent.magnetURI;
                     return photo;
@@ -427,7 +541,70 @@ export default class TorrentAddition {
                 if(callback) {
                     callback(torrent);
                 }
+            };
+
+            torrent = this.master.addSeedOrGetTorrent('seed', files, (torrent, err) => {
+                // Handle error case (WebTorrent callback can receive error as second parameter)
+                if(err) {
+                    Logger.error('addSeedOrGetTorrent callback received error: ' + (err.message || err));
+                    photos.forEach(photo => {
+                        photo.uploadError = err.message || 'Failed to create torrent';
+                        photo.rendering = false;
+                        photo.loading = false;
+                    });
+                    self.emitter.emit('photos', {type: 'update', item: photos});
+                    self.emitter.emit('showError', 'Failed to upload image: ' + (err.message || err));
+                    if(callback) {
+                        callback(null, err);
+                    }
+                    return;
+                }
+                
+                if(!torrent) {
+                    Logger.error('addSeedOrGetTorrent callback received null torrent');
+                    return;
+                }
+
+                // Wait for torrent to be ready before accessing its properties
+                if(!torrent.infoHash) {
+                    Logger.warn('Torrent callback called but infoHash not yet available, waiting for ready event');
+                    const readyHandler = () => {
+                        processTorrentReady(torrent);
+                    };
+                    const errorHandler = (err) => {
+                        Logger.error('Torrent failed while waiting for ready: ' + (err.message || err));
+                        photos.forEach(photo => {
+                            photo.uploadError = err.message || 'Torrent failed to initialize';
+                            photo.rendering = false;
+                            photo.loading = false;
+                        });
+                        self.emitter.emit('photos', {type: 'update', item: photos});
+                        self.emitter.emit('showError', 'Failed to upload image: ' + (err.message || err));
+                    };
+                    torrent.once('ready', readyHandler);
+                    torrent.once('error', errorHandler);
+                    return;
+                }
+
+                processTorrentReady(torrent);
             });
+
+            // Only attach event listeners if torrent was successfully created
+            if(!torrent) {
+                Logger.error('addSeedOrGetTorrent returned null torrent, cannot attach event listeners');
+                // Mark photos as failed
+                photos.forEach(photo => {
+                    photo.uploadError = 'Failed to create torrent: Invalid input';
+                    photo.rendering = false;
+                    photo.loading = false;
+                });
+                self.emitter.emit('photos', {type: 'update', item: photos});
+                self.emitter.emit('showError', 'Failed to upload image: Invalid torrent input');
+                if(callback) {
+                    callback(null, new Error('Failed to create torrent: Invalid input'));
+                }
+                return null;
+            }
 
             torrent.on('infoHash', async () => {
                 Logger.info('seed.infoHash');
@@ -438,15 +615,31 @@ export default class TorrentAddition {
             });
 
             torrent.on('error', err => {
-                Logger.error('Torrent error: ' + err.message);
-                // Mark photos as failed
+                const errorMsg = err.message || String(err);
+                Logger.error('Torrent error: ' + errorMsg);
+                
+                // Check if this is a tracker/WebSocket connection error (non-fatal)
+                const isConnectionError = errorMsg.includes('WebSocket') || 
+                                         errorMsg.includes('connection') ||
+                                         errorMsg.includes('tracker') ||
+                                         errorMsg.includes('Invalid torrent identifier');
+                
+                if(isConnectionError && torrent && torrent.infoHash) {
+                    // Tracker connection failed, but torrent is still valid
+                    // Log warning but don't mark as failed - torrent can still work via DHT/direct connections
+                    Logger.warn('Tracker connection failed, but torrent is still valid: ' + torrent.infoHash);
+                    // Don't mark photos as failed for connection errors if torrent has infoHash
+                    return;
+                }
+                
+                // For other errors, mark photos as failed
                 photos.forEach(photo => {
-                    photo.uploadError = err.message;
+                    photo.uploadError = errorMsg;
                     photo.rendering = false;
                     photo.loading = false;
                 });
                 self.emitter.emit('photos', {type: 'update', item: photos});
-                self.emitter.emit('showError', 'Failed to upload image: ' + err.message);
+                self.emitter.emit('showError', 'Failed to upload image: ' + errorMsg);
             });
 
             this.emitter.on('torrentError', err => {

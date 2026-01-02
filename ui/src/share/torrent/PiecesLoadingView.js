@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect } from 'react';
 import {withStyles} from '@mui/styles';
 import Typography from "@mui/material/Typography";
 import List from "@mui/material/List";
@@ -71,127 +71,103 @@ const styles = theme => ({
     }
 });
 
-class PiecesLoadingView extends Component {
+function PiecesLoadingView({master, tile, classes}) {
+    const [currentTile, setCurrentTile] = useState(tile);
 
-    constructor(props) {
-        super(props);
+    useEffect(() => {
+        setCurrentTile(tile);
+    }, [tile]);
 
-        const {master} = props;
-        const emitter = master.emitter;
-
-        emitter.on('downloadProgress', this.handleDownloadProgress, this);
-        emitter.on('uploadProgress', this.handleUploadProgress, this);
-    }
-
-    componentDidUpdate(nextProps) {
-        const tile = nextProps.tile;
-        if (tile && tile.torrent) {
-            if(!this.hasPieces(tile)) {
-                Logger.info('subscribe to metadata ' + tile.torrent.name);
-                tile.torrent.on('metadata', () => {
-                    Logger.info('handleMetadata ' + tile.torrent.name);
-                    this.setState({tile: tile});
-                });
+    useEffect(() => {
+        const handleDownloadProgress = (event) => {
+            const torrent = event.torrent;
+            if(torrent.infoHash === tile?.infoHash && tile?.torrent?.infoHash) {
+                // Progress tracking can be handled here if needed
             }
-            /*Logger.info('componentDidUpdate ' + this);
-            const id = setInterval(() => {
-                if(this.hasPieces(torrent)) {
-                    this.setState({torrent: torrent});
-                    clearInterval(id);
-                }
-            }, 200);*/
+        };
+
+        const handleUploadProgress = (event) => {
+            const torrent = event.torrent;
+            if(torrent.infoHash === tile?.infoHash && tile?.torrent?.infoHash) {
+                // Progress tracking can be handled here if needed
+            }
+        };
+
+        master.emitter.on('downloadProgress', handleDownloadProgress);
+        master.emitter.on('uploadProgress', handleUploadProgress);
+
+        return () => {
+            master.emitter.removeListener('downloadProgress', handleDownloadProgress);
+            master.emitter.removeListener('uploadProgress', handleUploadProgress);
+        };
+    }, [master.emitter, tile]);
+
+    useEffect(() => {
+        if (tile && tile.torrent) {
+            if(!hasPieces(tile)) {
+                Logger.info('subscribe to metadata ' + tile.torrent.name);
+                const handleMetadata = () => {
+                    Logger.info('handleMetadata ' + tile.torrent.name);
+                    setCurrentTile(tile);
+                };
+                tile.torrent.on('metadata', handleMetadata);
+                return () => {
+                    tile.torrent.removeListener('metadata', handleMetadata);
+                };
+            }
         }
-    }
+    }, [tile]);
 
-    handleDownloadProgress(event) {
-        const torrent = event.torrent;
-        if(torrent.infoHash === this.props.torrent && this.props.torrent.infoHash) {
-            const progress = event.progress;
-            this.setState({
-                progress: progress,
-                downSpeed: event.speed,
-                timeRemaining: event.timeRemaining});
-        }
-    }
-
-    handleUploadProgress(event) {
-        const torrent = event.torrent;
-        if(torrent.infoHash === this.props.torrent && this.props.torrent.infoHash) {
-            const progress = event.progress;
-            this.setState({
-                progress: progress,
-                upSpeed: event.speed,
-                timeRemaining: event.timeRemaining});
-        }
-    }
-
-    handleMetadata(torrent) {
-        Logger.info('handleMetadata ' + torrent.name);
-        this.setState({torrent: torrent});
-    }
-
-    componentWillUnmount() {
-        this.props.master.emitter.removeListener('downloadProgress', this.handleDownloadProgress, this);
-        this.props.master.emitter.removeListener('uploadProgress', this.handleUploadProgress, this);
-        //if(this.props.torrent) {
-        //    this.props.torrent.removeListener('metadata', this.handleMetadata, this);
-        //}
-    }
-
-    hasPieces(tile) {
+    const hasPieces = (tile) => {
         return tile && tile.torrent && tile.torrent.pieces && tile.torrent.pieces.length > 0;
-    }
+    };
 
-    renderPieces(torrent, classes) {
-        return <div style={{
-        width: '100%',
-        display: 'flex',
-        //flexDirection: 'row',
-        //flexWrap: 'wrap',
-        //alignItems: 'center',
-        //justifyContent: 'flex-start',
-        flexFlow: 'row wrap',
-        alignItems: 'stretch',
-        justifyContent: 'stretch',
-        }}>
-            {torrent.pieces.map((piece, index) => {
-                let brick;
-                if(!piece) {
-                    brick = <span key={index} className={classes.done}/>
-                } else if(piece && piece.missing < piece.length) {
-                    const percentage = piece.missing / piece.length * 100;
-                    brick = <span key={index} className={classes.inProgress}>
-                        <span style={{
-                            width: percentage, height: '100%',
-                            backgroundColor: 'red',
-                        }}/>
-                    </span>
-                } else {
-                    const isSelected = torrent._selections.find(item => _.inRange(index, item.from, item.to));
-                    brick = isSelected
-                        ? <span key={index} className={classes.notStartedSelected}/>
-                        : <span key={index} className={classes.notStarted}/>
-                }
-
-                return brick;
-            })}
-        </div>
-    }
-
-    render() {
-        const {classes, tile} = this.props;
-
+    const renderPieces = (torrent, classes) => {
         return (
-            this.hasPieces(tile) ?
-                    <div style={{
-                        margin: '10px',
-                    }}>
-                            {
-                                this.renderPieces(tile.torrent, classes)
-                            }
-                    </div> : ''
+            <div style={{
+                width: '100%',
+                display: 'flex',
+                flexFlow: 'row wrap',
+                alignItems: 'stretch',
+                justifyContent: 'stretch',
+            }}>
+                {torrent.pieces.map((piece, index) => {
+                    let brick;
+                    if(!piece) {
+                        brick = <span key={index} className={classes.done}/>
+                    } else if(piece && piece.missing < piece.length) {
+                        const percentage = piece.missing / piece.length * 100;
+                        brick = (
+                            <span key={index} className={classes.inProgress}>
+                                <span style={{
+                                    width: percentage, 
+                                    height: '100%',
+                                    backgroundColor: 'red',
+                                }}/>
+                            </span>
+                        );
+                    } else {
+                        const isSelected = torrent._selections?.find(item => _.inRange(index, item.from, item.to));
+                        brick = isSelected
+                            ? <span key={index} className={classes.notStartedSelected}/>
+                            : <span key={index} className={classes.notStarted}/>
+                    }
+
+                    return brick;
+                })}
+            </div>
         );
+    };
+
+    if (!hasPieces(currentTile)) {
+        return null;
     }
+
+    return (
+        <div style={{ margin: '10px' }}>
+            {renderPieces(currentTile.torrent, classes)}
+        </div>
+    );
 }
 
 export default withStyles(styles)(PiecesLoadingView);

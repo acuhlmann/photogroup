@@ -23,20 +23,19 @@ export default class GalleryPhotoHandler {
             const format = 'H:m MMM d y';
             if(event.type === 'all') {
 
-                this.view.setState(() => {
+                this.view.setTiles(() => {
                     const photos = event.item;
                     photos.forEach(item => {
                         item.loading = true;
                     });
                     this.sortPictures(photos, format);
-                    return {tiles: photos};
+                    return photos;
                 });
 
             } else if(event.type === 'add') {
 
-                this.view.setState(state => {
-
-                    const oldTiles = state.tiles;
+                this.view.setTiles(state => {
+                    const oldTiles = state;
                     let tiles = oldTiles;
                     event.item.forEach(photo => {
                         const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
@@ -51,25 +50,26 @@ export default class GalleryPhotoHandler {
                         }
                     });
                     this.sortPictures(tiles, format);
-                    return {tiles: tiles};
+                    return tiles;
                 });
 
             } else if(event.type === 'delete') {
 
-                this.view.setState(state => {
-                    const oldTiles = state.tiles;
+                this.view.setTiles(state => {
+                    const oldTiles = state;
                     const index = oldTiles.findIndex(item => item.infoHash === event.item);
                     if(index > -1) {
                         this.emitter.emit('disconnectNode', event.item);
                         const tiles = update(oldTiles, {$splice: [[index, 1]]});
-                        return {tiles: tiles};
+                        return tiles;
                     }
+                    return oldTiles;
                 });
 
             } else if(event.type === 'update') {
 
-                this.view.setState(state => {
-                    const oldTiles = state.tiles;
+                this.view.setTiles(state => {
+                    const oldTiles = state;
                     let tiles = oldTiles;
                     event.item.forEach(photo => {
                         const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
@@ -78,13 +78,13 @@ export default class GalleryPhotoHandler {
                             tiles = update(oldTiles, {$splice: [[index, 1, newTile]]});
                         }
                     });
-                    return {tiles: tiles};
+                    return tiles;
                 });
 
             } else if(event.type === 'addOwner') {
 
-                this.view.setState(state => {
-                    const oldTiles = state.tiles;
+                this.view.setTiles(state => {
+                    const oldTiles = state;
                     let tiles = oldTiles;
                     event.item.forEach(photo => {
                         const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
@@ -99,13 +99,13 @@ export default class GalleryPhotoHandler {
                             }
                         }
                     });
-                    return {tiles: tiles};
+                    return tiles;
                 });
 
             } else if(event.type === 'removeOwner') {
 
-                this.view.setState(state => {
-                    const oldTiles = state.tiles;
+                this.view.setTiles(state => {
+                    const oldTiles = state;
                     let tiles = oldTiles;
                     oldTiles.forEach((oldTile, tileIndex) => {
                         const ownerIndex = oldTile.owners.findIndex(owner => owner.peerId === event.item);
@@ -115,13 +115,13 @@ export default class GalleryPhotoHandler {
                             tiles = update(oldTiles, {$splice: [[tileIndex, 1, tile]]});
                         }
                     });
-                    return {tiles: tiles};
+                    return tiles;
                 });
 
             } else if(event.type === 'updateOwner') {
 
-                this.view.setState(state => {
-                    const oldTiles = state.tiles;
+                this.view.setTiles(state => {
+                    const oldTiles = state;
                     let tiles = oldTiles;
                     event.item.forEach(photo => {
                         const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
@@ -136,7 +136,7 @@ export default class GalleryPhotoHandler {
                             }
                         }
                     });
-                    return {tiles: tiles};
+                    return tiles;
                 });
             }
         });

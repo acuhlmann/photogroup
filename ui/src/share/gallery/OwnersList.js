@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {withStyles} from '@mui/styles';
 import Typography from "@mui/material/Typography";
 import List from "@mui/material/List";
@@ -46,49 +46,41 @@ const styles = theme => ({
     },
 });
 
-class OwnersList extends Component {
+function OwnersList(props) {
+    const {emitter, peers, tile, myPeerId, classes} = props;
 
-    constructor(props) {
-        super(props);
+    const [expanded, setExpanded] = useState(false);
+    const [peerItems, setPeerItems] = useState(peers);
+    const [newConnections, setNewConnections] = useState([]);
 
-        const {emitter, peers} = props;
+    const handlePeersUpdate = useCallback((len, peers) => {
+        setPeerItems(peers);
+    }, []);
 
-        this.state = {
-            expanded: false,
-            peerItems: peers,
-            newConnections: []
-        };
-
-        emitter.on('numPeersChange', this.handlePeersUpdate, this);
-        emitter.on('peerConnections', this.handlePeersConnectionUpdate, this);
-    }
-
-    handlePeersUpdate(len, peers) {
-        this.setState({peerItems: peers});
-    }
-
-    handlePeersConnectionUpdate(connections) {
-        const {tile} = this.props;
+    const handlePeersConnectionUpdate = useCallback((connections) => {
         if(connections && connections.length > 0) {
             const photoConnections = connections.filter(item => item.infoHash === tile.infoHash);
             if(photoConnections.length > 0) {
-                this.setState({newConnections: photoConnections});
+                setNewConnections(photoConnections);
             }
         }
-    }
+    }, [tile.infoHash]);
 
-    componentWillUnmount() {
-        this.props.emitter.removeListener('numPeersChange', this.handlePeersUpdate, this);
-        this.props.emitter.removeListener('peerConnections', this.handlePeersConnectionUpdate, this);
-    }
+    useEffect(() => {
+        emitter.on('numPeersChange', handlePeersUpdate);
+        emitter.on('peerConnections', handlePeersConnectionUpdate);
 
-    handleExpand = panel => (event, expanded) => {
-        this.setState({
-            [panel]: expanded,
-        });
-    };
+        return () => {
+            emitter.removeListener('numPeersChange', handlePeersUpdate);
+            emitter.removeListener('peerConnections', handlePeersConnectionUpdate);
+        };
+    }, [emitter, handlePeersUpdate, handlePeersConnectionUpdate]);
 
-    hasOwners(owners, peers) {
+    const handleExpand = useCallback((panel) => (event, expanded) => {
+        setExpanded(expanded);
+    }, []);
+
+    const hasOwners = useCallback((owners, peers) => {
         const anyFound = owners.some(owner => {
             const peer = peers.items.find(peer => peer.peerId === owner.peerId);
             if(!peer) {
@@ -97,9 +89,9 @@ class OwnersList extends Component {
             return peer ? owner : undefined;
         });
         return owners && owners.length > 0 && anyFound;
-    }
+    }, []);
 
-    buildHeader(owners, peers, connectionTypes, classes) {
+    const buildHeader = useCallback((owners, peers, connectionTypes, classes) => {
         const numOfOwners = owners.length;
         const names = owners.map(owner => {
             let name = owner.peerId;
@@ -152,9 +144,9 @@ class OwnersList extends Component {
             </span>
             <Typography variant="caption">{overallProgress}</Typography>
         </span>
-    }
+    }, []);
 
-    renderOwners(otherPeers, peers, tile, classes) {
+    const renderOwners = useCallback((otherPeers, peers, tile, classes) => {
         const nats = otherPeers.map(owner => {
 
             const peer = peers.items.find(item => item.peerId === owner.peerId);
@@ -228,48 +220,43 @@ class OwnersList extends Component {
                     {clients}
                 </ListItem>;
             });
+    }, []);
+
+    const currentPeers = peerItems;
+    const otherPeers = tile.owners.filter(item => item.peerId !== myPeerId);
+    let photoConnections = newConnections;
+    if(currentPeers.connections && currentPeers.connections.length > 0) {
+        photoConnections = currentPeers.connections.filter(item => item.infoHash === tile.infoHash);
     }
+    const connectionTypes = [...new Set(photoConnections.map(item => item.connectionType))].join(', ');
 
-    render() {
-        const {classes, myPeerId, tile} = this.props;
-        const {peerItems, newConnections, expanded} = this.state;
-
-        const peers = peerItems;
-        const otherPeers = tile.owners.filter(item => item.peerId !== myPeerId);
-        let photoConnections = newConnections;
-        if(peers.connections && peers.connections.length > 0) {
-            photoConnections = peers.connections.filter(item => item.infoHash === tile.infoHash);
-        }
-        const connectionTypes = [...new Set(photoConnections.map(item => item.connectionType))].join(', ');
-
-        //Logger.info('tile.owners ' + JSON.stringify(otherPeers));
-        return (
-            this.hasOwners(otherPeers, peers) ?
-                <Accordion expanded={expanded}
-                                style={{
-                                    marginBottom: '10px', marginLeft: '10px', marginRight: '10px'
-                                }}
-                                onChange={this.handleExpand('expanded')}>
-                    <AccordionSummary 
-                        expandIcon={<ExpandMoreIcon />}
-                        slotProps={{ iconButton: { component: 'div' } }}>
-                        {this.buildHeader(otherPeers, peers, connectionTypes, classes)}
-                    </AccordionSummary>
-                    <AccordionDetails className={classes.content}>
-                        <Paper style={{
-                            margin: '10px',
-                            //padding: '10px'
-                        }}>
-                            <List>
-                                {
-                                    this.renderOwners(otherPeers, peers, tile, classes)
-                                }
-                            </List>
-                        </Paper>
-                    </AccordionDetails>
-                </Accordion> : <Typography variant="caption">No peer has this image</Typography>
-        );
-    }
+    //Logger.info('tile.owners ' + JSON.stringify(otherPeers));
+    return (
+        hasOwners(otherPeers, currentPeers) ?
+            <Accordion expanded={expanded}
+                            style={{
+                                marginBottom: '10px', marginLeft: '10px', marginRight: '10px'
+                            }}
+                            onChange={handleExpand('expanded')}>
+                <AccordionSummary 
+                    expandIcon={<ExpandMoreIcon />}
+                    slotProps={{ iconButton: { component: 'div' } }}>
+                    {buildHeader(otherPeers, currentPeers, connectionTypes, classes)}
+                </AccordionSummary>
+                <AccordionDetails className={classes.content}>
+                    <Paper style={{
+                        margin: '10px',
+                        //padding: '10px'
+                    }}>
+                        <List>
+                            {
+                                renderOwners(otherPeers, currentPeers, tile, classes)
+                            }
+                        </List>
+                    </Paper>
+                </AccordionDetails>
+            </Accordion> : <Typography variant="caption">No peer has this image</Typography>
+    );
 }
 
 export default withStyles(styles)(OwnersList);

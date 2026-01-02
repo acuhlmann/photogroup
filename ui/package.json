@@ -12,6 +12,7 @@
     "@mui/material": "^7.3.6",
     "@mui/styles": "^6.4.8",
     "audiomotion-analyzer": "^4.5.2",
+    "buffer": "^6.0.3",
     "butterchurn": "^2.6.7",
     "butterchurn-presets": "^2.4.7",
     "clipboard-copy": "^4.0.1",

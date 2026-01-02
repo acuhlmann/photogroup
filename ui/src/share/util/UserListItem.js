@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React from 'react';
 import {withStyles} from '@mui/styles';
 import Typography from "@mui/material/Typography";
 import StringUtil from "./StringUtil";
@@ -13,38 +13,30 @@ const styles = theme => ({
     },
 });
 
-class UserListItem extends Component {
-
-    constructor(props) {
-        super(props);
-    }
-
-    createClientLabel(peer) {
-
+function UserListItem({peer, classes}) {
+    const createClientLabel = (peer) => {
         return StringUtil.addEmptySpaces([
             peer.connectionSpeedType,
             peer.name,
             peer.originPlatform
         ]);
-    }
+    };
 
-    render() {
-
-        const {peer, classes} = this.props;
-
-        return (
-            <span
-                className={classes.horizontal}
-                style={{
-                    justifyContent: 'left'
-                }}>
-                <AccountCircleRounded/>
-                <Typography variant="caption" style={{
-                    marginLeft: '5px', textAlign: 'left'
-                }}>{this.createClientLabel(peer)}</Typography>
-            </span>
-        );
-    }
+    return (
+        <span
+            className={classes.horizontal}
+            style={{
+                justifyContent: 'left'
+            }}>
+            <AccountCircleRounded/>
+            <Typography variant="caption" style={{
+                marginLeft: '5px', 
+                textAlign: 'left'
+            }}>
+                {createClientLabel(peer)}
+            </Typography>
+        </span>
+    );
 }
 
 export default withStyles(styles)(UserListItem);

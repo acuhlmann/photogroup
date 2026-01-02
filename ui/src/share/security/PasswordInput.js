@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 
 import { withStyles } from '@mui/styles';
@@ -26,108 +26,87 @@ const styles = theme => ({
     },
 });
 
-class PasswordInput extends Component {
+function PasswordInput({classes, onChange}) {
+    const [password, setPassword] = useState('foobar');
+    const [showPassword, setShowPassword] = useState(false);
+    const [strengthMeter, setStrengthMeter] = useState(0);
+    const [strengthText, setStrengthText] = useState('');
 
-    constructor(props) {
-        super(props);
-
-        const { classes } = props;
-
-        this.classes = classes;
-
-        this.state = {
-            password: 'foobar',
-            //password: '',
-            showPassword: false,
-            strengthMeter: 0, strengthText: ''
-        };
-        this.props.onChange(this.state.password);
-    }
-
-    componentDidMount() {
-        this.keyCheckMeter(this.state.password);
-    }
-
-    get password() {
-        return this.state.passive;
-    }
-
-    handleClickShowPassword = () => {
-        this.setState(state => ({ showPassword: !state.showPassword }));
-    };
-
-    handleChange = prop => event => {
-        const password = event.target.value;
-        this.setState({ [prop]: password });
-        this.props.onChange(password);
-        this.keyCheckMeter(password);
-    };
+    useEffect(() => {
+        onChange(password);
+        keyCheckMeter(password);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     //credits https://github.com/sh-dv/hat.sh/blob/master/src/js/app.js
-    keyCheckMeter(password) {
-        let strength = {
+    const keyCheckMeter = (password) => {
+        const strength = {
             0: "Very Bad",
             1: "Bad",
             2: "Weak",
             3: "Good",
             4: "Strong"
         };
-        let result = zxcvbn(password);
-        const strengthMeter = result.score * 25 + '%';
-        let strengthText;
+        const result = zxcvbn(password);
+        const strengthMeterValue = result.score * 25 + '%';
+        let strengthTextValue;
         if (password !== '') {
-            strengthText = strength[result.score];
+            strengthTextValue = strength[result.score];
         } else {
-            strengthText = "none.";
+            strengthTextValue = "none.";
         }
 
-        this.setState({
-            strengthMeter: strengthMeter, strengthText: strengthText
-        })
-    }
+        setStrengthMeter(strengthMeterValue);
+        setStrengthText(strengthTextValue);
+    };
 
-    render() {
-        const {classes} = this.props;
-        const {strengthMeter, strengthText} = this.state;
+    const handleClickShowPassword = () => {
+        setShowPassword(prev => !prev);
+    };
 
-        return (
-            <div>
-                <TextField
-                    id="outlined-adornment-password"
-                    className={classes.textField}
-                    variant="outlined"
-                    type={this.state.showPassword ? 'text' : 'password'}
-                    label="Password"
-                    value={this.state.password}
-                    onChange={this.handleChange('password')}
-                    InputProps={{
-                        endAdornment: (
-                            <InputAdornment position="end">
-                                <IconButton
-                                    aria-label="Toggle password visibility"
-                                    onClick={this.handleClickShowPassword}
-                                >
-                                    {this.state.showPassword ? <VisibilityOff /> : <Visibility />}
-                                </IconButton>
-                            </InputAdornment>
-                        ),
-                    }}
-                />
+    const handleChange = (event) => {
+        const newPassword = event.target.value;
+        setPassword(newPassword);
+        onChange(newPassword);
+        keyCheckMeter(newPassword);
+    };
 
-                {/*<span className={classes.vertical} style={{width: '100%'}}>
-                </span>*/}
-                <div style={{
-                    backgroundColor: '#757575',
-                    width: strengthMeter, height: '10px'
-                }}> </div>
-                <Typography variant="caption">Password Strength: {strengthText}</Typography>
-            </div>
-        );
-    }
+    return (
+        <div>
+            <TextField
+                id="outlined-adornment-password"
+                className={classes.textField}
+                variant="outlined"
+                type={showPassword ? 'text' : 'password'}
+                label="Password"
+                value={password}
+                onChange={handleChange}
+                InputProps={{
+                    endAdornment: (
+                        <InputAdornment position="end">
+                            <IconButton
+                                aria-label="Toggle password visibility"
+                                onClick={handleClickShowPassword}
+                            >
+                                {showPassword ? <VisibilityOff /> : <Visibility />}
+                            </IconButton>
+                        </InputAdornment>
+                    ),
+                }}
+            />
+
+            <div style={{
+                backgroundColor: '#757575',
+                width: strengthMeter, 
+                height: '10px'
+            }}> </div>
+            <Typography variant="caption">Password Strength: {strengthText}</Typography>
+        </div>
+    );
 }
 
 PasswordInput.propTypes = {
     classes: PropTypes.object.isRequired,
+    onChange: PropTypes.func.isRequired,
 };
 
 export default withStyles(styles)(PasswordInput);
