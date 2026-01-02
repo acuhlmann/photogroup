@@ -30,7 +30,17 @@ export default class MetadataParser {
                         tile.metadata = metadata;
                         tile.hasMetadata = true;
                         callback(tile, metadata);
+                    } else {
+                        // No metadata found, but still call callback to complete rendering
+                        tile.hasMetadata = false;
+                        callback(tile, {});
                     }
+                })
+                .catch(e => {
+                    Logger.error('error parsing image metadata ' + e);
+                    // Always call callback even on error to complete rendering
+                    tile.hasMetadata = false;
+                    callback(tile, {});
                 })
 
         } else if(tile.isAudio || tile.isVideo) {

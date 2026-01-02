@@ -42,10 +42,14 @@ jobs:
         run: |
           mkdir -p server/secret
           cat > server/secret/index.js << EOF
-          exports.twilio = {
-              accountSid: '${{ secrets.TWILIO_ACCOUNT_SID || '' }}',
-              authToken: '${{ secrets.TWILIO_AUTH_TOKEN || '' }}'
-            };
+          // Secret configuration file
+          // Created from GitHub Secrets via CI/CD
+          export default {
+              twilio: {
+                  accountSid: '${{ secrets.TWILIO_ACCOUNT_SID || '' }}',
+                  authToken: '${{ secrets.TWILIO_AUTH_TOKEN || '' }}'
+              }
+          };
           EOF
       
       - name: Run UI unit tests

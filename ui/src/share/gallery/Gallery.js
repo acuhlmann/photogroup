@@ -108,6 +108,17 @@ class Gallery extends Component {
             photos.forEach(photo => {
                 this.mergePreloadMetadata(photo);
                 this.mergePostloadMetadata(photo, photo.file, true);
+                // For images, ensure elem and img are set so rendering can proceed
+                if(photo.isImage && photo.elem && !photo.img) {
+                    photo.img = URL.createObjectURL(photo.elem);
+                }
+                // For seeded images, immediately emit blobDone to trigger metadata reading
+                // This ensures readMetadata is called and photoRendered is emitted
+                if(photo.isImage && photo.elem) {
+                    Logger.info('Seeded image ready, emitting blobDone for ' + photo.fileName);
+                    this.props.master.emitter.emit('blobDone-' + photo.infoHash, photo);
+                }
+                // getBlob will also emit blobDone event (may be redundant but safe)
                 this.getBlob(photo);
             });
             this.renderTile(photos, isSeeding);
@@ -190,7 +201,9 @@ class Gallery extends Component {
     }
 
     mergeStreamingMetadata(photo, extention) {
-        photo.loading = photo.rendering = false;
+        photo.loading = false;
+        // Don't clear rendering here - it should be cleared when photoRendered event is emitted
+        // photo.rendering = false;
         photo.elem = null;
         photo.img = null;
         photo.fileSize = photo.fileSize || FileUtil.formatBytes(photo.torrentFile.length);
@@ -208,12 +221,17 @@ class Gallery extends Component {
     }
 
     mergePostloadMetadata(photo, file, noElem) {
-        photo.loading = photo.rendering = false;
-        photo.elem = noElem ? null : file;
+        photo.loading = false;
+        // Don't clear rendering here - it should be cleared when photoRendered event is emitted
+        // photo.rendering = false;
+        // For images, we need elem to be set so readMetadata can process it
+        // Only set elem to null for non-images when noElem is true
+        const isImage = photo.fileType.includes('image/');
+        photo.elem = (noElem && !isImage) ? null : file;
         photo.img = URL.createObjectURL(file);
-        photo.fileSize = photo.fileSize || FileUtil.formatBytes(noElem ? photo.torrentFile.length : photo.elem.size);
+        photo.fileSize = photo.fileSize || FileUtil.formatBytes(noElem ? photo.torrentFile.length : (photo.elem ? photo.elem.size : file.size));
         photo.isVideo = photo.fileType.includes('video/');
-        photo.isImage = photo.fileType.includes('image/');
+        photo.isImage = isImage;
         photo.isAudio = photo.fileType.includes('audio/');
         //photo.fileName = FileUtil.truncateFileName(file.name);
         //photo.fileType = file.type;

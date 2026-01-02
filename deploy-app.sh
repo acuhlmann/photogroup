@@ -47,9 +47,19 @@ fi
 # Install dependencies and start application (combined for efficiency)
 echo "Installing dependencies and starting application..."
 gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "
-  cd ~/pg
+  # Get the actual home directory path (works regardless of which user runs this)
+  USER_HOME=\$(eval echo ~\$(whoami))
+  APP_DIR=\"\$USER_HOME/pg\"
+  
+  cd \"\$APP_DIR\"
   npm install --production --prefer-offline --no-audit --no-fund
-  sudo pm2 start app.js --name app
+  
+  # Stop and delete existing app to ensure clean restart
+  sudo pm2 stop app 2>/dev/null || true
+  sudo pm2 delete app 2>/dev/null || true
+  
+  # Start app with explicit path to avoid path issues
+  sudo pm2 start \"\$APP_DIR/app.js\" --name app --cwd \"\$APP_DIR\"
   sudo pm2 save
 " 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
 

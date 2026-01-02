@@ -134,12 +134,17 @@ class Uploader extends Component {
                     style={{
                         position: 'absolute',
                         top: loadedAnything ? '-15px' : '0px',
+                        width: 0,
+                        height: 0,
+                        opacity: 0,
+                        overflow: 'hidden',
+                        zIndex: -1,
                     }}
                     className={classes.input}
                     id="contained-button-file" disabled={disabled}
                     type="file" onChange={this.handleUpload.bind(this)}
                 />
-                <label htmlFor="contained-button-file">
+                <label htmlFor="contained-button-file" style={{cursor: disabled ? 'not-allowed' : 'pointer'}}>
                     <IconButton
                         aria-haspopup="true"
                         color="inherit" variant="contained"
