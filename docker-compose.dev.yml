@@ -9,6 +9,7 @@ services:
     ports:
       - "${SERVER_PORT:-8081}:8081"
       - "${UI_PORT:-3000}:3000"
+      - "${WS_PORT:-9000}:9000"
     environment:
       - NODE_ENV=development
       - PORT=8081

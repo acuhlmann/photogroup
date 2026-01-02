@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+
+# Deploy PhotoGroup app to GCP VM using Docker
+# This script builds the Docker image locally, pushes it to the VM, and runs it
+
+ZONE=asia-east2-a
+INSTANCE=main
+PROJECT=photogroup-215600
+IMAGE_NAME=photogroup-ai
+CONTAINER_NAME=photogroup-app
+
+echo "Deploying PhotoGroup app to GCP VM using Docker..."
+echo "Project: $PROJECT"
+echo "Instance: $INSTANCE"
+echo "Zone: $ZONE"
+echo ""
+
+# Verify instance exists
+if ! gcloud compute instances describe $INSTANCE --project $PROJECT --zone $ZONE &>/dev/null; then
+    echo "ERROR: VM instance '$INSTANCE' not found in project '$PROJECT' zone '$ZONE'"
+    echo "Create the VM first using: ./create-vm.sh"
+    exit 1
+fi
+
+# Function to run gcloud commands and ignore metadata update warnings
+run_gcloud_ssh() {
+    local cmd="$1"
+    local description="$2"
+    local temp_output
+    local exit_code
+    
+    # Run command, capture both output and exit code
+    temp_output=$(gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "$cmd" 2>&1)
+    exit_code=$?
+    
+    # Filter out metadata warnings but keep everything else
+    echo "$temp_output" | grep -v "^Updating project ssh metadata\.\.\." | grep -v "^Updating instance ssh metadata\.\.\." | grep -v "^\.$" | grep -v "^done\.$" || true
+    
+    if [ $exit_code -ne 0 ]; then
+        echo "ERROR: $description failed (exit code: $exit_code)"
+        return $exit_code
+    fi
+    return 0
+}
+
+# Check if Docker is installed on VM
+echo "Checking Docker installation on VM..."
+if ! run_gcloud_ssh "docker --version" "Checking Docker" >/dev/null 2>&1; then
+    echo "ERROR: Docker is not installed on the VM"
+    echo "The VM should have Docker installed via create-vm.sh startup script"
+    echo "You can install it manually with:"
+    echo "  gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command 'curl -fsSL https://get.docker.com | sh'"
+    exit 1
+fi
+
+# Build Docker image locally
+echo "Building Docker image locally..."
+if ! docker build -t $IMAGE_NAME:latest .; then
+    echo "ERROR: Failed to build Docker image"
+    exit 1
+fi
+
+# Save Docker image to tar file
+echo "Saving Docker image to tar file..."
+TAR_FILE="/tmp/${IMAGE_NAME}.tar"
+docker save $IMAGE_NAME:latest -o "$TAR_FILE"
+
+if [ ! -f "$TAR_FILE" ]; then
+    echo "ERROR: Failed to save Docker image"
+    exit 1
+fi
+
+# Upload Docker image to VM
+echo "Uploading Docker image to VM (this may take a few minutes)..."
+gcloud compute scp --compress "$TAR_FILE" $INSTANCE:/tmp/ --project $PROJECT --zone $ZONE 2>&1 | grep -v "^Updating project ssh metadata\.\.\." | grep -v "^Updating instance ssh metadata\.\.\." | grep -v "^\.$" | grep -v "^done\.$" || true
+
+# Clean up local tar file
+rm -f "$TAR_FILE"
+
+# Build docker run command with optional Twilio credentials
+DOCKER_RUN_CMD="docker run -d \
+    --name $CONTAINER_NAME \
+    --restart unless-stopped \
+    -p 127.0.0.1:8081:8081 \
+    -p 127.0.0.1:9000:9000 \
+    -e NODE_ENV=production \
+    -e PORT=8081 \
+    -e WS_PORT=9000"
+
+# Add Twilio credentials if provided
+if [ -n "$TWILIO_ACCOUNT_SID" ]; then
+    DOCKER_RUN_CMD="$DOCKER_RUN_CMD -e TWILIO_ACCOUNT_SID=$TWILIO_ACCOUNT_SID"
+fi
+if [ -n "$TWILIO_AUTH_TOKEN" ]; then
+    DOCKER_RUN_CMD="$DOCKER_RUN_CMD -e TWILIO_AUTH_TOKEN=$TWILIO_AUTH_TOKEN"
+fi
+
+DOCKER_RUN_CMD="$DOCKER_RUN_CMD $IMAGE_NAME:latest"
+
+# Load image and run container on VM
+echo "Loading Docker image and starting container on VM..."
+run_gcloud_ssh "
+    # Load the Docker image
+    docker load -i /tmp/${IMAGE_NAME}.tar
+    rm -f /tmp/${IMAGE_NAME}.tar
+    
+    # Stop and remove existing container if it exists
+    docker stop $CONTAINER_NAME 2>/dev/null || true
+    docker rm $CONTAINER_NAME 2>/dev/null || true
+    
+    # Run the new container
+    # Bind to 127.0.0.1 so nginx can reach it (not exposed publicly)
+    $DOCKER_RUN_CMD
+    
+    # Verify container is running
+    docker ps | grep $CONTAINER_NAME
+" "Deploying Docker container" || exit 1
+
+echo ""
+echo "Docker deployment completed successfully!"
+echo ""
+echo "Container status:"
+run_gcloud_ssh "docker ps | grep $CONTAINER_NAME" "Checking container status" || true
+echo ""
+echo "Container logs (last 20 lines):"
+run_gcloud_ssh "docker logs --tail 20 $CONTAINER_NAME" "Viewing container logs" || true
+echo ""
+echo "To view logs: gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command 'docker logs -f $CONTAINER_NAME'"
+echo "To restart: gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command 'docker restart $CONTAINER_NAME'"
+

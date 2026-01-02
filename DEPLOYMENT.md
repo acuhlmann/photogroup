@@ -225,14 +225,44 @@ gcloud compute ssh main --project photogroup-215600 --zone asia-east2-a --comman
 - **deploy-all.sh**: Runs all deployment steps in sequence
 - **deploy-copy.sh**: Copies UI build and server files to `./bin/` directory
 - **deploy-app.sh**: Uploads application files to VM and restarts with PM2
+- **deploy-docker.sh**: Deploys application to VM using Docker (alternative to PM2 deployment)
 - **deploy-nginx.sh**: Deploys nginx configuration
 - **setup-ssl.sh**: One-time SSL certificate setup script (run from local machine, executes remotely on VM)
+
+### Docker Deployment (Alternative to PM2)
+
+You can deploy the application using Docker instead of PM2:
+
+```bash
+# Set Twilio credentials (optional, for WebRTC/TURN functionality)
+export TWILIO_ACCOUNT_SID="your_account_sid"
+export TWILIO_AUTH_TOKEN="your_auth_token"
+
+# Deploy using Docker
+./deploy-docker.sh
+```
+
+This script will:
+- Build the Docker image locally
+- Upload it to the VM
+- Run the container with ports bound to `127.0.0.1:8081` and `127.0.0.1:9000` (for nginx)
+- Configure automatic restart
+
+**Note**: The Docker container binds to `127.0.0.1` (localhost only) so nginx can proxy to it, but it's not exposed publicly. This matches the nginx configuration which expects the app on `127.0.0.1:8081` and `127.0.0.1:9000`.
+
+**Advantages of Docker deployment**:
+- Consistent runtime environment
+- Easier rollbacks (just run previous image)
+- Isolation from host system
+- Works with the same nginx configuration
+
+**Note**: The VM must have Docker installed (which is done automatically by `create-vm.sh`).
 
 ## Additional service: Hackersbot (Docker) on `hackernews.photogroup.network`
 
 This repository's nginx config is set up to route:
 
-- `photogroup.network` → Node app on `127.0.0.1:8081` (PM2)
+- `photogroup.network` → Node app on `127.0.0.1:8081` (PM2 or Docker)
 - `hackernews.photogroup.network` → a Dockerized Python service on `127.0.0.1:18080`
 
 ### Expected Docker contract (VM side)

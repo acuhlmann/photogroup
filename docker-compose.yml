@@ -7,10 +7,12 @@ services:
       dockerfile: Dockerfile
     container_name: photogroup-app
     ports:
-      - "${PORT:-8081}:8081"
+      - "127.0.0.1:${PORT:-8081}:8081"
+      - "127.0.0.1:${WS_PORT:-9000}:9000"
     environment:
       - NODE_ENV=production
       - PORT=8081
+      - WS_PORT=9000
       # Optional: Twilio credentials for ICE servers
       # - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
       # - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}

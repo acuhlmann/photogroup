@@ -76,8 +76,8 @@ RUN chown -R nodejs:nodejs /app
 # Switch to non-root user
 USER nodejs
 
-# Expose port
-EXPOSE 8081
+# Expose ports (8081 for HTTP, 9000 for WebSocket tracker)
+EXPOSE 8081 9000
 
 # Health check - check if server is responding
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
