@@ -25,12 +25,15 @@ vi.mock('./share/torrent/TorrentMaster', () => {
       this.service = service;
       this.emitter = emitter || {
         on: vi.fn(),
-        emit: vi.fn()
+        emit: vi.fn(),
+        removeListener: vi.fn()
       };
       this.torrentAddition = {
         emitter: {
-          on: vi.fn()
-        }
+          on: vi.fn(),
+          removeListener: vi.fn()
+        },
+        seed: vi.fn()
       };
       this.findExistingContent = vi.fn();
       this.reload = vi.fn();
