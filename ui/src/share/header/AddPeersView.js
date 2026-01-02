@@ -323,6 +323,8 @@ class AddPeersView extends Component {
                     onClose={this.show.bind(this, false)}
                     TransitionComponent={Transition}
                     keepMounted
+                    maxWidth="md"
+                    fullWidth
                 >
                     <DialogContent className={classes.vertical} style={{
                         textAlign: 'center'
