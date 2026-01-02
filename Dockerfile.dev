@@ -1,0 +1,38 @@
+# Development Dockerfile for PhotoGroup AI
+# This allows hot-reloading for both UI and server
+
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Install root dependencies (npm-run-all)
+COPY package*.json ./
+RUN npm install
+
+# Install server dependencies
+WORKDIR /app/server
+COPY server/package*.json ./
+RUN npm install
+
+# Install UI dependencies
+WORKDIR /app/ui
+COPY ui/package*.json ./
+RUN npm install --legacy-peer-deps
+
+# Copy all source code
+WORKDIR /app
+COPY . .
+
+# Expose ports
+# 8081 for server, 3000 for Vite dev server
+EXPOSE 8081 3000
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start both server and UI in development mode
+CMD ["npm", "run", "start"]
+

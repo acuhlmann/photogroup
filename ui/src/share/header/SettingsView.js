@@ -73,7 +73,7 @@ class SettingsView extends Component {
             messages: [],
             open: false,
             peerId: '',
-            showTopology: false, showMe: true, encrypt: false,
+            showTopology: true, showMe: true, encrypt: false,
             strategyPreference: false, darkMode: props.prefersDarkMode,
         };
         this.logsBeforeMount = [];
@@ -85,8 +85,9 @@ class SettingsView extends Component {
             const showMe = localStorage.getItem('showMe') || this.state.showMe;
             this.handleShowMeChange(String(showMe) == 'true');
 
-            const showTopology = localStorage.getItem('showTopology') || this.state.showTopology;
-            this.handleTopologyChange(String(showTopology) == 'true');
+            const showTopology = localStorage.getItem('showTopology');
+            const showTopologyValue = showTopology !== null ? showTopology === 'true' : this.state.showTopology;
+            this.handleTopologyChange(showTopologyValue);
 
             const encrypt = localStorage.getItem('encrypt') || this.state.encrypt;
             this.handleEncryptChange(String(encrypt) == 'true');
@@ -276,7 +277,7 @@ class SettingsView extends Component {
     }
 
     handleTopologyChange(value) {
-        localStorage.setItem('showTopology', value);
+        localStorage.setItem('showTopology', String(value));
         this.master.emitter.emit('showTopology', value);
         this.setState({showTopology: value});
     };
@@ -351,6 +352,8 @@ class SettingsView extends Component {
                     onClose={this.handleClose.bind(this)}
                     TransitionComponent={Transition}
                     keepMounted
+                    maxWidth="md"
+                    fullWidth
                 >
                     <DialogTitle>Settings</DialogTitle>
                     <DialogActions className={classes.vertical}>
