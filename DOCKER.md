@@ -255,7 +255,29 @@ The application uses a Docker network (`photogroup-network`) for service isolati
 
 ## Production Deployment
 
-For production deployment:
+### GCP VM Deployment
+
+The Dockerized app is fully compatible with the GCP VM setup. Use the deployment script:
+
+```bash
+# Set Twilio credentials (optional)
+export TWILIO_ACCOUNT_SID="your_account_sid"
+export TWILIO_AUTH_TOKEN="your_auth_token"
+
+# Deploy to GCP VM
+./deploy-docker.sh
+```
+
+The container will:
+- Bind to `127.0.0.1:8081` and `127.0.0.1:9000` (localhost only, for nginx)
+- Work with the existing nginx configuration
+- Automatically restart on failure
+
+**Note**: The VM must have Docker installed (done automatically by `create-vm.sh`).
+
+### Other Platforms
+
+For other hosting platforms:
 
 1. Build the image:
    ```bash
@@ -273,6 +295,8 @@ For production deployment:
    ```
 
 4. Deploy to your hosting platform (AWS ECS, Google Cloud Run, etc.)
+
+**Important**: Ensure both ports 8081 (HTTP) and 9000 (WebSocket) are exposed and accessible.
 
 ## Additional Resources
 

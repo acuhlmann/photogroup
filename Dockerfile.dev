@@ -27,8 +27,8 @@ WORKDIR /app
 COPY . .
 
 # Expose ports
-# 8081 for server, 3000 for Vite dev server
-EXPOSE 8081 3000
+# 8081 for server, 3000 for Vite dev server, 9000 for WebSocket tracker
+EXPOSE 8081 3000 9000
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
