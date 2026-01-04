@@ -43,14 +43,17 @@ run_gcloud_ssh() {
     return 0
 }
 
-# Check if Docker is installed on VM
+# Check if Docker is installed on VM, install if not
 echo "Checking Docker installation on VM..."
 if ! run_gcloud_ssh "docker --version" "Checking Docker" >/dev/null 2>&1; then
-    echo "ERROR: Docker is not installed on the VM"
-    echo "The VM should have Docker installed via create-vm.sh startup script"
-    echo "You can install it manually with:"
-    echo "  gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command 'curl -fsSL https://get.docker.com | sh'"
-    exit 1
+    echo "Docker is not installed on the VM. Installing Docker..."
+    run_gcloud_ssh "curl -fsSL https://get.docker.com | sudo sh && sudo systemctl enable docker && sudo systemctl start docker" "Installing Docker" || {
+        echo "ERROR: Failed to install Docker on the VM"
+        exit 1
+    }
+    echo "Docker installed successfully."
+else
+    echo "Docker is already installed."
 fi
 
 # Build Docker image locally
@@ -105,8 +108,8 @@ DOCKER_RUN_CMD="$DOCKER_RUN_CMD $IMAGE_NAME:latest"
 # Load image and run container on VM
 echo "Loading Docker image and starting container on VM..."
 run_gcloud_ssh "
-    # Load the Docker image
-    docker load -i /tmp/${IMAGE_NAME}.tar
+    # Load the Docker image (use sudo in case user is not in docker group)
+    sudo docker load -i /tmp/${IMAGE_NAME}.tar
     rm -f /tmp/${IMAGE_NAME}.tar
     
     # Stop PM2 processes if any (transitioning from PM2 to Docker deployment)
@@ -117,26 +120,26 @@ run_gcloud_ssh "
     sudo lsof -ti:9000 | xargs sudo kill -9 2>/dev/null || true
     
     # Stop and remove existing container if it exists
-    docker stop $CONTAINER_NAME 2>/dev/null || true
-    docker rm $CONTAINER_NAME 2>/dev/null || true
+    sudo docker stop $CONTAINER_NAME 2>/dev/null || true
+    sudo docker rm $CONTAINER_NAME 2>/dev/null || true
     
     # Run the new container
     # Bind to 127.0.0.1 so nginx can reach it (not exposed publicly)
-    $DOCKER_RUN_CMD
+    sudo $DOCKER_RUN_CMD
     
     # Verify container is running
-    docker ps | grep $CONTAINER_NAME
+    sudo docker ps | grep $CONTAINER_NAME
 " "Deploying Docker container" || exit 1
 
 echo ""
 echo "Docker deployment completed successfully!"
 echo ""
 echo "Container status:"
-run_gcloud_ssh "docker ps | grep $CONTAINER_NAME" "Checking container status" || true
+run_gcloud_ssh "sudo docker ps | grep $CONTAINER_NAME" "Checking container status" || true
 echo ""
 echo "Container logs (last 20 lines):"
-run_gcloud_ssh "docker logs --tail 20 $CONTAINER_NAME" "Viewing container logs" || true
+run_gcloud_ssh "sudo docker logs --tail 20 $CONTAINER_NAME" "Viewing container logs" || true
 echo ""
-echo "To view logs: gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command 'docker logs -f $CONTAINER_NAME'"
-echo "To restart: gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command 'docker restart $CONTAINER_NAME'"
+echo "To view logs: gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command 'sudo docker logs -f $CONTAINER_NAME'"
+echo "To restart: gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command 'sudo docker restart $CONTAINER_NAME'"
 
