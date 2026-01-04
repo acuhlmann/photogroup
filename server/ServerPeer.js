@@ -6,7 +6,7 @@ import WebTorrent from 'webtorrent';
 
 export default class ServerPeer {
 
-    constructor(topology, remoteLog, peers, roomManager, ice, emitter) {
+    constructor(topology, remoteLog, peers, roomManager, ice, emitter, tracker) {
 
         this.topology = topology;
         this.remoteLog = remoteLog;
@@ -15,6 +15,7 @@ export default class ServerPeer {
         this.roomManager = roomManager;
         this.ice = ice;
         this.emitter = emitter;
+        this.tracker = tracker;
 
         this.webtorrent = {};
     }
@@ -101,10 +102,20 @@ export default class ServerPeer {
         const isProd = process.env.args && process.env.args.includes('prod') || false;
         console.info('prd ' + isProd);
         console.info('process.env ' + inspect(process.argv));
-        const tracker = isProd ? 'wss://photogroup.network/ws' : 'ws://localhost:9000';
-        //const tracker = 'wss://photogroup.network/ws';
+        
+        // Get tracker URL dynamically from the tracker instance, with fallbacks
+        let trackerUrl;
+        if (isProd) {
+            trackerUrl = 'wss://photogroup.network/ws';
+        } else if (this.tracker && this.tracker.getWsUrl()) {
+            trackerUrl = this.tracker.getWsUrl();
+            console.info('Using dynamic tracker URL: ' + trackerUrl);
+        } else {
+            trackerUrl = 'ws://localhost:9000';
+            console.warn('Using fallback tracker URL: ' + trackerUrl);
+        }
 
-        this.webtorrent.client.add(url, { 'announce': tracker }, torrent => {
+        this.webtorrent.client.add(url, { 'announce': trackerUrl }, torrent => {
             remoteLog('wt.add ' + torrent.name);
 
             this.connect(torrent);

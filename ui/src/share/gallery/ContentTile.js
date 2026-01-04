@@ -115,7 +115,7 @@ function ContentTile(props) {
     }, []);
 
     const listenToPreview = useCallback(() => {
-        if(tile.torrentFileThumb && tile.isAudio) {
+        if(tile.torrentFileThumb && tile.isAudio && typeof tile.torrentFileThumb.getBlobURL === 'function') {
             const file = tile.torrentFileThumb;
             tile.torrentFileThumb.getBlobURL((err, url) => {
                 if(err) {

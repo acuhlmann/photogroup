@@ -55,19 +55,32 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
     page2 = await context2.newPage();
   }
 
-  // Step 1: Browser 1 - Navigate to app
-  await page1.goto('/');
-  
-  // Set up console logging to catch errors
+  // Set up console logging for both browsers
   page1.on('console', msg => {
     if (msg.type() === 'error') {
-      console.log('Browser console error:', msg.text());
+      console.log('[B1 error]', msg.text());
     }
   });
   
   page1.on('pageerror', error => {
-    console.log('Page error:', error.message);
+    console.log('[B1 pageerror]', error.message);
   });
+  
+  page2.on('console', msg => {
+    const text = msg.text();
+    if (msg.type() === 'error') {
+      console.log('[B2 error]', text);
+    } else if (text.includes('addMediaToDom') || text.includes('getBlob') || text.includes('blobDone')) {
+      console.log('[B2]', text);
+    }
+  });
+  
+  page2.on('pageerror', error => {
+    console.log('[B2 pageerror]', error.message);
+  });
+
+  // Step 1: Browser 1 - Navigate to app
+  await page1.goto('/');
   
   // Wait for the app to load - look for the "start a Private Room" button
   // The button text is "start a Private Room" (case sensitive in the code)
@@ -249,27 +262,39 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
   // 3. Any indication that content is being loaded
   
   let imageFound = false;
-  let loadingFound = false;
+  let torrentDownloaded = false;
   
-  // Wait up to 60 seconds for either image or loading indicator
-  const maxWaitTime = 60000;
+  // Wait up to 30 seconds for torrent download or image
+  const maxWaitTime = 30000;
   const startTime = Date.now();
   
-  while (Date.now() - startTime < maxWaitTime && !imageFound && !loadingFound) {
-    // Check for images
-    const imageCount = await page2.locator('img').count();
-    if (imageCount > 0) {
-      imageFound = true;
-      console.log(`Browser 2: Found ${imageCount} image(s)`);
+  while (Date.now() - startTime < maxWaitTime && !imageFound && !torrentDownloaded) {
+    // Check for torrent download progress (most reliable)
+    const torrentStatus = await page2.evaluate(() => {
+      if (window.client && window.client.torrents && window.client.torrents.length > 0) {
+        const torrent = window.client.torrents[0];
+        return {
+          infoHash: torrent.infoHash,
+          progress: Math.round(torrent.progress * 100),
+          numPeers: torrent.numPeers
+        };
+      }
+      return null;
+    });
+    
+    if (torrentStatus && torrentStatus.progress === 100) {
+      torrentDownloaded = true;
+      console.log(`Browser 2: Torrent downloaded 100% - ${torrentStatus.infoHash}, peers: ${torrentStatus.numPeers}`);
       break;
+    } else if (torrentStatus) {
+      console.log(`Browser 2: Download progress: ${torrentStatus.progress}%, peers: ${torrentStatus.numPeers}`);
     }
     
-    // Check for loading indicators (percentage text)
-    const loadingCount = await page2.getByText(/%/).count();
-    if (loadingCount > 0) {
-      loadingFound = true;
-      const loadingText = await page2.getByText(/%/).first().textContent();
-      console.log(`Browser 2: Found loading indicator: ${loadingText}`);
+    // Check for images as backup
+    const imageCount = await page2.locator('img[src^="blob:"]').count();
+    if (imageCount > 0) {
+      imageFound = true;
+      console.log(`Browser 2: Found ${imageCount} blob image(s)`);
       break;
     }
     
@@ -277,14 +302,26 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
     await page2.waitForTimeout(1000);
   }
   
-  // Verify that something is happening - either image or loading indicator
-  expect(imageFound || loadingFound).toBeTruthy();
+  // Verify that P2P transfer completed successfully
+  expect(imageFound || torrentDownloaded).toBeTruthy();
   
-  if (imageFound) {
-    console.log('Browser 2: Image is loading or loaded');
-  } else if (loadingFound) {
-    console.log('Browser 2: Image download in progress');
+  if (torrentDownloaded) {
+    console.log('Browser 2: P2P torrent transfer completed successfully');
   }
+  if (imageFound) {
+    console.log('Browser 2: Image rendered in gallery');
+  }
+  
+  // Check if actual image is visible in Browser 2
+  const hasVisibleImage = await page2.evaluate(() => {
+    const imgs = document.querySelectorAll('img[src^="blob:"], img[src^="data:image"]');
+    return imgs.length > 0;
+  });
+  console.log('Browser 2: Has visible blob/data image:', hasVisibleImage);
+  
+  // Wait 500ms so user can see the result
+  console.log('Waiting 500ms for visual inspection...');
+  await page2.waitForTimeout(500);
   
   // Clean up
   if (process.env.SIDE_BY_SIDE === 'true') {

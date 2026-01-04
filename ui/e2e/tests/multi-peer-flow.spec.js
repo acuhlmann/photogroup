@@ -91,37 +91,53 @@ test('three browser P2P photo sharing flow', async ({ browser }) => {
   await fileInput.setInputFiles(testImagePath);
   await page1.waitForTimeout(2000);
 
-  // Step 4: Browser 2 and 3 - Wait for image to appear
-  let imageFound2 = false;
-  let imageFound3 = false;
-  const maxWaitTime = 60000;
+  // Step 4: Browser 2 and 3 - Wait for P2P download
+  let downloaded2 = false;
+  let downloaded3 = false;
+  const maxWaitTime = 30000;
   const startTime = Date.now();
 
-  while (Date.now() - startTime < maxWaitTime && (!imageFound2 || !imageFound3)) {
-    if (!imageFound2) {
-      const imageCount2 = await page2.locator('img').count();
-      if (imageCount2 > 0) {
-        imageFound2 = true;
-        console.log('Browser 2: Found image');
+  while (Date.now() - startTime < maxWaitTime && (!downloaded2 || !downloaded3)) {
+    if (!downloaded2) {
+      const status2 = await page2.evaluate(() => {
+        if (window.client && window.client.torrents && window.client.torrents.length > 0) {
+          const t = window.client.torrents[0];
+          return { progress: Math.round(t.progress * 100), peers: t.numPeers };
+        }
+        return null;
+      });
+      if (status2 && status2.progress === 100) {
+        downloaded2 = true;
+        console.log(`Browser 2: Downloaded 100%, peers: ${status2.peers}`);
+      } else if (status2) {
+        console.log(`Browser 2: Progress ${status2.progress}%, peers: ${status2.peers}`);
       }
     }
 
-    if (!imageFound3) {
-      const imageCount3 = await page3.locator('img').count();
-      if (imageCount3 > 0) {
-        imageFound3 = true;
-        console.log('Browser 3: Found image');
+    if (!downloaded3) {
+      const status3 = await page3.evaluate(() => {
+        if (window.client && window.client.torrents && window.client.torrents.length > 0) {
+          const t = window.client.torrents[0];
+          return { progress: Math.round(t.progress * 100), peers: t.numPeers };
+        }
+        return null;
+      });
+      if (status3 && status3.progress === 100) {
+        downloaded3 = true;
+        console.log(`Browser 3: Downloaded 100%, peers: ${status3.peers}`);
+      } else if (status3) {
+        console.log(`Browser 3: Progress ${status3.progress}%, peers: ${status3.peers}`);
       }
     }
 
-    if (!imageFound2 || !imageFound3) {
+    if (!downloaded2 || !downloaded3) {
       await page2.waitForTimeout(1000);
-      await page3.waitForTimeout(1000);
     }
   }
 
-  expect(imageFound2).toBeTruthy();
-  expect(imageFound3).toBeTruthy();
+  expect(downloaded2).toBeTruthy();
+  expect(downloaded3).toBeTruthy();
+  console.log('All browsers successfully received the image via P2P!');
 
   // Clean up
   // Clean up

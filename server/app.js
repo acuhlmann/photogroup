@@ -49,10 +49,24 @@ const started = new Promise((resolve, reject) => {
 
     if (isMainModule) {
         const server = app.listen(webPort, () => {
-            const host = server.address().address;
-            const actualPort = server.address().port;
-            console.log(`App started at ${host}:${actualPort}`);
+            const addr = server.address();
+            if (addr) {
+                const host = addr.address;
+                const actualPort = addr.port;
+                console.log(`App started at ${host}:${actualPort}`);
+            } else {
+                console.log(`App started on port ${webPort}`);
+            }
             resolve();
+        });
+        
+        server.on('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                console.error(`Error: Port ${webPort} is already in use. Please stop the other process or use a different port.`);
+            } else {
+                console.error('Server error:', err.message);
+            }
+            reject(err);
         });
     } else {
         // When imported as a module (e.g., in tests), resolve immediately

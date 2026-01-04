@@ -141,6 +141,27 @@ export default class RoomsService {
                 Logger.debug('__rtcConfig__ err ' + err);
             });
     }
+    
+    /**
+     * Get the tracker WebSocket configuration from the server
+     * @returns {Promise<{wsUrl: string, port: number}>} The tracker configuration
+     */
+    getTrackerConfig() {
+        return fetch('/api/__trackerConfig__')
+            .then(response => {
+                return response.json();
+            })
+            .then(json => {
+                delete json.comment;
+                Logger.debug('trackerConfig: ' + JSON.stringify(json));
+                return json;
+            })
+            .catch(err => {
+                Logger.warn('__trackerConfig__ err ' + err);
+                // Fallback to default local WebSocket URL
+                return { wsUrl: 'ws://127.0.0.1:9000', port: 9000 };
+            });
+    }
 
     get peerData() {
         return {
