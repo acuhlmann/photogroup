@@ -2,12 +2,21 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { createWriteStream } from 'fs';
 import ServerSetup from './ServerSetup.js';
 import EventEmitter from 'eventemitter3';
 import IceServers from './IceServers.js';
 import IpTranslator from './IpTranslator.js';
 import Tracker from './Tracker.js';
 import Rooms from './Rooms.js';
+
+// Helper for immediate logging with file backup (for PowerShell buffering issues)
+const logFile = createWriteStream(path.join(dirname(fileURLToPath(import.meta.url)), 'server.log'), { flags: 'a' });
+function logImmediate(...args) {
+    const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ') + '\n';
+    console.log(...args);
+    logFile.write(`[${new Date().toISOString()}] ${message}`);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,17 +34,31 @@ const app = setup.app;
 const emitter = new EventEmitter();
 
 async function init() {
+    // Force unbuffered output for immediate logging
+    if (process.stdout.isTTY) {
+        process.stdout.setDefaultEncoding('utf8');
+    }
+    
+    logImmediate('[App] ========================================');
+    logImmediate('[App] Initializing PhotoGroup Server...');
+    logImmediate('[App] IP translation enabled:', process.env.ENABLE_IP_LOOKUP !== 'false');
+    logImmediate('[App] ========================================');
 
     IpTranslator.lookedUpIPs = new Map();
+    logImmediate('[App] IpTranslator initialized');
 
     const ice = new IceServers(updateChannel, remoteLog, app);
     await ice.start();
+    logImmediate('[App] IceServers started');
 
     const tracker = new Tracker(updateChannel, remoteLog, app, emitter);
     await tracker.start();
+    logImmediate('[App] Tracker started');
 
     const rooms = new Rooms(updateChannel, remoteLog, app, emitter, ice, tracker);
     rooms.start();
+    logImmediate('[App] Rooms started');
+    logImmediate('[App] Initialization complete - server ready');
 }
 
 init().catch(err => {
@@ -53,10 +76,12 @@ const started = new Promise((resolve, reject) => {
             if (addr) {
                 const host = addr.address;
                 const actualPort = addr.port;
-                console.log(`App started at ${host}:${actualPort}`);
+                logImmediate(`[App] Server listening at ${host}:${actualPort}`);
             } else {
-                console.log(`App started on port ${webPort}`);
+                logImmediate(`[App] Server listening on port ${webPort}`);
             }
+            logImmediate('[App] Ready to accept connections');
+            logImmediate('[App] Waiting for peers to connect...');
             resolve();
         });
         

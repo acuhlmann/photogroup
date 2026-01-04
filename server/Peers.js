@@ -32,12 +32,24 @@ export default class Peers {
         if(!peer.networkChain) {
             peer.networkChain = [];
         }
+        console.log(`[Peers] create: peer ${peer.peerId} with ${peer.networkChain?.length || 0} networkChain items`);
+        // Initialize network property for all chain items immediately
+        // This ensures the UI has the structure even before enrichment completes
+        peer.networkChain.forEach(item => {
+            if (item && item.ip && !item.network) {
+                item.network = IpTranslator.createEmptyIpObj(item.ip);
+            }
+        });
         this.webPeers.set(peer.peerId, peer);
         this.sendWebPeers('add', peer);
+        // Enrich asynchronously and send update when complete
         IpTranslator.enrichNetworkChainIPs(peer.networkChain).then(results => {
+            console.log(`[Peers] create: enrichment completed for peer ${peer.peerId}, sending update`);
             if(results && results.length > 0) {
                 this.sendWebPeers('update', peer);
             }
+        }).catch(err => {
+            console.error(`[Peers] create: enrichment failed for peer ${peer.peerId}:`, err);
         });
         return this.peers;
     }
@@ -71,19 +83,39 @@ export default class Peers {
 
     updatePeer(peer, update) {
         const newPeer = _.merge(peer, update);
+        // Initialize network property for any new chain items
+        if(newPeer.networkChain) {
+            newPeer.networkChain.forEach(item => {
+                if (item && item.ip && !item.network) {
+                    item.network = IpTranslator.createEmptyIpObj(item.ip);
+                }
+            });
+        }
         this.webPeers.set(peer.peerId, newPeer);
         this.sendWebPeers('update', newPeer);
-        IpTranslator.enrichNetworkChainIPs(newPeer.networkChain).then(results => {
-            if(results && results.length > 0) {
-                this.sendWebPeers('update', newPeer);
-            }
-        });
+        // Enrich asynchronously and send update when complete
+        if(newPeer.networkChain) {
+            IpTranslator.enrichNetworkChainIPs(newPeer.networkChain).then(results => {
+                if(results && results.length > 0) {
+                    this.sendWebPeers('update', newPeer);
+                }
+            });
+        }
     }
 
     createPeer(peerId, update) {
+        // Initialize network property for all chain items immediately
+        if(update.networkChain) {
+            update.networkChain.forEach(item => {
+                if (item && item.ip && !item.network) {
+                    item.network = IpTranslator.createEmptyIpObj(item.ip);
+                }
+            });
+        }
         this.webPeers.set(peerId, update);
         this.sendWebPeers('add', update);
         if(update.networkChain) {
+            // Enrich asynchronously and send update when complete
             IpTranslator.enrichNetworkChainIPs(update.networkChain).then(results => {
                 if(results && results.length > 0) {
                     this.sendWebPeers('update', update);
@@ -116,6 +148,25 @@ export default class Peers {
     }
 
     sendWebPeers(type, item) {
+        // Always log what we're sending (not just in debug mode)
+        if (item.networkChain && item.networkChain.length > 0) {
+            const enrichedItems = item.networkChain.filter(chainItem => chainItem.network && (chainItem.network.city || chainItem.network.connection?.isp));
+            if (enrichedItems.length > 0) {
+                console.log(`[Peers] Sending ${type} for peer ${item.peerId} with ${enrichedItems.length}/${item.networkChain.length} enriched network items`);
+                enrichedItems.forEach(chainItem => {
+                    console.log(`  ✓ ${chainItem.ip}: ${chainItem.network.city || ''} ${chainItem.network.connection?.isp || ''}`);
+                });
+            } else {
+                console.log(`[Peers] Sending ${type} for peer ${item.peerId} - ${item.networkChain.length} networkChain items but NO enriched data`);
+                item.networkChain.forEach(chainItem => {
+                    const hasNetwork = !!chainItem.network;
+                    const networkInfo = hasNetwork ? `network exists but no city/isp` : `no network property`;
+                    console.log(`  - ${chainItem.ip}: ${networkInfo}`);
+                });
+            }
+        } else {
+            console.log(`[Peers] Sending ${type} for peer ${item.peerId} - no networkChain`);
+        }
 
         const clients = [...this.clientsBySessionId.values()];
         this.updateChannel.send({
