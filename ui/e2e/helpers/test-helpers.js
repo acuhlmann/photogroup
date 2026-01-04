@@ -293,11 +293,11 @@ async function positionWindow(page, x, y, width, height) {
  * @returns {Promise<{browser1: Browser, browser2: Browser, context1: BrowserContext, context2: BrowserContext, page1: Page, page2: Page}>}
  */
 async function launchSideBySideBrowsers() {
-  const windowWidth = 420;
-  const windowHeight = 750;
+  const windowWidth = 600;
+  const windowHeight = 1500; // Increased height by 300px for better visibility
   const padding = 50; // Increased padding so windows are fully visible with no overlap
   const startX = 50;
-  const startY = 50;
+  const startY = 0;
   
   const window1X = startX;
   const window2X = startX + windowWidth + padding;
@@ -319,14 +319,14 @@ async function launchSideBySideBrowsers() {
     ]
   });
 
-  // Create contexts with mobile viewport
+  // Create contexts with taller viewport for better visibility
   const context1 = await browser1.newContext({
-    viewport: { width: 375, height: 667 },
+    viewport: { width: 600, height: 1500 },
     permissions: ['clipboard-read', 'clipboard-write']
   });
 
   const context2 = await browser2.newContext({
-    viewport: { width: 375, height: 667 }
+    viewport: { width: 600, height: 1500 }
   });
 
   const page1 = await context1.newPage();
@@ -345,11 +345,11 @@ async function launchSideBySideBrowsers() {
  * @returns {Promise<{browsers: Browser[], contexts: BrowserContext[], pages: Page[]}>}
  */
 async function launchSideBySideBrowsers3() {
-  const windowWidth = 400;
-  const windowHeight = 700;
+  const windowWidth = 600;
+  const windowHeight = 1400;
   const padding = 50; // Increased padding so windows are fully visible with no overlap
   const startX = 50;
-  const startY = 50;
+  const startY = 0;
   
   const window1X = startX;
   const window2X = startX + windowWidth + padding;
@@ -371,7 +371,7 @@ async function launchSideBySideBrowsers3() {
     browsers.push(browser);
 
     const context = await browser.newContext({
-      viewport: { width: 375, height: 667 },
+      viewport: { width: 600, height: 1400 },
       permissions: i === 0 ? ['clipboard-read', 'clipboard-write'] : []
     });
     contexts.push(context);

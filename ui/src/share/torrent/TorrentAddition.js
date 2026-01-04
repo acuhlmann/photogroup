@@ -45,7 +45,13 @@ export default class TorrentAddition {
             });
 
             const torrentId = infoHashes[0][0];
-            const torrent = this.master.client.get(torrentId);
+            let torrent = this.master.client.get(torrentId);
+            
+            // WebTorrent bug: client.get() returns empty object {} instead of null
+            if (torrent && !torrent.infoHash) {
+                torrent = null;
+            }
+            
             if(!torrent) {
                 this._add(torrentId, serverPhotos, false, infoHashes.map(item => item[1]))
             }
@@ -56,12 +62,20 @@ export default class TorrentAddition {
     }
 
     add(torrentId, photo, fromCache) {
-
-        const torrent = this.master.client.get(photo.infoHash);
+        // Extract base infoHash (without file path suffix)
+        const baseInfoHash = photo.infoHash ? photo.infoHash.split('-')[0] : null;
+        let torrent = baseInfoHash ? this.master.client.get(baseInfoHash) : null;
+        
+        // WebTorrent bug: client.get() returns empty object {} instead of null for non-existent torrents
+        if (torrent && !torrent.infoHash) {
+            torrent = null;
+        }
+        
         return new Promise((async (resolve, reject) => {
 
             if(photo.isFake) {
                 reject('Is fake tile for perceived performance.');
+                return;
             }
 
             if(!torrent) {
@@ -69,6 +83,7 @@ export default class TorrentAddition {
                     const result = await this._add(torrentId, [photo], fromCache);
                     resolve(result);
                 } catch(e) {
+                    Logger.error('TorrentAddition.add error: ' + e);
                     reject(e);
                 }
             } else {
@@ -108,8 +123,23 @@ export default class TorrentAddition {
                             photo.torrentFileThumb = localFiles
                                 .find(file => file.path === pathParts[0] + '/' + 'Thumbnail ' + pathParts[1]);
                             photo.torrentFile = files.find(file => file.path === paths[index]);
+                            
+                            // Fallback: if no match by path, try by name
+                            if (!photo.torrentFile) {
+                                photo.torrentFile = files.find(file => file.name === photo.fileName);
+                            }
+                            // Fallback: find any non-thumbnail file
+                            if (!photo.torrentFile) {
+                                photo.torrentFile = files.find(file => !file.name.startsWith('Thumbnail '));
+                            }
                         } else {
                             photo.torrentFile = files.find(file => file.path === paths[index]);
+                        }
+                        
+                        // Final fallback for paths case
+                        if (!photo.torrentFile && files.length > 0) {
+                            photo.torrentFile = files[0];
+                            Logger.debug('torrentFile (paths) using first file: ' + photo.torrentFile.name);
                         }
 
                     } else {
@@ -120,8 +150,22 @@ export default class TorrentAddition {
                             }
                             photo.torrentFileThumb = localFiles.find(file => file.name === 'Thumbnail ' + photo.fileName);
                             photo.torrentFile = files.find(file => file.name === photo.fileName);
+                            
+                            // Fallback: if no exact match, try to find the main file (non-thumbnail)
+                            if (!photo.torrentFile) {
+                                photo.torrentFile = files.find(file => !file.name.startsWith('Thumbnail '));
+                                if (photo.torrentFile) {
+                                    Logger.debug('torrentFile fallback to: ' + photo.torrentFile.name);
+                                }
+                            }
                         } else {
                             photo.torrentFile = files.find(file => file.name === torrent.name);
+                        }
+                        
+                        // Final fallback: use the first file if still not found
+                        if (!photo.torrentFile && files.length > 0) {
+                            photo.torrentFile = files[0];
+                            Logger.debug('torrentFile using first file: ' + photo.torrentFile.name);
                         }
                     }
                     photo.fromCache = fromCache;
@@ -507,7 +551,6 @@ export default class TorrentAddition {
                 });
 
                 this.storeTorrent(torrent).then(torrent => {
-
                     if(photos[0].deleted) {
                         return;
                     }
@@ -616,7 +659,6 @@ export default class TorrentAddition {
 
             torrent.on('error', err => {
                 const errorMsg = err.message || String(err);
-                Logger.error('Torrent error: ' + errorMsg);
                 
                 // Check if this is a tracker/WebSocket connection error (non-fatal)
                 const isConnectionError = errorMsg.includes('WebSocket') || 
@@ -626,11 +668,14 @@ export default class TorrentAddition {
                 
                 if(isConnectionError && torrent && torrent.infoHash) {
                     // Tracker connection failed, but torrent is still valid
-                    // Log warning but don't mark as failed - torrent can still work via DHT/direct connections
-                    Logger.warn('Tracker connection failed, but torrent is still valid: ' + torrent.infoHash);
+                    // Log as debug since this is expected in some browser environments
+                    Logger.debug('Non-fatal torrent error (torrent still valid): ' + errorMsg);
                     // Don't mark photos as failed for connection errors if torrent has infoHash
                     return;
                 }
+                
+                // Only log actual errors at error level
+                Logger.error('Torrent error: ' + errorMsg);
                 
                 // For other errors, mark photos as failed
                 photos.forEach(photo => {
@@ -742,31 +787,39 @@ export default class TorrentAddition {
 
     storeTorrent(torrent) {
         //Once generated, stores the metadata for later use when re-adding the torrent!
-        const parsed = window.parsetorrent(torrent.torrentFile);
+        let parsed;
+        try {
+            parsed = window.parsetorrent(torrent.torrentFile);
+        } catch (e) {
+            Logger.debug('storeTorrent parsetorrent error: ' + e.message);
+            return Promise.resolve(torrent); // Don't fail the whole flow
+        }
+        
         const key = parsed.infoHash;
-        Logger.info('metadata ' + parsed.name + ' ' + key);
 
         return new Promise((resolve, reject) => {
 
             const self = this;
             this.torrentsDb.get(key, (err, value) => {
                 if (err) {
+                    Logger.debug('storeTorrent torrentsDb.get error: ' + err);
+                    resolve(torrent); // Resolve anyway so the flow continues
                     return;
                 }
 
                 if(!value) {
                     try {
                         self.torrentsDb.add(key, parsed, () => {
-                            Logger.warn('IndexedDB added ' + key);
+                            Logger.debug('storeTorrent IndexedDB added ' + key);
                             resolve(torrent);
                         });
                     } catch(e) {
-                        Logger.warn('IndexedDB error saving ' + e.message);
+                        Logger.warn('storeTorrent IndexedDB error saving ' + e.message);
                         resolve(torrent);
                     }
 
                 } else {
-                    Logger.warn('torrent.metadata already added ' + key + ' of name ' + value.name);
+                    Logger.debug('storeTorrent metadata already added ' + key);
                     resolve(torrent);
                 }
             });

@@ -90,7 +90,7 @@ export default class Rooms {
             };
             room.peers = new Peers(this.updateChannel, this.remoteLog, this.app, this.emitter);
             room.topology = new Topology(room.peers, this.updateChannel);
-            //room.serverPeer = new ServerPeer(room.topology, this.remoteLog, this, this.ice, this.emitter);
+            //room.serverPeer = new ServerPeer(room.topology, this.remoteLog, this, this.ice, this.emitter, this.tracker);
             rooms.set(id, room);
 
             joinRoom(room, request, response);

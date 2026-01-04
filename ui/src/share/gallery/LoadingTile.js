@@ -62,7 +62,7 @@ function LoadingTile({tile, master, classes, name}) {
     const [previewThumbnail, setPreviewThumbnail] = useState(null);
 
     const listenToPreview = useCallback(() => {
-        if(tile.loading && tile.torrentFileThumb) {
+        if(tile.loading && tile.torrentFileThumb && typeof tile.torrentFileThumb.getBlobURL === 'function') {
             tile.torrentFileThumb.getBlobURL((err, url) => {
                 if(err) {
                     Logger.error('preview ' + err);

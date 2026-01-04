@@ -13,9 +13,23 @@ export default class TorrentCreator {
         this.torrentAddition = torrentAddition;
     }
 
-    static setupAnnounceUrls() {
-        const isLocal = window.location.href.includes('localhost');
-        const wsUrl = isLocal ? 'ws://' + window.location.hostname + ':9000' : 'wss://' + window.location.hostname + '/ws';
+    /**
+     * Setup announce URLs for WebTorrent
+     * @param {string} [trackerWsUrl] - Optional tracker WebSocket URL from server config
+     */
+    static setupAnnounceUrls(trackerWsUrl) {
+        let wsUrl;
+        
+        if (trackerWsUrl) {
+            // Use the provided tracker URL from server config
+            wsUrl = trackerWsUrl;
+        } else {
+            // Fallback to default behavior (should rarely happen)
+            const isLocal = window.location.href.includes('localhost');
+            wsUrl = isLocal ? 'ws://' + window.location.hostname + ':9000' : 'wss://' + window.location.hostname + '/ws';
+            Logger.warn('Using fallback tracker URL: ' + wsUrl);
+        }
+        
         //window.WEBTORRENT_ANNOUNCE = createTorrent.announceList
         window.WEBTORRENT_ANNOUNCE = []
             .map(arr => {
@@ -29,24 +43,31 @@ export default class TorrentCreator {
         Logger.info('trackers ' + window.WEBTORRENT_ANNOUNCE);
     }
 
-    start() {
+    async start() {
+        // Fetch both RTC config and tracker config in parallel
+        const [iceServers, trackerConfig] = await Promise.all([
+            this.service.getRtcConfig(),
+            this.service.getTrackerConfig()
+        ]);
 
-        return this.service.getRtcConfig().then(iceServers => {
+        if(iceServers && Array.isArray(iceServers.iceServers)) {
+            //TODO: does below make sense to add in addition to Twillio STUN?
+            //seems the default of webtorrent: https://github.com/webtorrent/webtorrent/issues/831
+            //https://github.com/feross/simple-peer/blob/4dcc8a7092e515297613cf2e41197aeb53986248/index.js#L161
+            //iceServers.iceServers.unshift({ urls: 'stun:23.21.150.121' });
+            //iceServers.iceServers.unshift({ urls: 'stun:stun.l.google.com:19302'});
+        }
 
-            if(iceServers && Array.isArray(iceServers.iceServers)) {
-                //TODO: does below make sense to add in addition to Twillio STUN?
-                //seems the default of webtorrent: https://github.com/webtorrent/webtorrent/issues/831
-                //https://github.com/feross/simple-peer/blob/4dcc8a7092e515297613cf2e41197aeb53986248/index.js#L161
-                //iceServers.iceServers.unshift({ urls: 'stun:23.21.150.121' });
-                //iceServers.iceServers.unshift({ urls: 'stun:stun.l.google.com:19302'});
-            }
+        this.iceServers = iceServers;
+        
+        // Store the tracker WebSocket URL for use by other components
+        this.trackerWsUrl = trackerConfig?.wsUrl;
+        Logger.info('Using tracker WebSocket URL: ' + this.trackerWsUrl);
+        
+        this.createWT();
 
-            this.iceServers = iceServers;
-            this.createWT();
-
-            this.emitter.emit('iceDone');
-            this.buildTopology();
-        });
+        this.emitter.emit('iceDone');
+        this.buildTopology();
     }
 
     buildTopology() {
@@ -67,7 +88,7 @@ export default class TorrentCreator {
         });
         Logger.info('client.peerId '+client.peerId);
         window.client = client; // for easier debugging
-        TorrentCreator.setupAnnounceUrls();
+        TorrentCreator.setupAnnounceUrls(this.trackerWsUrl);
         this.client = client;
         this.emitter.emit('wtInitialized', client);
 

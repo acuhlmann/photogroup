@@ -147,7 +147,11 @@ function PiecesLoadingView({master, tile, classes}) {
                             </span>
                         );
                     } else {
-                        const isSelected = torrent._selections?.find(item => _.inRange(index, item.from, item.to));
+                        // Check if _selections exists and is an array with find method
+                        const selections = torrent._selections;
+                        const isSelected = Array.isArray(selections) 
+                            ? selections.find(item => _.inRange(index, item.from, item.to))
+                            : false;
                         brick = isSelected
                             ? <span key={index} className={classes.notStartedSelected}/>
                             : <span key={index} className={classes.notStarted}/>

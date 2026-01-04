@@ -174,7 +174,14 @@ export default class TorrentMaster {
         return new Promise((resolve, reject) => {
 
             if(typeof metadata === 'object' && metadata != null) {
-                if(self.client.get(metadata.infoHash)) {
+                let existingTorrent = self.client.get(metadata.infoHash);
+                
+                // WebTorrent bug: client.get() returns empty object {} instead of null
+                if (existingTorrent && !existingTorrent.infoHash) {
+                    existingTorrent = null;
+                }
+                
+                if(existingTorrent) {
 
                     Logger.info('resurrectTorrent.client.get ' + metadata.name);
                     resolve(metadata);
@@ -410,7 +417,7 @@ export default class TorrentMaster {
 
     syncUiWithServerUrls(photos) {
         const self = this;
-        Logger.debug('photos.length: '+photos.length);
+        Logger.debug('syncUiWithServerUrls photos.length: '+photos.length);
 
         this.client.torrents.forEach(torrent => {
             const urlItem = this.findUrl(photos, torrent.infoHash);
@@ -422,11 +429,24 @@ export default class TorrentMaster {
         });
 
         photos.forEach(item => {
-            const torrent = self.client.get(item.infoHash);
+            // Extract base infoHash (without file path suffix) for client.get()
+            const baseInfoHash = item.infoHash ? item.infoHash.split('-')[0] : null;
+            
+            let torrent = baseInfoHash ? self.client.get(baseInfoHash) : null;
+            
+            // WebTorrent bug: client.get() returns empty object {} instead of null for non-existent torrents
+            if (torrent && !torrent.infoHash) {
+                torrent = null;
+            }
+            
             if(!torrent) {
-                Logger.debug('new photo found on server');
+                Logger.debug('syncUiWithServerUrls adding torrent: ' + baseInfoHash);
 
-                self.torrentAddition.add(item.infoHash, item);
+                self.torrentAddition.add(baseInfoHash || item.infoHash, item).then(result => {
+                    Logger.debug('syncUiWithServerUrls add success: ' + (result ? result.infoHash : 'null'));
+                }).catch(err => {
+                    Logger.warn('syncUiWithServerUrls add failed: ' + err);
+                });
             }
 
             /*if(torrent && torrent.files && torrent.files.length < 1 && item.owners.find(owner => owner.peerId === this.client.peerId)) {
