@@ -59,9 +59,38 @@ gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo sys
 # Obtain certificates using certbot with nginx plugin
 echo "Obtaining SSL certificates from Let's Encrypt..."
 echo "Note: This requires DNS to be pointing to the VM's external IP"
-gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN -d $HACKERNEWS_SUBDOMAIN --non-interactive --agree-tos --email $EMAIL --redirect"
+echo "Note: Ensure nginx configuration is deployed first (run ./deploy-nginx.sh if needed)"
+if ! gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN -d $HACKERNEWS_SUBDOMAIN --non-interactive --agree-tos --email $EMAIL --redirect"; then
+    echo "ERROR: Failed to obtain SSL certificates"
+    echo "Make sure:"
+    echo "  1. DNS is configured and pointing to the VM's IP"
+    echo "  2. Nginx configuration is deployed (./deploy-nginx.sh)"
+    echo "  3. All three domains resolve to the VM: $DOMAIN, www.$DOMAIN, $HACKERNEWS_SUBDOMAIN"
+    exit 1
+fi
+
+# Verify certificate includes all domains
+echo ""
+echo "Verifying certificate includes all domains..."
+CERT_OUTPUT=$(gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo certbot certificates" 2>/dev/null)
+if ! echo "$CERT_OUTPUT" | grep -q "$DOMAIN"; then
+    echo "ERROR: Certificate verification failed - $DOMAIN not found in certificate"
+    exit 1
+fi
+if ! echo "$CERT_OUTPUT" | grep -q "www.$DOMAIN"; then
+    echo "ERROR: Certificate verification failed - www.$DOMAIN not found in certificate"
+    exit 1
+fi
+if ! echo "$CERT_OUTPUT" | grep -q "$HACKERNEWS_SUBDOMAIN"; then
+    echo "ERROR: Certificate verification failed - $HACKERNEWS_SUBDOMAIN not found in certificate"
+    echo "Certificate domains found:"
+    echo "$CERT_OUTPUT" | grep -A 5 "Certificate Name:"
+    exit 1
+fi
+echo "✓ Certificate verified: includes $DOMAIN, www.$DOMAIN, and $HACKERNEWS_SUBDOMAIN"
 
 # Set up automatic renewal
+echo ""
 echo "Setting up automatic certificate renewal..."
 gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo systemctl enable certbot.timer"
 gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo systemctl start certbot.timer"
@@ -73,5 +102,6 @@ gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "sudo cer
 echo ""
 echo "SSL setup complete!"
 echo "Certificates are located at: /etc/letsencrypt/live/$DOMAIN/"
+echo "Certificate includes: $DOMAIN, www.$DOMAIN, and $HACKERNEWS_SUBDOMAIN"
 echo "Automatic renewal is configured via certbot.timer"
 
