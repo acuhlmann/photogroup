@@ -57,8 +57,9 @@ gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "
   sudo pm2 stop app 2>/dev/null || true
   sudo pm2 delete app 2>/dev/null || true
   
-  # Start app with fixed absolute path (consistent across all deploying users)
-  sudo pm2 start $APP_DIR/app.js --name app --cwd $APP_DIR
+  # Start app using npm start (required for ES modules support)
+  # PM2 has issues directly loading ES module files, so we use npm start
+  cd $APP_DIR && sudo pm2 start npm --name app -- start
   sudo pm2 save
 " 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
 
