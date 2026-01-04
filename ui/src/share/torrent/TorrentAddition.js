@@ -677,21 +677,24 @@ export default class TorrentAddition {
         const remotePeerId = wire.peerId.toString();
         const myPeerId = this.master.client.peerId;
         
-        // Report connection on wire event to show connection lines in TopologyView
-        this.master.peers.connectWire(myPeerId, torrent, remotePeerId, wire.remoteAddress, wire.remotePort);
+        // For WebRTC connections, wire.remoteAddress is undefined
+        // Report connection with just peerIds - server will infer connection type from networkChains
+        const remoteAddr = wire.remoteAddress || (addr ? addr.split(':')[0] : null);
+        const remotePort = wire.remotePort || (addr ? parseInt(addr.split(':')[1]) : null);
+        
+        // Report connection for TopologyView - server uses peerIds to look up network info
+        this.master.peers.connectWire(myPeerId, torrent, remotePeerId, remoteAddr, remotePort);
 
-        if(remotePeerId && wire.remoteAddress) {
+        if(remotePeerId && remoteAddr) {
             const peer = this.master.peers.items.find(item => item.peerId == remotePeerId);
             if(peer) {
-                const network = peer.networkChain ? peer.networkChain.find(item => item.ip === wire.remoteAddress) : null;
+                const network = peer.networkChain ? peer.networkChain.find(item => item.ip === remoteAddr) : null;
                 if(network) {
                     Logger.info('wire peer ' + StringUtil.createNetworkLabel(network) + ' ' + addr);
                     return;
                 }
             }
             Logger.info('wire ' + addr);
-        } else {
-            Logger.info('wire no peerId: ' + remotePeerId);
         }
     }
 

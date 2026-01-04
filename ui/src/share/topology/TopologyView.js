@@ -233,7 +233,8 @@ function TopologyView(props) {
         if(hosts.length > 1) {
             //Logger.warn('multiple hosts found ' + JSON.stringify(hosts));
         }
-        const host = hosts.find(item => item.label);
+        // Use first host if none have label, as labels may not be set for remote peers
+        const host = hosts.find(item => item.label) || hosts[0];
         if(host) {
             const platform = StringUtil.slimPlatform(peer.originPlatform);
             const node = {
@@ -260,9 +261,10 @@ function TopologyView(props) {
         const nats = peer.networkChain.filter(item => isNatType(item.typeDetail));
         if(nats.length > 1) {
             Logger.warn('multiple nats found '
-                + nats.length + ': ' + nats.map(item => item.label || item.hostname).join(', '));
+                + nats.length + ': ' + nats.map(item => item.label || item.hostname || item.ip).join(', '));
         }
-        const nat = nats.find(item => item.label);
+        // Use first nat if none have label, as labels may not be set for remote peers
+        const nat = nats.find(item => item.label) || nats[0];
         if(nat) {
             if(nodes.find(item => item.id === nat.ip)) return nat;
             const node = {
