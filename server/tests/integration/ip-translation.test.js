@@ -18,10 +18,7 @@ describe('IP Translation Integration', () => {
     before(async () => {
         await started;
         
-        // Reset IpTranslator cache before tests
-        if (!IpTranslator.lookedUpIPs) {
-            IpTranslator.lookedUpIPs = new Map();
-        }
+        // Reset IpTranslator state before tests
         IpTranslator.reset();
     });
 
