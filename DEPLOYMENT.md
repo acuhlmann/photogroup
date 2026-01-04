@@ -86,7 +86,13 @@ The project is configured to use Let's Encrypt SSL certificates. Set up SSL cert
 
 2. **Update email in setup-ssl.sh** (if needed): Email is already set to `acuhlmann@gmail.com`
 
-3. **Run the SSL setup script from your local machine**:
+3. **Deploy nginx configuration first** (required before SSL setup):
+   ```bash
+   ./deploy-nginx.sh
+   ```
+   This ensures nginx is configured to handle all three domains before certbot runs.
+
+4. **Run the SSL setup script from your local machine**:
    ```bash
    ./setup-ssl.sh
    ```
@@ -97,11 +103,14 @@ The project is configured to use Let's Encrypt SSL certificates. Set up SSL cert
 
 This will:
 - Install certbot on the VM
-- Obtain SSL certificates from Let's Encrypt (including `hackernews.photogroup.network`)
+- Obtain SSL certificates from Let's Encrypt for all three domains: `photogroup.network`, `www.photogroup.network`, and `hackernews.photogroup.network`
+- Verify the certificate includes all three domains
 - Configure automatic renewal
 - Update nginx configuration for HTTPS
 
-**Important**: DNS must be pointing to the VM before running this script, as Let's Encrypt needs to verify domain ownership.
+**Important**: 
+- DNS must be pointing to the VM before running this script, as Let's Encrypt needs to verify domain ownership for all three domains
+- Nginx configuration must be deployed first (step 3 above) so certbot can properly configure SSL
 
 ## Deployment Process
 
@@ -303,6 +312,7 @@ gcloud compute ssh main --project photogroup-215600 --zone asia-east2-a --comman
 - Check certificate status: `gcloud compute ssh main --project photogroup-215600 --zone asia-east2-a --command "sudo certbot certificates"`
 - Verify nginx config: `gcloud compute ssh main --project photogroup-215600 --zone asia-east2-a --command "sudo nginx -t"`
 - Check Let's Encrypt rate limits if certificate requests fail
+- **If certificate is missing `hackernews.photogroup.network`** (e.g., from an older setup): Run `./fix-ssl-subdomain.sh` to expand the existing certificate to include all three domains. Note: New VMs set up with `./setup-ssl.sh` will automatically include all domains, so this script is only needed for fixing existing certificates.
 
 ### Application Not Starting
 - Check PM2 status: `gcloud compute ssh main --project photogroup-215600 --zone asia-east2-a --command "pm2 list"`
