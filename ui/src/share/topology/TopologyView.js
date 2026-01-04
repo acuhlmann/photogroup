@@ -44,11 +44,11 @@ function TopologyView(props) {
     masterRef.current = master;
 
     const [visible, setVisible] = useState(false);
-    const [showTopology, setShowTopology] = useState(false);
+    const [showTopology, setShowTopology] = useState(true);
     const [wtNumPeers, setWtNumPeers] = useState(0);
     const [expandedTopology, setExpandedTopology] = useState(() => {
-        const expandedTopology = localStorage.getItem('expandedTopology') || true;
-        return String(expandedTopology) == 'true';
+        const expandedTopology = localStorage.getItem('expandedTopology');
+        return expandedTopology === null ? false : String(expandedTopology) === 'true';
     });
     const [graph, setGraph] = useState({
         nodes: [], edges: []

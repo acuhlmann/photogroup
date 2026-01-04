@@ -96,6 +96,32 @@ export default class IceServers {
         this.registerGet();
     }
 
+    /**
+     * Get diagnostic info about ICE servers
+     */
+    getIceServerDiagnostics() {
+        if (!this.iceServers || this.iceServers.length === 0) {
+            return { hasStun: false, hasTurn: false, total: 0, stunCount: 0, turnCount: 0 };
+        }
+        
+        const stunServers = this.iceServers.filter(s => 
+            (s.urls && s.urls.toString().startsWith('stun:')) || 
+            (s.url && s.url.toString().startsWith('stun:'))
+        );
+        const turnServers = this.iceServers.filter(s => 
+            (s.urls && s.urls.toString().startsWith('turn:')) || 
+            (s.url && s.url.toString().startsWith('turn:'))
+        );
+        
+        return {
+            hasStun: stunServers.length > 0,
+            hasTurn: turnServers.length > 0,
+            total: this.iceServers.length,
+            stunCount: stunServers.length,
+            turnCount: turnServers.length
+        };
+    }
+
     registerGet() {
         const self = this;
 
@@ -110,13 +136,21 @@ export default class IceServers {
             // Always return 200 for health checks (Playwright webServer needs 200 status)
             // In test mode or when iceServers not initialized, return empty array
             if (!self.iceServers) {
-                return res.status(200).send({ iceServers: [] });
+                console.log('ICE config requested but no servers available yet');
+                return res.status(200).send({ iceServers: [], diagnostics: { hasStun: false, hasTurn: false } });
+            }
+
+            const diagnostics = self.getIceServerDiagnostics();
+            
+            // Log diagnostic info for debugging connectivity issues
+            if (!diagnostics.hasTurn) {
+                console.warn('WARNING: No TURN servers available - cross-network connections may fail');
             }
 
             res.send({
-                //ip: res.connection._peername,
                 comment: 'WARNING: This is *NOT* a public endpoint. Do not depend on it in your app',
-                iceServers: self.iceServers
+                iceServers: self.iceServers,
+                diagnostics: diagnostics
             })
         });
     }
@@ -129,20 +163,23 @@ export default class IceServers {
         if(!this.twilioClient) return;
         this.twilioClient.tokens.create({}, function (err, token) {
             if (err) {
-                const msg = err.message || err;
+                const msg = 'Twilio ICE servers fetch failed: ' + (err.message || err);
                 updateChannel.send({
                     event: 'discoveryMessage',
                     data: msg
                 });
-                return console.error(msg);
+                console.error(msg);
+                console.error('Cross-network WebRTC connections may fail without TURN servers');
+                return;
             }
             if (!token.iceServers) {
-                const msg = 'twilio response missing iceServers';
+                const msg = 'Twilio response missing iceServers - TURN relay unavailable';
                 updateChannel.send({
                     event: 'discoveryMessage',
                     data: msg
                 });
-                return console.error(msg);
+                console.error(msg);
+                return;
             }
 
             // Support new spec (`RTCIceServer.url` was renamed to `RTCIceServer.urls`)
@@ -154,8 +191,15 @@ export default class IceServers {
                 return server
             });
 
-            console.log('ice.length ' + self.iceServers.length);
-            console.log('ice ' + inspect(self.iceServers));
+            // Log diagnostics about fetched servers
+            const diagnostics = self.getIceServerDiagnostics();
+            console.log(`ICE servers updated: ${diagnostics.total} total (${diagnostics.stunCount} STUN, ${diagnostics.turnCount} TURN)`);
+            if (diagnostics.hasTurn) {
+                console.log('TURN relay servers available - cross-network connections supported');
+            } else {
+                console.warn('WARNING: No TURN servers - only direct/NAT connections possible');
+            }
+            console.log('ICE servers: ' + inspect(self.iceServers));
         })
     }
 };
