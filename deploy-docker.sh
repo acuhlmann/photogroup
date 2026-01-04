@@ -55,7 +55,12 @@ fi
 
 # Build Docker image locally
 echo "Building Docker image locally..."
-if ! docker build -t $IMAGE_NAME:latest .; then
+BUILD_ARGS=""
+if [ -n "$VITE_APP_VERSION" ]; then
+    BUILD_ARGS="--build-arg VITE_APP_VERSION=$VITE_APP_VERSION"
+    echo "Using VITE_APP_VERSION: $VITE_APP_VERSION"
+fi
+if ! docker build $BUILD_ARGS -t $IMAGE_NAME:latest .; then
     echo "ERROR: Failed to build Docker image"
     exit 1
 fi
@@ -103,6 +108,13 @@ run_gcloud_ssh "
     # Load the Docker image
     docker load -i /tmp/${IMAGE_NAME}.tar
     rm -f /tmp/${IMAGE_NAME}.tar
+    
+    # Stop PM2 processes if any (transitioning from PM2 to Docker deployment)
+    sudo pm2 stop app 2>/dev/null || true
+    sudo pm2 delete app 2>/dev/null || true
+    # Also kill any processes on ports 8081/9000 in case they're running outside PM2
+    sudo lsof -ti:8081 | xargs sudo kill -9 2>/dev/null || true
+    sudo lsof -ti:9000 | xargs sudo kill -9 2>/dev/null || true
     
     # Stop and remove existing container if it exists
     docker stop $CONTAINER_NAME 2>/dev/null || true
