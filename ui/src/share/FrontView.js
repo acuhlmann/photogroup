@@ -7,7 +7,6 @@ import Button from '@mui/material/Button';
 import PlayCircleFilledWhiteRoundedIcon from '@mui/icons-material/PlayCircleFilledWhiteRounded';
 import {Typography} from "@mui/material";
 import CropFreeRounded from '@mui/icons-material/CropFreeRounded';
-import SettingsVoiceRounded from '@mui/icons-material/SettingsVoiceRounded';
 import IconButton from "@mui/material/IconButton";
 import Slide from "@mui/material/Slide";
 
@@ -98,28 +97,13 @@ function FrontView({classes, master}) {
                     start a Private Room
                 </Button>
                 <Typography variant={"body2"}>or join another room via</Typography>
-                <span className={classes.vertical}>
-                    <span className={classes.horizontal}>
-                        <Typography variant={"body2"}>Scanning a QR code</Typography>
-                        <IconButton
-                            onClick={() => master.emitter.emit('openQr')}
-                            color="inherit">
-                            <CropFreeRounded />
-                        </IconButton>
-                    </span>
-                    <span className={classes.horizontal}>
-                        <Typography variant={"body2"}>Listening to an audio signal</Typography>
-                        <IconButton 
-                            color="secondary"
-                            onClick={() => master.emitter.emit('openRecorder')}>
-                            <SettingsVoiceRounded />
-                        </IconButton>
-                        <IconButton 
-                            color="inherit"
-                            onClick={() => master.emitter.emit('openRecorderUltrasonic')}>
-                            <SettingsVoiceRounded />
-                        </IconButton>
-                    </span>
+                <span className={classes.horizontal}>
+                    <Typography variant={"body2"}>Scanning a QR code</Typography>
+                    <IconButton
+                        onClick={() => master.emitter.emit('openQr')}
+                        color="inherit">
+                        <CropFreeRounded />
+                    </IconButton>
                 </span>
             </div>
         );

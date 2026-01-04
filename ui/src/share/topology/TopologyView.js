@@ -190,11 +190,17 @@ function TopologyView(props) {
     }, []);
 
     const createShortNetworkLabel = useCallback((item) => {
-        return StringUtil.addEmptySpaces([
-            StringUtil.stripSrflx(item.typeDetail),
-            _.get(item, 'network.location.country_flag_emoji'),
-            _.truncate((_.get(item, 'network.connection.isp') || item.ip)) + '\n'
-        ]);
+        // Use StringUtil.createNetworkLabel to show IP with location and ISP info
+        // For short labels in the graph, truncate if needed but keep IP visible
+        const fullLabel = StringUtil.createNetworkLabel(item, '\n', false);
+        const lines = fullLabel.split('\n');
+        // Ensure IP is always shown, truncate other lines if needed
+        if (lines.length > 0) {
+            const ipLine = lines[0];
+            const otherLines = lines.slice(1).map(line => _.truncate(line, { length: 30 }));
+            return [ipLine, ...otherLines].join('\n');
+        }
+        return fullLabel;
     }, []);
 
     const addUserIcon = useCallback((node, platform, isMe) => {
@@ -345,14 +351,20 @@ function TopologyView(props) {
                     const values = [...node.relays.values()];
                     const ips = values.map(item => item.ip).join(',');
                     const ports = values.map(item => item.port).join(',');
-                    node.network.ip = ips;
-                    label = StringUtil.createNetworkLabel(node.network, '\n');
-                    label += (network.transport ? network.transport.toLowerCase() : '')
-                        + ' ' + ips + ':' + ports;
+                    // Create a temporary network object with IP for display
+                    const relayNetwork = { ...node.network, ip: ips };
+                    label = StringUtil.createNetworkLabel(relayNetwork, '\n');
+                    // Add transport and port info on a new line
+                    if (network.transport) {
+                        label += '\n' + network.transport.toLowerCase() + ' ' + ips + ':' + ports;
+                    } else {
+                        label += '\n' + ips + ':' + ports;
+                    }
                     setSelectedNodeLabel(label);
                     return;
                 } else {
-                    label = StringUtil.createNetworkLabel(node.network, '\n', true) + '\n';
+                    // For NAT nodes, use createNetworkLabel which now shows IP on first line
+                    label = StringUtil.createNetworkLabel(node.network, '\n', true);
                 }
 
                 if(node.networks) {

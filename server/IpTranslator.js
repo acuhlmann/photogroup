@@ -89,13 +89,17 @@ export default class IpTranslator {
                                 ip: json.query || ip,
                                 hostname: json.reverse || '',
                                 country_code: json.countryCode || null,
+                                country: json.country || null,
                                 city: json.city || null,
+                                region: json.region || null,
                                 region_name: json.regionName || null,
                                 location: {
                                     country_flag_emoji: json.countryCode ? IpTranslator.getCountryFlagEmoji(json.countryCode) : null
                                 },
                                 connection: {
-                                    isp: json.isp || json.org || null
+                                    isp: json.isp || json.org || null,
+                                    org: json.org || null,
+                                    as: json.as || null
                                 }
                             };
                             
@@ -131,13 +135,17 @@ export default class IpTranslator {
             "ip": ip,
             "hostname": isLocal(ip) ? 'localhost' : '',
             "country_code": null,
+            "country": null,
             "city": null,
+            "region": null,
             "region_name": null,
             "location": {
                 "country_flag_emoji": null
             },
             "connection": {
-                "isp": null
+                "isp": null,
+                "org": null,
+                "as": null
             }
         };
     }

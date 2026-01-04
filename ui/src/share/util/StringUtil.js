@@ -31,19 +31,48 @@ export default class StringUtil {
     }
 
     static createNetworkLabel(item, ispSeparator='', noStripping) {
-
-        let country = StringUtil.addEmptySpaces([
-            noStripping ? item.typeDetail : StringUtil.stripSrflx(item.typeDetail),
-            _.get(item, 'network.location.country_flag_emoji'),
-            _.get(item, 'network.city')
-        ]).trim();
-
-        const host = StringUtil.addEmptySpaces([
-            (_.get(item, 'network.connection.isp') || item.ip) + ispSeparator,
-            _.get(item, 'network.hostname')
-        ]);
-
-        country = country ? country + ', ' : country;
-        return country + host;
+        // Always show IP address on first line
+        const ip = item.ip || _.get(item, 'network.ip') || '';
+        
+        // Build location line: city, region, country with flag emoji
+        const locationParts = [];
+        if (noStripping ? item.typeDetail : StringUtil.stripSrflx(item.typeDetail)) {
+            locationParts.push(noStripping ? item.typeDetail : StringUtil.stripSrflx(item.typeDetail));
+        }
+        const countryFlag = _.get(item, 'network.location.country_flag_emoji');
+        if (countryFlag) {
+            locationParts.push(countryFlag);
+        }
+        const city = _.get(item, 'network.city');
+        const regionName = _.get(item, 'network.region_name');
+        const country = _.get(item, 'network.country');
+        
+        const locationDetails = [];
+        if (city) locationDetails.push(city);
+        if (regionName) locationDetails.push(regionName);
+        if (country) locationDetails.push(country);
+        
+        const locationLine = locationParts.length > 0 
+            ? locationParts.join(' ') + (locationDetails.length > 0 ? ' ' + locationDetails.join(', ') : '')
+            : locationDetails.join(', ');
+        
+        // Build ISP line
+        const isp = _.get(item, 'network.connection.isp') || _.get(item, 'network.connection.org') || null;
+        const hostname = _.get(item, 'network.hostname');
+        
+        // Build the full label with IP on first line
+        const lines = [ip];
+        
+        if (locationLine) {
+            lines.push(locationLine);
+        }
+        
+        if (isp) {
+            lines.push(isp);
+        } else if (hostname) {
+            lines.push(hostname);
+        }
+        
+        return lines.join(ispSeparator || '\n');
     }
 }

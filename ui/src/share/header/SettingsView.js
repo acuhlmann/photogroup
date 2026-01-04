@@ -7,7 +7,6 @@ import { withStyles } from '@mui/styles';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Settings from '@mui/icons-material/Settings';
-import Bluetooth from '@mui/icons-material/BluetoothSearching';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
@@ -15,9 +14,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogActions from '@mui/material/DialogActions';
 
 import List from '@mui/material/List';
-/*import ListItem from '@mui/material/ListItem';
-import ListItemText from '@mui/material/ListItemText';
-import { FixedSizeList } from 'react-window';*/
 
 import Switch from '@mui/material/Switch';
 import FormGroup from '@mui/material/FormGroup';
@@ -157,89 +153,6 @@ function SettingsView(props) {
         setOpen(false);
     }, []);
 
-    const onDisconnected = useCallback((event) => {
-        let device = event.target;
-        Logger.info('Device ' + device.name + ' is disconnected.');
-    }, []);
-
-    const handleBatteryLevelChanged = useCallback((event) => {
-        let value = event.target.value.getUint8(0);
-        Logger.info('handleBatteryLevelChanges ' + JSON.stringify(event));
-        Logger.info('handleBatteryLevelChanges value ' + value);
-    }, []);
-
-    const requestLES = useCallback(() => {
-        if(!navigator.bluetooth.requestLEScan && typeof navigator.bluetooth.requestLEScan !== 'function')
-            return;
-
-        navigator.bluetooth.requestLEScan({
-            filters: [{manufacturerData: {0x004C: {dataPrefix: new Uint8Array([
-                            0x02, 0x15, // iBeacon identifier.
-                            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15  // My beacon UUID.
-                        ])}}}],
-            keepRepeatedDevices: true
-        }).then(() => {
-            navigator.bluetooth.addEventListener('advertisementreceived', event => {
-                let appleData = event.manufacturerData.get(0x004C);
-                if (appleData.byteLength !== 23) {
-                    // Isn't an iBeacon.
-                    return;
-                }
-                let major = appleData.getUint16(18, false);
-                let minor = appleData.getUint16(20, false);
-                let txPowerAt1m = -appleData.getInt8(22);
-                let pathLossVs1m = txPowerAt1m - event.rssi;
-
-                Logger.info(major, minor, pathLossVs1m);
-            });
-        })
-    }, []);
-
-    const requestBLE = useCallback(() => {
-        if(!navigator.bluetooth) {
-            Logger.info('navigator.bluetooth not available');
-        } else {
-            if(navigator.bluetooth.getAvailability && typeof navigator.bluetooth.getAvailability === 'function') {
-                navigator.bluetooth.getAvailability()
-                    .then(availability => {
-                        Logger.info('bluetooth.availability ' + availability);
-                    })
-                    .catch((e) => {
-                        Logger.info('bluetooth.availability.e ' + JSON.stringify(e));
-                    });
-            } else {
-                Logger.info('bluetooth.getAvailability() not available');
-            }
-
-            requestLES();
-
-            navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-            })
-                .then(device => {
-                    Logger.info('bluetooth.device ' + device.name + ' ' + device.id);
-                    device.addEventListener('gattserverdisconnected', onDisconnected);
-                    return device.gatt.connect();
-                })
-                .then(server => {
-                    return server.getPrimaryService('battery_service');
-                })
-                .then(service => {
-                    return service.getCharacteristic('battery_level');
-                })
-                .then(characteristic => {
-                    characteristic.addEventListener('characteristicvaluechanged', handleBatteryLevelChanged);
-                    return characteristic.readValue();
-                })
-                .then(value => {
-                    Logger.info('Battery percentage is ' + value.getUint8(0));
-                })
-                .catch(error => {
-                    Logger.error('bluetooth.error ' + error.name + ' ' + error.message);
-                });
-        }
-    }, [requestLES, onDisconnected, handleBatteryLevelChanged]);
-
     const handleTopologyChange = useCallback((value) => {
         localStorage.setItem('showTopology', String(value));
         masterRef.current.emitter.emit('showTopology', value);
@@ -268,14 +181,6 @@ function SettingsView(props) {
         localStorage.setItem('darkMode', value);
         masterRef.current.emitter.emit('darkMode', value);
         setDarkMode(value);
-    }, []);
-
-    const batchChangeName = useCallback((event) => {
-        if(!event.target) return;
-        console.log('change name ' + event.target.value);
-        masterRef.current.service.updatePeer({
-            name: event.target.value
-        });
     }, []);
 
     const messagesList = <List>
@@ -360,13 +265,6 @@ function SettingsView(props) {
                             label="Dark Theme"
                         />
                     <span className={classes.horizontal}>
-                        <IconButton
-                            aria-haspopup="true"
-                            onClick={requestBLE}
-                            color="inherit"
-                        >
-                            <Bluetooth />
-                        </IconButton>
                         <Button onClick={() => masterRef.current.restartTrackers()} color="secondary">
                             restart trackers
                         </Button>
