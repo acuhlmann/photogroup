@@ -32,10 +32,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # For workflow_run: use the branch/commit from the test workflow
-          # For push/manual dispatch: use current branch/commit
-          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
-          sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # For workflow_run: use the commit SHA from the test workflow
+          # For push/manual dispatch: use current commit SHA
+          # Note: 'ref' accepts both branch names and commit SHAs
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       
       - name: Set up Node.js
         uses: actions/setup-node@v4

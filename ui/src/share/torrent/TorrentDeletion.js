@@ -1,5 +1,6 @@
 import Logger from 'js-logger';
 import IdbKvStore from "idb-kv-store";
+import { getTorrent, isCompoundInfoHash, getBaseInfoHash, getFilePathFromInfoHash } from './WebTorrentUtils';
 
 export default class TorrentDeletion {
 
@@ -46,12 +47,10 @@ export default class TorrentDeletion {
             return;
         }
 
-        const isMultiFileTorrent = infoHash.includes('-');
-        if(isMultiFileTorrent) {
-            const parts = infoHash.split('-');
-            const torrentId = parts[0];
-            const path = parts[1];
-            const torrent = this.master.client.get(torrentId);
+        if(isCompoundInfoHash(infoHash)) {
+            const torrentId = getBaseInfoHash(infoHash);
+            const path = getFilePathFromInfoHash(infoHash);
+            const torrent = getTorrent(this.master.client, torrentId);
             if(!torrent || !torrent.files) return;
             const fileIndex = torrent.files.findIndex(item => item.path === path);
             if(fileIndex >= 0) {
@@ -77,7 +76,7 @@ export default class TorrentDeletion {
             return;
         }
 
-        const torrent = this.master.client.get(infoHash);
+        const torrent = getTorrent(this.master.client, infoHash);
         if(torrent) {
             this.deleteTorrent(torrent).then(infoHash => {
                 Logger.info('deleteTorrent done ' + infoHash);
@@ -125,7 +124,7 @@ export default class TorrentDeletion {
         return new Promise((resolve, reject) => {
 
             if(torrent.client) {
-                if(torrent.infoHash && torrent.client.get(torrent.infoHash)) {
+                if(torrent.infoHash && getTorrent(torrent.client, torrent.infoHash)) {
                     torrent.client.remove(torrent.infoHash, () => {
                         Logger.info('torrent removed ' + torrent.infoHash);
                         resolve(torrent.infoHash);

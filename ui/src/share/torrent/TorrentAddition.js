@@ -2,12 +2,11 @@ import Logger from 'js-logger';
 import shortid  from 'shortid';
 import StringUtil from "../util/StringUtil";
 import {format} from 'date-fns';
-//import * as exifr from 'exifr';
-import exifr from 'exifr/dist/full.esm.mjs'
 import _ from 'lodash';
 import FileUtil from "../util/FileUtil";
-import * as musicMetadata from 'music-metadata-browser';
 import React from "react";
+import { getTorrent, getBaseInfoHash, isDuplicateTorrentError, extractDuplicateTorrentId } from './WebTorrentUtils';
+import { getPreviewFromImage, getPreviewFromAudio } from './ThumbnailExtractor';
 
 export default class TorrentAddition {
 
@@ -45,12 +44,7 @@ export default class TorrentAddition {
             });
 
             const torrentId = infoHashes[0][0];
-            let torrent = this.master.client.get(torrentId);
-            
-            // WebTorrent bug: client.get() returns empty object {} instead of null
-            if (torrent && !torrent.infoHash) {
-                torrent = null;
-            }
+            const torrent = getTorrent(this.master.client, torrentId);
             
             if(!torrent) {
                 this._add(torrentId, serverPhotos, false, infoHashes.map(item => item[1]))
@@ -63,13 +57,8 @@ export default class TorrentAddition {
 
     add(torrentId, photo, fromCache) {
         // Extract base infoHash (without file path suffix)
-        const baseInfoHash = photo.infoHash ? photo.infoHash.split('-')[0] : null;
-        let torrent = baseInfoHash ? this.master.client.get(baseInfoHash) : null;
-        
-        // WebTorrent bug: client.get() returns empty object {} instead of null for non-existent torrents
-        if (torrent && !torrent.infoHash) {
-            torrent = null;
-        }
+        const baseInfoHash = getBaseInfoHash(photo.infoHash);
+        const torrent = getTorrent(this.master.client, baseInfoHash);
         
         return new Promise((async (resolve, reject) => {
 
@@ -214,148 +203,6 @@ export default class TorrentAddition {
         this.emitter.emit('torrentReady', photos);
     }
 
-    async getPreviewFromImage(filesArr) {
-        let thumbnailUrls = [];
-        try {
-            const tUrls = filesArr.map(item => exifr.thumbnailUrl(item));
-            thumbnailUrls = await Promise.all(tUrls);
-        } catch(e) {
-            Logger.warn('Cannot find thumbnail from EXIF ' + e + ' ' + filesArr.map(item => item.name));
-        }
-
-        thumbnailUrls = thumbnailUrls.filter(item => item);
-
-        // Fallback: For images without EXIF thumbnails (like PNGs), create thumbnails from the image itself
-        if(thumbnailUrls.length < filesArr.length) {
-            Logger.info('Creating fallback thumbnails for images without EXIF data');
-            const fallbackThumbnails = await Promise.all(
-                filesArr.map(async (file, index) => {
-                    // If we already have a thumbnail for this file, skip it
-                    if(thumbnailUrls[index]) {
-                        return null;
-                    }
-                    try {
-                        // Create a thumbnail by loading the image and creating a canvas
-                        return new Promise((resolve, reject) => {
-                            const img = new Image();
-                            const canvas = document.createElement('canvas');
-                            const ctx = canvas.getContext('2d');
-                            
-                            img.onload = () => {
-                                // Create a thumbnail (max 200x200)
-                                const maxSize = 200;
-                                let width = img.width;
-                                let height = img.height;
-                                
-                                if(width > height) {
-                                    if(width > maxSize) {
-                                        height = (height * maxSize) / width;
-                                        width = maxSize;
-                                    }
-                                } else {
-                                    if(height > maxSize) {
-                                        width = (width * maxSize) / height;
-                                        height = maxSize;
-                                    }
-                                }
-                                
-                                canvas.width = width;
-                                canvas.height = height;
-                                ctx.drawImage(img, 0, 0, width, height);
-                                
-                                canvas.toBlob((blob) => {
-                                    if(blob) {
-                                        const url = URL.createObjectURL(blob);
-                                        resolve(url);
-                                    } else {
-                                        reject(new Error('Failed to create thumbnail blob'));
-                                    }
-                                }, file.type, 0.9);
-                            };
-                            
-                            img.onerror = () => {
-                                reject(new Error('Failed to load image for thumbnail'));
-                            };
-                            
-                            img.src = URL.createObjectURL(file);
-                        });
-                    } catch(e) {
-                        Logger.warn('Failed to create fallback thumbnail for ' + file.name + ': ' + e);
-                        return null;
-                    }
-                })
-            );
-            
-            // Add fallback thumbnails to the array
-            fallbackThumbnails.forEach((thumb, index) => {
-                if(thumb && !thumbnailUrls[index]) {
-                    thumbnailUrls[index] = thumb;
-                }
-            });
-        }
-
-        if(thumbnailUrls.length < 1) {
-            Logger.warn('No thumbnail found for any image.');
-            return [];
-        }
-
-        const thumbnailBlobs = await Promise.all(thumbnailUrls
-            .filter(item => item)
-            .map(item => {
-                // If it's already a blob URL, fetch it; otherwise it's already a blob
-                if(typeof item === 'string' && item.startsWith('blob:')) {
-                    return fetch(item).then(r => r.blob());
-                }
-                return Promise.resolve(item);
-            }));
-
-        const thumbnailFiles = thumbnailBlobs.map((item, index) => {
-            const file = filesArr[index];
-            const fileName = 'Thumbnail ' + file.name;
-            const thumb = new File([item], fileName, {
-                type: file.type,
-                lastModified: file.lastModified
-            });
-            return thumb;
-        });
-        return thumbnailFiles;
-    }
-
-    async getPreviewFromAudio(filesArr) {
-        let metadatas = [];
-
-        try {
-            const results = filesArr.map(item => musicMetadata.parseBlob(item));
-            metadatas = await Promise.all(results);
-        } catch(e) {
-            Logger.warn('Cannot find thumbnail ' + e + ' ' + filesArr.map(item => item.name));
-        }
-
-        const thumbnailBlobs = metadatas
-            .filter(item => item)
-            .map((item, index) => {
-                const picture = item.common.picture;
-                if(!picture) {
-                    return;
-                }
-                if(picture && picture.length > 1) {
-                    Logger.warn('Can only show one album art preview but found ' + picture.length);
-                }
-                let thumb;
-                const pic = picture[0];
-                if(pic) {
-                    const file = filesArr[index];
-                    const fileName = 'Thumbnail ' + file.name;
-                    //const fileName = file.name;
-                    thumb = new File([pic.data], fileName, {
-                        type: pic.format,
-                    });
-                }
-                return thumb;
-            }).filter(item => item);
-        return thumbnailBlobs;
-    }
-
     async seed(files, secure = false, origFiles = [], callback) {
 
         const self = this;
@@ -419,9 +266,9 @@ export default class TorrentAddition {
         ) {
 
             if(filesArr.every(item => item.type.includes('image/'))) {
-                thumbnailFiles = await this.getPreviewFromImage(filesArr);
+                thumbnailFiles = await getPreviewFromImage(filesArr);
             } else if(filesArr.every(item => item.type.includes('audio/'))) {
-                thumbnailFiles = await this.getPreviewFromAudio(filesArr);
+                thumbnailFiles = await getPreviewFromAudio(filesArr);
             }
 
             if(thumbnailFiles.length > 0) {
@@ -703,9 +550,8 @@ export default class TorrentAddition {
                     return;
                 }
 
-                const msg = err.message;
-                const torrentId = msg.substring(msg.lastIndexOf('torrent ') + 8, msg.length);
-                const torrent = self.master.client.get(torrentId);
+                const torrentId = extractDuplicateTorrentId(err);
+                const torrent = getTorrent(self.master.client, torrentId);
                 if(torrent) {
                     self.emitter.emit('duplicate', {
                         torrent: torrent,
@@ -775,8 +621,7 @@ export default class TorrentAddition {
     }
 
     isDuplicateError(err) {
-        const msg = err.message;
-        return msg.indexOf('Cannot add duplicate') !== -1;
+        return isDuplicateTorrentError(err);
     }
 
     metadata(torrent) {

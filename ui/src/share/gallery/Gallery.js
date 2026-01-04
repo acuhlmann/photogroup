@@ -10,6 +10,7 @@ import LoadingTile from "./LoadingTile";
 import StringUtil from "../util/StringUtil";
 import ContentTile from "./ContentTile";
 import GalleryPhotoHandler from "./GalleryPhotoHandler";
+import { getBlobAndEmit } from "../torrent/BlobUtils";
 
 const styles = theme => ({
     root: {
@@ -40,69 +41,10 @@ function Gallery(props) {
     const photoHandlerRef = useRef(null);
 
     const getBlob = useCallback((photo) => {
-        if(photo.file && photo.file instanceof Blob) {
-            photo.elem = photo.file;
-            Logger.info('blobDone dispatch ' + photo.fileName);
-            master.emitter.emit('blobDone-' + photo.infoHash, photo);
-        } else if(photo.torrentFile && typeof photo.torrentFile.getBlob === 'function') {
-            // Use WebTorrent File.getBlob() API
-            photo.torrentFile.getBlob((err, elem) => {
-                if (err) {
-                    Logger.error('getBlob error: ' + err.message);
-                } else {
-                    photo.elem = elem;
-                    Logger.info('blobDone dispatch ' + photo.fileName);
-                    master.emitter.emit('blobDone-' + photo.infoHash, photo);
-                }
-            });
-        } else if(photo.torrentFile && typeof photo.torrentFile.getBlobURL === 'function') {
-            // Fallback: use getBlobURL if getBlob isn't available
-            Logger.info('getBlob using getBlobURL for ' + photo.fileName);
-            photo.torrentFile.getBlobURL((err, url) => {
-                if (err) {
-                    Logger.error('getBlobURL error: ' + err.message);
-                    master.emitter.emit('blobDone-' + photo.infoHash, photo);
-                } else {
-                    // Fetch the blob from the URL
-                    fetch(url)
-                        .then(response => response.blob())
-                        .then(blob => {
-                            photo.elem = blob;
-                            Logger.info('blobDone dispatch (via getBlobURL) ' + photo.fileName);
-                            master.emitter.emit('blobDone-' + photo.infoHash, photo);
-                        })
-                        .catch(fetchErr => {
-                            Logger.error('getBlobURL fetch error: ' + fetchErr.message);
-                            master.emitter.emit('blobDone-' + photo.infoHash, photo);
-                        });
-                }
-            });
-        } else if(photo.torrentFile && typeof photo.torrentFile.createReadStream === 'function') {
-            // Workaround: manually create blob using createReadStream
-            Logger.info('getBlob: Using createReadStream workaround for ' + photo.fileName);
-            try {
-                const stream = photo.torrentFile.createReadStream();
-                const chunks = [];
-                stream.on('data', chunk => chunks.push(chunk));
-                stream.on('end', () => {
-                    const blob = new Blob(chunks, { type: photo.fileType || 'application/octet-stream' });
-                    photo.elem = blob;
-                    Logger.info('blobDone dispatch (via createReadStream) ' + photo.fileName);
-                    master.emitter.emit('blobDone-' + photo.infoHash, photo);
-                });
-                stream.on('error', err => {
-                    Logger.error('createReadStream error: ' + err.message);
-                    master.emitter.emit('blobDone-' + photo.infoHash, photo);
-                });
-            } catch (streamErr) {
-                Logger.error('createReadStream exception: ' + streamErr.message);
-                master.emitter.emit('blobDone-' + photo.infoHash, photo);
-            }
-        } else {
-            Logger.warn('getBlob: torrentFile not available or missing methods for ' + photo.fileName);
-            // Emit event anyway so UI can show error state
-            master.emitter.emit('blobDone-' + photo.infoHash, photo);
-        }
+        // Use the simplified BlobUtils module for blob retrieval
+        getBlobAndEmit(photo, master.emitter).catch(err => {
+            Logger.error('getBlob error for ' + (photo.fileName || 'unknown') + ': ' + err.message);
+        });
     }, [master.emitter]);
 
     const mergeStreamingMetadata = useCallback((photo, extention) => {

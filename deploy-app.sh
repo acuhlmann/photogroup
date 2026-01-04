@@ -3,11 +3,14 @@
 ZONE=asia-east2-a
 INSTANCE=main
 PROJECT=photogroup-215600
+# Use a fixed absolute path to avoid issues with different deploying users
+APP_DIR=/opt/photogroup
 
 echo "Deploying application to VM..."
 echo "Project: $PROJECT"
 echo "Instance: $INSTANCE"
 echo "Zone: $ZONE"
+echo "App directory: $APP_DIR"
 echo ""
 
 # Verify instance exists
@@ -20,7 +23,7 @@ fi
 # Clean up old deployment directory and stop processes (combined for efficiency)
 echo "Cleaning up old deployment and stopping processes..."
 gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "
-  rm -rf ~/pg && mkdir -p ~/pg
+  sudo rm -rf $APP_DIR && sudo mkdir -p $APP_DIR && sudo chmod 777 $APP_DIR
   sudo lsof -ti:8081 | sudo xargs kill -9 2>/dev/null || true
   sudo lsof -ti:9000 | sudo xargs kill -9 2>/dev/null || true
   sudo pm2 stop app 2>/dev/null || true
@@ -29,7 +32,7 @@ gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "
 
 # Upload application files with compression
 echo "Uploading application files (this may take 1-2 minutes)..."
-gcloud compute scp --recurse --compress ./bin/* $INSTANCE:~/pg/ --project $PROJECT --zone $ZONE 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
+gcloud compute scp --recurse --compress ./bin/* $INSTANCE:$APP_DIR/ --project $PROJECT --zone $ZONE 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
 
 # Check and update Node.js version if needed (requires >=24.0.0)
 echo "Checking Node.js version..."
@@ -47,19 +50,15 @@ fi
 # Install dependencies and start application (combined for efficiency)
 echo "Installing dependencies and starting application..."
 gcloud compute ssh $INSTANCE --project $PROJECT --zone $ZONE --command "
-  # Get the actual home directory path (works regardless of which user runs this)
-  USER_HOME=\$(eval echo ~\$(whoami))
-  APP_DIR=\"\$USER_HOME/pg\"
-  
-  cd \"\$APP_DIR\"
+  cd $APP_DIR
   npm install --production --prefer-offline --no-audit --no-fund
   
   # Stop and delete existing app to ensure clean restart
   sudo pm2 stop app 2>/dev/null || true
   sudo pm2 delete app 2>/dev/null || true
   
-  # Start app with explicit path to avoid path issues
-  sudo pm2 start \"\$APP_DIR/app.js\" --name app --cwd \"\$APP_DIR\"
+  # Start app with fixed absolute path (consistent across all deploying users)
+  sudo pm2 start $APP_DIR/app.js --name app --cwd $APP_DIR
   sudo pm2 save
 " 2>&1 | grep -v "^Updating project ssh metadata" | grep -v "^Updating instance ssh metadata" | grep -v "^\.$" | grep -v "^done\.$" || true
 

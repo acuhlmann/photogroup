@@ -11,6 +11,7 @@ import platform from 'platform';
 import _ from 'lodash';
 import humanizeDuration from 'humanize-duration'
 import MetadataParser from "../gallery/metadata/MetadataParser";
+import { getTorrent, getBaseInfoHash } from './WebTorrentUtils';
 
 export default class TorrentMaster {
 
@@ -118,7 +119,7 @@ export default class TorrentMaster {
     fillMissingOwnersItem(item) {
         //check for missing owners - can happen after re-connections.
         const peerId = this.client.peerId;
-        const torrent = this.client.get(item.infoHash);
+        const torrent = getTorrent(this.client, item.infoHash);
         // Check that torrent exists, has files array, and files array has items
         const isOwner = torrent && torrent.files && torrent.files.length > 0;
         if(isOwner) {
@@ -174,12 +175,7 @@ export default class TorrentMaster {
         return new Promise((resolve, reject) => {
 
             if(typeof metadata === 'object' && metadata != null) {
-                let existingTorrent = self.client.get(metadata.infoHash);
-                
-                // WebTorrent bug: client.get() returns empty object {} instead of null
-                if (existingTorrent && !existingTorrent.infoHash) {
-                    existingTorrent = null;
-                }
+                const existingTorrent = getTorrent(self.client, metadata.infoHash);
                 
                 if(existingTorrent) {
 
@@ -430,14 +426,8 @@ export default class TorrentMaster {
 
         photos.forEach(item => {
             // Extract base infoHash (without file path suffix) for client.get()
-            const baseInfoHash = item.infoHash ? item.infoHash.split('-')[0] : null;
-            
-            let torrent = baseInfoHash ? self.client.get(baseInfoHash) : null;
-            
-            // WebTorrent bug: client.get() returns empty object {} instead of null for non-existent torrents
-            if (torrent && !torrent.infoHash) {
-                torrent = null;
-            }
+            const baseInfoHash = getBaseInfoHash(item.infoHash);
+            const torrent = getTorrent(self.client, baseInfoHash);
             
             if(!torrent) {
                 Logger.debug('syncUiWithServerUrls adding torrent: ' + baseInfoHash);
