@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 import { withStyles } from '@mui/styles';
@@ -14,18 +14,13 @@ import { QRCodeSVG } from "qrcode.react";
 import {Typography} from "@mui/material";
 import LinkRounded from '@mui/icons-material/LinkRounded';
 import ShareRounded from '@mui/icons-material/ShareRounded';
-import EqualizerRounded from '@mui/icons-material/EqualizerRounded';
-import AudiotrackRounded from '@mui/icons-material/AudiotrackRounded';
 import copy from "clipboard-copy";
-// QrReader import removed - react-qr-reader is not compatible with React 19
-// import QrReader from 'react-qr-reader'
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import Logger from 'js-logger';
 import Uploader from "./Uploader";
-//import Slide from '@mui/material/Slide';
 import Fade from '@mui/material/Fade';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
-    //return <Slide direction="down" ref={ref} {...props} />;
     return <Fade ref={ref} {...props} />;
 });
 
@@ -41,6 +36,17 @@ const styles = theme => ({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center'
+    },
+    qrReader: {
+        width: '100%',
+        maxWidth: '400px',
+        margin: '0 auto',
+        '& #qr-reader': {
+            border: 'none !important'
+        },
+        '& #qr-reader__scan_region': {
+            minHeight: '250px'
+        }
     }
 });
 
@@ -51,12 +57,10 @@ function AddPeersView(props) {
     const [open, setOpen] = useState(false);
     const [createdRoom, setCreatedRoom] = useState(false);
     const [openQr, setOpenQr] = useState(false);
-    const [scannerDelay] = useState(100);
-    const [scannerResult, setScannerResult] = useState('No result');
-    const [openRecorder, setOpenRecorder] = useState(false);
-    const [audioType, setAudioType] = useState('secondary');
+    const [scannerResult, setScannerResult] = useState('');
     const [numPeers, setNumPeers] = useState(0);
     const [copiedLink, setCopiedLink] = useState(false);
+    const scannerRef = useRef(null);
 
     const getFullUrl = useCallback((id) => {
         return window.location.origin + '?room=' + id;
@@ -68,17 +72,17 @@ function AddPeersView(props) {
         setVisible(open);
     }, []);
 
-    const handleScanOrSound = useCallback(async (data, handledSound) => {
+    const handleScan = useCallback(async (data) => {
         if(!data) return;
 
-        Logger.info('handleScanOrSound data ' + data, handledSound);
+        Logger.info('handleScan data ' + data);
 
         let urlParams;
         try {
             const url = new URL(data);
             urlParams = new URLSearchParams(url.search);
         } catch(e) {
-            Logger.error('handleScanOrSound error ' + e.message);
+            Logger.error('handleScan error ' + e.message);
             return;
         }
 
@@ -87,7 +91,7 @@ function AddPeersView(props) {
 
             master.service.id = urlParams.get('room');
             master.service.hasRoom = true;
-            Logger.info('handleScanOrSound id ' + master.service.id);
+            Logger.info('handleScan id ' + master.service.id);
             await master.findExistingContent(master.service.joinRoom);
             master.service.changeUrl('room', master.service.id);
             master.emitter.emit('hideFrontView');
@@ -97,108 +101,77 @@ function AddPeersView(props) {
         }
     }, [master, show]);
 
-    const listenOrPlaySound = useCallback((play = false, text = '', profileName = 'audible') => {
-        const Quiet = window.Quiet;
-        Quiet.init({
-            profilesPrefix: "",
-            memoryInitializerPrefix: "",
-            libfecPrefix: ""
-        });
+    // Initialize QR scanner when openQr changes
+    useEffect(() => {
+        if (openQr && !scannerRef.current) {
+            // Small delay to ensure DOM element exists
+            const timer = setTimeout(() => {
+                try {
+                    const scanner = new Html5QrcodeScanner(
+                        "qr-reader",
+                        {
+                            fps: 10,
+                            qrbox: { width: 250, height: 250 },
+                            rememberLastUsedCamera: true,
+                            aspectRatio: 1.0
+                        },
+                        /* verbose= */ false
+                    );
 
-        let transmit;
-        function onQuietReady() {
-            if(!play) {
-                receive(profileName);
-            } else {
-                transmit = Quiet.transmitter({profile: profileName, onFinish: onTransmitFinish});
-                Logger.info("send via voice: " + text);
-                transmit.transmit(Quiet.str2ab(text));
+                    scanner.render(
+                        (decodedText) => {
+                            Logger.info('QR Code scanned: ' + decodedText);
+                            handleScan(decodedText);
+                            scanner.clear().catch(err => Logger.error('Failed to clear scanner:', err));
+                            scannerRef.current = null;
+                        },
+                        (errorMessage) => {
+                            // Ignore scan failures - they happen constantly while scanning
+                        }
+                    );
+
+                    scannerRef.current = scanner;
+                } catch (err) {
+                    Logger.error('Failed to initialize QR scanner:', err);
+                }
+            }, 100);
+
+            return () => clearTimeout(timer);
+        }
+
+        // Cleanup when openQr becomes false
+        if (!openQr && scannerRef.current) {
+            scannerRef.current.clear().catch(err => Logger.error('Failed to clear scanner:', err));
+            scannerRef.current = null;
+        }
+    }, [openQr, handleScan]);
+
+    // Cleanup scanner on unmount
+    useEffect(() => {
+        return () => {
+            if (scannerRef.current) {
+                scannerRef.current.clear().catch(err => Logger.error('Failed to clear scanner on unmount:', err));
+                scannerRef.current = null;
             }
-        }
-
-        function onQuietFail(reason) {
-            Logger.error("quiet failed to initialize: " + reason);
-        }
-
-        function onTransmitFinish() {
-            Logger.info('onTransmitFinish');
-        }
-
-        function receive(profileName) {
-            Quiet.receiver({profile: profileName,
-                onReceive: onReceive,
-                onCreateFail: onReceiverCreateFail,
-                onReceiveFail: onReceiveFail
-            });
-        }
-        let content = new ArrayBuffer(0);
-        function onReceive(recvPayload) {
-            Logger.info('mergeab ' + Quiet.mergeab(content, recvPayload));
-            content = recvPayload;
-            const result = Quiet.ab2str(content);
-            Logger.info('onReceive ' + result);
-            const parsed = result.split('m=')[1];
-            Logger.info('onReceive parsed ' + parsed);
-            if(parsed) {
-                const url = getFullUrl(parsed);
-                handleScanOrSound(url, true);
-            }
-        }
-
-        function onReceiverCreateFail(reason) {
-            Logger.error("failed to create quiet receiver: " + reason);
-        }
-
-        function onReceiveFail(num_fails) {
-            Logger.error("onReceiveFail. closer to the receiver and set the volume to 50%." + num_fails);
-        }
-
-        Quiet.addReadyCallback(onQuietReady, onQuietFail);
-    }, [getFullUrl, handleScanOrSound]);
+        };
+    }, []);
 
     useEffect(() => {
         const emitter = master.emitter;
 
         const handleOpenRoomStart = () => {
             setVisible(true);
-            setOpenRecorder(false);
         };
 
         const handleOpenRoomEnd = () => {
             setOpen(true);
             setCreatedRoom(true);
-            setOpenRecorder(false);
         };
 
         const handleOpenQr = () => {
             setVisible(true);
             setOpen(true);
             setOpenQr(true);
-            setOpenRecorder(false);
-        };
-
-        const handleOpenRecorder = () => {
-            listenOrPlaySound(false, null, 'audible');
-            setVisible(true);
-            setOpen(true);
-            setOpenRecorder(true);
-            setAudioType('secondary');
-        };
-
-        const handleOpenRecorderUltrasonic = () => {
-            listenOrPlaySound(false, null, 'ultrasonic');
-            setVisible(true);
-            setOpen(true);
-            setOpenRecorder(true);
-            setAudioType('inherit');
-        };
-
-        const handleOpenRecorderChirp = () => {
-            Logger.warn('ChirpSDK feature has been removed');
-            setVisible(true);
-            setOpen(true);
-            setOpenRecorder(false);
-            setAudioType('primary');
         };
 
         const handleNumPeersChange = (numPeers) => {
@@ -208,21 +181,15 @@ function AddPeersView(props) {
         emitter.on('openRoomStart', handleOpenRoomStart);
         emitter.on('openRoomEnd', handleOpenRoomEnd);
         emitter.on('openQr', handleOpenQr);
-        emitter.on('openRecorder', handleOpenRecorder);
-        emitter.on('openRecorderUltrasonic', handleOpenRecorderUltrasonic);
-        emitter.on('openRecorderChirp', handleOpenRecorderChirp);
         emitter.on('numPeersChange', handleNumPeersChange);
 
         return () => {
             emitter.removeListener('openRoomStart', handleOpenRoomStart);
             emitter.removeListener('openRoomEnd', handleOpenRoomEnd);
             emitter.removeListener('openQr', handleOpenQr);
-            emitter.removeListener('openRecorder', handleOpenRecorder);
-            emitter.removeListener('openRecorderUltrasonic', handleOpenRecorderUltrasonic);
-            emitter.removeListener('openRecorderChirp', handleOpenRecorderChirp);
             emitter.removeListener('numPeersChange', handleNumPeersChange);
         };
-    }, [master.emitter, listenOrPlaySound]);
+    }, [master.emitter]);
 
     const copyLink = useCallback(async (url) => {
         try {
@@ -311,35 +278,21 @@ function AddPeersView(props) {
                                         <ShareRounded />
                                     </IconButton>
                                 </span> : ''}
-                                <span className={classes.horizontal}>
-                                    <Typography variant={"body2"}>Play Audio Signal to Listening Peers</Typography>
-                                    <IconButton color="secondary"
-                                                onClick={() => listenOrPlaySound(true, url, 'audible') }>
-                                        <AudiotrackRounded />
-                                    </IconButton>
-                                     <IconButton color="inherit"
-                                                 onClick={() => listenOrPlaySound(true, url, 'ultrasonic') }>
-                                        <AudiotrackRounded />
-                                    </IconButton>
-                                </span>
                             </span>
                             </span> : <span></span>
                         }
                     {
-                        !openQr ?
-                                '' :
-                            <div>
-                                {/* QrReader removed - react-qr-reader is not compatible with React 19 */}
-                                <Typography variant={"body2"}>QR Scanner temporarily unavailable</Typography>
-                                <Typography variant={"caption"}>{scannerResult}</Typography>
+                        openQr ? (
+                            <div className={classes.qrReader}>
+                                <Typography variant={"body2"} style={{ marginBottom: '10px' }}>
+                                    Scan a QR code to join a room
+                                </Typography>
+                                <div id="qr-reader"></div>
+                                {scannerResult && (
+                                    <Typography variant={"caption"}>Scanned: {scannerResult}</Typography>
+                                )}
                             </div>
-                    }
-                    {
-                        !openRecorder ?
-                            '' :
-                            <div>
-                                <EqualizerRounded color={audioType}/>
-                            </div>
+                        ) : null
                     }
                 </DialogContent>
                 <DialogActions style={{

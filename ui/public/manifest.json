@@ -17,5 +17,21 @@
   "display": "standalone",
   "theme_color": "#000000",
   "background_color": "#ffffff",
-  "prefer_related_applicatons": false
+  "prefer_related_applications": false,
+  "share_target": {
+    "action": "/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "media",
+          "accept": ["image/*", "video/*"]
+        }
+      ]
+    }
+  }
 }

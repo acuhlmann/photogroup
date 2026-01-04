@@ -136,17 +136,31 @@ export default class Peers {
             const peer = this.webPeers.get(event.sharedBy);
             if(peer && peer.networkChain) {
                 let foundAny;
+                
+                // For relay entries, replace old ones instead of accumulating
+                // Keep only the most recent relay entries from this offer
+                const newRelayIps = event.sdp.filter(s => s.typeDetail === 'relay').map(s => s.ip);
+                if (newRelayIps.length > 0) {
+                    // Remove old relay entries that aren't in the new offer
+                    peer.networkChain = peer.networkChain.filter(item => 
+                        item.typeDetail !== 'relay' || newRelayIps.includes(item.ip)
+                    );
+                }
+                
                 event.sdp.forEach(sdp => {
-
                     const found = peer.networkChain.find(item => item.ip === sdp.ip);
                     if(!found) {
                         peer.networkChain.push(sdp);
-                        console.log('added ' + sdp.ip);
                         foundAny = true;
                     }
                 });
                 if(foundAny) {
-                    this.sendWebPeers('update', peer);
+                    // Enrich new network chain items with IP translation
+                    IpTranslator.enrichNetworkChainIPs(peer.networkChain).then(results => {
+                        if(results && results.length > 0) {
+                            this.sendWebPeers('update', peer);
+                        }
+                    });
                 }
             }
 
