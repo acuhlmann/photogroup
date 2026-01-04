@@ -2,6 +2,10 @@
 # Stage 1: Build UI
 FROM node:24-alpine AS ui-builder
 
+# Build argument for version number (used in Settings view)
+ARG VITE_APP_VERSION=0
+ENV VITE_APP_VERSION=$VITE_APP_VERSION
+
 WORKDIR /app/ui
 
 # Copy UI package files
@@ -13,7 +17,7 @@ RUN npm ci --legacy-peer-deps
 # Copy UI source code
 COPY ui/ ./
 
-# Build UI
+# Build UI (VITE_APP_VERSION is picked up by Vite at build time)
 RUN npm run build
 
 # Stage 2: Build server and copy UI

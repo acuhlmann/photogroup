@@ -37,56 +37,6 @@ jobs:
           # Note: 'ref' accepts both branch names and commit SHAs
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            ui/package-lock.json
-            server/package-lock.json
-      
-      - name: Install root dependencies
-        run: npm ci
-      
-      - name: Install UI dependencies
-        run: |
-          cd ui
-          # UI has known peer-dependency conflicts (e.g. transitive deps requiring older React),
-          # so we install with legacy peer dependency resolution (same as the test workflow).
-          npm ci --legacy-peer-deps
-      
-      - name: Install server dependencies
-        run: |
-          cd server
-          npm ci
-      
-      - name: Create secret file from GitHub Secrets
-        run: |
-          mkdir -p server/secret
-          cat > server/secret/index.js << EOF
-          // Secret configuration file
-          // Created from GitHub Secrets via CI/CD
-          export default {
-              twilio: {
-                  accountSid: '${{ secrets.TWILIO_ACCOUNT_SID }}',
-                  authToken: '${{ secrets.TWILIO_AUTH_TOKEN }}'
-              }
-          };
-          EOF
-      
-      - name: Build UI
-        run: npm run build
-        env:
-          # Auto-incrementing build number for Settings view (exposed via import.meta.env)
-          VITE_APP_VERSION: ${{ github.run_number }}
-      
-      - name: Prepare deployment files
-        run: |
-          chmod +x deploy-copy.sh deploy-nginx.sh deploy-app.sh
-          ./deploy-copy.sh
-      
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -98,20 +48,29 @@ jobs:
           project_id: photogroup-215600
       
       - name: Deploy nginx configuration
-        run: ./deploy-nginx.sh
+        run: |
+          chmod +x deploy-nginx.sh
+          ./deploy-nginx.sh
         timeout-minutes: 5
         env:
           ZONE: asia-east2-a
           INSTANCE: main
           PROJECT: photogroup-215600
       
-      - name: Deploy application
-        run: ./deploy-app.sh
-        timeout-minutes: 10
+      - name: Deploy application with Docker
+        run: |
+          chmod +x deploy-docker.sh
+          ./deploy-docker.sh
+        timeout-minutes: 15
         env:
           ZONE: asia-east2-a
           INSTANCE: main
           PROJECT: photogroup-215600
+          # Pass version number to Docker build for Settings view
+          VITE_APP_VERSION: ${{ github.run_number }}
+          # Twilio credentials are passed as env vars to the container at runtime
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
       
       - name: Deployment summary
         run: |
@@ -119,4 +78,5 @@ jobs:
           echo "Instance: main"
           echo "Zone: asia-east2-a"
           echo "Project: photogroup-215600"
+          echo "Deployment method: Docker"
 
