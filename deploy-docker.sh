@@ -93,7 +93,8 @@ DOCKER_RUN_CMD="docker run -d \
     -p 127.0.0.1:9000:9000 \
     -e NODE_ENV=production \
     -e PORT=8081 \
-    -e WS_PORT=9000"
+    -e WS_PORT=9000 \
+    -e WS_HOST=0.0.0.0"
 
 # Add Twilio credentials if provided
 if [ -n "$TWILIO_ACCOUNT_SID" ]; then

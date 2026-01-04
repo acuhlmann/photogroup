@@ -44,9 +44,6 @@ async function init() {
     logImmediate('[App] IP translation enabled:', process.env.ENABLE_IP_LOOKUP !== 'false');
     logImmediate('[App] ========================================');
 
-    IpTranslator.lookedUpIPs = new Map();
-    logImmediate('[App] IpTranslator initialized');
-
     const ice = new IceServers(updateChannel, remoteLog, app);
     await ice.start();
     logImmediate('[App] IceServers started');

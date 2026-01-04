@@ -4,10 +4,7 @@ import IpTranslator from '../../IpTranslator.js';
 
 describe('IpTranslator', () => {
   beforeEach(() => {
-    // Initialize lookedUpIPs if it doesn't exist
-    if (!IpTranslator.lookedUpIPs) {
-      IpTranslator.lookedUpIPs = new Map();
-    }
+    // Reset IpTranslator state before each test
     IpTranslator.reset();
   });
 

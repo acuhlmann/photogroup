@@ -5,12 +5,22 @@ import _ from 'lodash';
 
 export default class IpTranslator {
 
+    // Cache for successfully looked up IPs
+    static lookedUpIPs = new Map();
+    
     // Map to store pending lookups (to avoid duplicate API calls for same IP)
     static pendingLookups = new Map();
+    
+    // Rate limit handling: timestamp when we can make API calls again
+    static rateLimitCooldownUntil = 0;
+    
+    // Cooldown period after hitting rate limit (60 seconds)
+    static RATE_LIMIT_COOLDOWN_MS = 60000;
 
     static reset() {
         IpTranslator.lookedUpIPs.clear();
         IpTranslator.pendingLookups.clear();
+        IpTranslator.rateLimitCooldownUntil = 0;
     }
 
     static extractIps(request) {
@@ -87,6 +97,16 @@ export default class IpTranslator {
             return Promise.resolve(ipObj);
         }
 
+        // Check if we're in global rate limit cooldown
+        const now = Date.now();
+        if (IpTranslator.rateLimitCooldownUntil > now) {
+            const remainingSecs = Math.ceil((IpTranslator.rateLimitCooldownUntil - now) / 1000);
+            console.log(`[IpTranslator] Rate limit cooldown active for ${ip}, ${remainingSecs}s remaining`);
+            const ipObj = IpTranslator.createEmptyIpObj(ip);
+            // Don't cache - we'll retry after cooldown expires
+            return Promise.resolve(ipObj);
+        }
+
         // Using ip-api.com (free tier: 45 requests/minute, no API key required)
         console.log(`[IpTranslator] Making API call for IP: ${ip}`);
         
@@ -149,9 +169,13 @@ export default class IpTranslator {
                 
                 const ipObj = IpTranslator.createEmptyIpObj(ip);
                 
-                // Only cache the result if it's NOT a rate limit error
-                // Rate limited requests should be retried later
-                if (!isRateLimit) {
+                // If rate limited, set global cooldown to prevent further API calls
+                if (isRateLimit) {
+                    IpTranslator.rateLimitCooldownUntil = Date.now() + IpTranslator.RATE_LIMIT_COOLDOWN_MS;
+                    console.log(`[IpTranslator] Rate limit hit! Pausing all API calls for ${IpTranslator.RATE_LIMIT_COOLDOWN_MS / 1000} seconds`);
+                } else {
+                    // Only cache the result if it's NOT a rate limit error
+                    // Rate limited requests should be retried later
                     IpTranslator.lookedUpIPs.set(ip, ipObj);
                 }
                 

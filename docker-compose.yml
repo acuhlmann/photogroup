@@ -13,6 +13,7 @@ services:
       - NODE_ENV=production
       - PORT=8081
       - WS_PORT=9000
+      - WS_HOST=0.0.0.0
       # Optional: Twilio credentials for ICE servers
       # - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
       # - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
