@@ -95,6 +95,23 @@ export default class RoomsService {
             Logger.info(`peers: ${data.type} ${data.item.name} ${data.item.sessionId}`);
 
             const peer = data.item;
+            
+            // Debug: Check if network data is present
+            if (peer.networkChain && peer.networkChain.length > 0) {
+                const enrichedItems = peer.networkChain.filter(item => item.network && (item.network.city || item.network.connection?.isp));
+                if (enrichedItems.length > 0) {
+                    Logger.info(`[UI] Received peer ${peer.peerId} with ${enrichedItems.length} enriched network items`);
+                    enrichedItems.forEach(item => {
+                        Logger.info(`  - ${item.ip}: city=${item.network.city}, isp=${item.network.connection?.isp}`);
+                    });
+                } else {
+                    Logger.warn(`[UI] Received peer ${peer.peerId} - NO enriched network data in chain`);
+                    peer.networkChain.forEach(item => {
+                        Logger.warn(`  - ${item.ip}: hasNetwork=${!!item.network}, networkKeys=${item.network ? Object.keys(item.network).join(',') : 'none'}`);
+                    });
+                }
+            }
+            
             const nat = peer.networkChain
                 ? peer.networkChain.find(item => (item.type.includes('srflx') || item.type.includes('prflx'))
                     && item.label) : null;

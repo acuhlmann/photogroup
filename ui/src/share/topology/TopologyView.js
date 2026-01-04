@@ -190,6 +190,17 @@ function TopologyView(props) {
     }, []);
 
     const createShortNetworkLabel = useCallback((item) => {
+        // Debug: Log what data we have for this item
+        if (process.env.NODE_ENV === 'development') {
+            const hasNetwork = !!item.network;
+            const networkKeys = item.network ? Object.keys(item.network) : [];
+            const hasCity = item.network?.city;
+            const hasIsp = item.network?.connection?.isp;
+            if (!hasNetwork || (!hasCity && !hasIsp)) {
+                Logger.debug(`[TopologyView] createShortNetworkLabel for ${item.ip}: hasNetwork=${hasNetwork}, keys=[${networkKeys.join(',')}], city=${hasCity}, isp=${hasIsp}`);
+            }
+        }
+        
         // Use StringUtil.createNetworkLabel to show IP with location and ISP info
         // For short labels in the graph, truncate if needed but keep IP visible
         const fullLabel = StringUtil.createNetworkLabel(item, '\n', false);
