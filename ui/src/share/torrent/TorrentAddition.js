@@ -676,22 +676,22 @@ export default class TorrentAddition {
         this.emitter.emit('wire', wire, addr, torrent);
         const remotePeerId = wire.peerId.toString();
         const myPeerId = this.master.client.peerId;
-        //this.master.peers.connectWire(myPeerId, torrent, remotePeerId, wire.remoteAddress, wire.remotePort);
+        
+        // Report connection on wire event to show connection lines in TopologyView
+        this.master.peers.connectWire(myPeerId, torrent, remotePeerId, wire.remoteAddress, wire.remotePort);
 
         if(remotePeerId && wire.remoteAddress) {
             const peer = this.master.peers.items.find(item => item.peerId == remotePeerId);
             if(peer) {
-                const network = peer.networkChain.find(item => item.ip === wire.remoteAddress);
+                const network = peer.networkChain ? peer.networkChain.find(item => item.ip === wire.remoteAddress) : null;
                 if(network) {
                     Logger.info('wire peer ' + StringUtil.createNetworkLabel(network) + ' ' + addr);
-                    //Logger.warn('wire peer ' + JSON.stringify(network));
                     return;
                 }
             }
-            //const address = (wire.remoteAddress || 'Unknown') + ':' + (wire.remotePort || 'Unknown');
             Logger.info('wire ' + addr);
         } else {
-            Logger.info('wire no ' + remotePeerId);
+            Logger.info('wire no peerId: ' + remotePeerId);
         }
     }
 
