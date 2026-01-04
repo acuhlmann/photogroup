@@ -23,7 +23,6 @@ import Switch from '@mui/material/Switch';
 import FormGroup from '@mui/material/FormGroup';
 import FormControlLabel from '@mui/material/FormControlLabel';
 
-import RoomsService from '../RoomsService';
 import {format} from 'date-fns';
 import Typography from "@mui/material/Typography";
 import {withSnackbar} from "../compatibility/withSnackbar";
@@ -156,11 +155,6 @@ function SettingsView(props) {
 
     const handleClose = useCallback(() => {
         setOpen(false);
-    }, []);
-
-    const handleReset = useCallback(async () => {
-        await RoomsService.deleteAll();
-        masterRef.current.leaveRoomAndReload();
     }, []);
 
     const onDisconnected = useCallback((event) => {
@@ -386,10 +380,6 @@ function SettingsView(props) {
                     <Typography variant={"caption"}>v{getAppVersionString()} {peerId}</Typography>
 
                     {messagesList}
-
-                    <Button key='delete' onClick={handleReset} color="primary">
-                        Del server state
-                    </Button>
                 </DialogContent>
             </Dialog>
         </div>

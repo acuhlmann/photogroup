@@ -42,17 +42,16 @@ export default class Peers {
     }
 
     connectWire(myPeerId, torrent, remotePeerId, remoteAddress, remotePort) {
-
-        if(!torrent || !remotePeerId || !remoteAddress) return;
+        // For WebRTC connections, remoteAddress may be null/undefined
+        // We still report the connection - server will infer connection type from networkChains
+        if(!torrent || !remotePeerId) return;
 
         const result = {
             fileName: torrent.name,
             infoHash: torrent.infoHash,
-
             fromPeerId: remotePeerId,
-            from: remoteAddress,
-            fromPort: remotePort,
-
+            from: remoteAddress || null,  // May be null for WebRTC
+            fromPort: remotePort || null,
             toPeerId: myPeerId,
         };
 
