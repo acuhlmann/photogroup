@@ -205,7 +205,7 @@ describe('IpTranslator', () => {
       await IpTranslator.getLookupIp(ip);
       
       assert.strictEqual(axiosGetCalls.length, 1);
-      assert.strictEqual(axiosGetCalls[0].url, 'https://ip-api.com/json/24.48.0.1');
+      assert.strictEqual(axiosGetCalls[0].url, 'http://ip-api.com/json/24.48.0.1');
       assert.deepStrictEqual(axiosGetCalls[0].config.params.fields, 
         'status,message,country,countryCode,region,regionName,city,isp,org,as,query,reverse');
     });
