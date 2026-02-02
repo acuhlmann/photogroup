@@ -275,6 +275,20 @@ The container will:
 
 **Note**: The VM must have Docker installed (done automatically by `create-vm.sh`).
 
+**Disk space on the GCP VM**: Each run of `./deploy-docker.sh` automatically prunes unused Docker resources on the VM after starting the new container:
+- **Dangling images** (the previous `photogroup-ai:latest` after a new image is loaded) are removed with `docker image prune -f`.
+- **Stopped containers** are removed with `docker container prune -f`.
+
+This keeps the VM from running out of disk space over repeated deployments. If you run other Docker images on the same VM, only dangling/unused resources are removed; currently running images are not touched.
+
+To free more space manually on the VM (e.g. remove all unused images, not just dangling):
+
+```bash
+gcloud compute ssh main --project photogroup-215600 --zone asia-east2-a --command "sudo docker system prune -a -f"
+```
+
+Use `-a` only if you are sure no other Docker images on the VM are needed.
+
 ### Other Platforms
 
 For other hosting platforms:

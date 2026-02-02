@@ -252,10 +252,11 @@ export TWILIO_AUTH_TOKEN="your_auth_token"
 ```
 
 This script will:
-- Build the Docker image locally
+- Build the Docker image locally (with BuildKit for efficient layer caching)
 - Upload it to the VM
 - Run the container with ports bound to `127.0.0.1:8081` and `127.0.0.1:9000` (for nginx)
 - Configure automatic restart
+- **Prune unused Docker images and stopped containers on the VM** so disk space is not filled by old PhotoGroup images
 
 **Note**: The Docker container binds to `127.0.0.1` (localhost only) so nginx can proxy to it, but it's not exposed publicly. This matches the nginx configuration which expects the app on `127.0.0.1:8081` and `127.0.0.1:9000`.
 

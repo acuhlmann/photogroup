@@ -1,0 +1,51 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/server/app.js",
+      "cwd": "${workspaceFolder}/server",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development",
+        "PORT": "8081"
+      },
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "UI (Vite)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/ui/node_modules/vite/bin/vite.js",
+      "cwd": "${workspaceFolder}/ui",
+      "console": "integratedTerminal",
+      "outputCapture": "std",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Chrome (UI)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/ui/src",
+      "sourceMaps": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Server + UI (compound)",
+      "configurations": ["Server", "UI (Vite)"],
+      "stopAll": true
+    },
+    {
+      "name": "Server + UI + Chrome",
+      "configurations": ["Server", "UI (Vite)", "Chrome (UI)"],
+      "stopAll": true
+    }
+  ]
+}
