@@ -16,19 +16,44 @@ This is in an experimental stage.
 
 # Install and Run
 
-```
-git clone ...
-cd ...
+**Requirements:** Node.js >= 24.0.0
+
+```bash
+git clone <this-repo>
+cd photogroup2
 npm run install-start
 ```
 
-Add an index.js file inside `server/secret/` with account credentials 
-to your Twilio account for their NAT traversal.
-```exports.twilio = {
-     accountSid: '',
-     authToken: ''
-   };
+- **First time:** `npm run install-start` installs dependencies for root, server, and UI, then starts both.
+- **Later:** From the project root, run `npm run start` to start the server and UI in parallel.
+
+| Service | URL | Port |
+|---------|-----|------|
+| **UI** (Vite) | http://localhost:3000 | 3000 |
+| **API server** | http://localhost:8081 | 8081 (or `PORT` env) |
+
+Open **http://localhost:3000** in your browser. The UI proxies `/api` to the server.
+
+### Optional: Twilio (NAT traversal)
+
+For TURN/STUN via Twilio, add credentials in either:
+
+- **`server/secret/index.js`** (tried first), or  
+- **`server/secret.js`**, or  
+- **Environment variables:** `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`
+
+Example `server/secret/index.js`:
+
+```js
+export default {
+  twilio: {
+    accountSid: '',
+    authToken: ''
+  }
+};
 ```
+
+If omitted, the app still runs with default WebRTC behavior.
 
 # Other Notes
 

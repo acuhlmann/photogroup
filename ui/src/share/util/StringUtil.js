@@ -56,8 +56,9 @@ export default class StringUtil {
             ? locationParts.join(' ') + (locationDetails.length > 0 ? ' ' + locationDetails.join(', ') : '')
             : locationDetails.join(', ');
         
-        // Build ISP line
-        const isp = _.get(item, 'network.connection.isp') || _.get(item, 'network.connection.org') || null;
+        // Build ISP and org lines
+        const isp = _.get(item, 'network.connection.isp') || null;
+        const org = _.get(item, 'network.connection.org') || null;
         const hostname = _.get(item, 'network.hostname');
         
         // Build the full label with IP on first line
@@ -69,7 +70,13 @@ export default class StringUtil {
         
         if (isp) {
             lines.push(isp);
-        } else if (hostname) {
+        }
+        
+        if (org && org !== isp) {
+            lines.push(org);
+        }
+        
+        if (!isp && !org && hostname) {
             lines.push(hostname);
         }
         

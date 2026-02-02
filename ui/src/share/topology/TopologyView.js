@@ -62,6 +62,7 @@ function TopologyView(props) {
             font: {
                 size: 9
             },
+            widthConstraint: { minimum: 140, maximum: 220 },
         },
         edges: {
             color: '#000000'
@@ -208,7 +209,7 @@ function TopologyView(props) {
         // Ensure IP is always shown, truncate other lines if needed
         if (lines.length > 0) {
             const ipLine = lines[0];
-            const otherLines = lines.slice(1).map(line => _.truncate(line, { length: 30 }));
+            const otherLines = lines.slice(1).map(line => _.truncate(line, { length: 48 }));
             return [ipLine, ...otherLines].join('\n');
         }
         return fullLabel;

@@ -71,7 +71,8 @@ export default class IpTranslator {
     static getLookupIp(ip) {
         // Check if already cached
         if (IpTranslator.lookedUpIPs.has(ip)) {
-            return Promise.resolve(IpTranslator.lookedUpIPs.get(ip));
+            const ipObj = IpTranslator.lookedUpIPs.get(ip);
+            return Promise.resolve(ipObj);
         }
 
         // Check if there's already a pending lookup for this IP (avoid duplicate API calls)
@@ -110,7 +111,7 @@ export default class IpTranslator {
         // Using ip-api.com (free tier: 45 requests/minute, no API key required)
         console.log(`[IpTranslator] Making API call for IP: ${ip}`);
         
-        const lookupPromise = axios.get('https://ip-api.com/json/' + ip, {
+        const lookupPromise = axios.get('http://ip-api.com/json/' + ip, {
             params: {
                 fields: 'status,message,country,countryCode,region,regionName,city,isp,org,as,query,reverse'
             },

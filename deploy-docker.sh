@@ -56,7 +56,8 @@ else
     echo "Docker is already installed."
 fi
 
-# Build Docker image locally
+# Build Docker image locally (use BuildKit for better cache and smaller layers)
+export DOCKER_BUILDKIT=1
 echo "Building Docker image locally..."
 BUILD_ARGS=""
 if [ -n "$VITE_APP_VERSION" ]; then
@@ -130,6 +131,11 @@ run_gcloud_ssh "
     
     # Verify container is running
     sudo docker ps | grep $CONTAINER_NAME
+    
+    # Prune unused Docker resources to free disk space on the VM
+    # (removes previous photogroup-ai image and any stopped containers)
+    sudo docker image prune -f
+    sudo docker container prune -f
 " "Deploying Docker container" || exit 1
 
 echo ""
