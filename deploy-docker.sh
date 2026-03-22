@@ -107,6 +107,10 @@ fi
 
 DOCKER_RUN_CMD="$DOCKER_RUN_CMD $IMAGE_NAME:latest"
 
+# Small boot disks (e.g. 10GB) can fill from systemd journals; Docker then fails to start → nginx 502.
+echo "Checking free disk on VM..."
+run_gcloud_ssh "AVAIL_KB=\$(df -k / | awk 'NR==2{print \$4}'); if [ \"\${AVAIL_KB:-0}\" -lt 524288 ]; then echo 'Low disk (<512MB free), vacuuming systemd journal...'; sudo journalctl --vacuum-size=80M || true; df -h /; fi" "Free disk check" || true
+
 # Load image and run container on VM
 echo "Loading Docker image and starting container on VM..."
 run_gcloud_ssh "

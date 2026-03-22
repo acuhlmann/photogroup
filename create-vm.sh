@@ -9,7 +9,7 @@ PROJECT=photogroup-215600
 MACHINE_TYPE=e2-micro
 IMAGE_FAMILY=ubuntu-2204-lts
 IMAGE_PROJECT=ubuntu-os-cloud
-DISK_SIZE=10GB
+DISK_SIZE=20GB
 
 # Extract region from zone (asia-east2-a -> asia-east2)
 # Using bash parameter expansion: remove shortest match of -[a-z] from end
@@ -153,6 +153,14 @@ else
         
         # Enable nginx
         systemctl enable nginx
+
+        # Cap journal size so a 10GB disk is not filled by logs (Docker needs /var/lib/docker space)
+        mkdir -p /etc/systemd/journald.conf.d
+        printf '%s\n' '[Journal]' 'SystemMaxUse=200M' 'RuntimeMaxUse=50M' > /etc/systemd/journald.conf.d/50-size.conf
+        systemctl restart systemd-journald || true
+
+        # Fix sudo "unable to resolve host" on GCP when hostname is missing from /etc/hosts
+        grep -qF " $(hostname)" /etc/hosts || echo "127.0.0.1 $(hostname)" >> /etc/hosts
 
         # Install Docker (for additional services like Hackersbot)
         # Using Docker official install script to get current stable Docker Engine + Compose plugin.

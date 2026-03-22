@@ -39,7 +39,7 @@ gcloud compute instances create main \
   --machine-type=e2-micro \
   --image-family=ubuntu-2204-lts \
   --image-project=ubuntu-os-cloud \
-  --boot-disk-size=10GB
+  --boot-disk-size=20GB
 ```
 
 ### Step 2: Configure DNS
