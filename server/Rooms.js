@@ -83,6 +83,12 @@ export default class Rooms {
                 return response.status(400).send({ error: 'Peer data is required' });
             }
 
+            const existing = rooms.get(id);
+            if (existing) {
+                joinRoom(existing, request, response);
+                return;
+            }
+
             const room = {
                 id: id,
                 photos: [],
