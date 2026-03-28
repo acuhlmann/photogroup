@@ -162,6 +162,20 @@ else
         # Fix sudo "unable to resolve host" on GCP when hostname is missing from /etc/hosts
         grep -qF " $(hostname)" /etc/hosts || echo "127.0.0.1 $(hostname)" >> /etc/hosts
 
+        # Create swap file (e2-micro has ~1GB RAM, swap prevents OOM crashes)
+        if [ ! -f /swapfile ]; then
+            fallocate -l 512M /swapfile
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+            echo "/swapfile none swap sw 0 0" >> /etc/fstab
+        fi
+
+        # Disable snapd (not needed on server VMs, wastes RAM/CPU)
+        systemctl stop snapd snapd.socket snapd.seeded 2>/dev/null || true
+        systemctl disable snapd snapd.socket snapd.seeded 2>/dev/null || true
+        systemctl mask snapd snapd.socket snapd.seeded 2>/dev/null || true
+
         # Install Docker (for additional services like Hackersbot)
         # Using Docker official install script to get current stable Docker Engine + Compose plugin.
         curl -fsSL https://get.docker.com | sh

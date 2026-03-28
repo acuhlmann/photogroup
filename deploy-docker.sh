@@ -107,6 +107,14 @@ fi
 
 DOCKER_RUN_CMD="$DOCKER_RUN_CMD $IMAGE_NAME:latest"
 
+# Ensure swap exists on memory-constrained VMs (e2-micro has ~1GB RAM)
+echo "Ensuring swap is configured on VM..."
+run_gcloud_ssh "if [ ! -f /swapfile ]; then sudo fallocate -l 512M /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab; echo 'Swap created'; else echo 'Swap already exists'; fi" "Swap setup" || true
+
+# Disable snapd to save resources (not needed on server VMs)
+echo "Disabling snapd if present..."
+run_gcloud_ssh "if systemctl is-active snapd >/dev/null 2>&1 || systemctl is-enabled snapd >/dev/null 2>&1; then sudo systemctl stop snapd snapd.socket snapd.seeded 2>/dev/null; sudo systemctl disable snapd snapd.socket snapd.seeded 2>/dev/null; sudo systemctl mask snapd snapd.socket snapd.seeded 2>/dev/null; echo 'snapd disabled'; else echo 'snapd already disabled'; fi" "Disable snapd" || true
+
 # Small boot disks (e.g. 10GB) can fill from systemd journals; Docker then fails to start → nginx 502.
 echo "Checking free disk on VM..."
 run_gcloud_ssh "AVAIL_KB=\$(df -k / | awk 'NR==2{print \$4}'); if [ \"\${AVAIL_KB:-0}\" -lt 524288 ]; then echo 'Low disk (<512MB free), vacuuming systemd journal...'; sudo journalctl --vacuum-size=80M || true; df -h /; fi" "Free disk check" || true
@@ -117,25 +125,27 @@ run_gcloud_ssh "
     # Load the Docker image (use sudo in case user is not in docker group)
     sudo docker load -i /tmp/${IMAGE_NAME}.tar
     rm -f /tmp/${IMAGE_NAME}.tar
-    
+
     # Stop PM2 processes if any (transitioning from PM2 to Docker deployment)
-    sudo pm2 stop app 2>/dev/null || true
-    sudo pm2 delete app 2>/dev/null || true
+    sudo pm2 stop all 2>/dev/null || true
+    sudo pm2 delete all 2>/dev/null || true
+    # Disable PM2 autostart to prevent port conflicts with Docker
+    sudo pm2 unstartup systemd 2>/dev/null || true
     # Also kill any processes on ports 8081/9000 in case they're running outside PM2
     sudo lsof -ti:8081 | xargs sudo kill -9 2>/dev/null || true
     sudo lsof -ti:9000 | xargs sudo kill -9 2>/dev/null || true
-    
+
     # Stop and remove existing container if it exists
     sudo docker stop $CONTAINER_NAME 2>/dev/null || true
     sudo docker rm $CONTAINER_NAME 2>/dev/null || true
-    
+
     # Run the new container
     # Bind to 127.0.0.1 so nginx can reach it (not exposed publicly)
     sudo $DOCKER_RUN_CMD
-    
+
     # Verify container is running
     sudo docker ps | grep $CONTAINER_NAME
-    
+
     # Prune unused Docker resources to free disk space on the VM
     # (removes previous photogroup-ai image and any stopped containers)
     sudo docker image prune -f
