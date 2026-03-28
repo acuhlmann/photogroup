@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import {withStyles } from '@mui/styles';
+import { withStyles } from '@mui/styles';
+import { useTheme } from '@mui/material/styles';
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
@@ -40,6 +41,7 @@ const styles = theme => ({
 
 function TopologyView(props) {
     const {master, classes} = props;
+    const muiTheme = useTheme();
     const masterRef = useRef(master);
     masterRef.current = master;
 
@@ -65,10 +67,10 @@ function TopologyView(props) {
             widthConstraint: { minimum: 140, maximum: 220 },
         },
         edges: {
-            color: '#000000'
+            color: muiTheme.palette.text.secondary,
         },
         physics: true,
-    }), []);
+    }), [muiTheme.palette.text.secondary]);
 
     useEffect(() => {
         const emitter = master.emitter;

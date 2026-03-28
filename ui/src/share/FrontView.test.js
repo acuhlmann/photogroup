@@ -1,8 +1,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import { vi } from 'vitest';
 import FrontView from './FrontView';
+import { createAppTheme } from '../theme';
 
 // Mock dependencies - create a real EventEmitter-like object that actually works
 const createMockEmitter = () => {
@@ -24,11 +25,15 @@ const createMockEmitter = () => {
           }
         });
       }
-    }
+    },
+    removeListener: (event, callback) => {
+      if (!listeners[event]) return;
+      listeners[event] = listeners[event].filter((cb) => cb !== callback);
+    },
   };
-  // Add vitest mocks for verification
   emitter.on = vi.fn(emitter.on);
   emitter.emit = vi.fn(emitter.emit);
+  emitter.removeListener = vi.fn(emitter.removeListener);
   return emitter;
 };
 
@@ -42,11 +47,17 @@ const mockMaster = {
   findExistingContent: vi.fn().mockResolvedValue(true)
 };
 
-describe('FrontView', () => {
-  const theme = createTheme();
+function renderFrontView(ui) {
+  const theme = createAppTheme('light');
+  return (
+    <ThemeProvider theme={theme}>
+      {ui}
+    </ThemeProvider>
+  );
+}
 
+describe('FrontView', () => {
   beforeEach(() => {
-    // Clear URL params
     delete window.location;
     window.location = { search: '' };
   });
@@ -54,7 +65,7 @@ describe('FrontView', () => {
   it('renders without crashing', () => {
     const div = document.createElement('div');
     const root = createRoot(div);
-    root.render(<FrontView master={mockMaster} classes={{}} theme={theme} />);
+    root.render(renderFrontView(<FrontView master={mockMaster} />));
     root.unmount();
   });
 
@@ -62,13 +73,9 @@ describe('FrontView', () => {
     window.location.search = '';
     const div = document.createElement('div');
     const root = createRoot(div);
-    root.render(<FrontView master={mockMaster} classes={{}} theme={theme} />);
-    // Trigger iceDone event to make component visible
+    root.render(renderFrontView(<FrontView master={mockMaster} />));
     mockMaster.emitter.emit('iceDone');
-    // Component should be rendered (even if not immediately visible due to Slide animation)
     expect(div).toBeTruthy();
-    // The button text may not be immediately visible due to Slide animation,
-    // but the component structure should exist
     root.unmount();
   });
 
@@ -76,8 +83,7 @@ describe('FrontView', () => {
     window.location.search = '?room=test123';
     const div = document.createElement('div');
     const root = createRoot(div);
-    root.render(<FrontView master={mockMaster} classes={{}} theme={theme} />);
-    // FrontView should be hidden when room is in URL
+    root.render(renderFrontView(<FrontView master={mockMaster} />));
     root.unmount();
   });
 
@@ -85,16 +91,14 @@ describe('FrontView', () => {
     window.location.search = '';
     const div = document.createElement('div');
     const root = createRoot(div);
-    root.render(<FrontView master={mockMaster} classes={{}} theme={theme} />);
-    
-    // Simulate button click
+    root.render(renderFrontView(<FrontView master={mockMaster} />));
+    mockMaster.emitter.emit('iceDone');
+
     const button = div.querySelector('button');
     if (button) {
       button.click();
-      // openRoom should be called (tested via emitter events)
     }
-    
+
     root.unmount();
   });
 });
-

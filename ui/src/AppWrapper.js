@@ -1,18 +1,14 @@
 import React from 'react';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import App from "./App";
+import { createAppTheme } from './theme';
 
 export default function AppWrapper() {
     const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
 
     const theme = React.useMemo(
-        () =>
-            createTheme({
-                palette: {
-                    mode: prefersDarkMode ? 'dark' : 'light',
-                },
-            }),
+        () => createAppTheme(prefersDarkMode ? 'dark' : 'light'),
         [prefersDarkMode],
     );
 

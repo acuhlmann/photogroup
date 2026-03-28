@@ -16,9 +16,12 @@ const styles = theme => ({
     root: {
         display: 'flex',
         flexWrap: 'wrap',
-        justifyContent: 'space-around',
+        justifyContent: 'flex-start',
+        alignContent: 'flex-start',
+        gap: theme.spacing(2),
         width: '100%',
-        backgroundColor: theme.palette.background.paper,
+        padding: theme.spacing(1, 0, 3),
+        backgroundColor: theme.palette.background.default,
     },
     white: {
         color: '#ffffff'
@@ -294,10 +297,8 @@ function Gallery(props) {
     }, []);
 
     return (
-        <div>
-            <div>
-                {tiles.map((tile, index) => buildTile(tile, index, classes, master))}
-            </div>
+        <div className={classes.root}>
+            {tiles.map((tile, index) => buildTile(tile, index, classes, master))}
         </div>
     );
 }

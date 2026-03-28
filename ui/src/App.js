@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import {ThemeProvider, createTheme} from '@mui/material/styles';
+import {ThemeProvider} from '@mui/material/styles';
+import { createAppTheme } from './theme';
 
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
-import Typography from '@mui/material/Typography'
+import Typography from '@mui/material/Typography';
+import CssBaseline from '@mui/material/CssBaseline';
+import Container from '@mui/material/Container';
+import Stack from '@mui/material/Stack';
 import './App.css';
 
 import EventEmitter from 'eventemitter3';
@@ -101,12 +105,8 @@ function App({theme: propsTheme, prefersDarkMode}) {
         masterRef.current.service.master = masterRef.current;
     }
 
-    const [theme, setTheme] = useState(() => 
-        propsTheme || createTheme({
-            palette: {
-                mode: 'light'
-            }
-        })
+    const [theme, setTheme] = useState(() =>
+        propsTheme || createAppTheme('light')
     );
 
     // Handle shared files from Web Share Target API
@@ -171,12 +171,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
         };
 
         const handleDarkMode = (isDark) => {
-            const newTheme = createTheme({
-                palette: {
-                    mode: isDark ? 'dark' : 'light'
-                }
-            });
-            setTheme(newTheme);
+            setTheme(createAppTheme(isDark ? 'dark' : 'light'));
         };
 
         // Handle shared files received event
@@ -247,15 +242,12 @@ function App({theme: propsTheme, prefersDarkMode}) {
 
     // Use state theme if available, otherwise fall back to props theme or default
     const currentTheme = useMemo(() => {
-        return theme || propsTheme || createTheme({
-            palette: {
-                mode: 'light'
-            }
-        });
+        return theme || propsTheme || createAppTheme('light');
     }, [theme, propsTheme]);
 
     return (
         <ThemeProvider theme={currentTheme}>
+            <CssBaseline />
             <SnackbarProvider
                 anchorOrigin={{
                     vertical: 'bottom',
@@ -264,33 +256,56 @@ function App({theme: propsTheme, prefersDarkMode}) {
                 maxSnack={3}>
                 <div className="App">
                     <header className="App-header">
-                        <AppBar position="static" color="default">
-                            <Toolbar>
-                                <div style={{flexGrow: 1}}>
-                                    <Typography variant="button" component="h2">
+                        <AppBar position="static" enableColorOnDark>
+                            <Toolbar
+                                variant="dense"
+                                sx={{
+                                    flexWrap: 'wrap',
+                                    gap: 1,
+                                    py: 1,
+                                    alignItems: 'center',
+                                }}
+                            >
+                                <Stack
+                                    direction="column"
+                                    spacing={0}
+                                    sx={{ flexGrow: 1, minWidth: 0, textAlign: 'left' }}
+                                >
+                                    <Typography variant="h6" component="h1" sx={{ lineHeight: 1.25 }}>
                                         PhotoGroup
                                     </Typography>
-                                    <Typography variant="caption">
+                                    <Typography
+                                        variant="body2"
+                                        sx={{
+                                            opacity: 0.92,
+                                            display: { xs: 'none', sm: 'block' },
+                                            lineHeight: 1.3,
+                                        }}
+                                    >
                                         Zero Install, Peer-to-Peer Photo Collaboration.
                                     </Typography>
-                                </div>
-                                <AddPeersView master={masterRef.current}/>
-                                <Uploader 
-                                    model={masterRef.current.torrentAddition}
-                                    emitter={masterRef.current.emitter} 
-                                />
-                                <SettingsView 
-                                    master={masterRef.current} 
-                                    emitter={masterRef.current.emitter}
-                                    prefersDarkMode={prefersDarkMode}
-                                />
+                                </Stack>
+                                <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
+                                    <AddPeersView master={masterRef.current}/>
+                                    <Uploader
+                                        model={masterRef.current.torrentAddition}
+                                        emitter={masterRef.current.emitter}
+                                    />
+                                    <SettingsView
+                                        master={masterRef.current}
+                                        emitter={masterRef.current.emitter}
+                                        prefersDarkMode={prefersDarkMode}
+                                    />
+                                </Stack>
                             </Toolbar>
                         </AppBar>
                     </header>
 
-                    <div className="App-intro">
-                        <ShareCanvas master={masterRef.current} />
-                    </div>
+                    <main className="App-main">
+                        <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 3 } }}>
+                            <ShareCanvas master={masterRef.current} />
+                        </Container>
+                    </main>
                 </div>
             </SnackbarProvider>
         </ThemeProvider>
