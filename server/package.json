@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "axios": "^1.13.2",
+    "bufferutil": "^4.1.0",
     "bittorrent-dht": "^11.0.11",
     "bittorrent-tracker": "^11.2.2",
     "compression": "^1.8.1",
@@ -31,6 +32,7 @@
     "sse-channel": "^4.0.0",
     "supertest": "^7.1.4",
     "twilio": "^5.11.1",
+    "utf-8-validate": "^6.0.6",
     "webtorrent": "^2.8.5",
     "wrtc": "^0.4.7"
   },
