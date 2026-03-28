@@ -254,13 +254,18 @@ export default class RoomsService {
                 body: JSON.stringify(data)});
 
             if (!response.ok) {
-                console.error(response.status);
-            } else {
-                Logger.info('joined room');
-                const room = await response.json();
-                this.listenToUrlChanges();
-                return room;
+                if (response.status === 404) {
+                    Logger.warn('join room: room missing on server (e.g. after restart); recreating with same id');
+                    return this.createRoom();
+                }
+                const errText = await response.text().catch(() => '');
+                Logger.error('join room failed: ' + response.status + ' ' + errText);
+                throw new Error(`Join failed (${response.status})`);
             }
+            Logger.info('joined room');
+            const room = await response.json();
+            this.listenToUrlChanges();
+            return room;
 
         } catch(err) {
             Logger.error('join room ' + err);

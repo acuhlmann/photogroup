@@ -49,6 +49,27 @@ describe('Rooms API', () => {
                 })
                 .expect(400, done);
         });
+
+        it('should join existing room when POST create uses same id (idempotent)', (done) => {
+            const dupPeer = {
+                ...testPeer,
+                peerId: 'dup-peer-' + Date.now(),
+                sessionId: 'dup-session-' + Date.now()
+            };
+            request(app)
+                .post('/api/rooms/')
+                .send({
+                    id: testRoomId,
+                    peer: dupPeer
+                })
+                .expect('Content-Type', /json/)
+                .expect(200)
+                .end((err, res) => {
+                    if (err) return done(err);
+                    assert(res.body.peers.length >= 2, 'Both creator and second peer should be in room');
+                    done();
+                });
+        });
     });
 
     describe('GET /api/rooms/:id', () => {
