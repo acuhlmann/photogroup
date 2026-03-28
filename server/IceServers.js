@@ -5,7 +5,8 @@ import cors from 'cors';
 import { inspect } from 'util';
 
 const CORS_WHITELIST = [
-    // Official WebTorrent site
+    'http://photogroup.network/',
+    'https://photogroup.network/',
     'http://www.photogroup.network/',
     'https://www.photogroup.network/'
 ];
