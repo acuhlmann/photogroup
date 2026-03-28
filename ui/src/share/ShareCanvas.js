@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import Gallery from "./gallery/Gallery";
 
 import Button from '@mui/material/Button';
-import {withStyles, withTheme } from '@mui/styles';
-
+import IconButton from '@mui/material/IconButton';
+import CloseRounded from '@mui/icons-material/CloseRounded';
 import Logger from 'js-logger';
 import { withSnackbar } from './compatibility/withSnackbar';
 
@@ -13,27 +13,7 @@ import TopologyView from './topology/TopologyView';
 import WebTorrent from 'webtorrent';
 // import Online from 'online-js' // Commented out - not currently used and causes axios import issues
 
-const styles = theme => ({
-    heading: {
-        fontSize: theme.typography.pxToRem(15),
-        fontWeight: theme.typography.fontWeightRegular,
-    },
-    content: {
-        padding: '0px 0px 0px 0px',
-        width: '100%',
-        overflow: 'hidden'
-    },
-    nooverflow: {
-        overflow: 'hidden',
-        width: '100%'
-    },
-
-    white: {
-        color: '#ffffff'
-    },
-});
-
-function ShareCanvas({master, classes, enqueueSnackbar, closeSnackbar, theme}) {
+function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
     const deferredPromptRef = useRef(null);
 
     useEffect(() => {
@@ -85,20 +65,21 @@ function ShareCanvas({master, classes, enqueueSnackbar, closeSnackbar, theme}) {
             persist: persist,
             autoHideDuration: 4000,
             action: (key) => (
-                <Button 
-                    className={classes.white} 
-                    onClick={() => closeSnackbar(key)} 
+                <IconButton
                     size="small"
+                    aria-label="Dismiss notification"
+                    onClick={() => closeSnackbar(key)}
+                    sx={{ color: 'inherit' }}
                 >
-                    x
-                </Button>
+                    <CloseRounded fontSize="small" />
+                </IconButton>
             ),
             anchorOrigin: {
                 vertical: vertical,
                 horizontal: 'right'
             }
         });
-    }, [enqueueSnackbar, closeSnackbar, classes.white]);
+    }, [enqueueSnackbar, closeSnackbar]);
 
     const subscribeToPush = useCallback(() => {
         Notification.requestPermission(status => {
@@ -152,4 +133,4 @@ function ShareCanvas({master, classes, enqueueSnackbar, closeSnackbar, theme}) {
     );
 }
 
-export default withTheme(withSnackbar(withStyles(styles)(ShareCanvas)));
+export default withSnackbar(ShareCanvas);
