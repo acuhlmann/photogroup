@@ -144,8 +144,9 @@ export default class Rooms {
                     }
                 });
 
-                const responsePhotos = request.body.photos.map(requestPhoto => {
+                const responsePhotos = [];
 
+                for (const requestPhoto of request.body.photos) {
                     const infoHash = requestPhoto.infoHash;
 
                     if(this.dht) {
@@ -154,8 +155,7 @@ export default class Rooms {
 
                     const peerId = requestPhoto.peerId;
                     if(!peerId) {
-                        response.status(400).send('Expected peerId');
-                        return;
+                        return response.status(400).send('Expected peerId');
                     }
 
                     let photo = this.findPhoto(room.photos, infoHash);
@@ -166,8 +166,8 @@ export default class Rooms {
 
                         room.photos.unshift(photo);
                     }
-                    return photo;
-                });
+                    responsePhotos.push(photo);
+                }
 
                 const sessionId = request.body.sessionId;
                 this.sendPhotos(room, this.allRoomClientsExcept(room, sessionId), 'add', responsePhotos);
@@ -201,9 +201,10 @@ export default class Rooms {
                 const updated = request.body.map(update => {
                     const infoHash = update.infoHash;
                     const existing = this.findPhoto(room.photos, infoHash);
+                    if (!existing) return null;
                     _.merge(existing, update);
                     return existing;
-                });
+                }).filter(item => item !== null);
                 this.sendPhotos(room, this.allRoomClients(room),'update', updated);
                 response.send(updated);
             }

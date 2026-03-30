@@ -194,40 +194,45 @@ export default class Tracker {
         const remoteLog = this.remoteLog;
         const peerId = theArgs[0];
         const data = theArgs[1];
-        
+
         // Guard against undefined data (can happen during some events)
         if (!data) {
             console.log('handleEvent called with no data, peerId:', peerId);
             return;
         }
-        
-        let peerIdStr = peerId;
-        if(data.to_peer_id) {
-            peerIdStr = peerId + ' to ' + data.to_peer_id;
-        }
 
-        const offers = data.offers;
-        const answer = data.answer;
-        const event = data.event;
-        const date = new Date();
-        const time = date.getMinutes() + ':' + date.getSeconds() + ':' + date.getMilliseconds();
-        const listener = 'pg tracker ' + time + ' '  + event + ' ' + peerIdStr + ': ' + data.addr + ': ';
-        let jsonSdp, sdp = '';
-        if(offers) {
-            jsonSdp = transform.parse(data.offers[0].offer.sdp);
-            sdp = 'offers ' + data.offers.length;
-            this.sendIceMsg('iceOffer', peerId, event, jsonSdp, data.addr, data.info_hash);
-            remoteLog(listener + sdp);
-        } else if(answer) {
-            jsonSdp = transform.parse(data.answer.sdp);
-            sdp = 'answer ' + data.answer.type;
-            this.sendIceMsg('iceAnswer', peerId, event, jsonSdp, data.addr, data.info_hash);
-            remoteLog(listener + sdp);
-        } else if(event === 'stopped' || event === 'completed') {
-            this.sendIceMsg('iceDone', peerId, event, null, data.addr, data.info_hash);
-            remoteLog(listener);
-        } else {
-            remoteLog(inspect(theArgs));
+        try {
+            let peerIdStr = peerId;
+            if(data.to_peer_id) {
+                peerIdStr = peerId + ' to ' + data.to_peer_id;
+            }
+
+            const offers = data.offers;
+            const answer = data.answer;
+            const event = data.event;
+            const date = new Date();
+            const time = date.getMinutes() + ':' + date.getSeconds() + ':' + date.getMilliseconds();
+            const listener = 'pg tracker ' + time + ' '  + event + ' ' + peerIdStr + ': ' + data.addr + ': ';
+            let jsonSdp, sdp = '';
+            if(offers && offers.length > 0 && offers[0].offer && offers[0].offer.sdp) {
+                jsonSdp = transform.parse(data.offers[0].offer.sdp);
+                sdp = 'offers ' + data.offers.length;
+                this.sendIceMsg('iceOffer', peerId, event, jsonSdp, data.addr, data.info_hash);
+                remoteLog(listener + sdp);
+            } else if(answer && answer.sdp) {
+                jsonSdp = transform.parse(data.answer.sdp);
+                sdp = 'answer ' + data.answer.type;
+                this.sendIceMsg('iceAnswer', peerId, event, jsonSdp, data.addr, data.info_hash);
+                remoteLog(listener + sdp);
+            } else if(event === 'stopped' || event === 'completed') {
+                this.sendIceMsg('iceDone', peerId, event, null, data.addr, data.info_hash);
+                remoteLog(listener);
+            } else {
+                remoteLog(inspect(theArgs));
+            }
+        } catch(err) {
+            console.error('Tracker handleEvent error:', err.message);
+            remoteLog('Tracker handleEvent error: ' + err.message);
         }
 
         //console.log('onlistening ' + util.inspect(theArgs));
@@ -255,6 +260,9 @@ export default class Tracker {
     }
 
     mapSdp(sdp) {
+        if (!sdp || !sdp.media || sdp.media.length === 0 || !sdp.media[0].candidates) {
+            return [];
+        }
         return sdp.media[0].candidates.map(item => {
             return {
                 ip: item.ip,
