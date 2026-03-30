@@ -31,7 +31,7 @@ test('single peer room creation and photo upload', async ({ page }) => {
   await page.goto('/');
   
   // Step 2: Create room
-  const startRoomButton = page.getByRole('button', { name: /start a Private Room/i });
+  const startRoomButton = page.getByRole('button', { name: /Create Room/i });
   await expect(startRoomButton).toBeVisible({ timeout: 30000 });
   await startRoomButton.click();
   
@@ -89,7 +89,7 @@ test('room URL sharing via clipboard', async ({ page }) => {
   await page.goto('/');
   
   // Create room
-  const startRoomButton = page.getByRole('button', { name: /start a Private Room/i });
+  const startRoomButton = page.getByRole('button', { name: /Create Room/i });
   await expect(startRoomButton).toBeVisible({ timeout: 30000 });
   await startRoomButton.click();
   

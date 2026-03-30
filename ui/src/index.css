@@ -2,11 +2,14 @@ body {
   margin: 0;
   padding: 0;
   font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 video {
   width: 100%    !important;
   height: auto   !important;
+  border-radius: 8px;
 }
 
 audio {
@@ -15,3 +18,7 @@ audio {
   height: 25px;
 }
 
+/* Selection color */
+::selection {
+  background: rgba(0, 229, 255, 0.25);
+}
