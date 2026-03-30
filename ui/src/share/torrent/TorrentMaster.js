@@ -448,7 +448,7 @@ export default class TorrentMaster {
     findUrl(photos, infoHash) {
         const index = photos.findIndex(item => item.infoHash === infoHash);
         let foundItem = null;
-        if(index => 0) {
+        if(index >= 0) {
             foundItem = photos[index];
         }
         return foundItem;
