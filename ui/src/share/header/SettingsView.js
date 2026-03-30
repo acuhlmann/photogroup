@@ -3,7 +3,6 @@ import PropTypes from 'prop-types';
 
 import Logger from 'js-logger';
 
-import { withStyles } from '@mui/styles';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Settings from '@mui/icons-material/Settings';
@@ -12,11 +11,11 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogActions from '@mui/material/DialogActions';
-
-import List from '@mui/material/List';
+import Box from '@mui/material/Box';
+import Divider from '@mui/material/Divider';
+import Collapse from '@mui/material/Collapse';
 
 import Switch from '@mui/material/Switch';
-import FormGroup from '@mui/material/FormGroup';
 import FormControlLabel from '@mui/material/FormControlLabel';
 
 import {format} from 'date-fns';
@@ -37,21 +36,61 @@ function getAppVersionString() {
     return build ? `${base}.${build}` : base;
 }
 
-const styles = theme => ({
-    horizontal: {
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-    vertical: {
-        display: 'flex',
-        flexDirection: 'column'
-    },
-});
+function SectionHeader({ label }) {
+    return (
+        <Box sx={{ mt: 2, mb: 1 }}>
+            <Typography
+                variant="subtitle2"
+                sx={{
+                    textTransform: 'uppercase',
+                    fontFamily: 'var(--font-mono)',
+                    letterSpacing: '0.05em',
+                    color: 'text.secondary',
+                    mb: 0.5,
+                }}
+            >
+                {label}
+            </Typography>
+            <Divider />
+        </Box>
+    );
+}
+
+function SettingToggle({ checked, onChange, label, description }) {
+    return (
+        <Box sx={{ py: 0.5 }}>
+            <FormControlLabel
+                control={
+                    <Switch
+                        checked={checked}
+                        onChange={(event) => onChange(event.target.checked)}
+                        color="primary"
+                    />
+                }
+                label={
+                    <Box>
+                        <Typography variant="body2">{label}</Typography>
+                        {description && (
+                            <Typography variant="caption" color="text.secondary">
+                                {description}
+                            </Typography>
+                        )}
+                    </Box>
+                }
+                sx={{ alignItems: 'flex-start', ml: 0 }}
+            />
+        </Box>
+    );
+}
+
+function getLogColor(level) {
+    if (level === 'ERROR') return 'error.main';
+    if (level === 'WARN') return 'warning.main';
+    return 'text.secondary';
+}
 
 function SettingsView(props) {
-    const {classes, master, enqueueSnackbar, closeSnackbar, prefersDarkMode} = props;
+    const {master, enqueueSnackbar, closeSnackbar, prefersDarkMode} = props;
     const masterRef = useRef(master);
     masterRef.current = master;
 
@@ -63,23 +102,29 @@ function SettingsView(props) {
     const [encrypt, setEncrypt] = useState(false);
     const [strategyPreference, setStrategyPreference] = useState(false);
     const [darkMode, setDarkMode] = useState(prefersDarkMode);
+    const [logsExpanded, setLogsExpanded] = useState(false);
     const logsBeforeMountRef = useRef([]);
     const mountedRef = useRef(false);
+    const logsEndRef = useRef(null);
 
     const log = useCallback((message, level) => {
         if(mountedRef.current) {
-            const msg = <div key={Math.random()}>
-                <Typography variant="caption">{level + ': ' + message}</Typography>
-            </div>;
+            const entry = { key: Math.random(), message, level };
             console.info(level, message);
 
             if(level === 'DEBUG' || level === 'INFO' || level === 'WARN' || level === 'ERROR') {
-                setMessages(state => update(state, {$unshift: [msg]}));
+                setMessages(state => update(state, {$push: [entry]}));
             }
         } else {
             logsBeforeMountRef.current.push({message: message, level: level});
         }
     }, []);
+
+    useEffect(() => {
+        if (logsExpanded && logsEndRef.current) {
+            logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages, logsExpanded]);
 
     useEffect(() => {
         Logger.setHandler((messages, context) => {
@@ -183,10 +228,6 @@ function SettingsView(props) {
         setDarkMode(value);
     }, []);
 
-    const messagesList = <List>
-        {messages}
-    </List>;
-
     return (
         <div>
             <IconButton
@@ -202,93 +243,125 @@ function SettingsView(props) {
                 onClose={handleClose}
                 TransitionComponent={Transition}
                 keepMounted
-                maxWidth="md"
+                maxWidth="sm"
                 fullWidth
             >
                 <DialogTitle>Settings</DialogTitle>
-                <DialogActions className={classes.vertical}>
-                        <FormControlLabel
-                            control={
-                                <Switch
-                                    onChange={(event) => handleEncryptChange(event.target.checked)}
-                                    checked={encrypt}
-                                    value="encrypt"
-                                    color="primary"
-                                />
-                            }
-                            label="Encrypt End-to-end"
-                        />
-                        <FormGroup row>
-                            <FormControlLabel
-                            control={
-                                <Switch
-                                    onChange={(event) => handleTopologyChange(event.target.checked)}
-                                    checked={showTopology}
-                                    value="showTopology"
-                                    color="primary"
-                                />
-                            }
-                            label="Topology View"
-                        />
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        onChange={(event) => handleShowMeChange(event.target.checked)}
-                                        checked={showMe}
-                                        value="showMe"
-                                        color="primary"
-                                    />
-                                }
-                                label="Me View"
-                            />
-                        </FormGroup>
-                        <FormControlLabel
-                            control={
-                                <Switch
-                                    onChange={(event) => handleStrategyPreferenceChange(event.target.checked)}
-                                    checked={strategyPreference}
-                                    value="strategyPreference"
-                                    color="primary"
-                                />
-                            }
-                            label="Prefer Sequential over Rarest-First Downloading?"
-                        />
-                        <FormControlLabel
-                            control={
-                                <Switch
-                                    onChange={(event) => handleDarkModeChange(event.target.checked)}
-                                    checked={darkMode}
-                                    value="darkMode"
-                                    color="primary"
-                                />
-                            }
-                            label="Dark Theme"
-                        />
-                    <span className={classes.horizontal}>
-                        <Button onClick={() => masterRef.current.restartTrackers()} color="secondary">
-                            restart trackers
-                        </Button>
-                        <IconButton
-                            onClick={handleClose}>
-                            <CloseRounded />
-                        </IconButton>
-                    </span>
-                </DialogActions>
                 <DialogContent>
-                    <Typography variant={"caption"}>v{getAppVersionString()} {peerId}</Typography>
+                    {/* Privacy */}
+                    <SectionHeader label="Privacy" />
+                    <SettingToggle
+                        checked={encrypt}
+                        onChange={handleEncryptChange}
+                        label="Encrypt End-to-End"
+                        description="Encrypts all data shared between peers so only participants can read it."
+                    />
 
-                    {messagesList}
+                    {/* Display */}
+                    <SectionHeader label="Display" />
+                    <SettingToggle
+                        checked={showTopology}
+                        onChange={handleTopologyChange}
+                        label="Topology View"
+                        description="Show the network topology graph of connected peers."
+                    />
+                    <SettingToggle
+                        checked={showMe}
+                        onChange={handleShowMeChange}
+                        label="Me View"
+                        description="Show your own node highlighted in the network view."
+                    />
+                    <SettingToggle
+                        checked={darkMode}
+                        onChange={handleDarkModeChange}
+                        label="Dark Theme"
+                        description="Switch between light and dark color schemes."
+                    />
+
+                    {/* Advanced */}
+                    <SectionHeader label="Advanced" />
+                    <SettingToggle
+                        checked={strategyPreference}
+                        onChange={handleStrategyPreferenceChange}
+                        label="Prefer Sequential Download"
+                        description="Download pieces in order instead of rarest-first. May reduce swarming efficiency."
+                    />
+                    <Box sx={{ py: 0.5, pl: 1 }}>
+                        <Button
+                            onClick={() => masterRef.current.restartTrackers()}
+                            color="secondary"
+                            variant="outlined"
+                            size="small"
+                        >
+                            Restart Trackers
+                        </Button>
+                    </Box>
+
+                    {/* Logs */}
+                    <SectionHeader label="Logs" />
+                    <Box sx={{ py: 0.5 }}>
+                        <Button
+                            size="small"
+                            onClick={() => setLogsExpanded(prev => !prev)}
+                        >
+                            {logsExpanded ? 'Hide Logs' : 'Show Logs'}
+                        </Button>
+                    </Box>
+                    <Collapse in={logsExpanded}>
+                        <Box
+                            sx={{
+                                maxHeight: 300,
+                                overflow: 'auto',
+                                bgcolor: 'action.hover',
+                                borderRadius: 1,
+                                p: 1,
+                                mt: 0.5,
+                            }}
+                        >
+                            {messages.map((entry) => (
+                                <Typography
+                                    key={entry.key}
+                                    variant="caption"
+                                    component="div"
+                                    sx={{
+                                        fontSize: '0.7rem',
+                                        fontFamily: 'var(--font-mono)',
+                                        color: getLogColor(entry.level),
+                                        whiteSpace: 'pre-wrap',
+                                        wordBreak: 'break-all',
+                                    }}
+                                >
+                                    {entry.level + ': ' + entry.message}
+                                </Typography>
+                            ))}
+                            <div ref={logsEndRef} />
+                        </Box>
+                    </Collapse>
                 </DialogContent>
+
+                <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 2 }}>
+                    <Typography
+                        variant="caption"
+                        sx={{
+                            fontFamily: 'var(--font-mono)',
+                            color: 'text.disabled',
+                        }}
+                    >
+                        v{getAppVersionString()} {peerId}
+                    </Typography>
+                    <IconButton onClick={handleClose}>
+                        <CloseRounded />
+                    </IconButton>
+                </DialogActions>
             </Dialog>
         </div>
     );
 }
 
 SettingsView.propTypes = {
-    classes: PropTypes.object.isRequired,
     emitter: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,
     prefersDarkMode: PropTypes.bool.isRequired,
 };
 
-export default withSnackbar(withStyles(styles)(SettingsView));
+export default withSnackbar(SettingsView);
