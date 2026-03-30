@@ -14,6 +14,7 @@ import StringUtil from "../util/StringUtil";
 import ContentTile from "./ContentTile";
 import GalleryPhotoHandler from "./GalleryPhotoHandler";
 import { getBlobAndEmit } from "../torrent/BlobUtils";
+import { cacheGet } from "../util/ImageBlobCache";
 
 function Gallery(props) {
     const {master} = props;
@@ -140,7 +141,25 @@ function Gallery(props) {
             renderTile(photos, isSeeding);
         } else {
             const photoPromises = photos.map(photo => {
-                return new Promise((resolve, reject) => {
+                return new Promise(async (resolve, reject) => {
+                    // Cache-first: if this photo was resurrected from a previous session,
+                    // try to serve the blob directly from IndexedDB without touching the
+                    // WebTorrent peer/tracker layer (which can hang when offline or after
+                    // the browser returns from standby).
+                    if (photo.fromCache && photo.infoHash) {
+                        try {
+                            const cachedBlob = await cacheGet(photo.infoHash);
+                            if (cachedBlob) {
+                                Logger.info('addMediaToDom: serving from blob cache for ' + (photo.fileName || photo.infoHash));
+                                const file = new File([cachedBlob], photo.fileName || 'image', { type: photo.fileType || cachedBlob.type });
+                                resolve(mergePostloadMetadata(photo, file));
+                                return;
+                            }
+                        } catch (cacheErr) {
+                            Logger.warn('addMediaToDom: blob cache lookup failed, falling through: ' + cacheErr);
+                        }
+                    }
+
                     // Check if torrentFile exists and has required methods
                     if (!photo.torrentFile) {
                         Logger.warn('addMediaToDom: torrentFile is null/undefined for ' + (photo.fileName || 'unknown'));

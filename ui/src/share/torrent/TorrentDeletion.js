@@ -1,6 +1,7 @@
 import Logger from 'js-logger';
 import IdbKvStore from "idb-kv-store";
 import { getTorrent, isCompoundInfoHash, getBaseInfoHash, getFilePathFromInfoHash } from './WebTorrentUtils';
+import { cacheDelete } from '../util/ImageBlobCache';
 
 export default class TorrentDeletion {
 
@@ -17,6 +18,9 @@ export default class TorrentDeletion {
             Logger.error('deleteItem called with invalid tile (missing infoHash)');
             return Promise.reject('Invalid tile: missing infoHash');
         }
+
+        // Remove from blob cache so stale data doesn't linger after deletion.
+        cacheDelete(tile.infoHash).catch(() => {});
 
         if(tile.torrent) {
             return this.service.delete(tile.infoHash)
