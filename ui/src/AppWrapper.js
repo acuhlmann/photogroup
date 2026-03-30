@@ -5,7 +5,9 @@ import App from "./App";
 import { createAppTheme } from './theme';
 
 export default function AppWrapper() {
-    const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
+    const systemPrefersDark = useMediaQuery('(prefers-color-scheme: dark)');
+    // Default to dark mode unless system explicitly prefers light
+    const prefersDarkMode = systemPrefersDark !== false;
 
     const theme = React.useMemo(
         () => createAppTheme(prefersDarkMode ? 'dark' : 'light'),

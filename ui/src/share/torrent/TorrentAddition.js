@@ -7,6 +7,7 @@ import FileUtil from "../util/FileUtil";
 import React from "react";
 import { getTorrent, getBaseInfoHash, isDuplicateTorrentError, extractDuplicateTorrentId } from './WebTorrentUtils';
 import { getPreviewFromImage, getPreviewFromAudio } from './ThumbnailExtractor';
+import { cachePut } from '../util/ImageBlobCache';
 
 export default class TorrentAddition {
 
@@ -417,6 +418,17 @@ export default class TorrentAddition {
                             photo.infoHash += '-' + file.path;
                         }
                         //self.emitter.emit('torrentReady', photo);
+                    });
+
+                    // Cache each image blob so it survives a page reload without
+                    // needing tracker/peer connectivity on resurrection.
+                    withoutThumbs.forEach((file, index) => {
+                        const photo = photos[index];
+                        if (photo.file && photo.infoHash) {
+                            cachePut(photo.infoHash, photo.file).catch(err => {
+                                Logger.warn('Failed to cache image blob for ' + photo.infoHash + ': ' + err);
+                            });
+                        }
                     });
 
                     // Emit update to refresh UI with new state

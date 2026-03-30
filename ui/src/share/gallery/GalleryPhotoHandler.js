@@ -20,7 +20,7 @@ export default class GalleryPhotoHandler {
     sync() {
         this.emitter.on('photos', event => {
 
-            const format = 'H:m MMM d y';
+            const formatToken = 'H:m MMM d y';
             if(event.type === 'all') {
 
                 this.view.setTiles(() => {
@@ -28,7 +28,7 @@ export default class GalleryPhotoHandler {
                     photos.forEach(item => {
                         item.loading = true;
                     });
-                    this.sortPictures(photos, format);
+                    this.sortPictures(photos, formatToken);
                     return photos;
                 });
 
@@ -44,12 +44,12 @@ export default class GalleryPhotoHandler {
                             const tile = photo;
                             tile.loading = true;
                             if(!tile.picDateTaken && tile.file && tile.file.lastModified) {
-                                tile.picDateTaken = format(tile.file.lastModified, format);
+                                tile.picDateTaken = format(tile.file.lastModified, formatToken);
                             }
                             tiles = update(oldTiles, {$unshift: [tile]});
                         }
                     });
-                    this.sortPictures(tiles, format);
+                    this.sortPictures(tiles, formatToken);
                     return tiles;
                 });
 
