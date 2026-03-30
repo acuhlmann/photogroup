@@ -148,16 +148,18 @@ export default class Peers {
     }
 
     sendWebPeers(type, item) {
-        // Always log what we're sending (not just in debug mode)
-        if (item.networkChain && item.networkChain.length > 0) {
+        // For delete events, item is a peerId string, not a peer object
+        const peerId = typeof item === 'string' ? item : item.peerId;
+
+        if (typeof item !== 'string' && item.networkChain && item.networkChain.length > 0) {
             const enrichedItems = item.networkChain.filter(chainItem => chainItem.network && (chainItem.network.city || chainItem.network.connection?.isp));
             if (enrichedItems.length > 0) {
-                console.log(`[Peers] Sending ${type} for peer ${item.peerId} with ${enrichedItems.length}/${item.networkChain.length} enriched network items`);
+                console.log(`[Peers] Sending ${type} for peer ${peerId} with ${enrichedItems.length}/${item.networkChain.length} enriched network items`);
                 enrichedItems.forEach(chainItem => {
                     console.log(`  ✓ ${chainItem.ip}: ${chainItem.network.city || ''} ${chainItem.network.connection?.isp || ''}`);
                 });
             } else {
-                console.log(`[Peers] Sending ${type} for peer ${item.peerId} - ${item.networkChain.length} networkChain items but NO enriched data`);
+                console.log(`[Peers] Sending ${type} for peer ${peerId} - ${item.networkChain.length} networkChain items but NO enriched data`);
                 item.networkChain.forEach(chainItem => {
                     const hasNetwork = !!chainItem.network;
                     const networkInfo = hasNetwork ? `network exists but no city/isp` : `no network property`;
@@ -165,7 +167,7 @@ export default class Peers {
                 });
             }
         } else {
-            console.log(`[Peers] Sending ${type} for peer ${item.peerId} - no networkChain`);
+            console.log(`[Peers] Sending ${type} for peer ${peerId}`);
         }
 
         const clients = [...this.clientsBySessionId.values()];
