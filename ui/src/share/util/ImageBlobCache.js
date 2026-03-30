@@ -9,7 +9,15 @@
 import IdbKvStore from 'idb-kv-store';
 import Logger from 'js-logger';
 
-const db = new IdbKvStore('image-blob-cache');
+// Lazily initialised so that importing this module in test environments
+// (jsdom/Node) that lack IndexedDB does not throw at module load time.
+let _db = null;
+function getDb() {
+    if (_db) return _db;
+    if (typeof indexedDB === 'undefined') return null;
+    _db = new IdbKvStore('image-blob-cache');
+    return _db;
+}
 
 /**
  * Store a blob (or File) for the given infoHash, overwriting any previous entry.
@@ -18,6 +26,8 @@ const db = new IdbKvStore('image-blob-cache');
  * @returns {Promise<void>}
  */
 export function cachePut(infoHash, blob) {
+    const db = getDb();
+    if (!db) return Promise.resolve();
     return new Promise((resolve, reject) => {
         db.set(infoHash, blob, (err) => {
             if (err) {
@@ -38,6 +48,8 @@ export function cachePut(infoHash, blob) {
  * @returns {Promise<Blob|File|null>}
  */
 export function cacheGet(infoHash) {
+    const db = getDb();
+    if (!db) return Promise.resolve(null);
     return new Promise((resolve, reject) => {
         db.get(infoHash, (err, value) => {
             if (err) {
@@ -57,6 +69,8 @@ export function cacheGet(infoHash) {
  * @returns {Promise<void>}
  */
 export function cacheDelete(infoHash) {
+    const db = getDb();
+    if (!db) return Promise.resolve();
     return new Promise((resolve) => {
         db.remove(infoHash, (err) => {
             if (err) Logger.warn('ImageBlobCache.delete error for ' + infoHash + ': ' + err);
