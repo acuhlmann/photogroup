@@ -1,56 +1,68 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import PropTypes from 'prop-types';
 
-import {withStyles} from '@mui/styles';
-
-import Accordion from '@mui/material/Accordion';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import AccordionDetails from '@mui/material/AccordionDetails';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import TextField from '@mui/material/TextField';
+import Chip from '@mui/material/Chip';
+import ArrowDownwardRounded from '@mui/icons-material/ArrowDownwardRounded';
+import SmartphoneRounded from '@mui/icons-material/SmartphoneRounded';
+import ComputerRounded from '@mui/icons-material/ComputerRounded';
+import RouterRounded from '@mui/icons-material/RouterRounded';
+import DnsRounded from '@mui/icons-material/DnsRounded';
 
-import Paper from "@mui/material/Paper";
-import AccountCircleRounded from '@mui/icons-material/AccountCircleRounded';
-import TextField from "@mui/material/TextField";
-import update from "immutability-helper";
-import ViewListRounded from '@mui/icons-material/ViewListRounded';
-import ViewAgendaRounded from '@mui/icons-material/ViewAgendaRounded';
-import IconButton from '@mui/material/IconButton';
-import StringUtil from "./util/StringUtil";
-import NatListItem from "./util/NatListItem";
-import UserListItem from "./util/UserListItem";
-import Slide from "@mui/material/Slide";
-import {Fade} from "@mui/material";
+import StringUtil from './util/StringUtil';
 
-const styles = theme => ({
-    content: {
-        padding: '0px 0px 0px 0px',
-        width: '100%',
-        overflow: 'hidden'
-    },
-    vertical: {
-        display: 'flex',
-        flexDirection: 'column'
-    },
-    verticalAndWide: {
-        display: 'flex',
-        flexDirection: 'column',
-        width: '100%'
-    },
-    horizontal: {
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-});
+const monoFont = 'var(--font-mono)';
 
-function MeView({classes, master}) {
-    const expandedMeFromStorage = localStorage.getItem('expandedMe') || false;
-    const [expandedMe, setExpandedMe] = useState(String(expandedMeFromStorage) === 'true');
+function getDeviceIcon(platform) {
+    if (!platform) return <ComputerRounded />;
+    const lower = platform.toLowerCase();
+    if (lower.includes('android') || lower.includes('ios') || lower.includes('iphone') || lower.includes('mobile')) {
+        return <SmartphoneRounded />;
+    }
+    return <ComputerRounded />;
+}
+
+function ChainArrow() {
+    return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.5 }}>
+            <ArrowDownwardRounded sx={{ color: 'text.disabled', fontSize: 20 }} />
+        </Box>
+    );
+}
+
+function ChainCard({ icon, title, children, borderColor }) {
+    return (
+        <Paper
+            variant="outlined"
+            sx={{
+                p: 1.5,
+                borderLeft: 4,
+                borderLeftColor: borderColor,
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'flex-start',
+                gap: 1.5,
+            }}
+        >
+            <Box sx={{ color: 'text.secondary', mt: 0.25 }}>
+                {icon}
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, minWidth: 0 }}>
+                <Typography variant="subtitle2" sx={{ lineHeight: 1.3 }}>
+                    {title}
+                </Typography>
+                {children}
+            </Box>
+        </Paper>
+    );
+}
+
+function MeView({ master }) {
     const [showMe, setShowMe] = useState(false);
     const [galleryHasImages, setGalleryHasImages] = useState(false);
-    const [listView, setListView] = useState(true);
     const [me, setMe] = useState({});
     const [myNat, setMyNat] = useState(null);
     const [connectionSpeedType, setConnectionSpeedType] = useState('');
@@ -64,15 +76,15 @@ function MeView({classes, master}) {
         const emitter = master.emitter;
 
         const handleLocalNetwork = (chain) => {
-            if(me?.label && myNat?.network?.hostname) return;
-            if(!chain?.find) return;
-            
+            if (me?.label && myNat?.network?.hostname) return;
+            if (!chain?.find) return;
+
             const meItem = chain.find(item => item.typeDetail === 'host');
-            if(meItem) {
+            if (meItem) {
                 meItem.label = originPlatform + ' ' + meItem.ip;
             }
             const natItem = findNat(chain);
-            if(natItem) {
+            if (natItem) {
                 natItem.label = natItem.typeDetail + ' ' + natItem.ip;
                 natItem.network = {};
             }
@@ -82,18 +94,18 @@ function MeView({classes, master}) {
         };
 
         const handlePeers = (event) => {
-            if(event.type === 'update') {
+            if (event.type === 'update') {
                 const myPeer = event.item;
-                if(myPeer && myPeer.peerId === master.client.peerId && myPeer.networkChain) {
+                if (myPeer && myPeer.peerId === master.client.peerId && myPeer.networkChain) {
                     const natItem = findNat(myPeer.networkChain);
-                    if(natItem && !natItem.network) {
+                    if (natItem && !natItem.network) {
                         natItem.network = {};
                     }
-                    if(natItem) {
+                    if (natItem) {
                         natItem.label = StringUtil.createNetworkLabel(natItem);
                     }
                     const meItem = myPeer.networkChain.find(item => item.typeDetail === 'host');
-                    if(meItem) {
+                    if (meItem) {
                         meItem.label = originPlatform + ' ' + meItem.ip;
                     }
                     setMyNat(natItem);
@@ -109,7 +121,7 @@ function MeView({classes, master}) {
         const handleAddPeerDone = (peer) => {
             const platform = StringUtil.slimPlatform(peer.originPlatform);
             setOriginPlatform(platform);
-            setMe({label: platform});
+            setMe({ label: platform });
         };
 
         const handleShowMe = (value) => {
@@ -137,108 +149,125 @@ function MeView({classes, master}) {
         };
     }, [master, findNat, me, myNat, originPlatform]);
 
-    const handleExpand = useCallback((panel) => (event, expanded) => {
-        localStorage.setItem(panel, expanded);
-        if (panel === 'expandedMe') {
-            setExpandedMe(expanded);
-        }
-    }, []);
-
     const batchChangeName = useCallback((event) => {
-        if(!event.target) return;
+        if (!event.target) return;
         console.log('change name ' + event.target.value);
         master.service.updatePeer({
-            name: event.target.value
+            name: event.target.value,
         });
     }, [master]);
 
-    const buildHeader = useCallback((galleryHasImages, listView, classes) => {
-        const init = master && master.client && master.client.peerId && master.me;
-        if (!init) return null;
-        
-        return (
-            <span style={{
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                width: '100%'
-            }}>
-                <TextField
-                    placeholder="Your Nickname"
-                    margin="normal"
-                    variant="outlined"
-                    defaultValue={master.me.name}
-                    onClick={event => {
-                        event.stopPropagation();
-                    }}
-                    onChange={batchChangeName}
-                />
-                <Fade in={galleryHasImages}>
-                    <span className={classes.horizontal}>
-                        <IconButton 
-                            component="div"
-                            color={listView ? 'primary' : 'inherit'}
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                master.emitter.emit('galleryListView', true);
-                                setListView(true);
-                            }}>
-                            <ViewListRounded />
-                        </IconButton>
-                        <IconButton 
-                            component="div"
-                            color={!listView ? 'primary' : 'inherit'}
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                master.emitter.emit('galleryListView', false);
-                                setListView(false);
-                            }}>
-                            <ViewAgendaRounded />
-                        </IconButton>
-                    </span>
-                </Fade>
-            </span>
-        );
-    }, [master, batchChangeName, classes]);
+    const init = master && master.client && master.client.peerId && master.me;
 
-    const peer = {
-        connectionSpeedType: connectionSpeedType,
-        name: '', 
-        originPlatform: me.label
-    };
+    // Extract NAT details for display
+    const natIp = myNat?.ip || myNat?.network?.ip || '';
+    const natIsp = myNat?.network?.connection?.isp || '';
+    const natCity = myNat?.network?.city || '';
+    const natCountryFlag = myNat?.network?.location?.country_flag_emoji || '';
+    const natCountry = myNat?.network?.country || '';
+    const natHostname = myNat?.network?.hostname || '';
+
+    // Determine if there's a relay (relay items have typeDetail 'relay')
+    const hasRelay = myNat?.typeDetail?.includes('prflx');
+
+    const speedChip = connectionSpeedType.trim();
 
     return (
-        <Slide direction="left" in={showMe} mountOnEnter unmountOnExit>
-            <span>
-                <Accordion expanded={expandedMe} onChange={handleExpand('expandedMe')}>
-                    <AccordionSummary 
-                        expandIcon={<ExpandMoreIcon />}
-                        slotProps={{ iconButton: { component: 'div' } }}>
-                        {buildHeader(galleryHasImages, listView, classes)}
-                    </AccordionSummary>
-                    <AccordionDetails className={classes.content}>
-                        <div className={classes.verticalAndWide}>
-                            <Paper style={{
-                                margin: '10px',
-                                padding: '10px'
-                            }}>
-                                <div className={classes.vertical}>
-                                    <UserListItem peer={peer} />
-                                    <NatListItem nat={myNat} />
-                                </div>
-                            </Paper>
-                        </div>
-                    </AccordionDetails>
-                </Accordion>
-            </span>
-        </Slide>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+            {/* Nickname field */}
+            {init && (
+                <TextField
+                    placeholder="Your Nickname"
+                    margin="none"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    defaultValue={master.me.name}
+                    onChange={batchChangeName}
+                />
+            )}
+
+            {/* Network chain visualization */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {/* Device card */}
+                <ChainCard
+                    icon={getDeviceIcon(originPlatform)}
+                    title="Your Device"
+                    borderColor="success.main"
+                >
+                    <Typography variant="caption" sx={{ fontFamily: monoFont, color: 'text.secondary' }}>
+                        {me.label || originPlatform || 'Detecting...'}
+                    </Typography>
+                    {me.ip && (
+                        <Typography variant="caption" sx={{ fontFamily: monoFont, color: 'text.secondary' }}>
+                            {me.ip}
+                        </Typography>
+                    )}
+                    {speedChip && (
+                        <Box sx={{ mt: 0.5 }}>
+                            <Chip label={speedChip} size="small" variant="outlined" color="info" />
+                        </Box>
+                    )}
+                </ChainCard>
+
+                {/* NAT card */}
+                {myNat && (
+                    <>
+                        <ChainArrow />
+                        <ChainCard
+                            icon={<RouterRounded />}
+                            title="NAT"
+                            borderColor="warning.main"
+                        >
+                            {natIp && (
+                                <Typography variant="caption" sx={{ fontFamily: monoFont, color: 'text.secondary' }}>
+                                    {natIp}
+                                </Typography>
+                            )}
+                            {natHostname && (
+                                <Typography variant="caption" sx={{ fontFamily: monoFont, color: 'text.secondary' }}>
+                                    {natHostname}
+                                </Typography>
+                            )}
+                            {natIsp && (
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                    {natIsp}
+                                </Typography>
+                            )}
+                            {(natCity || natCountry) && (
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                    {natCountryFlag && (
+                                        <span style={{ fontSize: '1.2em', marginRight: 4 }}>{natCountryFlag}</span>
+                                    )}
+                                    {[natCity, natCountry].filter(Boolean).join(', ')}
+                                </Typography>
+                            )}
+                        </ChainCard>
+                    </>
+                )}
+
+                {/* Relay card */}
+                {hasRelay && (
+                    <>
+                        <ChainArrow />
+                        <ChainCard
+                            icon={<DnsRounded />}
+                            title="Relay Server"
+                            borderColor="error.main"
+                        >
+                            <Typography variant="caption" sx={{ fontFamily: monoFont, color: 'text.secondary' }}>
+                                Connection relayed (TURN)
+                            </Typography>
+                        </ChainCard>
+                    </>
+                )}
+            </Box>
+        </Box>
     );
 }
 
 MeView.propTypes = {
-    classes: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,
 };
 
-export default withStyles(styles)(MeView);
+export default MeView;
