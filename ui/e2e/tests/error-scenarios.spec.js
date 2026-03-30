@@ -53,7 +53,7 @@ test('handles network disconnection gracefully', async ({ page }) => {
   await page.goto('/');
   
   // Wait for app to load
-  const startRoomButton = page.getByRole('button', { name: /start a Private Room/i });
+  const startRoomButton = page.getByRole('button', { name: /Create Room/i });
   await expect(startRoomButton).toBeVisible({ timeout: 30000 });
   
   // Simulate offline mode
@@ -76,7 +76,7 @@ test('handles room creation failure', async ({ page }) => {
 
   await page.goto('/');
   
-  const startRoomButton = page.getByRole('button', { name: /start a Private Room/i });
+  const startRoomButton = page.getByRole('button', { name: /Create Room/i });
   await expect(startRoomButton).toBeVisible({ timeout: 30000 });
   
   // Monitor for console errors
@@ -106,7 +106,7 @@ test('handles large file upload', async ({ page }) => {
 
   // Create a room first
   await page.goto('/');
-  const startRoomButton = page.getByRole('button', { name: /start a Private Room/i });
+  const startRoomButton = page.getByRole('button', { name: /Create Room/i });
   await expect(startRoomButton).toBeVisible({ timeout: 30000 });
   await startRoomButton.click();
   await expect(page).toHaveURL(new RegExp('\\?room='), { timeout: 30000 });

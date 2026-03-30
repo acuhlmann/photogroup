@@ -61,7 +61,7 @@ test('three browser P2P photo sharing flow', async ({ browser }) => {
   // Step 1: Browser 1 - Create room
   await page1.goto('/');
   
-  const startRoomButton = page1.getByRole('button', { name: /start a Private Room/i });
+  const startRoomButton = page1.getByRole('button', { name: /Create Room/i });
   await expect(startRoomButton).toBeVisible({ timeout: 30000 });
   await startRoomButton.click();
   
