@@ -1,185 +1,214 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { withStyles } from '@mui/styles';
 import { useTheme } from '@mui/material/styles';
-import Accordion from '@mui/material/Accordion';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import AccordionDetails from '@mui/material/AccordionDetails';
+import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import GroupRounded from '@mui/icons-material/GroupRounded';
+import Chip from '@mui/material/Chip';
 import { withSnackbar } from '../compatibility/withSnackbar';
 
-import Graph from 'vis-react';
 import Logger from 'js-logger';
 import _ from "lodash";
 import update from "immutability-helper";
 import StringUtil from "../util/StringUtil";
-import Badge from "@mui/material/Badge";
-import Slide from "@mui/material/Slide";
 
-const styles = theme => ({
-    horizontal: {
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-    heading: {
-        fontSize: theme.typography.pxToRem(15),
-        fontWeight: theme.typography.fontWeightRegular,
-    },
-    content: {
-        padding: '0px 0px 0px 0px',
-        width: '100%',
-        overflow: 'hidden'
-    },
-    wordwrap: {
-        wordWrap: 'break-word'
-    },
-});
+// Force-directed layout constants
+const REPULSION = 3000;
+const SPRING_K = 0.005;
+const DAMPING = 0.85;
+const CENTER_GRAVITY = 0.01;
+const MIN_DIST = 60;
 
-function TopologyView(props) {
-    const {master, classes} = props;
+function layoutNodes(nodes, edges, width, height) {
+    if (nodes.length === 0) return;
+
+    // Initialize positions in a circle if not set
+    nodes.forEach((node, i) => {
+        if (node.x === undefined) {
+            const angle = (2 * Math.PI * i) / nodes.length;
+            const r = Math.min(width, height) * 0.3;
+            node.x = width / 2 + r * Math.cos(angle);
+            node.y = height / 2 + r * Math.sin(angle);
+            node.vx = 0;
+            node.vy = 0;
+        }
+    });
+
+    // Run iterations
+    for (let iter = 0; iter < 60; iter++) {
+        // Repulsion between all pairs
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                let dx = nodes[j].x - nodes[i].x;
+                let dy = nodes[j].y - nodes[i].y;
+                let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                if (dist < MIN_DIST) dist = MIN_DIST;
+                const force = REPULSION / (dist * dist);
+                const fx = (dx / dist) * force;
+                const fy = (dy / dist) * force;
+                nodes[i].vx -= fx;
+                nodes[i].vy -= fy;
+                nodes[j].vx += fx;
+                nodes[j].vy += fy;
+            }
+        }
+
+        // Spring attraction along edges
+        edges.forEach(edge => {
+            const a = nodes.find(n => n.id === edge.from);
+            const b = nodes.find(n => n.id === edge.to);
+            if (!a || !b) return;
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const force = SPRING_K * (dist - 120);
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+            a.vx += fx;
+            a.vy += fy;
+            b.vx -= fx;
+            b.vy -= fy;
+        });
+
+        // Center gravity
+        nodes.forEach(node => {
+            node.vx += (width / 2 - node.x) * CENTER_GRAVITY;
+            node.vy += (height / 2 - node.y) * CENTER_GRAVITY;
+        });
+
+        // Apply velocity with damping
+        nodes.forEach(node => {
+            node.vx *= DAMPING;
+            node.vy *= DAMPING;
+            node.x += node.vx;
+            node.y += node.vy;
+            // Bounds
+            node.x = Math.max(50, Math.min(width - 50, node.x));
+            node.y = Math.max(30, Math.min(height - 30, node.y));
+        });
+    }
+}
+
+function getEdgeColor(edge, isDark) {
+    if (!edge.network) return isDark ? '#556677' : '#aabbcc';
+    const ct = edge.network.connectionType || '';
+    if (ct.includes('relay')) return '#ff1744';
+    if (ct.includes('nat') || ct === 'p2p nat') return '#ffab00';
+    if (ct === 'p2p') return '#00e676';
+    return isDark ? '#556677' : '#aabbcc';
+}
+
+function getNodeColor(node, isMe, isDark) {
+    if (isMe) return isDark ? '#00e5ff' : '#0d9488';
+    if (node.type === 'nat') return '#ffab00';
+    if (node.type === 'relay') return '#ff1744';
+    return isDark ? '#8899aa' : '#667788';
+}
+
+// Particle system for animated data flow
+class ParticleSystem {
+    constructor() {
+        this.particles = [];
+    }
+    addParticlesForEdge(edge, fromNode, toNode) {
+        // Add 2-3 particles per connection edge
+        const count = 2 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < count; i++) {
+            this.particles.push({
+                edgeId: edge.id || `${edge.from}-${edge.to}`,
+                progress: i / count, // evenly spaced
+                speed: 0.003 + Math.random() * 0.002,
+                fromX: fromNode.x, fromY: fromNode.y,
+                toX: toNode.x, toY: toNode.y,
+            });
+        }
+    }
+    update() {
+        this.particles.forEach(p => {
+            p.progress += p.speed;
+            if (p.progress > 1) p.progress -= 1;
+        });
+    }
+    draw(ctx, isDark) {
+        this.particles.forEach(p => {
+            const x = p.fromX + (p.toX - p.fromX) * p.progress;
+            const y = p.fromY + (p.toY - p.fromY) * p.progress;
+            const alpha = Math.sin(p.progress * Math.PI) * 0.9 + 0.1;
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = isDark
+                ? `rgba(0,229,255,${alpha})`
+                : `rgba(13,148,136,${alpha})`;
+            ctx.fill();
+            // Glow
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, Math.PI * 2);
+            ctx.fillStyle = isDark
+                ? `rgba(0,229,255,${alpha * 0.2})`
+                : `rgba(13,148,136,${alpha * 0.2})`;
+            ctx.fill();
+        });
+    }
+    clear() {
+        this.particles = [];
+    }
+}
+
+function drawRoundedRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+}
+
+function drawHexagon(ctx, x, y, r) {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i - Math.PI / 6;
+        const px = x + r * Math.cos(angle);
+        const py = y + r * Math.sin(angle);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+}
+
+function drawDiamond(ctx, x, y, r) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r, y);
+    ctx.closePath();
+}
+
+function TopologyView({ master }) {
     const muiTheme = useTheme();
+    const isDark = muiTheme.palette.mode === 'dark';
     const masterRef = useRef(master);
     masterRef.current = master;
 
+    const canvasRef = useRef(null);
+    const animFrameRef = useRef(null);
+    const particleSystemRef = useRef(new ParticleSystem());
+    const nodesRef = useRef([]);
+    const edgesRef = useRef([]);
+    const containerRef = useRef(null);
+
     const [visible, setVisible] = useState(false);
     const [showTopology, setShowTopology] = useState(true);
-    const [wtNumPeers, setWtNumPeers] = useState(0);
-    const [expandedTopology, setExpandedTopology] = useState(() => {
-        const expandedTopology = localStorage.getItem('expandedTopology');
-        return expandedTopology === null ? false : String(expandedTopology) === 'true';
-    });
-    const [graph, setGraph] = useState({
-        nodes: [], edges: []
-    });
     const [selectedNodeLabel, setSelectedNodeLabel] = useState('');
-    const [network, setNetwork] = useState(null);
-    const graphRef = useRef(null);
+    const [graph, setGraph] = useState({ nodes: [], edges: [] });
 
-    const options = useMemo(() => ({
-        nodes: {
-            font: {
-                size: 9
-            },
-            widthConstraint: { minimum: 140, maximum: 220 },
-        },
-        edges: {
-            color: muiTheme.palette.text.secondary,
-        },
-        physics: true,
-    }), [muiTheme.palette.text.secondary]);
-
-    useEffect(() => {
-        const emitter = master.emitter;
-        
-        const handleShowTopology = (value) => {
-            setShowTopology(value);
-        };
-
-        const handleReadyToUpload = () => {
-            setVisible(true);
-        };
-
-        const handleWire = (wire, addr, torrent) => {
-            setWtNumPeers(torrent.numPeers);
-        };
-
-        emitter.on('showTopology', handleShowTopology);
-        emitter.on('readyToUpload', handleReadyToUpload);
-        emitter.on('wire', handleWire);
-
-        return () => {
-            emitter.removeListener('showTopology', handleShowTopology);
-            emitter.removeListener('readyToUpload', handleReadyToUpload);
-            emitter.removeListener('wire', handleWire);
-        };
-    }, [master.emitter]);
-
-        // Listen for localNetwork to show current user's node in topology
-        // This ensures the current user's node is visible even if not yet in peers.items
-        // Temporarily disabled to prevent crashes - will be re-enabled with proper error handling
-        /*
-        emitter.on('localNetwork', chain => {
-            try {
-                if(chain && chain.length > 0 && this.master && this.master.client && this.master.client.peerId) {
-                    const myPeerId = this.master.client.peerId;
-                    const self = this;
-                    
-                    this.setState(state => {
-                        // Check if current user's node already exists in graph
-                        const existingNode = state.graph && state.graph.nodes ? state.graph.nodes.find(n => n.id === myPeerId) : null;
-                        if(!existingNode) {
-                            const tempPeer = {
-                                peerId: myPeerId,
-                                networkChain: chain,
-                                name: 'You'
-                            };
-                            
-                            const nodes = [];
-                            const edges = [];
-                            const isMe = true;
-                            
-                            try {
-                                const host = self.addHosts(tempPeer, nodes, isMe);
-                                const nat = self.addNats(tempPeer, nodes, isMe);
-                                const relays = self.addRelays(tempPeer, nodes, isMe);
-                                
-                                if(nat) {
-                                    const edge = {
-                                        from: tempPeer.peerId,
-                                        to: nat.id || nat.ip,
-                                        width: 2,
-                                        dashes: true,
-                                        arrows: '',
-                                        color: self.isMeColor(isMe),
-                                        network: host
-                                    };
-                                    edges.push(edge);
-                                    
-                                    relays.forEach(relay => {
-                                        const edge = {
-                                            from: nat.id || nat.ip,
-                                            to: relay.id || relay.ip,
-                                            width: 2,
-                                            dashes: true,
-                                            arrows: '',
-                                            color: self.isMeColor(isMe)
-                                        };
-                                        edges.push(edge);
-                                    });
-                                }
-                                
-                                // Merge with existing graph
-                                return {
-                                    graph: {
-                                        nodes: [...(state.graph?.nodes || []), ...nodes],
-                                        edges: [...(state.graph?.edges || []), ...edges]
-                                    }
-                                };
-                            } catch(e) {
-                                Logger.error('Error adding local network node: ' + e);
-                                return state;
-                            }
-                        }
-                        return state;
-                    });
-                }
-            } catch(e) {
-                Logger.error('Error in localNetwork handler: ' + e);
-            }
-        });
-        */
-
-    // Helper methods
+    // Helper methods (kept from original)
     const isMeColor = useCallback((isMe) => {
         return isMe ? '#F50057' : '#e0e0e0';
-    }, []);
-
-    const isMeColorBlack = useCallback((isMe) => {
-        return isMe ? '#F50057' : '#000000';
     }, []);
 
     const isMobile = useCallback((platform) => {
@@ -193,22 +222,8 @@ function TopologyView(props) {
     }, []);
 
     const createShortNetworkLabel = useCallback((item) => {
-        // Debug: Log what data we have for this item
-        if (process.env.NODE_ENV === 'development') {
-            const hasNetwork = !!item.network;
-            const networkKeys = item.network ? Object.keys(item.network) : [];
-            const hasCity = item.network?.city;
-            const hasIsp = item.network?.connection?.isp;
-            if (!hasNetwork || (!hasCity && !hasIsp)) {
-                Logger.debug(`[TopologyView] createShortNetworkLabel for ${item.ip}: hasNetwork=${hasNetwork}, keys=[${networkKeys.join(',')}], city=${hasCity}, isp=${hasIsp}`);
-            }
-        }
-        
-        // Use StringUtil.createNetworkLabel to show IP with location and ISP info
-        // For short labels in the graph, truncate if needed but keep IP visible
         const fullLabel = StringUtil.createNetworkLabel(item, '\n', false);
         const lines = fullLabel.split('\n');
-        // Ensure IP is always shown, truncate other lines if needed
         if (lines.length > 0) {
             const ipLine = lines[0];
             const otherLines = lines.slice(1).map(line => _.truncate(line, { length: 48 }));
@@ -217,123 +232,61 @@ function TopologyView(props) {
         return fullLabel;
     }, []);
 
-    const addUserIcon = useCallback((node, platform, isMe) => {
-        node.shape = 'icon';
-        if(isMobile(platform)) {
-            node.icon = {
-                face: 'FontAwesome',
-                code: '\uf10b',
-                size: 30,
-                color: isMeColorBlack(isMe)
-            }
-        } else {
-            node.icon = {
-                face: 'FontAwesome',
-                code: '\uf108',
-                size: 30,
-                color: isMeColorBlack(isMe)
-            }
-        }
-    }, [isMobile, isMeColorBlack]);
-
-    const addRelayIcon = useCallback((node, isMe) => {
-        node.shape = 'icon';
-        node.icon = {
-            face: 'FontAwesome',
-            code: '\uf138',
-            size: 30,
-            color: isMeColorBlack(isMe)
-        }
-    }, [isMeColorBlack]);
-
     const addHosts = useCallback((peer, nodes, isMe) => {
-        if(nodes.find(item => item.id === peer.peerId)) return;
-
+        if (nodes.find(item => item.id === peer.peerId)) return;
         const hosts = peer.networkChain.filter(item => item.typeDetail === 'host');
-        if(hosts.length > 1) {
-            //Logger.warn('multiple hosts found ' + JSON.stringify(hosts));
-        }
-        // Use first host if none have label, as labels may not be set for remote peers
         const host = hosts.find(item => item.label) || hosts[0];
-        if(host) {
+        if (host) {
             const platform = StringUtil.slimPlatform(peer.originPlatform);
             const node = {
                 id: peer.peerId,
                 label: peer.name || _.truncate(platform),
                 type: 'client',
-                shape: 'box',
                 peer: peer,
                 network: host,
                 networks: hosts,
+                isMe: isMe,
             };
-            node.title = node.label;
-            node.color = isMeColor(isMe);
-            node.font = {
-                color: isMeColorBlack(isMe), strokeWidth: 2
-            };
-            addUserIcon(node, peer.originPlatform, isMe);
             nodes.push(node);
             return host;
         }
-    }, [isMeColor, isMeColorBlack, addUserIcon]);
+    }, []);
 
     const addNats = useCallback((peer, nodes, isMe) => {
         const nats = peer.networkChain.filter(item => isNatType(item.typeDetail));
-        if(nats.length > 1) {
-            Logger.warn('multiple nats found '
-                + nats.length + ': ' + nats.map(item => item.label || item.hostname || item.ip).join(', '));
-        }
-        // Use first nat if none have label, as labels may not be set for remote peers
         const nat = nats.find(item => item.label) || nats[0];
-        if(nat) {
-            if(nodes.find(item => item.id === nat.ip)) return nat;
+        if (nat) {
+            if (nodes.find(item => item.id === nat.ip)) return nat;
             const node = {
                 id: nat.ip,
                 label: createShortNetworkLabel(nat),
-                shape: 'box',
                 network: nat,
                 networks: nats,
                 peer: peer,
-                type: 'nat'
+                type: 'nat',
+                isMe: isMe,
             };
-            node.title = node.label;
-            node.color = isMeColor(isMe);
-            node.font = {
-                color: isMeColorBlack(isMe), strokeWidth: 2
-            };
-            node.shape = 'image';
-            node.image = './firewall.png';
-            node.size = 15;
             nodes.push(node);
             return node;
         }
-    }, [isNatType, createShortNetworkLabel, isMeColor, isMeColorBlack]);
+    }, [isNatType, createShortNetworkLabel]);
 
     const addRelays = useCallback((peer, nodes, isMe) => {
         const relays = peer.networkChain.filter(item => item.typeDetail === 'relay');
-        if(relays.length > 1) {
-            //Logger.warn('multiple relays found ' + JSON.stringify(relays));
-        }
         return relays.map(relay => {
             const shortName = createShortNetworkLabel(relay);
             const existing = nodes.find(item => item.id === shortName);
-            if(!existing) {
+            if (!existing) {
                 const node = {
                     id: shortName,
                     label: shortName,
                     relays: new Map([[relay.ip, relay]]),
                     type: 'relay',
-                    shape: 'box',
                     network: relay,
                     networks: [relay],
-                    peer: peer
+                    peer: peer,
+                    isMe: isMe,
                 };
-                node.title = node.label;
-                node.color = isMeColor(isMe);
-                node.font = {
-                    color: isMeColorBlack(isMe), strokeWidth: 2
-                };
-                addRelayIcon(node, isMe);
                 nodes.push(node);
                 return node;
             } else {
@@ -342,162 +295,81 @@ function TopologyView(props) {
                 return existing;
             }
         }).filter(item => item);
-    }, [createShortNetworkLabel, isMeColor, isMeColorBlack, addRelayIcon]);
+    }, [createShortNetworkLabel]);
 
-    const events = useMemo(() => ({
-        select: (event) => {
-            const {nodes, edges} = event;
-            if(nodes && nodes.length > 0) {
-                if(!nodes[0])
-                    return;
-
-                const id = nodes[0];
-                const node = graph.nodes.find(node => node.id === id);
-                if(!node)
-                    return;
-
-                let label = '';
-                const network = node.network;
-                if(node.type === 'client') {
-                    const platform = StringUtil.slimPlatform(node.peer.originPlatform);
-                    label = node.peer.name + '\n' + platform + '\n'
-                } else if(node.type === 'relay') {
-                    const values = [...node.relays.values()];
-                    const ips = values.map(item => item.ip).join(',');
-                    const ports = values.map(item => item.port).join(',');
-                    // Create a temporary network object with IP for display
-                    const relayNetwork = { ...node.network, ip: ips };
-                    label = StringUtil.createNetworkLabel(relayNetwork, '\n');
-                    // Add transport and port info on a new line
-                    if (network.transport) {
-                        label += '\n' + network.transport.toLowerCase() + ' ' + ips + ':' + ports;
-                    } else {
-                        label += '\n' + ips + ':' + ports;
-                    }
-                    setSelectedNodeLabel(label);
-                    return;
-                } else {
-                    // For NAT nodes, use createNetworkLabel which now shows IP on first line
-                    label = StringUtil.createNetworkLabel(node.network, '\n', true);
-                }
-
-                if(node.networks) {
-                    label += Object.values(_.groupBy(node.networks, 'ip')).map(ips => {
-                        return ' ' + ips.map(item => item.transport).join(',')
-                            + ' ' + ips[0].ip + ':'
-                            + ips.map(item => item.port).join(',');
-                    });
-                } else {
-                    label += (network.transport ? network.transport.toLowerCase() : '');
-                    label += ' ' + network.ip + ':' + network.port;
-                }
-
-                setSelectedNodeLabel(label);
-            } else if(edges && edges.length > 0) {
-                if(!edges[0])
-                    return;
-
-                const id = edges[0];
-                const edge = graph.edges.find(edge => edge.id === id);
-                if(edge) {
-                    let edgeLabel;
-                    if(edge.network && edge.network.typeDetail && edge.network.typeDetail.includes('host')) {
-                        edge.from = edge.network.ip;
-                    }
-                    if(edge.type === 'connection') {
-                        const conn = edge.network;
-                        edgeLabel = conn.connectionType + ' ' + conn.fileName + '\n';
-                        edgeLabel += `\n${conn.from}:${conn.fromPort} >> ${conn.to}:${conn.toPort}`
-                    } else{
-                        edgeLabel = '';
-                    }
-                    setSelectedNodeLabel(edgeLabel);
-                }
-            }
-        }
-    }), [graph]);
-
+    // Event listeners
     useEffect(() => {
         const emitter = master.emitter;
 
-        const handlePeers = (event) => {
+        const handleShowTopology = (value) => setShowTopology(value);
+        const handleReadyToUpload = () => setVisible(true);
+
+        emitter.on('showTopology', handleShowTopology);
+        emitter.on('readyToUpload', handleReadyToUpload);
+
+        return () => {
+            emitter.removeListener('showTopology', handleShowTopology);
+            emitter.removeListener('readyToUpload', handleReadyToUpload);
+        };
+    }, [master.emitter]);
+
+    // Peer and connection data
+    useEffect(() => {
+        const emitter = master.emitter;
+
+        const handlePeers = () => {
             const myPeerId = masterRef.current.client.peerId;
             const peers = masterRef.current.peers;
             const nodes = [];
 
             setGraph(state => {
-                const edges = state.edges.filter(item => item.type === 'connection');
+                const edges = (state.edges || []).filter(item => item.type === 'connection');
                 peers.items.forEach(peer => {
-                    if(peer.networkChain) {
+                    if (peer.networkChain) {
                         const isMe = peer.peerId === myPeerId;
                         const host = addHosts(peer, nodes, isMe);
                         const nat = addNats(peer, nodes, isMe);
                         const relays = addRelays(peer, nodes, isMe);
 
-                        if(nat) {
-                            const edge = {
+                        if (nat) {
+                            edges.push({
                                 from: peer.peerId,
                                 to: nat.id || nat.ip,
-                                width: 2,
-                                dashes: true,
-                                arrows: '',
-                                color: isMeColor(isMe),
-                                network: host
-                            };
-                            edges.push(edge);
-
+                                type: 'chain',
+                                network: host,
+                            });
                             relays.forEach(relay => {
-                                const edge = {
+                                edges.push({
                                     from: nat.id || nat.ip,
                                     to: relay.id || relay.ip,
-                                    width: 2,
-                                    dashes: true,
-                                    arrows: '',
-                                    color: isMeColor(isMe)
-                                };
-                                edges.push(edge);
+                                    type: 'chain',
+                                });
                             });
                         }
                     }
                 });
-                return {nodes : nodes, edges: edges};
+                return { nodes, edges };
             });
         };
 
         const handlePeerConnections = (connections) => {
             setGraph(state => {
-                const nodes = state.nodes;
-                let edges = state.edges;
-
-                //remove all connection edges
-                const connEdges = edges.filter(item => item.type === 'connection');
-                connEdges.forEach(edge => {
-                    const index = edges.findIndex(item => item.from === edge.from && item.to === edge.to);
-                    edges = update(edges, {$splice: [[index, 1]]});
-                });
-
-                //add connection edges in.
+                let edges = (state.edges || []).filter(item => item.type !== 'connection');
                 connections.forEach(conn => {
                     const from = conn.connectionType === 'p2p' ? conn.fromPeerId : conn.from;
                     const to = conn.connectionType === 'p2p' ? conn.toPeerId : conn.to;
                     const edge = {
-                        id: conn.id, from: from, to: to,
+                        id: conn.id,
+                        from,
+                        to,
                         type: 'connection',
                         network: conn,
-                        width: 2,
-                        arrows: 'to',
-                        smooth: {type: 'curvedCW', roundness: 0.5, forceDirection: 'none'},
-                        font: {
-                            align: 'bottom'
-                        }
                     };
-                    edge.title = edge.label;
-                    if(!edges.find(item => item.from === edge.from && item.to === edge.to)) {
-                        edges = update(edges, {$push: [edge]});
+                    if (!edges.find(item => item.from === edge.from && item.to === edge.to)) {
+                        edges.push(edge);
                     }
                 });
-
-                return {nodes : nodes, edges: edges};
+                return { nodes: state.nodes, edges };
             });
         };
 
@@ -508,62 +380,360 @@ function TopologyView(props) {
             emitter.removeListener('peers', handlePeers);
             emitter.removeListener('peerConnections', handlePeerConnections);
         };
-    }, [master.emitter, addHosts, addNats, addRelays, isMeColor]);
+    }, [master.emitter, addHosts, addNats, addRelays]);
 
-    const setNetworkInstance = useCallback((nw) => {
-        setNetwork(nw);
+    // Canvas rendering
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const container = containerRef.current;
+        if (!container) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const rect = container.getBoundingClientRect();
+        const width = rect.width;
+        const height = 350;
+
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Copy graph data to refs for animation
+        const nodes = graph.nodes.map(n => ({
+            ...n,
+            x: nodesRef.current.find(old => old.id === n.id)?.x,
+            y: nodesRef.current.find(old => old.id === n.id)?.y,
+            vx: 0,
+            vy: 0,
+        }));
+
+        layoutNodes(nodes, graph.edges, width, height);
+        nodesRef.current = nodes;
+        edgesRef.current = graph.edges;
+
+        // Rebuild particles for connection edges
+        const ps = particleSystemRef.current;
+        ps.clear();
+        graph.edges.filter(e => e.type === 'connection').forEach(edge => {
+            const fromNode = nodes.find(n => n.id === edge.from);
+            const toNode = nodes.find(n => n.id === edge.to);
+            if (fromNode && toNode) {
+                ps.addParticlesForEdge(edge, fromNode, toNode);
+            }
+        });
+
+        let running = true;
+
+        function render() {
+            if (!running) return;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Background grid pattern
+            ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.03)';
+            ctx.lineWidth = 0.5;
+            const gridSize = 30;
+            for (let x = 0; x < width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+
+            // Draw edges
+            edgesRef.current.forEach(edge => {
+                const fromNode = nodes.find(n => n.id === edge.from);
+                const toNode = nodes.find(n => n.id === edge.to);
+                if (!fromNode || !toNode) return;
+
+                ctx.beginPath();
+                ctx.moveTo(fromNode.x, fromNode.y);
+                ctx.lineTo(toNode.x, toNode.y);
+
+                if (edge.type === 'chain') {
+                    ctx.setLineDash([4, 4]);
+                    ctx.strokeStyle = isDark ? 'rgba(136,153,170,0.3)' : 'rgba(100,120,140,0.25)';
+                    ctx.lineWidth = 1;
+                } else {
+                    ctx.setLineDash([]);
+                    ctx.strokeStyle = getEdgeColor(edge, isDark);
+                    ctx.lineWidth = 2;
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Arrow for connection edges
+                if (edge.type === 'connection') {
+                    const dx = toNode.x - fromNode.x;
+                    const dy = toNode.y - fromNode.y;
+                    const angle = Math.atan2(dy, dx);
+                    const arrLen = 8;
+                    const tipX = toNode.x - dx * 0.15;
+                    const tipY = toNode.y - dy * 0.15;
+
+                    ctx.beginPath();
+                    ctx.moveTo(tipX, tipY);
+                    ctx.lineTo(tipX - arrLen * Math.cos(angle - 0.4), tipY - arrLen * Math.sin(angle - 0.4));
+                    ctx.lineTo(tipX - arrLen * Math.cos(angle + 0.4), tipY - arrLen * Math.sin(angle + 0.4));
+                    ctx.closePath();
+                    ctx.fillStyle = getEdgeColor(edge, isDark);
+                    ctx.fill();
+                }
+            });
+
+            // Particles
+            ps.update();
+            ps.draw(ctx, isDark);
+
+            // Draw nodes
+            const myPeerId = masterRef.current?.client?.peerId;
+            nodes.forEach(node => {
+                const isMe = node.id === myPeerId || node.isMe;
+                const color = getNodeColor(node, isMe, isDark);
+                const x = node.x;
+                const y = node.y;
+
+                if (node.type === 'nat') {
+                    drawHexagon(ctx, x, y, 18);
+                    ctx.fillStyle = isDark ? 'rgba(255,171,0,0.15)' : 'rgba(255,171,0,0.1)';
+                    ctx.fill();
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                } else if (node.type === 'relay') {
+                    drawDiamond(ctx, x, y, 18);
+                    ctx.fillStyle = isDark ? 'rgba(255,23,68,0.15)' : 'rgba(255,23,68,0.1)';
+                    ctx.fill();
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                } else {
+                    // Client node - rounded rectangle
+                    const w = 90;
+                    const h = 32;
+                    drawRoundedRect(ctx, x - w / 2, y - h / 2, w, h, 6);
+                    ctx.fillStyle = isDark
+                        ? (isMe ? 'rgba(0,229,255,0.1)' : 'rgba(136,153,170,0.08)')
+                        : (isMe ? 'rgba(13,148,136,0.08)' : 'rgba(100,120,140,0.06)');
+                    ctx.fill();
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = isMe ? 2 : 1;
+                    ctx.stroke();
+
+                    // Glow for own node
+                    if (isMe && isDark) {
+                        ctx.shadowColor = '#00e5ff';
+                        ctx.shadowBlur = 12;
+                        ctx.strokeStyle = '#00e5ff';
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                    }
+                }
+
+                // Label
+                const label = (node.label || '').split('\n')[0];
+                ctx.font = '11px "JetBrains Mono", "Source Sans 3", monospace';
+                ctx.fillStyle = isDark ? '#e4e8ee' : '#1a1a2e';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(_.truncate(label, { length: 16 }), x, y);
+
+                // Type indicator below
+                if (node.type !== 'client') {
+                    ctx.font = '8px "JetBrains Mono", monospace';
+                    ctx.fillStyle = isDark ? '#667788' : '#8899aa';
+                    ctx.fillText(node.type.toUpperCase(), x, y + (node.type === 'nat' ? 26 : 26));
+                }
+            });
+
+            // Empty state message
+            if (nodes.length === 0) {
+                ctx.font = '13px "Source Sans 3", sans-serif';
+                ctx.fillStyle = isDark ? '#556677' : '#aabbcc';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('Waiting for peer connections...', width / 2, height / 2 - 10);
+                ctx.font = '11px "JetBrains Mono", monospace';
+                ctx.fillStyle = isDark ? '#3d4a5c' : '#c1c9d2';
+                ctx.fillText('Create a room and share the link', width / 2, height / 2 + 12);
+            }
+
+            animFrameRef.current = requestAnimationFrame(render);
+        }
+
+        render();
+
+        return () => {
+            running = false;
+            if (animFrameRef.current) {
+                cancelAnimationFrame(animFrameRef.current);
+            }
+        };
+    }, [graph, isDark]);
+
+    // Handle canvas click for node selection
+    const handleCanvasClick = useCallback((e) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const nodes = nodesRef.current;
+        const clickedNode = nodes.find(node => {
+            const dx = node.x - x;
+            const dy = node.y - y;
+            return Math.sqrt(dx * dx + dy * dy) < 25;
+        });
+
+        if (clickedNode) {
+            let label = '';
+            if (clickedNode.type === 'client') {
+                const platform = clickedNode.peer ? StringUtil.slimPlatform(clickedNode.peer.originPlatform) : '';
+                label = (clickedNode.peer?.name || '') + '\n' + platform;
+                if (clickedNode.networks) {
+                    label += '\n' + Object.values(_.groupBy(clickedNode.networks, 'ip')).map(ips => {
+                        return ips.map(item => item.transport).join(',') + ' ' + ips[0].ip + ':' + ips.map(item => item.port).join(',');
+                    }).join('\n');
+                }
+            } else if (clickedNode.type === 'relay') {
+                const values = clickedNode.relays ? [...clickedNode.relays.values()] : [];
+                label = 'RELAY\n' + values.map(item => item.ip + ':' + item.port).join('\n');
+            } else {
+                label = StringUtil.createNetworkLabel(clickedNode.network, '\n', true);
+            }
+            setSelectedNodeLabel(label);
+        } else {
+            setSelectedNodeLabel('');
+        }
     }, []);
 
-    const showStatusMessage = useCallback((selectedNodeLabel, classes) => {
-        return <Typography variant="caption" align="center" className={classes.wordwrap}>
-            <div>{selectedNodeLabel}</div>
-        </Typography>
-    }, []);
+    // Resize handler
+    useEffect(() => {
+        const handleResize = _.debounce(() => {
+            // Force re-render by updating graph reference
+            setGraph(prev => ({ ...prev }));
+        }, 200);
 
-    const handleExpand = useCallback((panel) => (event, expanded) => {
-        localStorage.setItem(panel, expanded);
-        setExpandedTopology(expanded);
-    }, []);
-
-    const buildHeader = useCallback((classes, wtNumPeers) => {
-        return <span className={classes.horizontal}>
-            <Typography className={classes.heading}>Network Topology</Typography>
-            <Badge badgeContent={wtNumPeers} color="primary" style={{
-                marginLeft: '10px'
-            }} >
-                <GroupRounded />
-            </Badge>
-        </span>
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            handleResize.cancel();
+        };
     }, []);
 
     return (
-        <Slide direction="left" in={visible && showTopology} mountOnEnter unmountOnExit>
-            <Accordion expanded={expandedTopology}
-                                       onChange={handleExpand('expandedTopology')}
-                                       style={{
-                                           marginBottom: '5px'
-                                        }}>
-            <AccordionSummary 
-                expandIcon={<ExpandMoreIcon />}
-                slotProps={{ iconButton: { component: 'div' } }}>
-                {buildHeader(classes, wtNumPeers)}
-            </AccordionSummary>
-            <AccordionDetails className={classes.content} style={{
-                display: 'flex',
-                flexDirection: 'column'
-            }}>
-                {showStatusMessage(selectedNodeLabel, classes)}
-                <Graph ref={graphRef} getNetwork={setNetworkInstance}
-                       graph={graph} options={options} events={events}
-                       style={{width: "100%", height: "400px"}}/>
-            </AccordionDetails>
-            </Accordion>
-        </Slide>
+        <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+            {/* Canvas container */}
+            <Box
+                ref={containerRef}
+                sx={{
+                    position: 'relative',
+                    width: '100%',
+                    height: 350,
+                    overflow: 'hidden',
+                }}
+            >
+                <canvas
+                    ref={canvasRef}
+                    onClick={handleCanvasClick}
+                    style={{
+                        display: 'block',
+                        cursor: 'pointer',
+                        width: '100%',
+                        height: '100%',
+                    }}
+                />
+
+                {/* Legend overlay */}
+                <Box sx={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    display: 'flex',
+                    gap: 0.5,
+                    flexDirection: 'column',
+                }}>
+                    <Chip
+                        size="small"
+                        label="P2P"
+                        sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            bgcolor: 'rgba(0,230,118,0.15)',
+                            color: '#00e676',
+                            border: '1px solid rgba(0,230,118,0.3)',
+                            '& .MuiChip-label': { px: 1 },
+                        }}
+                    />
+                    <Chip
+                        size="small"
+                        label="NAT"
+                        sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            bgcolor: 'rgba(255,171,0,0.15)',
+                            color: '#ffab00',
+                            border: '1px solid rgba(255,171,0,0.3)',
+                            '& .MuiChip-label': { px: 1 },
+                        }}
+                    />
+                    <Chip
+                        size="small"
+                        label="Relay"
+                        sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            bgcolor: 'rgba(255,23,68,0.15)',
+                            color: '#ff1744',
+                            border: '1px solid rgba(255,23,68,0.3)',
+                            '& .MuiChip-label': { px: 1 },
+                        }}
+                    />
+                </Box>
+            </Box>
+
+            {/* Selected node detail */}
+            {selectedNodeLabel && (
+                <Box sx={{
+                    px: 2,
+                    py: 1,
+                    borderTop: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: isDark ? 'rgba(17,24,32,0.8)' : 'rgba(240,244,248,0.9)',
+                }}>
+                    <Typography
+                        variant="caption"
+                        component="pre"
+                        sx={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.7rem',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-all',
+                            color: 'text.secondary',
+                            m: 0,
+                        }}
+                    >
+                        {selectedNodeLabel}
+                    </Typography>
+                </Box>
+            )}
+        </Box>
     );
 }
 
 TopologyView.propTypes = {
-    classes: PropTypes.object.isRequired,
+    master: PropTypes.object.isRequired,
 };
 
-export default withSnackbar(withStyles(styles)(TopologyView));
+export default withSnackbar(TopologyView);

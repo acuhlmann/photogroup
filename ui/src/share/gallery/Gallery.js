@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import {withStyles} from '@mui/styles';
+import { useTheme } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import CloudUploadIcon from '@mui/icons-material/CloudUploadRounded';
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import {withSnackbar} from "../compatibility/withSnackbar";
@@ -12,36 +15,43 @@ import ContentTile from "./ContentTile";
 import GalleryPhotoHandler from "./GalleryPhotoHandler";
 import { getBlobAndEmit } from "../torrent/BlobUtils";
 
-const styles = theme => ({
-    root: {
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'flex-start',
-        alignContent: 'flex-start',
-        gap: theme.spacing(2),
-        width: '100%',
-        padding: theme.spacing(1, 0, 3),
-        backgroundColor: theme.palette.background.default,
-    },
-    white: {
-        color: '#ffffff'
-    },
-    horizontal: {
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-    vertical: {
-        display: 'flex',
-        flexDirection: 'column'
-    },
-});
-
 function Gallery(props) {
-    const {master, classes} = props;
+    const {master} = props;
+    const theme = useTheme();
     const [tiles, setTiles] = useState([]);
+    const [dragOver, setDragOver] = useState(false);
     const photoHandlerRef = useRef(null);
+    const dragCounterRef = useRef(0);
+
+    const handleDragEnter = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current += 1;
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+            setDragOver(true);
+        }
+    }, []);
+
+    const handleDragLeave = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current -= 1;
+        if (dragCounterRef.current === 0) {
+            setDragOver(false);
+        }
+    }, []);
+
+    const handleDragOver = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    }, []);
+
+    const handleDrop = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragOver(false);
+        dragCounterRef.current = 0;
+    }, []);
 
     const getBlob = useCallback((photo) => {
         // Use the simplified BlobUtils module for blob retrieval
@@ -137,14 +147,14 @@ function Gallery(props) {
                         reject('torrentFile not available');
                         return;
                     }
-                    
+
                     const hasGetBlob = typeof photo.torrentFile.getBlob === 'function';
                     const hasGetBlobURL = typeof photo.torrentFile.getBlobURL === 'function';
                     Logger.info('addMediaToDom: ' + photo.fileName + ' hasGetBlob=' + hasGetBlob + ' hasGetBlobURL=' + hasGetBlobURL);
-                    
+
                     if (!hasGetBlob && !hasGetBlobURL) {
                         Logger.warn('addMediaToDom: No blob methods available for ' + (photo.fileName || 'unknown'));
-                        
+
                         // Workaround: manually create blob using createReadStream if available
                         if (typeof photo.torrentFile.createReadStream === 'function') {
                             Logger.info('addMediaToDom: Using createReadStream workaround for ' + photo.fileName);
@@ -180,7 +190,7 @@ function Gallery(props) {
                         }
                         return;
                     }
-                    
+
                     // Use getBlobURL if getBlob isn't available
                     if (!hasGetBlob && hasGetBlobURL) {
                         Logger.info('addMediaToDom: Using getBlobURL for ' + photo.fileName);
@@ -203,7 +213,7 @@ function Gallery(props) {
                         });
                         return;
                     }
-                    
+
                     const extention = photo.torrentFile.name.split('.').pop().toLowerCase();
                     const isNoStreamingOrTooLarge = !master.STREAMING_FORMATS.includes(extention)
                         || FileUtil.largerThanMaxBlobSize(photo.torrentFile.length);
@@ -269,7 +279,7 @@ function Gallery(props) {
 
         photoHandlerRef.current = new GalleryPhotoHandler({ addMediaToDom, setTiles, master }, emitter);
         photoHandlerRef.current.sync();
-        
+
         // Emit initial gallery state
         updateGalleryState();
 
@@ -283,7 +293,7 @@ function Gallery(props) {
         updateGalleryState();
     }, [tiles, updateGalleryState]);
 
-    const buildTile = useCallback((tile, index, classes, master) => {
+    const buildTile = useCallback((tile, index, master) => {
         tile.picSummary = StringUtil.addEmptySpaces([tile.picDateTaken, FileUtil.truncateFileName(tile.fileName)]);
         let name = StringUtil.addEmptySpaces([tile.picSummary, tile.fileSize, tile.cameraSettings]);
 
@@ -297,13 +307,60 @@ function Gallery(props) {
     }, []);
 
     return (
-        <div className={classes.root}>
-            {tiles.map((tile, index) => buildTile(tile, index, classes, master))}
-        </div>
+        <Box
+            className="stagger-children"
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            sx={{
+                position: 'relative',
+                columnCount: { xs: 1, sm: 2, md: 2, lg: 3, xl: 4 },
+                columnGap: theme.spacing(2),
+                width: '100%',
+                padding: theme.spacing(1, 0, 3),
+                backgroundColor: 'background.default',
+                '& > *': {
+                    breakInside: 'avoid',
+                    marginBottom: theme.spacing(2),
+                },
+            }}
+        >
+            {tiles.map((tile, index) => buildTile(tile, index, master))}
+
+            {/* Drag-drop overlay */}
+            {dragOver && (
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        zIndex: 20,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '2px dashed',
+                        borderColor: 'primary.main',
+                        borderRadius: 2,
+                        backgroundColor: (t) =>
+                            t.palette.mode === 'dark'
+                                ? 'rgba(255,255,255,0.06)'
+                                : 'rgba(0,0,0,0.04)',
+                        backdropFilter: 'blur(4px)',
+                        pointerEvents: 'none',
+                    }}
+                >
+                    <CloudUploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
+                    <Typography variant="subtitle1" sx={{ color: 'primary.main' }}>
+                        Drop files to upload
+                    </Typography>
+                </Box>
+            )}
+        </Box>
     );
 }
 
 Gallery.propTypes = {
     master: PropTypes.object.isRequired,
 };
-export default withSnackbar(withStyles(styles)(Gallery));
+export default withSnackbar(Gallery);
