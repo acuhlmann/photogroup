@@ -12,6 +12,8 @@ import _ from 'lodash';
 import humanizeDuration from 'humanize-duration'
 import MetadataParser from "../gallery/metadata/MetadataParser";
 import { getTorrent, getBaseInfoHash } from './WebTorrentUtils';
+import { cacheGet } from '../util/ImageBlobCache';
+import FileUtil from '../util/FileUtil';
 
 export default class TorrentMaster {
 
@@ -77,13 +79,13 @@ export default class TorrentMaster {
 
                 const photos = response.photos;
                 Logger.info(`photos: ${photos.length} peers ${peers.length}`);
+
+                // Pre-populate photos from blob cache so they render immediately
+                // without waiting for WebTorrent resurrection
+                await this.serveCachedPhotos(photos);
+
                 const values = await this.resurrectLocallySavedTorrents(photos);
                 Logger.info('done with resurrectAllTorrents ' + values);
-                /*Promise.all(values).then(results => {
-                    Logger.info('all done with resurrectAllTorrents ' + results);
-                });*/
-
-                //this.hasPeer = true;
 
                 this.syncUiWithServerUrls(photos);
                 this.emitter.emit('photos', {type: 'all', item: photos});
@@ -92,6 +94,37 @@ export default class TorrentMaster {
 
                 return response.photos;
             });
+    }
+
+    /**
+     * Check the blob cache for each photo and pre-populate image data
+     * so photos render immediately on page reload without waiting for
+     * WebTorrent peer/tracker connectivity.
+     */
+    async serveCachedPhotos(photos) {
+        for (const photo of photos) {
+            if (!photo.infoHash) continue;
+            try {
+                const blob = await cacheGet(photo.infoHash);
+                if (blob) {
+                    const file = new File([blob], photo.fileName || 'image', {
+                        type: photo.fileType || blob.type
+                    });
+                    photo.fromCache = true;
+                    photo.cachedFile = file;
+                    photo.img = URL.createObjectURL(file);
+                    photo.elem = file;
+                    photo.loading = false;
+                    photo.fileSize = photo.fileSize || (file.size ? FileUtil.formatBytes(file.size) : '');
+                    photo.isImage = (photo.fileType || '').includes('image/');
+                    photo.isVideo = (photo.fileType || '').includes('video/');
+                    photo.isAudio = (photo.fileType || '').includes('audio/');
+                    Logger.info('serveCachedPhotos: served from cache ' + photo.fileName);
+                }
+            } catch (e) {
+                Logger.debug('serveCachedPhotos: cache miss for ' + photo.infoHash);
+            }
+        }
     }
 
     fillMissingOwners(photos) {
