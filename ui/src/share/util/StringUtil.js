@@ -33,7 +33,7 @@ export default class StringUtil {
     static createNetworkLabel(item, ispSeparator='', noStripping) {
         // Always show IP address on first line
         const ip = item.ip || _.get(item, 'network.ip') || '';
-        
+
         // Build location line: city, region, country with flag emoji
         const locationParts = [];
         if (noStripping ? item.typeDetail : StringUtil.stripSrflx(item.typeDetail)) {
@@ -46,40 +46,79 @@ export default class StringUtil {
         const city = _.get(item, 'network.city');
         const regionName = _.get(item, 'network.region_name');
         const country = _.get(item, 'network.country');
-        
+
         const locationDetails = [];
         if (city) locationDetails.push(city);
         if (regionName) locationDetails.push(regionName);
         if (country) locationDetails.push(country);
-        
-        const locationLine = locationParts.length > 0 
+
+        const locationLine = locationParts.length > 0
             ? locationParts.join(' ') + (locationDetails.length > 0 ? ' ' + locationDetails.join(', ') : '')
             : locationDetails.join(', ');
-        
+
         // Build ISP and org lines
         const isp = _.get(item, 'network.connection.isp') || null;
         const org = _.get(item, 'network.connection.org') || null;
         const hostname = _.get(item, 'network.hostname');
-        
+
         // Build the full label with IP on first line
         const lines = [ip];
-        
+
         if (locationLine) {
             lines.push(locationLine);
         }
-        
+
         if (isp) {
             lines.push(isp);
         }
-        
+
         if (org && org !== isp) {
             lines.push(org);
         }
-        
+
         if (!isp && !org && hostname) {
             lines.push(hostname);
         }
-        
+
         return lines.join(ispSeparator || '\n');
+    }
+
+    /**
+     * Returns a short display name for a network node, prioritizing
+     * human-readable info (ISP, city, hostname) over raw IP addresses.
+     * IP is omitted from this label and should be shown in click details.
+     */
+    static createDisplayName(item) {
+        const isp = _.get(item, 'network.connection.isp') || null;
+        const org = _.get(item, 'network.connection.org') || null;
+        const city = _.get(item, 'network.city');
+        const country = _.get(item, 'network.country');
+        const hostname = _.get(item, 'network.hostname');
+        const countryFlag = _.get(item, 'network.location.country_flag_emoji');
+
+        // Prefer ISP name
+        if (isp) {
+            return countryFlag ? countryFlag + ' ' + isp : isp;
+        }
+        // Fall back to org
+        if (org) {
+            return countryFlag ? countryFlag + ' ' + org : org;
+        }
+        // Fall back to city + country
+        if (city) {
+            const loc = country ? city + ', ' + country : city;
+            return countryFlag ? countryFlag + ' ' + loc : loc;
+        }
+        // Fall back to hostname
+        if (hostname) {
+            return hostname;
+        }
+        // Fall back to type detail
+        const typeDetail = StringUtil.stripSrflx(item.typeDetail || '');
+        if (typeDetail && typeDetail.trim()) {
+            return typeDetail.trim();
+        }
+        // Last resort: IP
+        return item.ip || _.get(item, 'network.ip') || '?';
     }
 }

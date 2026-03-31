@@ -258,8 +258,13 @@ function Gallery(props) {
 
             renderTile(photos, false, false);
 
-            Promise.all(photoPromises).then(results => {
-                renderTile(results, false, true);
+            Promise.allSettled(photoPromises).then(results => {
+                const fulfilled = results
+                    .filter(r => r.status === 'fulfilled')
+                    .map(r => r.value);
+                if (fulfilled.length > 0) {
+                    renderTile(fulfilled, false, true);
+                }
             });
         }
     }, [master, getBlob, mergePreloadMetadata, mergePostloadMetadata, renderTile, mergeStreamingMetadata]);

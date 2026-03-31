@@ -26,7 +26,10 @@ export default class GalleryPhotoHandler {
                 this.view.setTiles(() => {
                     const photos = event.item;
                     photos.forEach(item => {
-                        item.loading = true;
+                        // Don't override loading=false for photos already served from cache
+                        if (!item.img) {
+                            item.loading = true;
+                        }
                     });
                     this.sortPictures(photos, formatToken);
                     return photos;

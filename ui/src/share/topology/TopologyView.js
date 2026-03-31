@@ -222,14 +222,8 @@ function TopologyView({ master }) {
     }, []);
 
     const createShortNetworkLabel = useCallback((item) => {
-        const fullLabel = StringUtil.createNetworkLabel(item, '\n', false);
-        const lines = fullLabel.split('\n');
-        if (lines.length > 0) {
-            const ipLine = lines[0];
-            const otherLines = lines.slice(1).map(line => _.truncate(line, { length: 48 }));
-            return [ipLine, ...otherLines].join('\n');
-        }
-        return fullLabel;
+        // Use human-readable display name (ISP, city, hostname) instead of IP
+        return StringUtil.createDisplayName(item);
     }, []);
 
     const addHosts = useCallback((peer, nodes, isMe) => {
@@ -304,14 +298,71 @@ function TopologyView({ master }) {
         const handleShowTopology = (value) => setShowTopology(value);
         const handleReadyToUpload = () => setVisible(true);
 
+        // Show the user's own node immediately when local ICE discovery completes,
+        // rather than waiting for the server round-trip.
+        const handleLocalNetwork = (networkChain) => {
+            if (!networkChain || !Array.isArray(networkChain) || networkChain.length === 0) return;
+            const myPeerId = masterRef.current?.client?.peerId;
+            if (!myPeerId) return;
+
+            setGraph(state => {
+                // Don't overwrite if we already have this node from server data
+                if (state.nodes.find(n => n.id === myPeerId)) return state;
+
+                const nodes = [...state.nodes];
+                const edges = [...state.edges];
+                const hosts = networkChain.filter(item => item.typeDetail === 'host');
+                const host = hosts.find(item => item.label) || hosts[0];
+                if (host) {
+                    const me = masterRef.current.me || {};
+                    const platform = StringUtil.slimPlatform(me.originPlatform || '');
+                    nodes.push({
+                        id: myPeerId,
+                        label: me.name || _.truncate(platform) || 'Me',
+                        type: 'client',
+                        peer: { ...me, peerId: myPeerId, networkChain },
+                        network: host,
+                        networks: hosts,
+                        isMe: true,
+                    });
+                }
+
+                const nats = networkChain.filter(item =>
+                    item.typeDetail && (item.typeDetail.includes('srflx') || item.typeDetail.includes('prflx'))
+                );
+                const nat = nats.find(item => item.label) || nats[0];
+                if (nat && !nodes.find(n => n.id === nat.ip)) {
+                    nodes.push({
+                        id: nat.ip,
+                        label: createShortNetworkLabel(nat),
+                        network: nat,
+                        networks: nats,
+                        peer: { peerId: myPeerId, networkChain },
+                        type: 'nat',
+                        isMe: true,
+                    });
+                    edges.push({
+                        from: myPeerId,
+                        to: nat.ip,
+                        type: 'chain',
+                        network: host,
+                    });
+                }
+
+                return { nodes, edges };
+            });
+        };
+
         emitter.on('showTopology', handleShowTopology);
         emitter.on('readyToUpload', handleReadyToUpload);
+        emitter.on('localNetwork', handleLocalNetwork);
 
         return () => {
             emitter.removeListener('showTopology', handleShowTopology);
             emitter.removeListener('readyToUpload', handleReadyToUpload);
+            emitter.removeListener('localNetwork', handleLocalNetwork);
         };
-    }, [master.emitter]);
+    }, [master.emitter, createShortNetworkLabel]);
 
     // Peer and connection data
     useEffect(() => {
@@ -599,7 +650,7 @@ function TopologyView({ master }) {
         if (clickedNode) {
             let label = '';
             if (clickedNode.type === 'client') {
-                const platform = clickedNode.peer ? StringUtil.slimPlatform(clickedNode.peer.originPlatform) : '';
+                const platform = clickedNode.peer ? StringUtil.slimPlatform(clickedNode.peer.originPlatform || '') : '';
                 label = (clickedNode.peer?.name || '') + '\n' + platform;
                 if (clickedNode.networks) {
                     label += '\n' + Object.values(_.groupBy(clickedNode.networks, 'ip')).map(ips => {
@@ -610,6 +661,7 @@ function TopologyView({ master }) {
                 const values = clickedNode.relays ? [...clickedNode.relays.values()] : [];
                 label = 'RELAY\n' + values.map(item => item.ip + ':' + item.port).join('\n');
             } else {
+                // Show full details including IP for NAT/other nodes
                 label = StringUtil.createNetworkLabel(clickedNode.network, '\n', true);
             }
             setSelectedNodeLabel(label);
