@@ -13,7 +13,6 @@ import humanizeDuration from 'humanize-duration'
 import MetadataParser from "../gallery/metadata/MetadataParser";
 import { getTorrent, getBaseInfoHash } from './WebTorrentUtils';
 import { cacheGet } from '../util/ImageBlobCache';
-import FileUtil from '../util/FileUtil';
 
 export default class TorrentMaster {
 
