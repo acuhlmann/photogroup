@@ -43,7 +43,7 @@ test('diagnostic test - check for blank screen and errors', async ({ page }) => 
   });
 
   // Navigate to the app
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   
   // Wait a bit for React to render
   await page.waitForTimeout(3000);

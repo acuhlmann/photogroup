@@ -20,9 +20,7 @@ async function checkServerRunning(port) {
 }
 
 test('three browser P2P photo sharing flow', async ({ browser }) => {
-  // Skip in CI or headless environments - P2P tests require real WebRTC connections which are unreliable in headless environments
-  const isHeadless = !process.env.HEADED && process.env.SIDE_BY_SIDE !== 'true';
-  test.skip(!!process.env.CI || isHeadless, 'Skipping P2P test in CI/headless - requires real WebRTC connections');
+  // P2P tests work in headless Chromium with proper WebRTC flags (set in playwright.config.js)
   
   // Check if backend server is running
   const serverRunning = await checkServerRunning(8081);
@@ -59,7 +57,7 @@ test('three browser P2P photo sharing flow', async ({ browser }) => {
   }
 
   // Step 1: Browser 1 - Create room
-  await page1.goto('/');
+  await page1.goto('/', { waitUntil: 'domcontentloaded' });
   
   const startRoomButton = page1.getByRole('button', { name: /Create Room/i });
   await expect(startRoomButton).toBeVisible({ timeout: 30000 });
@@ -74,8 +72,8 @@ test('three browser P2P photo sharing flow', async ({ browser }) => {
   console.log('Room URL:', roomUrl);
 
   // Step 2: Browser 2 and 3 - Join room
-  await page2.goto(roomUrl);
-  await page3.goto(roomUrl);
+  await page2.goto(roomUrl, { waitUntil: 'domcontentloaded' });
+  await page3.goto(roomUrl, { waitUntil: 'domcontentloaded' });
   
   await expect(page2).toHaveURL(new RegExp('\\?room='), { timeout: 10000 });
   await expect(page3).toHaveURL(new RegExp('\\?room='), { timeout: 10000 });
@@ -94,7 +92,7 @@ test('three browser P2P photo sharing flow', async ({ browser }) => {
   // Step 4: Browser 2 and 3 - Wait for P2P download
   let downloaded2 = false;
   let downloaded3 = false;
-  const maxWaitTime = 30000;
+  const maxWaitTime = 90000;
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitTime && (!downloaded2 || !downloaded3)) {

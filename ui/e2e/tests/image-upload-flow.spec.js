@@ -12,9 +12,7 @@ const { checkServerRunning, waitForImage, createRoom, uploadFile, setupSideBySid
  * - Side-by-side (local): SIDE_BY_SIDE=true npx playwright test --headed
  */
 test('image upload and receive flow between two browsers', async ({ browser }) => {
-  // Skip in CI or headless environments - P2P tests require real WebRTC connections which are unreliable in headless environments
-  const isHeadless = !process.env.HEADED && process.env.SIDE_BY_SIDE !== 'true';
-  test.skip(!!process.env.CI || isHeadless, 'Skipping P2P test in CI/headless - requires real WebRTC connections');
+  // P2P tests work in headless Chromium with proper WebRTC flags (set in playwright.config.js)
   
   // Check if backend server is running (should be auto-started by Playwright config)
   const serverRunning = await checkServerRunning(8081);
@@ -86,7 +84,7 @@ test('image upload and receive flow between two browsers', async ({ browser }) =
 
     // Step 2: Browser 2 - Join room
     console.log('Step 2: Browser 2 joining room...');
-    await page2.goto(roomUrl);
+    await page2.goto(roomUrl, { waitUntil: 'domcontentloaded' });
     await expect(page2).toHaveURL(new RegExp('\\?room='), { timeout: 10000 });
     await page2.waitForTimeout(2000); // Wait for room to initialize
     console.log('Browser 2 joined room');
