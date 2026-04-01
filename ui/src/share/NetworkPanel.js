@@ -3,15 +3,8 @@ import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import Drawer from '@mui/material/Drawer';
-import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
-import Fab from '@mui/material/Fab';
-import Badge from '@mui/material/Badge';
-import CloseRounded from '@mui/icons-material/CloseRounded';
-import HubRounded from '@mui/icons-material/HubRounded';
 
 import TopologyView from './topology/TopologyView';
 import MeView from './MeView';
@@ -28,16 +21,15 @@ function TabPanel({ children, value, index }) {
     );
 }
 
-function NetworkPanel({ master, isMobile, wtNumPeers }) {
+function NetworkPanel({ master, isMobile, isCenter, wtNumPeers }) {
     const theme = useTheme();
     const [tabValue, setTabValue] = useState(0);
-    const [drawerOpen, setDrawerOpen] = useState(false);
 
     const handleTabChange = useCallback((event, newValue) => {
         setTabValue(newValue);
     }, []);
 
-    const panelContent = (
+    return (
         <Box sx={{
             display: 'flex',
             flexDirection: 'column',
@@ -50,7 +42,7 @@ function NetworkPanel({ master, isMobile, wtNumPeers }) {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 px: 2,
-                pt: isMobile ? 1 : 0,
+                pt: 1,
                 pb: 0,
             }}>
                 <Typography
@@ -65,11 +57,6 @@ function NetworkPanel({ master, isMobile, wtNumPeers }) {
                 >
                     Network
                 </Typography>
-                {isMobile && (
-                    <IconButton size="small" onClick={() => setDrawerOpen(false)}>
-                        <CloseRounded fontSize="small" />
-                    </IconButton>
-                )}
             </Box>
 
             {/* Tabs */}
@@ -97,78 +84,11 @@ function NetworkPanel({ master, isMobile, wtNumPeers }) {
 
             {/* Tab content */}
             <TabPanel value={tabValue} index={0}>
-                <TopologyView master={master} />
+                <TopologyView master={master} fillHeight={isCenter} />
             </TabPanel>
             <TabPanel value={tabValue} index={1}>
                 <MeView master={master} />
             </TabPanel>
-        </Box>
-    );
-
-    // Mobile: FAB + bottom drawer
-    if (isMobile) {
-        return (
-            <>
-                <Fab
-                    size="medium"
-                    color="primary"
-                    onClick={() => setDrawerOpen(true)}
-                    sx={{
-                        position: 'fixed',
-                        bottom: 20,
-                        right: 20,
-                        zIndex: 1050,
-                        boxShadow: theme.palette.mode === 'dark'
-                            ? '0 0 24px rgba(0,229,255,0.3)'
-                            : '0 4px 12px rgba(0,0,0,0.15)',
-                    }}
-                >
-                    <Badge badgeContent={wtNumPeers} color="secondary" overlap="circular">
-                        <HubRounded />
-                    </Badge>
-                </Fab>
-                <Drawer
-                    anchor="bottom"
-                    open={drawerOpen}
-                    onClose={() => setDrawerOpen(false)}
-                    PaperProps={{
-                        sx: {
-                            height: '75vh',
-                            borderTopLeftRadius: 16,
-                            borderTopRightRadius: 16,
-                            bgcolor: 'background.default',
-                        },
-                    }}
-                >
-                    {/* Drag handle */}
-                    <Box sx={{
-                        display: 'flex',
-                        justifyContent: 'center',
-                        pt: 1,
-                        pb: 0.5,
-                    }}>
-                        <Box sx={{
-                            width: 40,
-                            height: 4,
-                            borderRadius: 2,
-                            bgcolor: 'divider',
-                        }} />
-                    </Box>
-                    {panelContent}
-                </Drawer>
-            </>
-        );
-    }
-
-    // Desktop: inline panel
-    return (
-        <Box sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            borderRight: `1px solid ${theme.palette.divider}`,
-        }}>
-            {panelContent}
         </Box>
     );
 }
@@ -176,6 +96,7 @@ function NetworkPanel({ master, isMobile, wtNumPeers }) {
 NetworkPanel.propTypes = {
     master: PropTypes.object.isRequired,
     isMobile: PropTypes.bool.isRequired,
+    isCenter: PropTypes.bool,
     wtNumPeers: PropTypes.number,
 };
 
