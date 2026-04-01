@@ -11,14 +11,14 @@ const isSideBySide = process.env.SIDE_BY_SIDE === 'true';
  */
 module.exports = defineConfig({
   testDir: './e2e/tests',
-  /* Global timeout for all tests - longer for P2P tests */
-  timeout: isCI ? 120000 : 60000, // 2 minutes in CI, 1 minute locally
+  /* Global timeout for all tests */
+  timeout: isCI ? 90000 : 60000, // 90s in CI, 60s locally
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: isCI,
-  /* Retry P2P tests which can have intermittent WebRTC timing issues */
-  retries: isCI ? 2 : 1,
+  /* Retry on failure - keep low to avoid CI timeout (20 min job limit) */
+  retries: isCI ? 1 : 1,
   /* Opt out of parallel tests on CI. */
   workers: isCI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */

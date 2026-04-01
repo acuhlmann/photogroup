@@ -101,7 +101,7 @@ test('image upload and receive flow between two browsers', async ({ browser }) =
     // Wait for either image to appear or loading indicator
     let imageFound = false;
     let loadingFound = false;
-    const maxWaitTime = 90000; // 90 seconds for P2P transfer
+    const maxWaitTime = 60000; // 60 seconds for P2P transfer
     const startTime = Date.now();
 
     while (Date.now() - startTime < maxWaitTime && !imageFound) {

@@ -211,7 +211,7 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
   let torrentDownloaded = false;
   
   // Wait up to 90 seconds for torrent download or image
-  const maxWaitTime = 90000;
+  const maxWaitTime = 60000;
   const startTime = Date.now();
   
   while (Date.now() - startTime < maxWaitTime && !imageFound && !torrentDownloaded) {
