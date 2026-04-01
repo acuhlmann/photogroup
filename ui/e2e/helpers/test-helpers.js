@@ -94,7 +94,28 @@ async function stopBackendServer() {
 }
 
 /**
- * Wait for an image to appear in the page (content image, not UI icons)
+ * Open the gallery drawer by clicking the gallery FAB button.
+ * The gallery is inside a slide-in drawer triggered by a FAB with a CollectionsRounded icon.
+ * @param {Page} page - Playwright page object
+ */
+async function openGalleryDrawer(page) {
+  // Check if the drawer is already open by looking for the "Received Photos" header
+  const drawerHeader = page.locator('text=Received Photos');
+  if (await drawerHeader.isVisible({ timeout: 500 }).catch(() => false)) {
+    return; // Already open
+  }
+
+  // Click the gallery FAB (the floating action button with CollectionsRounded icon)
+  const galleryFab = page.locator('button[class*="MuiFab"]').filter({ has: page.locator('svg[data-testid="CollectionsRoundedIcon"]') });
+  if (await galleryFab.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await galleryFab.click();
+    await page.waitForTimeout(500); // Wait for drawer animation
+  }
+}
+
+/**
+ * Wait for an image to appear in the page (content image, not UI icons).
+ * Opens the gallery drawer first since images are displayed inside it.
  * @param {Page} page - Playwright page object
  * @param {number} timeout - Maximum time to wait in milliseconds
  * @returns {Promise<boolean>} - True if content image found
@@ -102,6 +123,9 @@ async function stopBackendServer() {
 async function waitForImage(page, timeout = 60000) {
   const startTime = Date.now();
   while (Date.now() - startTime < timeout) {
+    // Open gallery drawer if not already open
+    await openGalleryDrawer(page);
+
     const images = await page.locator('img').all();
     for (const img of images) {
       const src = await img.getAttribute('src') || '';
@@ -184,26 +208,26 @@ async function positionWindow(page, x, y, width, height) {
       console.log(`⚠️  No browser instance found for window positioning`);
       return;
     }
-    
+
     // Get CDP session
     const client = await context.newCDPSession(page);
-    
+
     // Enable Browser domain
     await client.send('Browser.enable');
-    
+
     // Get context index to use as window identifier
     const contexts = browser.contexts();
     const contextIndex = contexts.indexOf(context);
-    
+
     // Try to get the actual window ID
     let windowId = contextIndex + 1; // Default fallback
-    
+
     try {
       // Method 1: List all windows and find the one for this context
       const { windows } = await client.send('Browser.getWindowForTarget', {
         targetId: (await page.evaluateHandle(() => window)).toString()
       }).catch(() => ({}));
-      
+
       if (windows && windows.length > contextIndex) {
         windowId = windows[contextIndex].windowId;
       }
@@ -222,26 +246,26 @@ async function positionWindow(page, x, y, width, height) {
         // Use context index as fallback
       }
     }
-    
+
     // Store position to track
     const positionKey = `${contextIndex}-${windowId}`;
     windowPositions.set(positionKey, { x, y, width, height });
-    
+
     // Position the window
     await client.send('Browser.setWindowBounds', {
       windowId: windowId,
-      bounds: { 
-        left: x, 
-        top: y, 
-        width: width, 
-        height: height, 
-        windowState: 'normal' 
+      bounds: {
+        left: x,
+        top: y,
+        width: width,
+        height: height,
+        windowState: 'normal'
       }
     });
-    
+
     // Verify the position was set
     await page.waitForTimeout(300);
-    
+
     // Try to verify position (optional)
     try {
       const bounds = await client.send('Browser.getWindowBounds', { windowId });
@@ -251,34 +275,34 @@ async function positionWindow(page, x, y, width, height) {
     } catch (e) {
       // Verification failed, but that's okay
     }
-    
+
   } catch (e) {
     // Fallback: Try simpler approach with context index
     try {
       const context = page.context();
       const browser = context.browser();
       if (!browser) return;
-      
+
       const contexts = browser.contexts();
       const contextIndex = contexts.indexOf(context);
       const client = await context.newCDPSession(page);
-      
+
       await client.send('Browser.enable');
-      
+
       // Use context index + 1 as window ID
       const windowId = contextIndex + 1;
-      
+
       await client.send('Browser.setWindowBounds', {
         windowId: windowId,
-        bounds: { 
-          left: x, 
-          top: y, 
-          width: width, 
-          height: height, 
-          windowState: 'normal' 
+        bounds: {
+          left: x,
+          top: y,
+          width: width,
+          height: height,
+          windowState: 'normal'
         }
       });
-      
+
       await page.waitForTimeout(300);
     } catch (e2) {
       console.log(`⚠️  Could not auto-position window at (${x}, ${y}). Error: ${e2.message}`);
@@ -298,7 +322,7 @@ async function launchSideBySideBrowsers() {
   const padding = 50; // Increased padding so windows are fully visible with no overlap
   const startX = 50;
   const startY = 0;
-  
+
   const window1X = startX;
   const window2X = startX + windowWidth + padding;
 
@@ -350,7 +374,7 @@ async function launchSideBySideBrowsers3() {
   const padding = 50; // Increased padding so windows are fully visible with no overlap
   const startX = 50;
   const startY = 0;
-  
+
   const window1X = startX;
   const window2X = startX + windowWidth + padding;
   const window3X = startX + (windowWidth + padding) * 2;
@@ -402,7 +426,7 @@ async function setupSideBySideWindows(context1, context2, page1, page2) {
   // Close the original contexts and launch separate browsers
   await context1.close().catch(() => {});
   await context2.close().catch(() => {});
-  
+
   // Launch separate browser instances for true side-by-side viewing
   return await launchSideBySideBrowsers();
 }
@@ -416,9 +440,9 @@ module.exports = {
   waitForLoadingIndicator,
   createRoom,
   uploadFile,
+  openGalleryDrawer,
   positionWindow,
   setupSideBySideWindows,
   launchSideBySideBrowsers,
   launchSideBySideBrowsers3
 };
-
