@@ -142,7 +142,7 @@ async function waitForLoadingIndicator(page, timeout = 60000) {
  * @returns {Promise<string>} - The room URL
  */
 async function createRoom(page) {
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   const startRoomButton = page.getByRole('button', { name: /Create Room/i });
   await startRoomButton.waitFor({ timeout: 30000 });
   await startRoomButton.click();

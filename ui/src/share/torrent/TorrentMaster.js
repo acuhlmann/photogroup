@@ -174,22 +174,23 @@ export default class TorrentMaster {
 
         return new Promise((resolve, reject) => {
 
-            const loopResolver = value => {};
-            const loopPromise = new Promise(loopResolver);
+            let loopResolve;
+            const loopPromise = new Promise(r => { loopResolve = r; });
 
             const allPendingTorrents = [loopPromise];
             self.torrentsDb.iterator((err, cursor) => {
                 if(err) {
                     reject(err);
+                    return;
                 }
                 if(cursor) {
                     if(typeof cursor.value === 'object'){
                         allPendingTorrents.push(self.resurrectTorrent(cursor.value, photos));
-                        loopResolver(true);
                     }
                     cursor.continue()
                 } else {
-                    resolve(allPendingTorrents);
+                    // Iterator finished — resolve the loop sentinel so Promise.all can proceed
+                    loopResolve(true);
                 }
             });
 
@@ -197,7 +198,7 @@ export default class TorrentMaster {
                 Logger.info('resurrectAllTorrents ' + values);
                 values.shift();
                 resolve(values);
-            });
+            }).catch(reject);
         });
     }
 

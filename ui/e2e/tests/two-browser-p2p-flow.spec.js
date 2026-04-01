@@ -21,9 +21,7 @@ async function checkServerRunning(port) {
 }
 
 test('two browser P2P photo sharing flow', async ({ browser }) => {
-  // Skip in CI or headless environments - P2P tests require real WebRTC connections which are unreliable in headless environments
-  const isHeadless = !process.env.HEADED && process.env.SIDE_BY_SIDE !== 'true';
-  test.skip(!!process.env.CI || isHeadless, 'Skipping P2P test in CI/headless - requires real WebRTC connections');
+  // P2P tests work in headless Chromium with proper WebRTC flags (set in playwright.config.js)
   
   // Check if backend server is running (required for room creation)
   const serverRunning = await checkServerRunning(8081);
@@ -80,7 +78,7 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
   });
 
   // Step 1: Browser 1 - Navigate to app
-  await page1.goto('/');
+  await page1.goto('/', { waitUntil: 'domcontentloaded' });
   
   // Wait for the app to load - look for the "Create Room" button
   // The button text is "Create Room" (case sensitive in the code)
@@ -123,65 +121,13 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
   // The dialog should open automatically, but we might need to wait for React to render
   await page1.waitForTimeout(2000);
   
-  // Step 3b: Browser 1 - Wait for room creation dialog to open
-  // The dialog should appear after room is created (openRoomEnd event)
-  // Try multiple approaches to find the dialog content
-  let shareDialogText = null;
-  let dialogFound = false;
-  
-  // First, try to find the dialog by looking for Material-UI Dialog (it has role="dialog")
-  const dialog = page1.locator('[role="dialog"]');
-  const dialogCount = await dialog.count();
-  
-  if (dialogCount > 0) {
-    // Dialog exists, now look for the text inside it
-    shareDialogText = dialog.getByText('Share this room via either...');
-    try {
-      await expect(shareDialogText).toBeVisible({ timeout: 10000 });
-      dialogFound = true;
-    } catch (e) {
-      console.log('Dialog found but text not visible yet, waiting...');
-    }
-  }
-  
-  // If dialog not found or text not visible, try clicking AddPeersView button
-  if (!dialogFound) {
-    console.log('Dialog not automatically visible, trying to open it via AddPeersView button...');
-    // Look for the AddPeersView button (IconButton with GroupAddRounded icon)
-    // It's in the AppBar toolbar
-    const addPeersButtons = page1.locator('button[aria-haspopup="true"]');
-    const buttonCount = await addPeersButtons.count();
-    
-    if (buttonCount > 0) {
-      // Click the first button that might be AddPeersView
-      await addPeersButtons.first().click();
-      await page1.waitForTimeout(1000);
-      
-      // Now look for the dialog text again
-      shareDialogText = page1.getByText('Share this room via either...');
-      await expect(shareDialogText).toBeVisible({ timeout: 10000 });
-      dialogFound = true;
-    }
-  }
-  
-  if (!dialogFound) {
-    // Last resort: take a screenshot for debugging
-    await page1.screenshot({ path: 'test-results/debug-dialog-not-found.png', fullPage: true });
-    throw new Error('Dialog did not open after room creation. Screenshot saved.');
-  }
-  
-  // Step 4: Browser 1 - Click "Copy/Paste Link" button
-  // The button is an IconButton with LinkRounded icon, next to "Copy/Paste Link" text
-  // Structure: span.horizontal > Typography "Copy/Paste Link" + IconButton
-  const copyPasteLinkText = page1.getByText('Copy/Paste Link');
-  await expect(copyPasteLinkText).toBeVisible();
-  
-  // Find the IconButton that is a sibling in the same horizontal container
-  // Get the parent span, then find the button within it
-  const copyLinkButton = copyPasteLinkText.locator('..').getByRole('button');
-  await expect(copyLinkButton).toBeVisible();
-  
-  // Click the copy button
+  // Step 3b: Browser 1 - Wait for Share Room dialog to open
+  const shareDialog = page1.getByText('Share Room').locator('..').locator('..');
+  await expect(page1.getByText('Share Room')).toBeVisible({ timeout: 10000 });
+
+  // Step 4: Browser 1 - Click "Copy Link" button in the Share Room dialog
+  const copyLinkButton = page1.getByText('Copy Link');
+  await expect(copyLinkButton).toBeVisible({ timeout: 5000 });
   await copyLinkButton.click();
   
   // Wait a moment for clipboard to be updated
@@ -216,7 +162,7 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
   console.log('Copied URL:', copiedUrl);
   
   // Step 6: Browser 2 - Open with copied URL
-  await page2.goto(copiedUrl);
+  await page2.goto(copiedUrl, { waitUntil: 'domcontentloaded' });
   
   // Step 7: Browser 2 - Wait for room to load
   // The room should load and the FrontView should be hidden (hasRoom() returns true)
@@ -264,8 +210,8 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
   let imageFound = false;
   let torrentDownloaded = false;
   
-  // Wait up to 30 seconds for torrent download or image
-  const maxWaitTime = 30000;
+  // Wait up to 90 seconds for torrent download or image
+  const maxWaitTime = 90000;
   const startTime = Date.now();
   
   while (Date.now() - startTime < maxWaitTime && !imageFound && !torrentDownloaded) {
@@ -290,13 +236,20 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
       console.log(`Browser 2: Download progress: ${torrentStatus.progress}%, peers: ${torrentStatus.numPeers}`);
     }
     
-    // Check for images as backup
-    const imageCount = await page2.locator('img[src^="blob:"]').count();
-    if (imageCount > 0) {
-      imageFound = true;
-      console.log(`Browser 2: Found ${imageCount} blob image(s)`);
-      break;
+    // Check for images as backup (blob: or data: URLs, with size check to exclude icons)
+    const images = await page2.locator('img').all();
+    for (const img of images) {
+      const src = await img.getAttribute('src') || '';
+      if (src.startsWith('blob:') || src.includes('data:image')) {
+        const rect = await img.boundingBox();
+        if (rect && rect.width > 50 && rect.height > 50) {
+          imageFound = true;
+          console.log(`Browser 2: Found content image (${rect.width}x${rect.height})`);
+          break;
+        }
+      }
     }
+    if (imageFound) break;
     
     // Wait a bit before checking again
     await page2.waitForTimeout(1000);

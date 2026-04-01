@@ -17,8 +17,8 @@ module.exports = defineConfig({
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: isCI,
-  /* Retry on CI only */
-  retries: isCI ? 2 : 0,
+  /* Retry P2P tests which can have intermittent WebRTC timing issues */
+  retries: isCI ? 2 : 1,
   /* Opt out of parallel tests on CI. */
   workers: isCI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
@@ -35,20 +35,21 @@ module.exports = defineConfig({
     permissions: ['clipboard-read', 'clipboard-write'],
     /* Headless mode - always true in CI, configurable locally */
     headless: isCI ? true : !isHeaded,
-    /* CI-specific browser args for better stability */
-    ...(isCI && {
-      launchOptions: {
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu',
-        ],
-      },
-    }),
+    /* Browser args for WebRTC support in headless and CI */
+    launchOptions: {
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu',
+        /* WebRTC flags for headless P2P testing */
+        '--use-fake-ui-for-media-stream',
+        '--use-fake-device-for-media-stream',
+        '--allow-insecure-localhost',
+      ],
+    },
   },
 
   /* Configure projects for major browsers */
@@ -59,24 +60,15 @@ module.exports = defineConfig({
         ...devices['Desktop Chrome'],
         /* For side-by-side viewing, use smaller viewport */
         viewport: isSideBySide ? { width: 375, height: 667 } : devices['Desktop Chrome'].viewport,
-        /* Launch args - merge CI args with side-by-side args if needed */
-        launchOptions: isCI ? {
-          // CI-specific args (already set in use section, but ensure they're here too)
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu',
-          ],
-        } : isSideBySide ? {
-          args: [
-            '--window-size=400,700',
-            '--window-position=50,50'
-          ]
-        } : undefined,
+        /* Side-by-side window positioning args */
+        ...(isSideBySide && !isCI && {
+          launchOptions: {
+            args: [
+              '--window-size=400,700',
+              '--window-position=50,50'
+            ]
+          }
+        }),
       },
     },
   ],

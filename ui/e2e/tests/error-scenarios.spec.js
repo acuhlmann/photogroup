@@ -24,7 +24,7 @@ test('handles invalid room URL gracefully', async ({ page }) => {
   }
 
   // Try to access a non-existent room
-  await page.goto('/?room=non-existent-room-id-12345');
+  await page.goto('/?room=non-existent-room-id-12345', { waitUntil: 'domcontentloaded' });
   
   // App should still load (not crash)
   await expect(page).toHaveURL(new RegExp('\\?room='), { timeout: 10000 });
@@ -50,7 +50,7 @@ test('handles network disconnection gracefully', async ({ page }) => {
     test.skip();
   }
 
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   
   // Wait for app to load
   const startRoomButton = page.getByRole('button', { name: /Create Room/i });
@@ -74,7 +74,7 @@ test('handles room creation failure', async ({ page }) => {
     test.skip();
   }
 
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   
   const startRoomButton = page.getByRole('button', { name: /Create Room/i });
   await expect(startRoomButton).toBeVisible({ timeout: 30000 });
@@ -105,7 +105,7 @@ test('handles large file upload', async ({ page }) => {
   }
 
   // Create a room first
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   const startRoomButton = page.getByRole('button', { name: /Create Room/i });
   await expect(startRoomButton).toBeVisible({ timeout: 30000 });
   await startRoomButton.click();

@@ -28,7 +28,7 @@ test('single peer room creation and photo upload', async ({ page }) => {
   }
 
   // Step 1: Navigate to app
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   
   // Step 2: Create room
   const startRoomButton = page.getByRole('button', { name: /Create Room/i });
@@ -86,7 +86,7 @@ test('room URL sharing via clipboard', async ({ page }) => {
   const context = await page.context();
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   
   // Create room
   const startRoomButton = page.getByRole('button', { name: /Create Room/i });
