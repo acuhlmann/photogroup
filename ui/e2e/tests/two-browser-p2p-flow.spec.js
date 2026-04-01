@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 const http = require('http');
-const { launchSideBySideBrowsers } = require('../helpers/test-helpers');
+const { launchSideBySideBrowsers, openGalleryDrawer } = require('../helpers/test-helpers');
 
 // Helper function to check if server is running
 async function checkServerRunning(port) {
@@ -227,7 +227,7 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
       }
       return null;
     });
-    
+
     if (torrentStatus && torrentStatus.progress === 100) {
       torrentDownloaded = true;
       console.log(`Browser 2: Torrent downloaded 100% - ${torrentStatus.infoHash}, peers: ${torrentStatus.numPeers}`);
@@ -235,7 +235,10 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
     } else if (torrentStatus) {
       console.log(`Browser 2: Download progress: ${torrentStatus.progress}%, peers: ${torrentStatus.numPeers}`);
     }
-    
+
+    // Open gallery drawer to check for images (gallery is inside a drawer)
+    await openGalleryDrawer(page2);
+
     // Check for images as backup (blob: or data: URLs, with size check to exclude icons)
     const images = await page2.locator('img').all();
     for (const img of images) {
@@ -265,7 +268,8 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
     console.log('Browser 2: Image rendered in gallery');
   }
   
-  // Check if actual image is visible in Browser 2
+  // Open gallery drawer and check if actual image is visible in Browser 2
+  await openGalleryDrawer(page2);
   const hasVisibleImage = await page2.evaluate(() => {
     const imgs = document.querySelectorAll('img[src^="blob:"], img[src^="data:image"]');
     return imgs.length > 0;

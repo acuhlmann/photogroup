@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
-const { checkServerRunning, waitForImage, createRoom, uploadFile, setupSideBySideWindows, launchSideBySideBrowsers } = require('../helpers/test-helpers');
+const { checkServerRunning, waitForImage, createRoom, uploadFile, openGalleryDrawer, setupSideBySideWindows, launchSideBySideBrowsers } = require('../helpers/test-helpers');
 
 /**
  * Core E2E test: Upload image in one browser, receive in another
@@ -105,6 +105,9 @@ test('image upload and receive flow between two browsers', async ({ browser }) =
     const startTime = Date.now();
 
     while (Date.now() - startTime < maxWaitTime && !imageFound) {
+      // Open gallery drawer to see images (gallery is inside a drawer)
+      await openGalleryDrawer(page2);
+
       // Check for actual content images (blob: or data: URLs, not UI icons)
       const images = await page2.locator('img').all();
       for (const img of images) {

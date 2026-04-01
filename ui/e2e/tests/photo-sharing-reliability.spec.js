@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
-const { checkServerRunning, createRoom, uploadFile, waitForImage } = require('../helpers/test-helpers');
+const { checkServerRunning, createRoom, uploadFile, waitForImage, openGalleryDrawer } = require('../helpers/test-helpers');
 
 const TEST_IMAGE = path.join(__dirname, '../fixtures/test-image.jpg');
 
@@ -129,6 +129,8 @@ test.describe('photo sharing reliability', () => {
 
     // After reload, the photo tile should still be present
     // (either from cache or server metadata, even if blob URL is regenerated)
+    // Open gallery drawer to check for tiles
+    await openGalleryDrawer(page);
     const tiles = await page.locator('img').count();
     // At minimum the app should load and show something
     const appLoaded = await page.locator('.App').count();
@@ -149,7 +151,8 @@ test.describe('photo sharing reliability', () => {
       await page2.goto(roomUrl, { waitUntil: 'domcontentloaded' });
       await page2.waitForTimeout(3000);
 
-      // Monitor SSE events on Browser 2 by watching for gallery tile additions
+      // Open gallery drawer on Browser 2 and get baseline count
+      await openGalleryDrawer(page2);
       const tileCountBefore = await page2.locator('img').count();
 
       // Close dialog on browser 1
@@ -166,6 +169,8 @@ test.describe('photo sharing reliability', () => {
       let newContent = false;
       const startTime = Date.now();
       while (Date.now() - startTime < 60000) {
+        // Ensure gallery drawer is open on browser 2
+        await openGalleryDrawer(page2);
         const currentCount = await page2.locator('img').count();
         if (currentCount > tileCountBefore) {
           newContent = true;

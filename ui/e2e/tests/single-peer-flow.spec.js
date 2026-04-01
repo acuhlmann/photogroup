@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 const http = require('http');
+const { openGalleryDrawer } = require('../helpers/test-helpers');
 
 // Helper function to check if server is running
 async function checkServerRunning(port) {
@@ -56,16 +57,19 @@ test('single peer room creation and photo upload', async ({ page }) => {
   // Step 6: Wait for upload to process
   await page.waitForTimeout(5000);
   
-  // Step 7: Verify content appears in gallery (could be image, video, or loading tile)
+  // Step 7: Open gallery drawer and verify content appears
+  // Gallery is now inside a drawer - open it first
+  await openGalleryDrawer(page);
+
   // Check for img elements, or gallery content tiles, or loading indicators
   const imageCount = await page.locator('img').count();
   const galleryItems = await page.locator('.MuiCard-root, .MuiCardMedia-root, [class*="tile"], [class*="gallery"]').count();
   const contentCount = imageCount + galleryItems;
-  
+
   // At minimum, the uploader should show something (loading indicator or image preview)
   // In single peer mode without other peers, the image might not fully render but should show up as loading
   console.log('Images found:', imageCount, 'Gallery items:', galleryItems);
-  
+
   // Relaxed check: either we have content or the upload is in progress
   if (contentCount === 0) {
     // Check if there's at least a loading indicator or progress bar
