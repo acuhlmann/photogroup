@@ -188,7 +188,62 @@ function drawDiamond(ctx, x, y, r) {
     ctx.closePath();
 }
 
-function TopologyView({ master }) {
+function drawPhotoBadge(ctx, x, y, count, isDark) {
+    if (count <= 0) return;
+    const badgeX = x + 38;
+    const badgeY = y - 14;
+    const text = count > 99 ? '99+' : String(count);
+    ctx.font = 'bold 9px "JetBrains Mono", monospace';
+    const textWidth = ctx.measureText(text).width;
+    const badgeW = Math.max(18, textWidth + 8);
+    const badgeH = 16;
+    const r = badgeH / 2;
+
+    // Badge background
+    ctx.beginPath();
+    ctx.moveTo(badgeX - badgeW / 2 + r, badgeY - badgeH / 2);
+    ctx.lineTo(badgeX + badgeW / 2 - r, badgeY - badgeH / 2);
+    ctx.arcTo(badgeX + badgeW / 2, badgeY - badgeH / 2, badgeX + badgeW / 2, badgeY, r);
+    ctx.arcTo(badgeX + badgeW / 2, badgeY + badgeH / 2, badgeX - badgeW / 2, badgeY + badgeH / 2, r);
+    ctx.arcTo(badgeX - badgeW / 2, badgeY + badgeH / 2, badgeX - badgeW / 2, badgeY, r);
+    ctx.arcTo(badgeX - badgeW / 2, badgeY - badgeH / 2, badgeX + badgeW / 2, badgeY - badgeH / 2, r);
+    ctx.closePath();
+    ctx.fillStyle = isDark ? '#e040fb' : '#9c27b0';
+    ctx.fill();
+
+    // Badge text
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, badgeX, badgeY);
+}
+
+function drawConnectionStatusLabel(ctx, fromNode, toNode, edge, isDark) {
+    if (edge.type !== 'connection' || !edge.network) return;
+    const ct = edge.network.connectionType || '';
+    if (!ct) return;
+
+    const midX = (fromNode.x + toNode.x) / 2;
+    const midY = (fromNode.y + toNode.y) / 2;
+
+    ctx.font = '9px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Background pill
+    const text = ct.toUpperCase();
+    const textW = ctx.measureText(text).width;
+    const padX = 6;
+    const padY = 3;
+    drawRoundedRect(ctx, midX - textW / 2 - padX, midY - 6 - padY, textW + padX * 2, 12 + padY * 2, 4);
+    ctx.fillStyle = isDark ? 'rgba(17,24,32,0.85)' : 'rgba(255,255,255,0.9)';
+    ctx.fill();
+
+    ctx.fillStyle = getEdgeColor(edge, isDark);
+    ctx.fillText(text, midX, midY);
+}
+
+function TopologyView({ master, fillHeight }) {
     const muiTheme = useTheme();
     const isDark = muiTheme.palette.mode === 'dark';
     const masterRef = useRef(master);
@@ -205,6 +260,7 @@ function TopologyView({ master }) {
     const [showTopology, setShowTopology] = useState(true);
     const [selectedNodeLabel, setSelectedNodeLabel] = useState('');
     const [graph, setGraph] = useState({ nodes: [], edges: [] });
+    const [peerPhotoCounts, setPeerPhotoCounts] = useState({});
 
     // Helper methods (kept from original)
     const isMeColor = useCallback((isMe) => {
@@ -290,6 +346,42 @@ function TopologyView({ master }) {
             }
         }).filter(item => item);
     }, [createShortNetworkLabel]);
+
+    // Track photo counts per peer
+    useEffect(() => {
+        const emitter = master.emitter;
+
+        const handlePhotos = (data) => {
+            // Recalculate photo counts from room photos when ownership changes
+            if (data.type === 'add' || data.type === 'addOwner' || data.type === 'removeOwner' || data.type === 'updateOwner' || data.type === 'delete') {
+                // Fetch current room state to get accurate photo counts
+                if (masterRef.current.service && masterRef.current.service.hasRoom) {
+                    masterRef.current.service.getRoom().then(room => {
+                        if (room && room.photos) {
+                            const counts = {};
+                            room.photos.forEach(photo => {
+                                if (photo.owners) {
+                                    photo.owners.forEach(owner => {
+                                        counts[owner.peerId] = (counts[owner.peerId] || 0) + 1;
+                                    });
+                                }
+                                // Also count by peerId (the original uploader)
+                                if (photo.peerId) {
+                                    counts[photo.peerId] = counts[photo.peerId] || 0;
+                                }
+                            });
+                            setPeerPhotoCounts(counts);
+                        }
+                    }).catch(() => {});
+                }
+            }
+        };
+
+        emitter.on('photos', handlePhotos);
+        return () => {
+            emitter.removeListener('photos', handlePhotos);
+        };
+    }, [master.emitter]);
 
     // Event listeners
     useEffect(() => {
@@ -445,7 +537,7 @@ function TopologyView({ master }) {
         const dpr = window.devicePixelRatio || 1;
         const rect = container.getBoundingClientRect();
         const width = rect.width;
-        const height = 350;
+        const height = fillHeight ? rect.height : 350;
 
         canvas.width = width * dpr;
         canvas.height = height * dpr;
@@ -540,6 +632,9 @@ function TopologyView({ master }) {
                     ctx.fillStyle = getEdgeColor(edge, isDark);
                     ctx.fill();
                 }
+
+                // Connection type label on edges
+                drawConnectionStatusLabel(ctx, fromNode, toNode, edge, isDark);
             });
 
             // Particles
@@ -589,6 +684,11 @@ function TopologyView({ master }) {
                         ctx.stroke();
                         ctx.shadowBlur = 0;
                     }
+
+                    // Photo count badge for client nodes
+                    const peerId = node.peer?.peerId || node.id;
+                    const photoCount = peerPhotoCounts[peerId] || 0;
+                    drawPhotoBadge(ctx, x, y, photoCount, isDark);
                 }
 
                 // Label
@@ -609,14 +709,14 @@ function TopologyView({ master }) {
 
             // Empty state message
             if (nodes.length === 0) {
-                ctx.font = '13px "Source Sans 3", sans-serif';
+                ctx.font = '15px "Source Sans 3", sans-serif';
                 ctx.fillStyle = isDark ? '#556677' : '#aabbcc';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText('Waiting for peer connections...', width / 2, height / 2 - 10);
-                ctx.font = '11px "JetBrains Mono", monospace';
+                ctx.font = '12px "JetBrains Mono", monospace';
                 ctx.fillStyle = isDark ? '#3d4a5c' : '#c1c9d2';
-                ctx.fillText('Create a room and share the link', width / 2, height / 2 + 12);
+                ctx.fillText('Create a room and share the link', width / 2, height / 2 + 16);
             }
 
             animFrameRef.current = requestAnimationFrame(render);
@@ -630,7 +730,7 @@ function TopologyView({ master }) {
                 cancelAnimationFrame(animFrameRef.current);
             }
         };
-    }, [graph, isDark]);
+    }, [graph, isDark, fillHeight, peerPhotoCounts]);
 
     // Handle canvas click for node selection
     const handleCanvasClick = useCallback((e) => {
@@ -651,7 +751,12 @@ function TopologyView({ master }) {
             let label = '';
             if (clickedNode.type === 'client') {
                 const platform = clickedNode.peer ? StringUtil.slimPlatform(clickedNode.peer.originPlatform || '') : '';
+                const peerId = clickedNode.peer?.peerId || clickedNode.id;
+                const photoCount = peerPhotoCounts[peerId] || 0;
                 label = (clickedNode.peer?.name || '') + '\n' + platform;
+                if (photoCount > 0) {
+                    label += '\nPhotos available: ' + photoCount;
+                }
                 if (clickedNode.networks) {
                     label += '\n' + Object.values(_.groupBy(clickedNode.networks, 'ip')).map(ips => {
                         return ips.map(item => item.transport).join(',') + ' ' + ips[0].ip + ':' + ips.map(item => item.port).join(',');
@@ -668,7 +773,7 @@ function TopologyView({ master }) {
         } else {
             setSelectedNodeLabel('');
         }
-    }, []);
+    }, [peerPhotoCounts]);
 
     // Resize handler
     useEffect(() => {
@@ -684,15 +789,19 @@ function TopologyView({ master }) {
         };
     }, []);
 
+    const canvasHeight = fillHeight ? '100%' : 350;
+
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', height: fillHeight ? '100%' : 'auto' }}>
             {/* Canvas container */}
             <Box
                 ref={containerRef}
                 sx={{
                     position: 'relative',
                     width: '100%',
-                    height: 350,
+                    flex: fillHeight ? 1 : 'none',
+                    height: fillHeight ? undefined : 350,
+                    minHeight: fillHeight ? 300 : 350,
                     overflow: 'hidden',
                 }}
             >
@@ -752,6 +861,18 @@ function TopologyView({ master }) {
                             '& .MuiChip-label': { px: 1 },
                         }}
                     />
+                    <Chip
+                        size="small"
+                        label="Photos"
+                        sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            bgcolor: isDark ? 'rgba(224,64,251,0.15)' : 'rgba(156,39,176,0.15)',
+                            color: isDark ? '#e040fb' : '#9c27b0',
+                            border: isDark ? '1px solid rgba(224,64,251,0.3)' : '1px solid rgba(156,39,176,0.3)',
+                            '& .MuiChip-label': { px: 1 },
+                        }}
+                    />
                 </Box>
             </Box>
 
@@ -786,6 +907,7 @@ function TopologyView({ master }) {
 
 TopologyView.propTypes = {
     master: PropTypes.object.isRequired,
+    fillHeight: PropTypes.bool,
 };
 
 export default withSnackbar(TopologyView);

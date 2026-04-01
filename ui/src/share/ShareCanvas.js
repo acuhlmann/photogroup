@@ -4,7 +4,12 @@ import Gallery from "./gallery/Gallery";
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import CloseRounded from '@mui/icons-material/CloseRounded';
+import CollectionsRounded from '@mui/icons-material/CollectionsRounded';
 import Box from '@mui/material/Box';
+import Badge from '@mui/material/Badge';
+import Fab from '@mui/material/Fab';
+import Drawer from '@mui/material/Drawer';
+import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import Logger from 'js-logger';
@@ -22,6 +27,8 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
 
     const [hasRoom, setHasRoom] = useState(false);
     const [wtNumPeers, setWtNumPeers] = useState(0);
+    const [galleryOpen, setGalleryOpen] = useState(false);
+    const [photoCount, setPhotoCount] = useState(0);
 
     useEffect(() => {
         if(!WebTorrent.WEBRTC_SUPPORT) {
@@ -48,9 +55,18 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             setWtNumPeers(torrent.numPeers);
         };
 
+        const handlePhotos = (data) => {
+            if (data.type === 'add') {
+                setPhotoCount(prev => prev + (Array.isArray(data.item) ? data.item.length : 1));
+            } else if (data.type === 'delete') {
+                setPhotoCount(prev => Math.max(0, prev - 1));
+            }
+        };
+
         master.emitter.on('showError', handleShowError);
         master.emitter.on('readyToUpload', handleReadyToUpload);
         master.emitter.on('wire', handleWire);
+        master.emitter.on('photos', handlePhotos);
 
         const handleBeforeInstallPrompt = (e) => {
             console.info('beforeinstallprompt');
@@ -79,6 +95,7 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             master.emitter.removeListener('showError', handleShowError);
             master.emitter.removeListener('readyToUpload', handleReadyToUpload);
             master.emitter.removeListener('wire', handleWire);
+            master.emitter.removeListener('photos', handlePhotos);
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
             window.removeEventListener('appinstalled', handleAppInstalled);
         };
@@ -138,40 +155,123 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
         );
     }, [snack, install]);
 
-    // When room is active and on desktop: split-pane layout
-    if (hasRoom && !isMobile) {
+    // Gallery drawer width
+    const galleryDrawerWidth = isDesktop ? 480 : 380;
+
+    // When room is active: network-centric layout with gallery drawer
+    if (hasRoom) {
         return (
             <Box sx={{
-                display: 'grid',
-                gridTemplateColumns: isDesktop ? '380px 1fr' : '320px 1fr',
+                display: 'flex',
+                flexDirection: 'column',
                 height: 'calc(100vh - 56px)',
                 overflow: 'hidden',
+                position: 'relative',
             }}>
-                {/* Left: Network Panel */}
+                {/* Main content: Network map takes center stage */}
                 <Box sx={{
-                    overflow: 'auto',
-                    borderRight: `1px solid ${theme.palette.divider}`,
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
                 }}>
                     <NetworkPanel
                         master={master}
                         isMobile={false}
+                        isCenter={true}
                         wtNumPeers={wtNumPeers}
                     />
                 </Box>
 
-                {/* Right: Gallery + FrontView */}
-                <Box sx={{
-                    overflow: 'auto',
-                    p: { sm: 2, lg: 3 },
-                }}>
-                    <FrontView master={master}/>
-                    <Gallery master={master} />
-                </Box>
+                {/* Gallery FAB */}
+                <Fab
+                    size="medium"
+                    color="primary"
+                    onClick={() => setGalleryOpen(true)}
+                    sx={{
+                        position: 'fixed',
+                        bottom: 20,
+                        right: 20,
+                        zIndex: 1050,
+                        boxShadow: theme.palette.mode === 'dark'
+                            ? '0 0 24px rgba(0,229,255,0.3)'
+                            : '0 4px 12px rgba(0,0,0,0.15)',
+                    }}
+                >
+                    <Badge badgeContent={photoCount} color="secondary" overlap="circular">
+                        <CollectionsRounded />
+                    </Badge>
+                </Fab>
+
+                {/* Gallery drawer - slides in from right */}
+                <Drawer
+                    anchor={isMobile ? "bottom" : "right"}
+                    open={galleryOpen}
+                    onClose={() => setGalleryOpen(false)}
+                    PaperProps={{
+                        sx: {
+                            width: isMobile ? '100%' : galleryDrawerWidth,
+                            height: isMobile ? '85vh' : '100%',
+                            borderTopLeftRadius: isMobile ? 16 : 0,
+                            borderTopRightRadius: isMobile ? 16 : 0,
+                            bgcolor: 'background.default',
+                        },
+                    }}
+                >
+                    {/* Drawer header */}
+                    <Box sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        px: 2,
+                        py: 1.5,
+                        borderBottom: `1px solid ${theme.palette.divider}`,
+                        bgcolor: 'background.paper',
+                    }}>
+                        {isMobile && (
+                            <Box sx={{
+                                position: 'absolute',
+                                top: 8,
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                width: 40,
+                                height: 4,
+                                borderRadius: 2,
+                                bgcolor: 'divider',
+                            }} />
+                        )}
+                        <Typography
+                            variant="subtitle2"
+                            sx={{
+                                fontFamily: 'var(--font-mono)',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.1em',
+                                fontSize: '0.75rem',
+                                color: 'text.secondary',
+                                mt: isMobile ? 1.5 : 0,
+                            }}
+                        >
+                            Received Photos
+                        </Typography>
+                        <IconButton size="small" onClick={() => setGalleryOpen(false)}>
+                            <CloseRounded fontSize="small" />
+                        </IconButton>
+                    </Box>
+
+                    {/* Gallery content */}
+                    <Box sx={{
+                        overflow: 'auto',
+                        flex: 1,
+                        p: 2,
+                    }}>
+                        <Gallery master={master} />
+                    </Box>
+                </Drawer>
             </Box>
         );
     }
 
-    // Mobile / no room: stacked layout
+    // No room: show FrontView landing
     return (
         <Box sx={{
             minHeight: 'calc(100vh - 48px)',
@@ -179,15 +279,6 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             py: { xs: 1.5, sm: 2 },
         }}>
             <FrontView master={master}/>
-            <Gallery master={master} />
-            {/* Mobile FAB for network panel */}
-            {hasRoom && (
-                <NetworkPanel
-                    master={master}
-                    isMobile={true}
-                    wtNumPeers={wtNumPeers}
-                />
-            )}
         </Box>
     );
 }
