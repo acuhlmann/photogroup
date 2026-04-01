@@ -103,7 +103,7 @@ jobs:
           CI: true
           NODE_ENV: test
           # Playwright's webServer config will automatically start both frontend and backend servers
-        timeout-minutes: 20  # Increased timeout for server startup + tests
+        timeout-minutes: 30  # Allow time for server startup + P2P E2E tests with retries
         continue-on-error: false
       
       - name: Upload Playwright test results

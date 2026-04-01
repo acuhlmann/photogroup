@@ -96,20 +96,20 @@ async function stopBackendServer() {
 /**
  * Open the gallery drawer by clicking the gallery FAB button.
  * The gallery is inside a slide-in drawer triggered by a FAB with a CollectionsRounded icon.
+ * Safe to call repeatedly in polling loops - returns quickly if drawer is already open or FAB not found.
  * @param {Page} page - Playwright page object
  */
 async function openGalleryDrawer(page) {
-  // Check if the drawer is already open by looking for the "Received Photos" header
-  const drawerHeader = page.locator('text=Received Photos');
-  if (await drawerHeader.isVisible({ timeout: 500 }).catch(() => false)) {
-    return; // Already open
-  }
+  // Quick check: is the drawer already open?
+  const drawerOpen = await page.locator('text=Received Photos').isVisible().catch(() => false);
+  if (drawerOpen) return;
 
-  // Click the gallery FAB (the floating action button with CollectionsRounded icon)
-  const galleryFab = page.locator('button[class*="MuiFab"]').filter({ has: page.locator('svg[data-testid="CollectionsRoundedIcon"]') });
-  if (await galleryFab.isVisible({ timeout: 3000 }).catch(() => false)) {
+  // Try to click the gallery FAB - use a very short timeout since this is called in loops
+  const galleryFab = page.locator('button[class*="MuiFab"]');
+  const fabVisible = await galleryFab.isVisible().catch(() => false);
+  if (fabVisible) {
     await galleryFab.click();
-    await page.waitForTimeout(500); // Wait for drawer animation
+    await page.waitForTimeout(400);
   }
 }
 

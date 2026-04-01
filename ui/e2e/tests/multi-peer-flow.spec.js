@@ -92,7 +92,7 @@ test('three browser P2P photo sharing flow', async ({ browser }) => {
   // Step 4: Browser 2 and 3 - Wait for P2P download
   let downloaded2 = false;
   let downloaded3 = false;
-  const maxWaitTime = 90000;
+  const maxWaitTime = 60000;
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitTime && (!downloaded2 || !downloaded3)) {
