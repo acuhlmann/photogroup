@@ -3,7 +3,6 @@ import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 
 import TopologyView from './topology/TopologyView';
@@ -40,29 +39,6 @@ function NetworkPanel({ master, isMobile, isCenter, wtNumPeers }) {
             height: '100%',
             bgcolor: 'background.default',
         }}>
-            {/* Panel header */}
-            <Box sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                px: 2,
-                pt: 1,
-                pb: 0,
-            }}>
-                <Typography
-                    variant="subtitle2"
-                    sx={{
-                        fontFamily: 'var(--font-mono)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.1em',
-                        fontSize: '0.7rem',
-                        color: 'text.secondary',
-                    }}
-                >
-                    Network
-                </Typography>
-            </Box>
-
             {/* Tabs */}
             <Tabs
                 value={tabValue}
