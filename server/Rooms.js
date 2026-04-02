@@ -38,6 +38,9 @@ export default class Rooms {
     }
 
     reset() {
+        this.rooms.forEach(room => {
+            if (room.photoIndex) room.photoIndex.clear();
+        });
         this.rooms.clear();
     }
 
@@ -92,6 +95,7 @@ export default class Rooms {
             const room = {
                 id: id,
                 photos: [],
+                photoIndex: new Map(),
                 connections: []
             };
             room.peers = new Peers(this.updateChannel, this.remoteLog, this.app, this.emitter);
@@ -149,6 +153,10 @@ export default class Rooms {
                 for (const requestPhoto of request.body.photos) {
                     const infoHash = requestPhoto.infoHash;
 
+                    if (!infoHash) {
+                        return response.status(400).send('Expected infoHash');
+                    }
+
                     if(this.dht) {
                         this.dht.lookup(infoHash);
                     }
@@ -158,13 +166,14 @@ export default class Rooms {
                         return response.status(400).send('Expected peerId');
                     }
 
-                    let photo = this.findPhoto(room.photos, infoHash);
+                    let photo = this.findPhoto(room, infoHash);
                     if (!photo) {
 
                         photo = requestPhoto;
                         photo.owners = [];
 
                         room.photos.unshift(photo);
+                        this.addToPhotoIndex(room, photo);
                     }
                     responsePhotos.push(photo);
                 }
@@ -200,7 +209,7 @@ export default class Rooms {
 
                 const updated = request.body.map(update => {
                     const infoHash = update.infoHash;
-                    const existing = this.findPhoto(room.photos, infoHash);
+                    const existing = this.findPhoto(room, infoHash);
                     if (!existing) return null;
                     _.merge(existing, update);
                     return existing;
@@ -224,6 +233,7 @@ export default class Rooms {
                     found = room.photos.find((item, index) => {
                         if (item.infoHash === infoHash) {
                             room.photos.splice(index, 1);
+                            this.removeFromPhotoIndex(room, infoHash);
                             return true;
                         }
                         return false;
@@ -250,17 +260,25 @@ export default class Rooms {
             .join('').replace(/ $/,'');
     }
 
-    findPhoto(photos, infoHash) {
-        return this.findByField(photos, 'infoHash', infoHash);
+    findPhoto(room, infoHash) {
+        if (room.photoIndex) {
+            return room.photoIndex.get(infoHash) || null;
+        }
+        // Fallback for rooms created before the index existed
+        const found = room.photos.find(item => item.infoHash === infoHash);
+        return found || null;
     }
 
-    findByField(photos, field, value) {
-        const index = photos.findIndex(item => item[field] === value);
-        let foundItem = null;
-        if(index > -1) {
-            foundItem = photos[index];
+    addToPhotoIndex(room, photo) {
+        if (room.photoIndex && photo.infoHash) {
+            room.photoIndex.set(photo.infoHash, photo);
         }
-        return foundItem;
+    }
+
+    removeFromPhotoIndex(room, infoHash) {
+        if (room.photoIndex) {
+            room.photoIndex.delete(infoHash);
+        }
     }
 
     registerOwnerRoutes(app) {
@@ -318,27 +336,25 @@ export default class Rooms {
 
     addOwner(room, updates) {
 
-        let added = false;
+        let anyAdded = false;
         const updated = updates.map(update => {
-            added = false;
-            room.photos.find(item => {
-                if(item.infoHash === update.infoHash) {
-                    const found = item.owners.find(item => item.peerId === update.peerId);
-                    if(!found) {
-                        update = update || {};
-                        item.owners.push(update);
-                    }
-                    added = true;
+            const photo = this.findPhoto(room, update.infoHash);
+            if (photo) {
+                const found = photo.owners.find(item => item.peerId === update.peerId);
+                if(!found) {
+                    update = update || {};
+                    photo.owners.push(update);
                 }
-            });
+                anyAdded = true;
+            }
             return update;
         }).filter(item => item);
 
-        if(added) {
+        if(anyAdded) {
             this.sendPhotos(room, this.allRoomClients(room),'addOwner', updated);
         }
 
-        return added;
+        return anyAdded;
     }
 
     removeOwner(room, peerId) {
@@ -374,7 +390,7 @@ export default class Rooms {
             .includes(item.infoHash.split('-')[0]));*/
 
         const updated = updates.map(update => {
-            const photo = this.findPhoto(room.photos, update.infoHash);
+            const photo = this.findPhoto(room, update.infoHash);
             if(!photo) {
 
                 return false
