@@ -11,21 +11,21 @@ import _ from "lodash";
 import update from "immutability-helper";
 import StringUtil from "../util/StringUtil";
 
-// Force-directed layout constants
-const REPULSION = 3000;
-const SPRING_K = 0.005;
+// Force-directed layout constants - tuned for better viewport utilization
+const REPULSION = 5000;
+const SPRING_K = 0.003;
 const DAMPING = 0.85;
-const CENTER_GRAVITY = 0.01;
-const MIN_DIST = 60;
+const CENTER_GRAVITY = 0.008;
+const MIN_DIST = 80;
 
 function layoutNodes(nodes, edges, width, height) {
     if (nodes.length === 0) return;
 
-    // Initialize positions in a circle if not set
+    // Initialize positions in a circle if not set - scale radius to viewport
     nodes.forEach((node, i) => {
         if (node.x === undefined) {
             const angle = (2 * Math.PI * i) / nodes.length;
-            const r = Math.min(width, height) * 0.3;
+            const r = Math.min(width, height) * 0.35;
             node.x = width / 2 + r * Math.cos(angle);
             node.y = height / 2 + r * Math.sin(angle);
             node.vx = 0;
@@ -52,7 +52,8 @@ function layoutNodes(nodes, edges, width, height) {
             }
         }
 
-        // Spring attraction along edges
+        // Spring attraction along edges - rest length scales with viewport
+        const restLength = Math.min(width, height) * 0.2;
         edges.forEach(edge => {
             const a = nodes.find(n => n.id === edge.from);
             const b = nodes.find(n => n.id === edge.to);
@@ -60,7 +61,7 @@ function layoutNodes(nodes, edges, width, height) {
             const dx = b.x - a.x;
             const dy = b.y - a.y;
             const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            const force = SPRING_K * (dist - 120);
+            const force = SPRING_K * (dist - restLength);
             const fx = (dx / dist) * force;
             const fy = (dy / dist) * force;
             a.vx += fx;
@@ -81,9 +82,11 @@ function layoutNodes(nodes, edges, width, height) {
             node.vy *= DAMPING;
             node.x += node.vx;
             node.y += node.vy;
-            // Bounds
-            node.x = Math.max(50, Math.min(width - 50, node.x));
-            node.y = Math.max(30, Math.min(height - 30, node.y));
+            // Bounds - use proportional padding for better scaling
+            const padX = Math.max(50, width * 0.06);
+            const padY = Math.max(30, height * 0.06);
+            node.x = Math.max(padX, Math.min(width - padX, node.x));
+            node.y = Math.max(padY, Math.min(height - padY, node.y));
         });
     }
 }
@@ -539,7 +542,7 @@ function TopologyView({ master, fillHeight, active = true }) {
         const dpr = window.devicePixelRatio || 1;
         const rect = container.getBoundingClientRect();
         const width = rect.width;
-        const height = fillHeight ? rect.height : 350;
+        const height = fillHeight ? rect.height : Math.max(350, rect.height);
 
         canvas.width = width * dpr;
         canvas.height = height * dpr;

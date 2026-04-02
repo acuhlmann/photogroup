@@ -4,7 +4,7 @@ import PropTypes from 'prop-types';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import ExitToAppOutlined from '@mui/icons-material/ExitToAppOutlined';
 import IconButton from '@mui/material/IconButton';
-import GroupAddRounded from '@mui/icons-material/GroupAddRounded';
+import IosShareRounded from '@mui/icons-material/IosShareRounded';
 import Badge from '@mui/material/Badge';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
@@ -14,7 +14,6 @@ import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import { QRCodeSVG } from "qrcode.react";
 import Typography from "@mui/material/Typography";
-import LinkRounded from '@mui/icons-material/LinkRounded';
 import ShareRounded from '@mui/icons-material/ShareRounded';
 import ContentCopyRounded from '@mui/icons-material/ContentCopyRounded';
 import copy from "clipboard-copy";
@@ -22,7 +21,6 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import Logger from 'js-logger';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
-import Uploader from "./Uploader";
 import Fade from '@mui/material/Fade';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
@@ -144,7 +142,6 @@ function AddPeersView({ master }) {
         };
 
         const handleOpenRoomEnd = () => {
-            setOpen(true);
             setCreatedRoom(true);
         };
 
@@ -214,7 +211,7 @@ function AddPeersView({ master }) {
             <IconButton
                 onClick={() => show(true)}>
                 <Badge badgeContent={numPeers} color="primary" >
-                    <GroupAddRounded />
+                    <IosShareRounded />
                 </Badge>
             </IconButton>
 
@@ -295,14 +292,6 @@ function AddPeersView({ master }) {
 
                             {/* Share buttons row */}
                             <Stack direction="row" spacing={1.5} justifyContent="center">
-                                <Button
-                                    variant="outlined"
-                                    size="small"
-                                    startIcon={<LinkRounded />}
-                                    onClick={() => copyLink(url)}
-                                >
-                                    Copy Link
-                                </Button>
                                 {canShare && (
                                     <Button
                                         variant="outlined"
@@ -396,13 +385,9 @@ function AddPeersView({ master }) {
                         <Box />
                     )}
 
-                    <Stack direction="row" spacing={1} alignItems="center">
-                        <Uploader model={master.torrentAddition}
-                                  emitter={master.emitter} />
-                        <IconButton onClick={() => show(false)}>
-                            <CloseRounded />
-                        </IconButton>
-                    </Stack>
+                    <IconButton onClick={() => show(false)}>
+                        <CloseRounded />
+                    </IconButton>
                 </DialogActions>
             </Dialog>
         </div> : <div></div>

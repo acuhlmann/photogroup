@@ -183,25 +183,27 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
                     />
                 </Box>
 
-                {/* Gallery FAB */}
-                <Fab
-                    size="medium"
-                    color="primary"
-                    onClick={() => setGalleryOpen(true)}
-                    sx={{
-                        position: 'fixed',
-                        bottom: 20,
-                        right: 20,
-                        zIndex: 1050,
-                        boxShadow: theme.palette.mode === 'dark'
-                            ? '0 0 24px rgba(0,229,255,0.3)'
-                            : '0 4px 12px rgba(0,0,0,0.15)',
-                    }}
-                >
-                    <Badge badgeContent={photoCount} color="secondary" overlap="circular">
-                        <CollectionsRounded />
-                    </Badge>
-                </Fab>
+                {/* Gallery FAB - only show when photos received */}
+                {photoCount > 0 && (
+                    <Fab
+                        size="medium"
+                        color="primary"
+                        onClick={() => setGalleryOpen(true)}
+                        sx={{
+                            position: 'fixed',
+                            bottom: 20,
+                            right: 20,
+                            zIndex: 1050,
+                            boxShadow: theme.palette.mode === 'dark'
+                                ? '0 0 24px rgba(0,229,255,0.3)'
+                                : '0 4px 12px rgba(0,0,0,0.15)',
+                        }}
+                    >
+                        <Badge badgeContent={photoCount} color="secondary" overlap="circular">
+                            <CollectionsRounded />
+                        </Badge>
+                    </Fab>
+                )}
 
                 {/* Gallery drawer - slides in from right */}
                 <Drawer
