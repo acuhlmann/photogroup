@@ -135,6 +135,11 @@ This project requires Node.js >= 24.0.0. The VM update script handles installing
 ### No external services required
 No database, Redis, or Docker needed for development. All state is in-memory. Twilio credentials are optional (only needed for TURN relay NAT traversal; app falls back to Google STUN servers without them).
 
+### Pushing changes
+Always push to `main`. Before pushing:
+1. Run all tests locally: `npm test` (runs both server and UI tests via `test-all.js`)
+2. Verify the push succeeded by checking the GitHub Actions results at https://github.com/acuhlmann/photogroup/actions
+
 ### GCP Cloud access
 Deployment uses `gcloud` CLI authenticated with a service account key (JSON). The secret `GCP_SERVICE_ACCOUNT_KEY` should be set in Cursor Secrets. To authenticate:
 ```bash
