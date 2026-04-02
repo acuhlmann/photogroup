@@ -71,16 +71,7 @@ test('image upload and receive flow between two browsers', async ({ browser }) =
     expect(roomUrl).toContain('?room=');
     console.log(`Room created: ${roomUrl}`);
 
-    // Close dialog if it opened
-    try {
-      const closeBtn = page1.locator('button[aria-label*="close" i], button:has-text("×"), button:has-text("Close")').first();
-      if (await closeBtn.isVisible({ timeout: 2000 })) {
-        await closeBtn.click();
-        await page1.waitForTimeout(500);
-      }
-    } catch (e) {
-      // Dialog might not be open, that's fine
-    }
+    // Dialog auto-dismissed by createRoom helper
 
     // Step 2: Browser 2 - Join room
     console.log('Step 2: Browser 2 joining room...');

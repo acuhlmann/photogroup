@@ -94,6 +94,27 @@ async function stopBackendServer() {
 }
 
 /**
+ * Dismiss any open MUI dialog that might be blocking interaction (e.g. Share Room dialog).
+ * @param {Page} page - Playwright page object
+ */
+async function dismissDialogs(page) {
+  // Try closing via the CloseRounded icon button inside dialogs
+  const closeBtn = page.locator('button:has(svg[data-testid="CloseRoundedIcon"])');
+  if (await closeBtn.first().isVisible().catch(() => false)) {
+    await closeBtn.first().click().catch(() => {});
+    await page.waitForTimeout(300);
+    return;
+  }
+  // Try clicking the MUI dialog backdrop to dismiss
+  const backdrop = page.locator('.MuiBackdrop-root');
+  if (await backdrop.isVisible().catch(() => false)) {
+    // Click top-left corner of backdrop (away from dialog content)
+    await backdrop.click({ position: { x: 5, y: 5 }, force: true }).catch(() => {});
+    await page.waitForTimeout(300);
+  }
+}
+
+/**
  * Open the gallery drawer by clicking the gallery FAB button.
  * The gallery is inside a slide-in drawer triggered by a FAB with a CollectionsRounded icon.
  * Safe to call repeatedly in polling loops - returns quickly if drawer is already open or FAB not found.
@@ -104,11 +125,14 @@ async function openGalleryDrawer(page) {
   const drawerOpen = await page.locator('text=Received Photos').isVisible().catch(() => false);
   if (drawerOpen) return;
 
-  // Try to click the gallery FAB - use a very short timeout since this is called in loops
+  // Dismiss any blocking dialog (e.g. Share Room dialog) before trying to click FAB
+  await dismissDialogs(page);
+
+  // Try to click the gallery FAB
   const galleryFab = page.locator('button[class*="MuiFab"]');
   const fabVisible = await galleryFab.isVisible().catch(() => false);
   if (fabVisible) {
-    await galleryFab.click();
+    await galleryFab.click({ force: true }).catch(() => {});
     await page.waitForTimeout(400);
   }
 }
@@ -161,7 +185,8 @@ async function waitForLoadingIndicator(page, timeout = 60000) {
 }
 
 /**
- * Create a room and return the room URL
+ * Create a room and return the room URL.
+ * Automatically dismisses the Share Room dialog that opens after creation.
  * @param {Page} page - Playwright page object
  * @returns {Promise<string>} - The room URL
  */
@@ -172,6 +197,8 @@ async function createRoom(page) {
   await startRoomButton.click();
   await page.waitForURL(new RegExp('\\?room='), { timeout: 30000 });
   await page.waitForTimeout(2000);
+  // Dismiss the Share Room dialog that auto-opens after room creation
+  await dismissDialogs(page);
   return page.url();
 }
 
@@ -440,6 +467,7 @@ module.exports = {
   waitForLoadingIndicator,
   createRoom,
   uploadFile,
+  dismissDialogs,
   openGalleryDrawer,
   positionWindow,
   setupSideBySideWindows,

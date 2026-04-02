@@ -20,16 +20,9 @@ test.describe('photo sharing reliability', () => {
   });
 
   test('uploader sees their own photo in gallery after upload', async ({ page }) => {
-    // Create room
+    // Create room (dialog auto-dismissed by createRoom)
     const roomUrl = await createRoom(page);
     expect(roomUrl).toContain('?room=');
-
-    // Close the share dialog if open
-    const closeBtn = page.locator('button:has(svg[data-testid="CloseRoundedIcon"])');
-    if (await closeBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await closeBtn.click();
-      await page.waitForTimeout(500);
-    }
 
     // Upload image
     await uploadFile(page, TEST_IMAGE);
@@ -50,13 +43,6 @@ test.describe('photo sharing reliability', () => {
     try {
       // Browser 1 creates room and uploads
       const roomUrl = await createRoom(page1);
-
-      // Close dialog
-      const closeBtn = page1.locator('button:has(svg[data-testid="CloseRoundedIcon"])');
-      if (await closeBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await closeBtn.click();
-      }
-
       await uploadFile(page1, TEST_IMAGE);
 
       // Browser 2 joins room
@@ -79,12 +65,6 @@ test.describe('photo sharing reliability', () => {
     try {
       // Browser 1 creates room and uploads photo
       const roomUrl = await createRoom(page1);
-
-      const closeBtn = page1.locator('button:has(svg[data-testid="CloseRoundedIcon"])');
-      if (await closeBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await closeBtn.click();
-      }
-
       await uploadFile(page1, TEST_IMAGE);
 
       // Wait for upload to fully complete (torrent seeding)
@@ -110,12 +90,6 @@ test.describe('photo sharing reliability', () => {
   test('room persists and photo metadata survives page reload for creator', async ({ page }) => {
     // Create room and upload
     const roomUrl = await createRoom(page);
-
-    const closeBtn = page.locator('button:has(svg[data-testid="CloseRoundedIcon"])');
-    if (await closeBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await closeBtn.click();
-    }
-
     await uploadFile(page, TEST_IMAGE);
     await page.waitForTimeout(5000);
 
@@ -128,7 +102,6 @@ test.describe('photo sharing reliability', () => {
     await page.waitForTimeout(5000);
 
     // After reload, the photo tile should still be present
-    // (either from cache or server metadata, even if blob URL is regenerated)
     // Open gallery drawer to check for tiles
     await openGalleryDrawer(page);
     const tiles = await page.locator('img').count();
@@ -155,28 +128,19 @@ test.describe('photo sharing reliability', () => {
       await openGalleryDrawer(page2);
       const tileCountBefore = await page2.locator('img').count();
 
-      // Close dialog on browser 1
-      const closeBtn = page1.locator('button:has(svg[data-testid="CloseRoundedIcon"])');
-      if (await closeBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await closeBtn.click();
-      }
-
       // Browser 1 uploads photo
       await uploadFile(page1, TEST_IMAGE);
 
       // Wait and verify Browser 2 received the SSE event and shows new content
-      // Either a loading tile or an image should appear
       let newContent = false;
       const startTime = Date.now();
       while (Date.now() - startTime < 60000) {
-        // Ensure gallery drawer is open on browser 2
         await openGalleryDrawer(page2);
         const currentCount = await page2.locator('img').count();
         if (currentCount > tileCountBefore) {
           newContent = true;
           break;
         }
-        // Also check for loading indicators (progress tiles)
         const loadingTiles = await page2.locator('[class*="progress"], [class*="loading"]').count();
         const blobImages = await page2.locator('img[src^="blob:"]').count();
         if (loadingTiles > 0 || blobImages > 0) {
@@ -195,11 +159,6 @@ test.describe('photo sharing reliability', () => {
 
   test('multiple photos can be shared in sequence', async ({ page }) => {
     const roomUrl = await createRoom(page);
-
-    const closeBtn = page.locator('button:has(svg[data-testid="CloseRoundedIcon"])');
-    if (await closeBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await closeBtn.click();
-    }
 
     // Upload same image twice (simulates sharing multiple photos)
     await uploadFile(page, TEST_IMAGE);
