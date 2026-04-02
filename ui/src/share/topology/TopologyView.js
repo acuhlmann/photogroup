@@ -243,7 +243,7 @@ function drawConnectionStatusLabel(ctx, fromNode, toNode, edge, isDark) {
     ctx.fillText(text, midX, midY);
 }
 
-function TopologyView({ master, fillHeight }) {
+function TopologyView({ master, fillHeight, active = true }) {
     const muiTheme = useTheme();
     const isDark = muiTheme.palette.mode === 'dark';
     const masterRef = useRef(master);
@@ -527,6 +527,8 @@ function TopologyView({ master, fillHeight }) {
 
     // Canvas rendering
     useEffect(() => {
+        if (!active) return;
+
         const canvas = canvasRef.current;
         if (!canvas) return;
 
@@ -730,7 +732,7 @@ function TopologyView({ master, fillHeight }) {
                 cancelAnimationFrame(animFrameRef.current);
             }
         };
-    }, [graph, isDark, fillHeight, peerPhotoCounts]);
+    }, [graph, isDark, fillHeight, peerPhotoCounts, active]);
 
     // Handle canvas click for node selection
     const handleCanvasClick = useCallback((e) => {

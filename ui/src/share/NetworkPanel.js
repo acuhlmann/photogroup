@@ -13,10 +13,14 @@ function TabPanel({ children, value, index }) {
     return (
         <Box
             role="tabpanel"
-            hidden={value !== index}
-            sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}
+            sx={{
+                flex: 1,
+                minHeight: 0,
+                overflow: 'auto',
+                display: value === index ? 'block' : 'none',
+            }}
         >
-            {value === index && children}
+            {children}
         </Box>
     );
 }
@@ -84,7 +88,7 @@ function NetworkPanel({ master, isMobile, isCenter, wtNumPeers }) {
 
             {/* Tab content */}
             <TabPanel value={tabValue} index={0}>
-                <TopologyView master={master} fillHeight={isCenter} />
+                <TopologyView master={master} fillHeight={isCenter} active={tabValue === 0} />
             </TabPanel>
             <TabPanel value={tabValue} index={1}>
                 <MeView master={master} />
