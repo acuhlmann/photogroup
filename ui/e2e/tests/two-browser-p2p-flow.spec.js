@@ -117,49 +117,16 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
     throw new Error('Room creation failed - URL did not change. This likely means the backend server is not running. Please start the server with "npm run start-server" from the project root.');
   }
   
-  // Wait a bit for the dialog to open (openRoomEnd event sets open: true)
-  // The dialog should open automatically, but we might need to wait for React to render
-  await page1.waitForTimeout(2000);
-  
-  // Step 3b: Browser 1 - Wait for Share Room dialog to open
-  const shareDialog = page1.getByText('Share Room').locator('..').locator('..');
-  await expect(page1.getByText('Share Room')).toBeVisible({ timeout: 10000 });
+  // Step 3b: Browser 1 - After room creation, we go straight to the network diagram view
+  // The share dialog no longer auto-opens; extract room URL directly from the page URL
+  await page1.waitForTimeout(1000);
 
-  // Step 4: Browser 1 - Click "Copy Link" button in the Share Room dialog
-  const copyLinkButton = page1.getByText('Copy Link');
-  await expect(copyLinkButton).toBeVisible({ timeout: 5000 });
-  await copyLinkButton.click();
-  
-  // Wait a moment for clipboard to be updated
-  await page1.waitForTimeout(500);
-  
-  // Step 5: Browser 1 - Extract URL from clipboard or page URL
-  // First try to get URL from clipboard, but fallback to page URL if clipboard fails
-  let copiedUrl = '';
-  try {
-    // Try reading from clipboard (requires permission)
-    copiedUrl = await page1.evaluate(async () => {
-      try {
-        return await navigator.clipboard.readText();
-      } catch (e) {
-        // If clipboard fails, get URL from page
-        return window.location.href;
-      }
-    });
-  } catch (e) {
-    // If clipboard access fails entirely, get URL directly from page
-    console.log('Clipboard access failed, using page URL instead');
-    copiedUrl = page1.url();
-  }
-  
-  // If clipboard didn't work, get URL from page directly
-  if (!copiedUrl || !copiedUrl.includes('?room=')) {
-    copiedUrl = page1.url();
-  }
-  
+  // Step 4: Browser 1 - Get the room URL from the page URL
+  const copiedUrl = page1.url();
+
   // Verify we got a URL with room parameter
   expect(copiedUrl).toContain('?room=');
-  console.log('Copied URL:', copiedUrl);
+  console.log('Room URL:', copiedUrl);
   
   // Step 6: Browser 2 - Open with copied URL
   await page2.goto(copiedUrl, { waitUntil: 'domcontentloaded' });

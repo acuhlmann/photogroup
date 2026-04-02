@@ -186,7 +186,7 @@ async function waitForLoadingIndicator(page, timeout = 60000) {
 
 /**
  * Create a room and return the room URL.
- * Automatically dismisses the Share Room dialog that opens after creation.
+ * After creation, the app goes straight to the network diagram view.
  * @param {Page} page - Playwright page object
  * @returns {Promise<string>} - The room URL
  */
@@ -197,8 +197,6 @@ async function createRoom(page) {
   await startRoomButton.click();
   await page.waitForURL(new RegExp('\\?room='), { timeout: 30000 });
   await page.waitForTimeout(2000);
-  // Dismiss the Share Room dialog that auto-opens after room creation
-  await dismissDialogs(page);
   return page.url();
 }
 
