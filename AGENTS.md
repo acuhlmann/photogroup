@@ -115,3 +115,32 @@ No Redux/Zustand -- state lives in `RoomsService.js` which is a plain class mana
 - The WebSocket tracker port (9000) must be accessible alongside the HTTP port (8081)
 - Node.js polyfills in `ui/src/compatibility/` and `ui/vite.config.js` are required because WebTorrent uses Node.js APIs
 - `wrtc` npm package (native WebRTC for Node.js) can be tricky to install on some platforms
+
+## Cursor Cloud specific instructions
+
+### Node.js version
+This project requires Node.js >= 24.0.0. The VM update script handles installing it via `nvm`.
+
+### Running services for development
+- **Backend server**: `cd server && node app.js` — runs on port 8081, also starts the WebSocket BitTorrent tracker on port 9000
+- **UI dev server**: `cd ui && npx vite --host 0.0.0.0` — runs on port 3000, proxies `/api` to the backend
+- Both must be running for full functionality. Start the backend first.
+
+### Running tests
+- Server tests (98 tests, Mocha): `cd server && npm test`
+- UI unit tests (72 tests, Vitest): `cd ui && npm test -- --run`
+- E2E tests (Playwright): `cd ui && npm run test:e2e` — auto-starts both servers via `playwright.config.js`
+- All tests: `node test-all.js` (note: `test-all.js` uses CommonJS `require()`, not ES modules)
+
+### No external services required
+No database, Redis, or Docker needed for development. All state is in-memory. Twilio credentials are optional (only needed for TURN relay NAT traversal; app falls back to Google STUN servers without them).
+
+### GCP Cloud access
+Deployment uses `gcloud` CLI authenticated with a service account key (JSON). The secret `GCP_SERVICE_ACCOUNT_KEY` should be set in Cursor Secrets. To authenticate:
+```bash
+echo "$GCP_SERVICE_ACCOUNT_KEY" > /tmp/gcp-key.json
+gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
+gcloud config set project photogroup-215600
+rm /tmp/gcp-key.json
+```
+GCP project: `photogroup-215600`, zone: `asia-east2-a`, VM instance: `main`. Deployment scripts: `deploy-docker.sh`, `deploy-nginx.sh`, `deploy-app.sh`. See `DEPLOYMENT.md` for full details.
