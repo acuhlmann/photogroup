@@ -208,6 +208,9 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
                     anchor={isMobile ? "bottom" : "right"}
                     open={galleryOpen}
                     onClose={() => setGalleryOpen(false)}
+                    ModalProps={{
+                        keepMounted: true, // Keep Gallery mounted so it receives photo events while closed
+                    }}
                     PaperProps={{
                         sx: {
                             width: isMobile ? '100%' : galleryDrawerWidth,
