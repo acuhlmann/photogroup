@@ -136,9 +136,9 @@ This project requires Node.js >= 24.0.0. The VM update script handles installing
 No database, Redis, or Docker needed for development. All state is in-memory. Twilio credentials are optional (only needed for TURN relay NAT traversal; app falls back to Google STUN servers without them).
 
 ### GCP Cloud access
-Deployment uses `gcloud` CLI authenticated with a service account key (JSON). The secret `GCP_SERVICE_ACCOUNT_KEY` should be set in Cursor Secrets. To authenticate:
+Deployment uses `gcloud` CLI authenticated with a service account key (JSON). The secret `GCP_DEPLOY` should be set in Cursor Secrets (personal scope, all repos). To authenticate:
 ```bash
-echo "$GCP_SERVICE_ACCOUNT_KEY" > /tmp/gcp-key.json
+echo "$GCP_DEPLOY" > /tmp/gcp-key.json
 gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
 gcloud config set project photogroup-215600
 rm /tmp/gcp-key.json
