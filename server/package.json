@@ -29,7 +29,7 @@
     "magnet-uri": "^7.0.7",
     "mocha": "^11.7.5",
     "sdp-transform": "^3.0.0",
-    "sse-channel": "^4.0.0",
+    "sse-channel": "^4.0.1",
     "supertest": "^7.1.4",
     "twilio": "^5.11.1",
     "utf-8-validate": "^6.0.6",
