@@ -7,10 +7,12 @@ import { loadConfig } from './config.js';
 import { GceController, waitForOriginReady } from './gce.js';
 import { createOriginProxy, proxyHttp, proxyWs, wantsHtml } from './proxy.js';
 import { renderStartingPage } from './starting-page.js';
+import { ActivityStore } from './activity.js';
 
 const config = loadConfig();
 const gce = new GceController(config);
 const proxy = createOriginProxy();
+const activity = new ActivityStore({ gce });
 
 /** @type {{ phase: string, ready: boolean, message: string, externalIp: string|null, updatedAt: number }} */
 let wakeState = {
@@ -31,6 +33,10 @@ function setState(patch) {
 function brandForHost(host = '') {
   if (host.startsWith('hackernews.')) return 'Hackersbot';
   return 'PhotoGroup';
+}
+
+function touchActivity() {
+  activity.touch().catch(() => {});
 }
 
 /**
@@ -80,9 +86,9 @@ async function ensureReady(host) {
         message: 'Ready',
         externalIp: ready.ip,
       });
+      touchActivity();
       return { scheme: config.originScheme, ip: ready.ip };
     } finally {
-      // Allow a later retry after failure; keep success cached via wakeState.ready
       ensureReadyPromise = null;
     }
   })();
@@ -91,7 +97,6 @@ async function ensureReady(host) {
 }
 
 async function handleWakeStatus(_req, res) {
-  // Opportunistically refresh status if we think we are ready
   if (wakeState.ready && wakeState.externalIp) {
     const probeHost = 'photogroup.network';
     try {
@@ -110,6 +115,7 @@ async function handleWakeStatus(_req, res) {
     }
   }
 
+  const lastActivityMs = await activity.getLastActivityMs();
   res.writeHead(200, {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-store',
@@ -119,7 +125,9 @@ async function handleWakeStatus(_req, res) {
     projectId: config.projectId,
     zone: config.zone,
     instance: config.instance,
-    idleMinutesHint: config.idleMinutesHint,
+    idleMinutesHint: config.idleMinutes,
+    lastActivityMs,
+    lastActivityIso: lastActivityMs ? new Date(lastActivityMs).toISOString() : null,
   }));
 }
 
@@ -152,6 +160,69 @@ async function handleWakeStop(req, res) {
   }
 }
 
+/**
+ * Public idle-stop: stops the VM only if it has been idle longer than IDLE_MINUTES.
+ * Safe to expose — worst case an attacker stops an already-idle VM.
+ */
+async function handleStopIfIdle(_req, res) {
+  try {
+    const status = await gce.getStatus();
+    if (status.status === 'TERMINATED' || status.status === 'STOPPED') {
+      setState({ phase: 'idle', ready: false, message: 'Already stopped', externalIp: null });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ action: 'none', reason: 'already_stopped', status }));
+      return;
+    }
+
+    const lastActivityMs = await activity.getLastActivityMs();
+    const idleMs = Date.now() - (lastActivityMs || 0);
+    const thresholdMs = config.idleMinutes * 60_000;
+
+    if (!lastActivityMs) {
+      // No activity recorded yet — do not stop a freshly started VM blindly.
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        action: 'none',
+        reason: 'no_activity_recorded',
+        status,
+      }));
+      return;
+    }
+
+    if (idleMs < thresholdMs) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        action: 'none',
+        reason: 'still_active',
+        idleMinutes: Math.round(idleMs / 60_000),
+        thresholdMinutes: config.idleMinutes,
+        lastActivityIso: new Date(lastActivityMs).toISOString(),
+        status,
+      }));
+      return;
+    }
+
+    const result = await gce.ensureStopped();
+    setState({
+      phase: 'idle',
+      ready: false,
+      message: 'Stopped (idle)',
+      externalIp: null,
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      action: 'stopped',
+      reason: 'idle',
+      idleMinutes: Math.round(idleMs / 60_000),
+      thresholdMinutes: config.idleMinutes,
+      result,
+    }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
 async function handleRequest(req, res) {
   const url = req.url || '/';
   const path = url.split('?')[0];
@@ -163,12 +234,18 @@ async function handleRequest(req, res) {
   if (path === '/__wake__/stop' && req.method === 'POST') {
     return handleWakeStop(req, res);
   }
-  // Cloud Run / LB health checks — do not start the VM
+  if (path === '/__wake__/stop-if-idle' && (req.method === 'POST' || req.method === 'GET')) {
+    return handleStopIfIdle(req, res);
+  }
+  // Cloud Run / LB health checks — do not start the VM or count as activity
   if (path === '/__wake__/healthz' || path === '/robots.txt') {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end(path === '/robots.txt' ? 'User-agent: *\nDisallow: /\n' : 'ok');
     return;
   }
+
+  // Real user traffic — refresh idle timer
+  touchActivity();
 
   // Fast path: already ready
   if (wakeState.ready && wakeState.externalIp) {
@@ -180,14 +257,13 @@ async function handleRequest(req, res) {
 
   // Browser navigations get the starting page immediately while boot continues
   if (wantsHtml(req)) {
-    // Kick off boot without awaiting
     ensureReady(host).catch((err) => {
       console.error('[wake-proxy] ensureReady failed:', err.message);
     });
     const html = renderStartingPage({
       brand: brandForHost(host),
       statusText: 'Starting the server…',
-      idleMinutes: config.idleMinutesHint,
+      idleMinutes: config.idleMinutes,
     });
     res.writeHead(503, {
       'Content-Type': 'text/html; charset=utf-8',
@@ -228,6 +304,7 @@ const server = http.createServer((req, res) => {
 
 server.on('upgrade', (req, socket, head) => {
   const host = req.headers.host || 'photogroup.network';
+  touchActivity();
 
   const go = async () => {
     try {
@@ -249,4 +326,5 @@ server.on('upgrade', (req, socket, head) => {
 server.listen(config.port, () => {
   console.log(`[wake-proxy] listening on :${config.port}`);
   console.log(`[wake-proxy] target VM ${config.projectId}/${config.zone}/${config.instance}`);
+  console.log(`[wake-proxy] idle stop after ${config.idleMinutes}m via /__wake__/stop-if-idle`);
 });
