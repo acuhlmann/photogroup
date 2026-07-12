@@ -13,7 +13,8 @@
 set -euo pipefail
 
 ZONE="${ZONE:-asia-east2-a}"
-REGION="${REGION:-asia-east2}"
+# Domain mappings are not supported in asia-east2; use asia-southeast1 for Cloud Run.
+REGION="${REGION:-asia-southeast1}"
 INSTANCE="${INSTANCE:-main}"
 PROJECT="${PROJECT:-photogroup-215600}"
 SERVICE="${WAKE_SERVICE:-photogroup-wake}"
@@ -120,7 +121,10 @@ echo ""
 echo "=========================================="
 echo "Next: point DNS at Cloud Run"
 echo "=========================================="
-echo "1) Map custom domains (if supported in $REGION):"
+echo "1) Map custom domains (must use $REGION — not asia-east2):"
+echo "     ./setup-domain-mappings.sh"
+echo "   (Run on your laptop after: gcloud auth login)"
+echo "   Or manually:"
 echo "     gcloud beta run domain-mappings create --service $SERVICE --domain photogroup.network --region $REGION --project $PROJECT"
 echo "     gcloud beta run domain-mappings create --service $SERVICE --domain www.photogroup.network --region $REGION --project $PROJECT"
 echo "     gcloud beta run domain-mappings create --service $SERVICE --domain hackernews.photogroup.network --region $REGION --project $PROJECT"
