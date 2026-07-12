@@ -10,6 +10,9 @@ MACHINE_TYPE=e2-micro
 IMAGE_FAMILY=ubuntu-2204-lts
 IMAGE_PROJECT=ubuntu-os-cloud
 DISK_SIZE=20GB
+# Wake-proxy architecture uses an ephemeral IP (released when the VM is stopped).
+# Set USE_STATIC_IP=1 only for the legacy "DNS A record → VM" setup.
+USE_STATIC_IP="${USE_STATIC_IP:-0}"
 
 # Extract region from zone (asia-east2-a -> asia-east2)
 # Using bash parameter expansion: remove shortest match of -[a-z] from end
@@ -39,60 +42,69 @@ if gcloud compute instances describe $INSTANCE --project $PROJECT --zone $ZONE 2
         exit 1
     fi
 else
-    # Create static IP address
-    echo "Creating static IP address..."
-    echo "Region: $REGION"
-    
-    # First, try to check if IP exists and get it
-    STATIC_IP=$(gcloud compute addresses describe $INSTANCE-ip --project $PROJECT --region $REGION --format="value(address)" 2>/dev/null | tr -d '\r\n ')
-    
-    if [ -n "$STATIC_IP" ]; then
-        echo "Static IP already exists."
-    else
-        echo "Creating new static IP address..."
-        CREATE_IP_OUTPUT=$(gcloud compute addresses create $INSTANCE-ip \
-            --project $PROJECT \
-            --region $REGION \
-            --description "Static IP for PhotoGroup VM" 2>&1)
-        CREATE_IP_EXIT=$?
-        echo "$CREATE_IP_OUTPUT" | filter_python_warnings
+    ADDRESS_ARGS=()
+    if [ "$USE_STATIC_IP" = "1" ]; then
+        # Create static IP address (legacy: DNS A record points at the VM)
+        echo "Creating static IP address..."
+        echo "Region: $REGION"
         
-        # Exit code 49 means "already exists" - treat as success
-        if [ $CREATE_IP_EXIT -ne 0 ] && [ $CREATE_IP_EXIT -ne 49 ]; then
-            echo "ERROR: Failed to create static IP address (exit code: $CREATE_IP_EXIT)"
-            echo "Full output:"
+        # First, try to check if IP exists and get it
+        STATIC_IP=$(gcloud compute addresses describe $INSTANCE-ip --project $PROJECT --region $REGION --format="value(address)" 2>/dev/null | tr -d '\r\n ')
+        
+        if [ -n "$STATIC_IP" ]; then
+            echo "Static IP already exists."
+        else
+            echo "Creating new static IP address..."
+            CREATE_IP_OUTPUT=$(gcloud compute addresses create $INSTANCE-ip \
+                --project $PROJECT \
+                --region $REGION \
+                --description "Static IP for PhotoGroup VM" 2>&1)
+            CREATE_IP_EXIT=$?
             echo "$CREATE_IP_OUTPUT" | filter_python_warnings
+            
+            # Exit code 49 means "already exists" - treat as success
+            if [ $CREATE_IP_EXIT -ne 0 ] && [ $CREATE_IP_EXIT -ne 49 ]; then
+                echo "ERROR: Failed to create static IP address (exit code: $CREATE_IP_EXIT)"
+                echo "Full output:"
+                echo "$CREATE_IP_OUTPUT" | filter_python_warnings
+                exit 1
+            fi
+            
+            if [ $CREATE_IP_EXIT -eq 49 ]; then
+                echo "Static IP already exists (this is OK)."
+            else
+                echo "Static IP created."
+            fi
+            
+            # Now retrieve the IP address
+            STATIC_IP=$(gcloud compute addresses describe $INSTANCE-ip --project $PROJECT --region $REGION --format="value(address)" 2>/dev/null | tr -d '\r\n ')
+        fi
+        
+        # If still empty, try alternative method: list and filter
+        if [ -z "$STATIC_IP" ]; then
+            echo "WARNING: Could not retrieve IP with describe, trying list method..."
+            STATIC_IP=$(gcloud compute addresses list --project $PROJECT --filter="name=$INSTANCE-ip AND region:$REGION" --format="value(address)" 2>/dev/null | head -1 | tr -d '\r\n ')
+        fi
+        
+        # Final check - if still empty, show error and debug info
+        if [ -z "$STATIC_IP" ]; then
+            echo "ERROR: Failed to retrieve static IP address"
+            echo "Looking for IP named '$INSTANCE-ip' in region '$REGION'"
+            echo "Attempting to list all addresses to debug..."
+            gcloud compute addresses list --project $PROJECT --format="table(name,address,region)" 2>/dev/null || true
             exit 1
         fi
-        
-        if [ $CREATE_IP_EXIT -eq 49 ]; then
-            echo "Static IP already exists (this is OK)."
-        else
-            echo "Static IP created."
-        fi
-        
-        # Now retrieve the IP address
-        STATIC_IP=$(gcloud compute addresses describe $INSTANCE-ip --project $PROJECT --region $REGION --format="value(address)" 2>/dev/null | tr -d '\r\n ')
+        echo "Static IP address: $STATIC_IP"
+        echo ""
+        echo "IMPORTANT: Update your DNS A record for photogroup.network to point to: $STATIC_IP"
+        echo ""
+        ADDRESS_ARGS=(--address="$STATIC_IP")
+    else
+        echo "Using ephemeral external IP (recommended with wake proxy)."
+        echo "DNS should point at Cloud Run, not this VM. See DEPLOYMENT.md (Wake proxy)."
+        echo "To create a legacy static IP instead: USE_STATIC_IP=1 ./create-vm.sh"
+        echo ""
     fi
-    
-    # If still empty, try alternative method: list and filter
-    if [ -z "$STATIC_IP" ]; then
-        echo "WARNING: Could not retrieve IP with describe, trying list method..."
-        STATIC_IP=$(gcloud compute addresses list --project $PROJECT --filter="name=$INSTANCE-ip AND region:$REGION" --format="value(address)" 2>/dev/null | head -1 | tr -d '\r\n ')
-    fi
-    
-    # Final check - if still empty, show error and debug info
-    if [ -z "$STATIC_IP" ]; then
-        echo "ERROR: Failed to retrieve static IP address"
-        echo "Looking for IP named '$INSTANCE-ip' in region '$REGION'"
-        echo "Attempting to list all addresses to debug..."
-        gcloud compute addresses list --project $PROJECT --format="table(name,address,region)" 2>/dev/null || true
-        exit 1
-    fi
-    echo "Static IP address: $STATIC_IP"
-    echo ""
-    echo "IMPORTANT: Update your DNS A record for photogroup.network to point to: $STATIC_IP"
-    echo ""
     
     # Create firewall rules if they don't exist
     echo "Creating firewall rules..."
@@ -135,7 +147,7 @@ else
         --image-project=$IMAGE_PROJECT \
         --boot-disk-size=$DISK_SIZE \
         --boot-disk-type=pd-standard \
-        --address=$STATIC_IP \
+        "${ADDRESS_ARGS[@]}" \
         --tags=http-server,https-server \
         --metadata=startup-script='#!/bin/bash
         apt-get update
@@ -221,11 +233,16 @@ else
     echo "Zone: $ZONE"
     echo "External IP: $EXTERNAL_IP"
     echo ""
-    echo "NEXT STEPS:"
-    echo "1. Update DNS: Point photogroup.network A record to: $EXTERNAL_IP"
-    echo "2. Wait for DNS propagation (can take up to 48 hours, usually much faster)"
-    echo "3. Run SSL setup: ./setup-ssl.sh"
-    echo "4. Deploy application: ./deploy-all.sh"
+    echo "NEXT STEPS (wake-proxy architecture):"
+    echo "1. Deploy nginx + app: ./deploy-nginx.sh && ./deploy-docker.sh"
+    echo "2. Obtain SSL on the VM (for origin HTTPS): ./setup-ssl.sh"
+    echo "3. Deploy wake proxy: ./deploy-wake-proxy.sh"
+    echo "4. Point DNS at Cloud Run (see deploy-wake-proxy.sh output) — not at $EXTERNAL_IP"
+    echo "5. Release any legacy static IP: ./release-static-ip.sh"
+    echo ""
+    echo "Legacy (DNS → VM IP) NEXT STEPS:"
+    echo "1. Update DNS A record to: $EXTERNAL_IP  (only if USE_STATIC_IP=1)"
+    echo "2. ./setup-ssl.sh && ./deploy-all.sh"
     echo ""
 fi
 

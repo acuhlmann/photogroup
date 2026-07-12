@@ -24,6 +24,7 @@ jobs:
             package-lock.json
             ui/package-lock.json
             server/package-lock.json
+            wake-proxy/package-lock.json
       
       - name: Install root dependencies
         run: npm ci
@@ -36,6 +37,11 @@ jobs:
       - name: Install server dependencies
         run: |
           cd server
+          npm ci
+
+      - name: Install wake-proxy dependencies
+        run: |
+          cd wake-proxy
           npm ci
       
       - name: Create secret file from GitHub Secrets
@@ -71,6 +77,11 @@ jobs:
         run: |
           cd server
           npm run test:integration
+
+      - name: Run wake-proxy unit tests
+        run: |
+          cd wake-proxy
+          npm test
       
       - name: Install Playwright browsers
         run: |

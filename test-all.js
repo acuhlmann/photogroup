@@ -250,6 +250,7 @@ async function main() {
     serverUnit: null,
     serverAPI: null,
     serverIntegration: null,
+    wakeProxy: null,
     uiUnit: null,
     uiE2E: null,
   };
@@ -257,6 +258,7 @@ async function main() {
   const rootDir = __dirname;
   const serverDir = path.join(rootDir, 'server');
   const uiDir = path.join(rootDir, 'ui');
+  const wakeProxyDir = path.join(rootDir, 'wake-proxy');
 
   // Check if server is running (needed for e2e tests)
   let serverRunning = false;
@@ -309,6 +311,13 @@ async function main() {
       serverDir,
       'Server Integration Tests'
     );
+
+    // 3b. Wake proxy unit tests
+    results.wakeProxy = await runCommand(
+      'npm test',
+      wakeProxyDir,
+      'Wake Proxy Unit Tests'
+    );
   }
 
   if (!serverOnly && !e2eOnly) {
@@ -351,6 +360,7 @@ async function main() {
     { name: 'Server Unit Tests', result: results.serverUnit },
     { name: 'Server API Tests', result: results.serverAPI },
     { name: 'Server Integration Tests', result: results.serverIntegration },
+    { name: 'Wake Proxy Unit Tests', result: results.wakeProxy },
     { name: 'UI Unit Tests', result: results.uiUnit },
     { name: 'UI E2E Tests', result: results.uiE2E },
   ];

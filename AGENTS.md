@@ -13,6 +13,7 @@ P2P photo sharing web app. Users create rooms, drop photos, and share them direc
 - **WebTorrent for P2P** -- not a custom WebRTC solution; uses BitTorrent protocol over WebRTC
 - **SSE not WebSocket for updates** -- real-time room updates use Server-Sent Events, not socket.io
 - **Vite, not CRA** -- migrated from create-react-app to Vite
+- **Wake proxy + auto-stop** -- public DNS hits Cloud Run (`wake-proxy/`); GCE VM starts on demand and idle-stops; ephemeral IP (no static IP) for ~$0 idle cost in `asia-east2`
 
 ## Entry Points
 
@@ -21,6 +22,7 @@ P2P photo sharing web app. Users create rooms, drop photos, and share them direc
 | Server start | `server/app.js` | Creates Express app, initializes all services, listens on :8081 |
 | UI start | `ui/src/index.js` | React 19 createRoot, renders `<App />` |
 | Build config | `ui/vite.config.js` | Dev server :3000, proxies /api to :8081, Node.js polyfills |
+| Wake proxy | `wake-proxy/src/index.js` | Cloud Run ingress: start VM, cold-start page, HTTP/WS proxy |
 | Tests (all) | `package.json` → `test` script | Runs `test-all.js` which parallelizes server + UI tests |
 | CI/CD | `.github/workflows/test.yml` + `deploy.yml` | Test on push, deploy on success |
 
@@ -38,6 +40,18 @@ app.js
       ├── ServerPeer      -- server-side WebTorrent client (one per room)
       └── Topology        -- analyzes connection types (direct/relay/NAT)
 ```
+
+### Production ingress (wake proxy)
+
+```
+Cloud Run photogroup-wake (wake-proxy/)
+  → GCE start/stop + HTTPS proxy
+  → VM nginx (:443) → Docker photogroup-app (:8081/:9000)
+                     → Docker hackersbot (:18080)
+VM timer photogroup-idle-stop → stop instance after nginx idle
+```
+
+Deploy: `./deploy-wake-proxy.sh` then point DNS at Cloud Run; release static IP with `./release-static-ip.sh`. See `DEPLOYMENT.md`.
 
 ### API Pattern
 
@@ -106,6 +120,7 @@ No Redux/Zustand -- state lives in `RoomsService.js` which is a plain class mana
 
 - Twilio credentials: `server/secret/index.js` (gitignored) or env vars
 - In CI: GitHub Secrets → written to `server/secret/index.js` during workflow
+- Optional `WAKE_STOP_SECRET` GitHub Secret → enables Cloud Run `/__wake__/stop` for Scheduler backups
 - No `.env` files used -- secrets are either in the secret module or env vars
 
 ## Gotchas
@@ -115,6 +130,8 @@ No Redux/Zustand -- state lives in `RoomsService.js` which is a plain class mana
 - The WebSocket tracker port (9000) must be accessible alongside the HTTP port (8081)
 - Node.js polyfills in `ui/src/compatibility/` and `ui/vite.config.js` are required because WebTorrent uses Node.js APIs
 - `wrtc` npm package (native WebRTC for Node.js) can be tricky to install on some platforms
+- Production DNS should target Cloud Run (`photogroup-wake`), not the VM IP; the VM uses an ephemeral IP that changes on each start
+- CI deploy starts the VM if it was idle-stopped before pushing nginx/Docker updates
 
 ## Cursor Cloud specific instructions
 
@@ -129,11 +146,17 @@ This project requires Node.js >= 24.0.0. The VM update script handles installing
 ### Running tests
 - Server tests (98 tests, Mocha): `cd server && npm test`
 - UI unit tests (72 tests, Vitest): `cd ui && npm test -- --run`
+- Wake proxy unit tests: `cd wake-proxy && npm test`
 - E2E tests (Playwright): `cd ui && npm run test:e2e` — auto-starts both servers via `playwright.config.js`
 - All tests: `node test-all.js` (note: `test-all.js` uses CommonJS `require()`, not ES modules)
 
 ### No external services required
 No database, Redis, or Docker needed for development. All state is in-memory. Twilio credentials are optional (only needed for TURN relay NAT traversal; app falls back to Google STUN servers without them).
+
+### Production wake / cost control
+- Deploy wake proxy: `./deploy-wake-proxy.sh`
+- Release static IP after DNS cutover: `./release-static-ip.sh`
+- Idle stop runs on the VM via `photogroup-idle-stop.timer` (default 60 minutes)
 
 ### Pushing changes
 Always push to `main`. Before pushing:

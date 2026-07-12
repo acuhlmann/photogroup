@@ -74,9 +74,10 @@ graph TB
     end
 
     subgraph Infra["Infrastructure"]
+        CR[Cloud Run wake proxy]
         NG[nginx - Reverse Proxy]
         LE[Let's Encrypt SSL]
-        GCP[GCP VM - e2-micro]
+        GCP[GCP VM - e2-micro + idle-stop]
         GH[GitHub Actions CI/CD]
     end
 
@@ -91,10 +92,12 @@ graph TB
     RM --> SP
     RM --> PE
     SP --> TP
+    CR -->|start + proxy| NG
     NG --> SS
     LE --> NG
     GCP --> NG
     GH -->|deploy| GCP
+    GH -->|deploy| CR
 ```
 
 ### API Endpoints
