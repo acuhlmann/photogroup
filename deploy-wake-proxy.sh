@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Deploy the PhotoGroup wake proxy to Cloud Run and (optionally) install VM idle-stop.
 #
-# Prerequisites:
-#   - gcloud authenticated with permission to deploy Cloud Run + manage IAM
-#   - Docker available locally (or Cloud Build)
+# Prerequisites (one-time, as project Owner):
+#   ./setup-wake-proxy-iam.sh
 #
-# Usage:
+# Then:
 #   ./deploy-wake-proxy.sh
 #   WAKE_STOP_SECRET=... IDLE_MINUTES=60 ./deploy-wake-proxy.sh
 #   SKIP_IDLE_STOP=1 ./deploy-wake-proxy.sh   # deploy Cloud Run only
@@ -29,29 +28,59 @@ echo "Project:  $PROJECT"
 echo "Region:   $REGION"
 echo "Service:  $SERVICE"
 echo "VM:       $INSTANCE ($ZONE)"
+echo "Account:  $(gcloud config get-value account 2>/dev/null || echo unknown)"
 echo ""
 
 gcloud config set project "$PROJECT" >/dev/null
 
-# Enable required APIs (idempotent)
-gcloud services enable \
+# Prefer soft-enable: GitHub Actions SA usually cannot enable APIs (needs
+# serviceusage.serviceUsageAdmin). Owner should run ./setup-wake-proxy-iam.sh once.
+echo "Checking required APIs (enable is best-effort)..."
+ENABLE_OUT=$(gcloud services enable \
   run.googleapis.com \
   compute.googleapis.com \
   artifactregistry.googleapis.com \
   cloudbuild.googleapis.com \
-  --project "$PROJECT" >/dev/null
+  --project "$PROJECT" 2>&1) && ENABLE_OK=1 || ENABLE_OK=0
+if [ "$ENABLE_OK" != "1" ]; then
+  echo "$ENABLE_OUT" | sed 's/^/  /'
+  echo ""
+  echo "WARNING: Could not enable APIs (often missing serviceusage permission)."
+  echo "         Continuing — APIs may already be enabled."
+  echo "         If deploy fails next, run as project Owner:"
+  echo "           ./setup-wake-proxy-iam.sh"
+  echo ""
+fi
+
+# Verify critical APIs are actually usable
+for API in run.googleapis.com compute.googleapis.com; do
+  STATE=$(gcloud services list --enabled --project "$PROJECT" \
+    --filter="config.name:$API" --format='value(config.name)' 2>/dev/null || true)
+  if [ -z "$STATE" ]; then
+    echo "ERROR: Required API '$API' is not enabled on project $PROJECT."
+    echo "Run as Owner: ./setup-wake-proxy-iam.sh"
+    echo "Or: gcloud services enable $API --project $PROJECT"
+    exit 1
+  fi
+done
+echo "Required APIs are enabled."
 
 # Service account for the wake proxy
 SA_NAME="photogroup-wake"
 SA_EMAIL="${SA_NAME}@${PROJECT}.iam.gserviceaccount.com"
 if ! gcloud iam service-accounts describe "$SA_EMAIL" --project "$PROJECT" &>/dev/null; then
   echo "Creating service account $SA_EMAIL..."
-  gcloud iam service-accounts create "$SA_NAME" \
-    --project "$PROJECT" \
-    --display-name "PhotoGroup wake proxy"
+  if ! gcloud iam service-accounts create "$SA_NAME" \
+      --project "$PROJECT" \
+      --display-name "PhotoGroup wake proxy"; then
+    echo "ERROR: Failed to create $SA_EMAIL"
+    echo "The deploy identity needs roles/iam.serviceAccountAdmin, or run:"
+    echo "  ./setup-wake-proxy-iam.sh"
+    exit 1
+  fi
 fi
 
-# Grant start/stop/get on Compute Engine
+# Grant start/stop/get on Compute Engine (best-effort; setup script is authoritative)
 echo "Ensuring IAM roles on wake service account..."
 for ROLE in roles/compute.instanceAdmin.v1 roles/iam.serviceAccountUser; do
   gcloud projects add-iam-policy-binding "$PROJECT" \
@@ -78,7 +107,12 @@ echo "Building and pushing image $IMAGE ..."
 export DOCKER_BUILDKIT=1
 docker build -t "$IMAGE" "$ROOT/wake-proxy"
 gcloud auth configure-docker --quiet
-docker push "$IMAGE"
+if ! docker push "$IMAGE"; then
+  echo "ERROR: docker push failed."
+  echo "GitHub Actions SA needs roles/storage.admin (GCR) or Artifact Registry writer."
+  echo "Fix with: ./setup-wake-proxy-iam.sh"
+  exit 1
+fi
 
 ENV_VARS="GCP_PROJECT=${PROJECT},GCE_ZONE=${ZONE},GCE_INSTANCE=${INSTANCE},ORIGIN_SCHEME=http,HEALTH_PATH=/api/__rtcConfig__,IDLE_MINUTES=${IDLE_MINUTES}"
 if [ -n "${WAKE_STOP_SECRET:-}" ]; then
@@ -86,7 +120,7 @@ if [ -n "${WAKE_STOP_SECRET:-}" ]; then
 fi
 
 echo "Deploying Cloud Run service $SERVICE ..."
-gcloud run deploy "$SERVICE" \
+if ! gcloud run deploy "$SERVICE" \
   --project "$PROJECT" \
   --region "$REGION" \
   --image "$IMAGE" \
@@ -101,7 +135,12 @@ gcloud run deploy "$SERVICE" \
   --concurrency 80 \
   --session-affinity \
   --service-account "$SA_EMAIL" \
-  --set-env-vars "$ENV_VARS"
+  --set-env-vars "$ENV_VARS"; then
+  echo "ERROR: Cloud Run deploy failed."
+  echo "GitHub Actions SA needs roles/run.admin and permission to act as $SA_EMAIL."
+  echo "Fix with: ./setup-wake-proxy-iam.sh"
+  exit 1
+fi
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE" \
   --project "$PROJECT" --region "$REGION" \
