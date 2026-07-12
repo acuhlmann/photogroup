@@ -1,0 +1,24 @@
+name: Wake proxy idle-stop
+
+# Periodically ask the wake proxy to stop the GCE VM if traffic has been
+# idle longer than IDLE_MINUTES (last activity is tracked in GCS by the proxy).
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  stop-if-idle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call stop-if-idle
+        env:
+          WAKE_PROXY_URL: https://photogroup-wake-990406861533.asia-east2.run.app
+        run: |
+          set -euo pipefail
+          echo "POST ${WAKE_PROXY_URL}/__wake__/stop-if-idle"
+          curl -sS -X POST -m 120 \
+            -H "Content-Type: application/json" \
+            -w "\nHTTP %{http_code}\n" \
+            "${WAKE_PROXY_URL}/__wake__/stop-if-idle"

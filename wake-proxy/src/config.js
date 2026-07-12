@@ -11,6 +11,7 @@ function intEnv(env, name, fallback) {
 }
 
 export function loadConfig(env = process.env) {
+  const idleMinutes = intEnv(env, 'IDLE_MINUTES', 60);
   return {
     port: intEnv(env, 'PORT', 8080),
     projectId: env.GCP_PROJECT || env.GOOGLE_CLOUD_PROJECT || 'photogroup-215600',
@@ -27,13 +28,13 @@ export function loadConfig(env = process.env) {
     /** Rate-limit VM start attempts (ms). */
     startCooldownMs: intEnv(env, 'START_COOLDOWN_MS', 30_000),
     /**
-     * Shared secret for /__wake__/stop (Cloud Scheduler / admin).
+     * Shared secret for /__wake__/stop (admin).
      * If empty, stop endpoint is disabled.
      */
     stopSecret: env.WAKE_STOP_SECRET || '',
-    /**
-     * Idle minutes used only for status reporting; actual auto-stop runs on the VM.
-     */
-    idleMinutesHint: intEnv(env, 'IDLE_MINUTES', 60),
+    /** Idle minutes before /__wake__/stop-if-idle will stop the VM. */
+    idleMinutes,
+    /** Alias used by starting-page / status. */
+    idleMinutesHint: idleMinutes,
   };
 }
