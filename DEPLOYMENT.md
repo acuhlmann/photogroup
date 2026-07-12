@@ -34,11 +34,19 @@ Public HTTPS is terminated at **Cloud Run** (domain mapping / Cloudflare). The w
 
 ### Deploy / migrate to wake proxy
 
+0. **One-time IAM (project Owner)** — required before CI or the limited GitHub Actions SA can deploy Cloud Run:
+   ```bash
+   gcloud auth login
+   ./setup-wake-proxy-iam.sh
+   ```
+   This enables Cloud Run / Artifact Registry APIs and grants `github-actions-deploy@…` the roles it needs (`run.admin`, `storage.admin`, `iam.serviceAccountAdmin`, etc.). Without this step, deploy fails with `Permission denied to enable service […]` (example: [failed run](https://github.com/acuhlmann/photogroup/actions/runs/29183337976)).
+
 1. Ensure the VM, nginx, Docker apps, and SSL on the VM still work (origin HTTPS).
 2. Deploy the wake proxy:
    ```bash
    ./deploy-wake-proxy.sh
    ```
+   Or re-run **Actions → Deploy to GCP VM → Run workflow** after IAM setup.
 3. Point DNS at Cloud Run (replace the old A record that targeted the VM):
    ```bash
    # If domain mappings are available in asia-east2:

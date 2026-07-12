@@ -97,8 +97,11 @@ jobs:
 
       - name: Deploy wake proxy to Cloud Run
         run: |
-          chmod +x deploy-wake-proxy.sh wake-proxy/vm-idle-stop/install-idle-stop.sh
-          # App deploy already ran; refresh Cloud Run image + idle-stop timer
+          chmod +x deploy-wake-proxy.sh setup-wake-proxy-iam.sh wake-proxy/vm-idle-stop/install-idle-stop.sh
+          # App deploy already ran; refresh Cloud Run image + idle-stop timer.
+          # If this fails with Permission denied on services.enable / run.admin /
+          # storage, a project Owner must run ./setup-wake-proxy-iam.sh once, then
+          # re-run this workflow. See DEPLOYMENT.md.
           ./deploy-wake-proxy.sh
         timeout-minutes: 20
         env:

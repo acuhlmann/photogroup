@@ -154,9 +154,11 @@ This project requires Node.js >= 24.0.0. The VM update script handles installing
 No database, Redis, or Docker needed for development. All state is in-memory. Twilio credentials are optional (only needed for TURN relay NAT traversal; app falls back to Google STUN servers without them).
 
 ### Production wake / cost control
+- One-time IAM (Owner): `./setup-wake-proxy-iam.sh`
 - Deploy wake proxy: `./deploy-wake-proxy.sh`
 - Release static IP after DNS cutover: `./release-static-ip.sh`
 - Idle stop runs on the VM via `photogroup-idle-stop.timer` (default 60 minutes)
+- Failed deploy example (missing IAM): https://github.com/acuhlmann/photogroup/actions/runs/29183337976
 
 ### Pushing changes
 Always push to `main`. Before pushing:
