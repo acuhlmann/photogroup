@@ -46,6 +46,29 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: photogroup-215600
+
+      - name: Ensure VM is running
+        run: |
+          STATUS=$(gcloud compute instances describe main \
+            --project photogroup-215600 --zone asia-east2-a \
+            --format='get(status)' 2>/dev/null || echo "UNKNOWN")
+          echo "VM status: $STATUS"
+          if [ "$STATUS" != "RUNNING" ]; then
+            echo "Starting VM for deployment..."
+            gcloud compute instances start main \
+              --project photogroup-215600 --zone asia-east2-a
+            # Wait until SSH-ready (boot can take a minute)
+            for i in $(seq 1 30); do
+              if gcloud compute ssh main --project photogroup-215600 --zone asia-east2-a \
+                --command "true" 2>/dev/null; then
+                echo "VM is reachable"
+                break
+              fi
+              echo "Waiting for VM... ($i)"
+              sleep 10
+            done
+          fi
+        timeout-minutes: 10
       
       - name: Deploy nginx configuration
         run: |
@@ -71,6 +94,20 @@ jobs:
           # Twilio credentials are passed as env vars to the container at runtime
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+
+      - name: Deploy wake proxy to Cloud Run
+        run: |
+          chmod +x deploy-wake-proxy.sh wake-proxy/vm-idle-stop/install-idle-stop.sh
+          # App deploy already ran; refresh Cloud Run image + idle-stop timer
+          ./deploy-wake-proxy.sh
+        timeout-minutes: 20
+        env:
+          ZONE: asia-east2-a
+          REGION: asia-east2
+          INSTANCE: main
+          PROJECT: photogroup-215600
+          IDLE_MINUTES: 60
+          WAKE_STOP_SECRET: ${{ secrets.WAKE_STOP_SECRET }}
       
       - name: Deployment summary
         run: |
@@ -78,5 +115,5 @@ jobs:
           echo "Instance: main"
           echo "Zone: asia-east2-a"
           echo "Project: photogroup-215600"
-          echo "Deployment method: Docker"
+          echo "Deployment method: Docker + Cloud Run wake proxy"
 

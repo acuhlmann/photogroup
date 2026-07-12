@@ -7,6 +7,76 @@
 - **Additional service**: `hackernews.photogroup.network` (reverse-proxied to a Docker container on the same VM)
 - **Zone**: `asia-east2-a`
 - **Instance Name**: `main`
+- **Public ingress**: Cloud Run wake proxy (`photogroup-wake`) — DNS points here, not at the VM
+- **VM IP**: Ephemeral (released when the instance is stopped). Do **not** reserve a static IP unless you intentionally use the legacy DNS→VM setup.
+
+## Cost-saving architecture (wake proxy + auto-stop)
+
+Recommended production shape for low-traffic Asia hosting:
+
+```
+DNS (photogroup.network, www, hackernews)
+  → Cloud Run wake proxy (asia-east2, min instances 0)
+      → starts GCE e2-micro on demand
+      → HTTPS reverse-proxy to nginx on the VM
+VM systemd timer → stops the instance after ~60 minutes of nginx idle
+```
+
+| State | Approx. monthly cost |
+|-------|----------------------|
+| VM stopped (idle) | **~$0** (ephemeral IP gone; 20 GB disk within Always Free allowance) |
+| VM running | **~$0.01/hour** compute in `asia-east2` (~$8.56/mo if left on 24/7) |
+| Cloud Run (low traffic) | **~$0** (within free tier) |
+
+Cold start for the first visitor is typically **1–2 minutes** (GCE boot + Docker/nginx). Subsequent requests are fast until idle auto-stop.
+
+Public HTTPS is terminated at **Cloud Run** (domain mapping / Cloudflare). The wake proxy reaches the VM over **HTTP :80** with header `X-Wake-Proxy: 1` (see `server/config/photogroup.network`). VM Let's Encrypt certs remain optional for legacy direct HTTPS access; ACME HTTP-01 renewals will not work while DNS points at Cloud Run (use DNS-01 or drop VM certs).
+
+### Deploy / migrate to wake proxy
+
+1. Ensure the VM, nginx, Docker apps, and SSL on the VM still work (origin HTTPS).
+2. Deploy the wake proxy:
+   ```bash
+   ./deploy-wake-proxy.sh
+   ```
+3. Point DNS at Cloud Run (replace the old A record that targeted the VM):
+   ```bash
+   # If domain mappings are available in asia-east2:
+   gcloud beta run domain-mappings create --service photogroup-wake \
+     --domain photogroup.network --region asia-east2 --project photogroup-215600
+   # Repeat for www.photogroup.network and hackernews.photogroup.network
+   # Then add the DNS records printed by gcloud.
+   #
+   # Alternative: Cloudflare CNAME each hostname → <service>.run.app (proxy on).
+   ```
+4. Release the legacy static IP (~$3.65/mo savings when stopped):
+   ```bash
+   ./release-static-ip.sh
+   ```
+5. Verify:
+   ```bash
+   curl -sS https://photogroup.network/__wake__/status
+   # Open https://photogroup.network — expect starting page, then the app
+   ```
+
+### Wake proxy controls
+
+| Path | Notes |
+|------|-------|
+| `/__wake__/healthz` | Liveness — does **not** start the VM |
+| `/__wake__/status` | JSON boot state (used by the starting page) |
+| `/__wake__/stop` | POST + header `X-Wake-Stop-Secret` (optional Cloud Scheduler backup) |
+
+Idle auto-stop is installed on the VM by `deploy-wake-proxy.sh` (`photogroup-idle-stop.timer`, every 10 minutes, default idle threshold 60 minutes). Override with `IDLE_MINUTES=45 ./deploy-wake-proxy.sh`.
+
+The VM service account and the wake Cloud Run service account both need permission to start/stop the instance (`roles/compute.instanceAdmin.v1`). `deploy-wake-proxy.sh` grants these.
+
+### New VM without a static IP
+
+```bash
+./create-vm.sh                 # ephemeral IP (default)
+USE_STATIC_IP=1 ./create-vm.sh # legacy DNS→VM only
+```
 
 ## Prerequisites
 
@@ -44,7 +114,9 @@ gcloud compute instances create main \
 
 ### Step 2: Configure DNS
 
-After the VM is created, you need to point your domain to the VM's static IP address.
+**Preferred (wake proxy):** Point DNS at the Cloud Run wake service after `./deploy-wake-proxy.sh` — see [Cost-saving architecture](#cost-saving-architecture-wake-proxy--auto-stop). Do **not** point the apex A record at the VM.
+
+**Legacy (DNS → VM):** After the VM is created, point your domain at the VM's external IP address.
 
 1. **Get the VM's external IP address**:
    ```bash
@@ -230,7 +302,9 @@ gcloud compute ssh main --project photogroup-215600 --zone asia-east2-a --comman
 
 ## Deployment Scripts
 
-- **create-vm.sh**: Creates VM instance with firewall rules and static IP (first-time setup)
+- **create-vm.sh**: Creates VM instance with firewall rules (ephemeral IP by default; `USE_STATIC_IP=1` for legacy)
+- **deploy-wake-proxy.sh**: Deploys Cloud Run wake proxy + installs VM idle-stop timer
+- **release-static-ip.sh**: Detaches and deletes the reserved regional static IP after DNS moves to Cloud Run
 - **deploy-all.sh**: Runs all deployment steps in sequence
 - **deploy-copy.sh**: Copies UI build and server files to `./bin/` directory
 - **deploy-app.sh**: Uploads application files to VM and restarts with PM2
