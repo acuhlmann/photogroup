@@ -16,11 +16,13 @@ Recommended production shape for low-traffic Asia hosting:
 
 ```
 DNS (photogroup.network, www, hackernews)
-  → Cloud Run wake proxy (asia-east2, min instances 0)
-      → starts GCE e2-micro on demand
-      → HTTPS reverse-proxy to nginx on the VM
+  → Cloud Run wake proxy (asia-southeast1, min instances 0)
+      → starts GCE e2-micro on demand (asia-east2-a)
+      → HTTP reverse-proxy to nginx on the VM
 VM systemd timer → stops the instance after ~60 minutes of nginx idle
 ```
+
+> **Region note:** The VM stays in `asia-east2-a` (Hong Kong). Cloud Run custom-domain mappings are **not** supported in `asia-east2`, so the wake proxy is deployed in **`asia-southeast1`** (Singapore). Latency from HK visitors to Cloud Run adds ~30–50 ms; VM cold-start dominates first load.
 
 | State | Approx. monthly cost |
 |-------|----------------------|
@@ -39,15 +41,17 @@ Public HTTPS is terminated at **Cloud Run** (domain mapping / Cloudflare). The w
    ```bash
    ./deploy-wake-proxy.sh
    ```
-3. Point DNS at Cloud Run (replace the old A record that targeted the VM):
+3. Map custom domains and get DNS records (run locally with the Google account that verified the domain):
    ```bash
-   # If domain mappings are available in asia-east2:
+   chmod +x setup-domain-mappings.sh
+   ./setup-domain-mappings.sh
+   ```
+   Or manually:
+   ```bash
    gcloud beta run domain-mappings create --service photogroup-wake \
-     --domain photogroup.network --region asia-east2 --project photogroup-215600
+     --domain photogroup.network --region asia-southeast1 --project photogroup-215600
    # Repeat for www.photogroup.network and hackernews.photogroup.network
    # Then add the DNS records printed by gcloud.
-   #
-   # Alternative: Cloudflare CNAME each hostname → <service>.run.app (proxy on).
    ```
 4. Release the legacy static IP (~$3.65/mo savings when stopped):
    ```bash

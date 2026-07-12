@@ -103,7 +103,7 @@ jobs:
         timeout-minutes: 20
         env:
           ZONE: asia-east2-a
-          REGION: asia-east2
+          REGION: asia-southeast1
           INSTANCE: main
           PROJECT: photogroup-215600
           IDLE_MINUTES: 60
