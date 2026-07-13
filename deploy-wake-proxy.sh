@@ -34,13 +34,23 @@ echo ""
 
 gcloud config set project "$PROJECT" >/dev/null
 
-# Enable required APIs (idempotent)
-gcloud services enable \
-  run.googleapis.com \
-  compute.googleapis.com \
-  artifactregistry.googleapis.com \
-  cloudbuild.googleapis.com \
-  --project "$PROJECT" >/dev/null
+# Enable required APIs (idempotent). The deploy service account may lack
+# serviceusage.services.enable; APIs are usually already on from initial setup.
+enable_required_apis() {
+  local apis=(
+    run.googleapis.com
+    compute.googleapis.com
+    artifactregistry.googleapis.com
+    cloudbuild.googleapis.com
+  )
+  if gcloud services enable "${apis[@]}" --project "$PROJECT" >/dev/null 2>&1; then
+    echo "Required GCP APIs are enabled."
+    return 0
+  fi
+  echo "WARNING: Could not enable GCP APIs (likely already enabled or missing serviceusage permission). Continuing..."
+  return 0
+}
+enable_required_apis
 
 # Service account for the wake proxy
 SA_NAME="photogroup-wake"
