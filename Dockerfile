@@ -1,6 +1,6 @@
 # Multi-stage build for PhotoGroup AI
 # Stage 1: Build UI
-FROM node:24-alpine AS ui-builder
+FROM node:24.18-alpine AS ui-builder
 
 # Build argument for version number (used in Settings view)
 ARG VITE_APP_VERSION=0
@@ -21,7 +21,7 @@ COPY ui/ ./
 RUN npm run build
 
 # Stage 2: Build server and copy UI
-FROM node:24-alpine AS server-builder
+FROM node:24.18-alpine AS server-builder
 
 WORKDIR /app
 
@@ -41,7 +41,7 @@ COPY server/ ./
 COPY --from=ui-builder /app/ui/build ./ui
 
 # Stage 3: Production runtime
-FROM node:24-alpine
+FROM node:24.18-alpine
 
 WORKDIR /app
 
