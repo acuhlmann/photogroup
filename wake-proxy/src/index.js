@@ -28,6 +28,34 @@ function setState(patch) {
   wakeState = { ...wakeState, ...patch, updatedAt: Date.now() };
 }
 
+/** Drop cached origin when the VM stopped or got a new ephemeral IP. */
+async function reconcileOriginState() {
+  if (!wakeState.ready && !wakeState.externalIp) return;
+
+  try {
+    const vm = await gce.getStatus();
+    if (vm.status !== 'RUNNING') {
+      setState({
+        phase: 'idle',
+        ready: false,
+        message: 'VM stopped',
+        externalIp: null,
+      });
+      return;
+    }
+    if (wakeState.externalIp && vm.externalIp !== wakeState.externalIp) {
+      setState({
+        phase: 'waiting_health',
+        ready: false,
+        message: 'Origin IP changed',
+        externalIp: vm.externalIp,
+      });
+    }
+  } catch (err) {
+    console.error('[wake-proxy] reconcileOriginState:', err.message);
+  }
+}
+
 function brandForHost(host = '') {
   if (host.startsWith('hackernews.')) return 'Hackersbot';
   return 'PhotoGroup';
@@ -103,7 +131,12 @@ async function handleWakeStatus(_req, res) {
         path: config.healthPath,
       });
       if (!probe.ok) {
-        setState({ ready: false, phase: 'waiting_health', message: 'Origin lost health' });
+        setState({
+          ready: false,
+          phase: 'waiting_health',
+          message: 'Origin lost health',
+          externalIp: null,
+        });
       }
     } catch {
       // ignore probe errors in status
@@ -170,6 +203,8 @@ async function handleRequest(req, res) {
     return;
   }
 
+  await reconcileOriginState();
+
   // Fast path: already ready
   if (wakeState.ready && wakeState.externalIp) {
     return proxyHttp(proxy, req, res, {
@@ -231,6 +266,7 @@ server.on('upgrade', (req, socket, head) => {
 
   const go = async () => {
     try {
+      await reconcileOriginState();
       let target;
       if (wakeState.ready && wakeState.externalIp) {
         target = { scheme: config.originScheme, ip: wakeState.externalIp };
