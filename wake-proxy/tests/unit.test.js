@@ -4,6 +4,12 @@ import { loadConfig } from '../src/config.js';
 import { renderStartingPage } from '../src/starting-page.js';
 import { wantsHtml } from '../src/proxy.js';
 import { waitForHealthy } from '../src/gce.js';
+import {
+  evaluateRequest,
+  isProbePath,
+  isScannerUserAgent,
+  looksLikeBrowser,
+} from '../src/bot-filter.js';
 
 describe('loadConfig', () => {
   it('uses defaults', () => {
@@ -50,6 +56,41 @@ describe('wantsHtml', () => {
     assert.equal(wantsHtml({ headers: { accept: 'application/json' }, url: '/api/rooms/' }), false);
     assert.equal(wantsHtml({ headers: { accept: '*/*' }, url: '/api/__rtcConfig__' }), false);
     assert.equal(wantsHtml({ headers: { accept: '*/*' }, url: '/' }), true);
+  });
+});
+
+describe('bot-filter', () => {
+  const chrome =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+  it('flags common probe paths', () => {
+    assert.equal(isProbePath('/wp-admin/'), true);
+    assert.equal(isProbePath('/.env'), true);
+    assert.equal(isProbePath('/xmlrpc.php'), true);
+    assert.equal(isProbePath('/index.php'), true);
+    assert.equal(isProbePath('/'), false);
+    assert.equal(isProbePath('/api/rooms/abc'), false);
+    assert.equal(isProbePath('/ws'), false);
+    assert.equal(isProbePath('/static/js/main.js'), false);
+  });
+
+  it('allows browsers and blocks scanners / empty UA', () => {
+    assert.equal(looksLikeBrowser(chrome), true);
+    assert.equal(isScannerUserAgent(chrome), false);
+    assert.equal(isScannerUserAgent('curl/8.0.0'), true);
+    assert.equal(isScannerUserAgent('python-requests/2.31.0'), true);
+    assert.equal(isScannerUserAgent(''), true);
+    assert.equal(
+      isScannerUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'),
+      true,
+    );
+  });
+
+  it('evaluateRequest combines path and UA', () => {
+    assert.equal(evaluateRequest({ url: '/', headers: { 'user-agent': chrome } }).allow, true);
+    assert.equal(evaluateRequest({ url: '/wp-login.php', headers: { 'user-agent': chrome } }).allow, false);
+    assert.equal(evaluateRequest({ url: '/', headers: { 'user-agent': 'curl/8.0' } }).allow, false);
+    assert.equal(evaluateRequest({ url: '/api/__rtcConfig__', headers: { 'user-agent': chrome } }).allow, true);
   });
 });
 

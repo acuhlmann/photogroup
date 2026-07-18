@@ -7,6 +7,7 @@ import { loadConfig } from './config.js';
 import { GceController, waitForOriginReady } from './gce.js';
 import { createOriginProxy, proxyHttp, proxyWs, wantsHtml } from './proxy.js';
 import { renderStartingPage } from './starting-page.js';
+import { evaluateRequest } from './bot-filter.js';
 
 const config = loadConfig();
 const gce = new GceController(config);
@@ -119,29 +120,8 @@ async function ensureReady(host) {
 }
 
 async function handleWakeStatus(_req, res) {
-  // Opportunistically refresh status if we think we are ready
-  if (wakeState.ready && wakeState.externalIp) {
-    const probeHost = 'photogroup.network';
-    try {
-      const { probeOriginHttp, probeOriginHttps } = await import('./gce.js');
-      const probeFn = config.originScheme === 'https' ? probeOriginHttps : probeOriginHttp;
-      const probe = await probeFn({
-        ip: wakeState.externalIp,
-        host: probeHost,
-        path: config.healthPath,
-      });
-      if (!probe.ok) {
-        setState({
-          ready: false,
-          phase: 'waiting_health',
-          message: 'Origin lost health',
-          externalIp: null,
-        });
-      }
-    } catch {
-      // ignore probe errors in status
-    }
-  }
+  // GCE API only — do not HTTP-probe nginx here (that resets idle-stop).
+  await reconcileOriginState();
 
   res.writeHead(200, {
     'Content-Type': 'application/json',
@@ -154,6 +134,16 @@ async function handleWakeStatus(_req, res) {
     instance: config.instance,
     idleMinutesHint: config.idleMinutesHint,
   }));
+}
+
+/** Reject junk without waking the VM or touching nginx. */
+function rejectBot(res, reason) {
+  console.log(`[wake-proxy] blocked (${reason})`);
+  res.writeHead(404, {
+    'Content-Type': 'text/plain',
+    'Cache-Control': 'no-store',
+  });
+  res.end('Not found');
 }
 
 async function handleWakeStop(req, res) {
@@ -201,6 +191,12 @@ async function handleRequest(req, res) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end(path === '/robots.txt' ? 'User-agent: *\nDisallow: /\n' : 'ok');
     return;
+  }
+
+  // Never wake or proxy scanner traffic (also when VM is already warm).
+  const verdict = evaluateRequest(req);
+  if (!verdict.allow) {
+    return rejectBot(res, verdict.reason);
   }
 
   await reconcileOriginState();
@@ -266,6 +262,14 @@ server.on('upgrade', (req, socket, head) => {
 
   const go = async () => {
     try {
+      const verdict = evaluateRequest(req);
+      if (!verdict.allow) {
+        console.log(`[wake-proxy] blocked ws (${verdict.reason})`);
+        socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
       await reconcileOriginState();
       let target;
       if (wakeState.ready && wakeState.externalIp) {

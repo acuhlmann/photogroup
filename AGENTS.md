@@ -121,6 +121,7 @@ No Redux/Zustand -- state lives in `RoomsService.js` which is a plain class mana
 - Twilio credentials: `server/secret/index.js` (gitignored) or env vars
 - In CI: GitHub Secrets → written to `server/secret/index.js` during workflow
 - Optional `WAKE_STOP_SECRET` GitHub Secret → enables Cloud Run `/__wake__/stop` for Scheduler backups
+- Wake proxy bot filter + optional Cloudflare Bot Fight Mode — keep scanner traffic from starting/keeping the GCE VM awake (see `wake-proxy/README.md`)
 - No `.env` files used -- secrets are either in the secret module or env vars
 
 ## Gotchas

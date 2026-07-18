@@ -32,7 +32,9 @@ VM systemd timer → stops the instance after ~60 minutes of nginx idle
 
 Cold start for the first visitor is typically **1–2 minutes** (GCE boot + Docker/nginx). Subsequent requests are fast until idle auto-stop.
 
-Public HTTPS is terminated at **Cloud Run** (domain mapping / Cloudflare). The wake proxy reaches the VM over **HTTP :80** with header `X-Wake-Proxy: 1` (see `server/config/photogroup.network`). VM Let's Encrypt certs remain optional for legacy direct HTTPS access; ACME HTTP-01 renewals will not work while DNS points at Cloud Run (use DNS-01 or drop VM certs).
+**Bot / scanner traffic** must not keep the VM awake. The wake proxy returns 404 for probe paths and non-browser User-Agents without starting the VM or proxying to nginx (see [wake-proxy/README.md](wake-proxy/README.md)). Putting **Cloudflare** (free) in front is recommended — Bot Fight Mode drops much of that junk before Cloud Run; setup steps are in the wake-proxy README.
+
+Public HTTPS is terminated at **Cloud Run** (domain mapping) and optionally **Cloudflare** orange-cloud in front. The wake proxy reaches the VM over **HTTP :80** with header `X-Wake-Proxy: 1` (see `server/config/photogroup.network`). VM Let's Encrypt certs remain optional for legacy direct HTTPS access; ACME HTTP-01 renewals will not work while DNS points at Cloud Run/Cloudflare (use DNS-01 or drop VM certs).
 
 ### Deploy / migrate to wake proxy
 
