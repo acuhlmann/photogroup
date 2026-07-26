@@ -92,6 +92,20 @@ gcloud auth configure-docker --quiet
 docker push "$IMAGE"
 
 ENV_VARS="GCP_PROJECT=${PROJECT},GCE_ZONE=${ZONE},GCE_INSTANCE=${INSTANCE},ORIGIN_SCHEME=http,HEALTH_PATH=/api/__rtcConfig__,IDLE_MINUTES=${IDLE_MINUTES}"
+
+HN_ORIGIN_IP="${HN_ORIGIN_IP:-}"
+if [ -z "$HN_ORIGIN_IP" ]; then
+  HN_ORIGIN_IP=$(gcloud compute instances describe hn-vm \
+    --project "$PROJECT" --zone us-central1-a \
+    --format='get(networkInterfaces[0].accessConfigs[0].natIP)' 2>/dev/null || true)
+fi
+if [ -n "$HN_ORIGIN_IP" ]; then
+  echo "Hackernews origin (hn-vm): $HN_ORIGIN_IP"
+  ENV_VARS="${ENV_VARS},HN_ORIGIN_IP=${HN_ORIGIN_IP},HN_ORIGIN_SCHEME=http"
+else
+  echo "WARNING: hn-vm IP not found — hackernews.photogroup.network will 503 until HN_ORIGIN_IP is set"
+fi
+
 if [ -n "${WAKE_STOP_SECRET:-}" ]; then
   ENV_VARS="${ENV_VARS},WAKE_STOP_SECRET=${WAKE_STOP_SECRET}"
 fi

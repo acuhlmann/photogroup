@@ -58,8 +58,23 @@ async function reconcileOriginState() {
 }
 
 function brandForHost(host = '') {
-  if (host.startsWith('hackernews.')) return 'Hackersbot';
+  if (hostName(host).startsWith('hackernews.')) return 'Hackersbot';
   return 'PhotoGroup';
+}
+
+function hostName(host = '') {
+  return (host || '').split(':')[0].toLowerCase();
+}
+
+function isHackernewsHost(host = '') {
+  return hostName(host).startsWith('hackernews.');
+}
+
+function hnOriginTarget() {
+  if (!config.hnOriginIp) {
+    throw new Error('HN_ORIGIN_IP not configured');
+  }
+  return { scheme: config.hnOriginScheme, ip: config.hnOriginIp };
 }
 
 /**
@@ -199,6 +214,17 @@ async function handleRequest(req, res) {
     return rejectBot(res, verdict.reason);
   }
 
+  // Hackernews runs on hn-vm (always on) — skip PhotoGroup VM wake entirely.
+  if (isHackernewsHost(host)) {
+    try {
+      return proxyHttp(proxy, req, res, hnOriginTarget());
+    } catch (err) {
+      res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ error: 'hn_origin_unconfigured', message: err.message }));
+      return;
+    }
+  }
+
   await reconcileOriginState();
 
   // Fast path: already ready
@@ -267,6 +293,11 @@ server.on('upgrade', (req, socket, head) => {
         console.log(`[wake-proxy] blocked ws (${verdict.reason})`);
         socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
         socket.destroy();
+        return;
+      }
+
+      if (isHackernewsHost(host)) {
+        proxyWs(proxy, req, socket, head, hnOriginTarget());
         return;
       }
 

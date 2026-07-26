@@ -35,5 +35,11 @@ export function loadConfig(env = process.env) {
      * Idle minutes used only for status reporting; actual auto-stop runs on the VM.
      */
     idleMinutesHint: intEnv(env, 'IDLE_MINUTES', 60),
+    /**
+     * Hackernews (Hackersbot) runs on a separate always-on VM — proxied directly,
+     * without waking the PhotoGroup GCE instance.
+     */
+    hnOriginIp: env.HN_ORIGIN_IP || '',
+    hnOriginScheme: env.HN_ORIGIN_SCHEME || 'http',
   };
 }

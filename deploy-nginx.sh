@@ -82,6 +82,14 @@ fi
 echo "Restarting nginx..."
 run_gcloud_ssh "sudo systemctl restart nginx" "Restarting nginx" || exit 1
 
+# Refresh idle-stop timer (uses wake-access.log, not the main access log)
+if [ -f "./wake-proxy/vm-idle-stop/install-idle-stop.sh" ]; then
+    echo "Refreshing VM idle-stop timer..."
+    chmod +x ./wake-proxy/vm-idle-stop/install-idle-stop.sh
+    IDLE_MINUTES="${IDLE_MINUTES:-60}" ZONE="$ZONE" INSTANCE="$INSTANCE" PROJECT="$PROJECT" \
+        bash ./wake-proxy/vm-idle-stop/install-idle-stop.sh
+fi
+
 echo ""
 echo "Nginx configuration deployed successfully!"
 echo ""

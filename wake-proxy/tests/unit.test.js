@@ -29,6 +29,8 @@ describe('loadConfig', () => {
       PORT: '9090',
       READY_TIMEOUT_MS: '1000',
       WAKE_STOP_SECRET: 's3cret',
+      HN_ORIGIN_IP: '10.0.0.5',
+      HN_ORIGIN_SCHEME: 'https',
     });
     assert.equal(cfg.projectId, 'demo');
     assert.equal(cfg.zone, 'us-west1-a');
@@ -36,6 +38,8 @@ describe('loadConfig', () => {
     assert.equal(cfg.port, 9090);
     assert.equal(cfg.readyTimeoutMs, 1000);
     assert.equal(cfg.stopSecret, 's3cret');
+    assert.equal(cfg.hnOriginIp, '10.0.0.5');
+    assert.equal(cfg.hnOriginScheme, 'https');
   });
 });
 

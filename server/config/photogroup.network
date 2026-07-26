@@ -9,21 +9,52 @@ map $http_upgrade $connection_upgrade {
 }
 
 # Wake proxy (Cloud Run) talks HTTP to this VM and sets X-Wake-Proxy: 1.
-# Direct browsers on :80 still redirect to HTTPS (legacy / accidental IP hits).
 map $http_x_wake_proxy $wake_http_ok {
     default 0;
     "1"     1;
 }
 
-# HTTP — wake-proxy origin OR redirect to HTTPS
+# Only log wake-proxy traffic — idle-stop uses this file (scanners must not reset the timer).
+map $wake_http_ok $log_wake {
+    default 0;
+    1       1;
+}
+
+# Drop direct IP / unknown-host hits (no logging).
+server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        server_name _;
+        access_log off;
+        return 444;
+}
+
+server {
+        listen 443 ssl default_server;
+        listen [::]:443 ssl default_server;
+        server_name _;
+        access_log off;
+        ssl_certificate /etc/letsencrypt/live/photogroup.network/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/photogroup.network/privkey.pem;
+        return 444;
+}
+
+# HTTP — wake-proxy origin only (HTTPS is terminated at Cloud Run).
 server {
         listen 80;
         listen [::]:80;
         server_name photogroup.network www.photogroup.network;
 
+        access_log /var/log/nginx/wake-access.log combined if=$log_wake;
+        access_log off;
+
+        location /.well-known/acme-challenge/ {
+                root /var/www/certbot;
+        }
+
         location / {
                 if ($wake_http_ok = 0) {
-                        return 301 https://$host$request_uri;
+                        return 444;
                 }
 
                 proxy_pass "http://127.0.0.1:8081/";
@@ -37,7 +68,7 @@ server {
 
         location /ws {
                 if ($wake_http_ok = 0) {
-                        return 301 https://$host$request_uri;
+                        return 444;
                 }
 
                 proxy_pass          http://127.0.0.1:9000;
@@ -46,76 +77,5 @@ server {
                 proxy_set_header    Connection  $connection_upgrade;
                 proxy_set_header    Host        $http_host;
                 proxy_set_header    X-Wake-Proxy $http_x_wake_proxy;
-        }
-}
-
-server {
-        listen 80;
-        listen [::]:80;
-        server_name hackernews.photogroup.network;
-
-        location / {
-                if ($wake_http_ok = 0) {
-                        return 301 https://$host$request_uri;
-                }
-
-                proxy_pass "http://127.0.0.1:18080/";
-                proxy_set_header Host $http_host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
-        }
-}
-
-# HTTPS server blocks (port 443) — optional direct access / legacy DNS→VM
-server {
-        listen 443 ssl;
-        listen [::]:443 ssl;
-        server_name photogroup.network www.photogroup.network;
-
-        ssl_certificate /etc/letsencrypt/live/photogroup.network/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/photogroup.network/privkey.pem;
-
-        location / {
-
-            proxy_pass "http://127.0.0.1:8081/";
-
-            proxy_set_header Host $http_host;
-
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $remote_addr;
-            proxy_set_header X-Real-Port $server_port;
-            proxy_set_header X-Real-Scheme $scheme;
-        }
-
-        location /ws {
-            proxy_pass          http://127.0.0.1:9000;
-            proxy_http_version  1.1;
-            proxy_set_header    Upgrade     $http_upgrade;
-            proxy_set_header    Connection  $connection_upgrade;
-        }
-}
-
-server {
-        listen 443 ssl;
-        listen [::]:443 ssl;
-        server_name hackernews.photogroup.network;
-
-        # This certificate is expected to include:
-        # - photogroup.network
-        # - www.photogroup.network
-        # - hackernews.photogroup.network
-        ssl_certificate /etc/letsencrypt/live/photogroup.network/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/photogroup.network/privkey.pem;
-
-        # Hackersbot (Python) runs in Docker and is exposed locally only.
-        # Expected host binding: 127.0.0.1:18080 -> container port (e.g. 8000)
-        location / {
-            proxy_pass "http://127.0.0.1:18080/";
-
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
         }
 }

@@ -36,6 +36,20 @@ jobs:
           # For push/manual dispatch: use current commit SHA
           # Note: 'ref' accepts both branch names and commit SHAs
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+      
+      - name: Detect wake-proxy changes
+        id: wake_proxy
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only HEAD~1 HEAD | grep -qE '^(wake-proxy/|deploy-wake-proxy\.sh)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
       
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
@@ -96,9 +110,9 @@ jobs:
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
 
       - name: Deploy wake proxy to Cloud Run
+        if: steps.wake_proxy.outputs.changed == 'true'
         run: |
           chmod +x deploy-wake-proxy.sh wake-proxy/vm-idle-stop/install-idle-stop.sh
-          # App deploy already ran; refresh Cloud Run image + idle-stop timer
           ./deploy-wake-proxy.sh
         timeout-minutes: 20
         env:
@@ -115,5 +129,5 @@ jobs:
           echo "Instance: main"
           echo "Zone: asia-east2-a"
           echo "Project: photogroup-215600"
+          echo "Wake proxy redeployed: ${{ steps.wake_proxy.outputs.changed }}"
           echo "Deployment method: Docker + Cloud Run wake proxy"
-
