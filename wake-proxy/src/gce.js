@@ -1,31 +1,41 @@
 /**
- * Thin wrapper around the Compute Engine API for start / stop / status / IP.
+ * Compute Engine start / stop / status via the REST API.
+ * Uses JSON responses directly — avoids @google-cloud/compute proto deserialization bugs.
  */
-import compute from '@google-cloud/compute';
+import { GoogleAuth } from 'google-auth-library';
 
-const { InstancesClient, ZoneOperationsClient } = compute;
+const COMPUTE_SCOPE = 'https://www.googleapis.com/auth/compute';
 
 export class GceController {
   /**
    * @param {{ projectId: string, zone: string, instance: string }} opts
-   * @param {{ instances?: import('@google-cloud/compute').InstancesClient, operations?: import('@google-cloud/compute').ZoneOperationsClient }} [clients]
+   * @param {{ request?: (options: object) => Promise<{ data: object }>, sleep?: (ms: number) => Promise<void> }} [deps]
    */
-  constructor(opts, clients = {}) {
+  constructor(opts, deps = {}) {
     this.projectId = opts.projectId;
     this.zone = opts.zone;
     this.instance = opts.instance;
-    this.instances = clients.instances || new InstancesClient();
-    this.operations = clients.operations || new ZoneOperationsClient();
+    this._auth = deps.auth || new GoogleAuth({ scopes: [COMPUTE_SCOPE] });
+    this._request = deps.request || this._defaultRequest.bind(this);
+    this._sleep = deps.sleep || sleep;
     this._lastStartAttempt = 0;
   }
 
+  _zoneBase() {
+    return `https://compute.googleapis.com/compute/v1/projects/${this.projectId}/zones/${this.zone}`;
+  }
+
+  async _defaultRequest(options) {
+    const client = await this._auth.getClient();
+    return client.request(options);
+  }
+
   async getInstance() {
-    const [vm] = await this.instances.get({
-      project: this.projectId,
-      zone: this.zone,
-      instance: this.instance,
+    const { data } = await this._request({
+      url: `${this._zoneBase()}/instances/${this.instance}`,
+      method: 'GET',
     });
-    return vm;
+    return data;
   }
 
   /**
@@ -44,11 +54,24 @@ export class GceController {
     };
   }
 
+  async _waitOperation(operationName) {
+    const url = `${this._zoneBase()}/operations/${operationName}`;
+    while (true) {
+      const { data: op } = await this._request({ url, method: 'GET' });
+      if (op.status === 'DONE') {
+        if (op.error?.errors?.length) {
+          const msg = op.error.errors.map((e) => e.message).join('; ');
+          throw new Error(msg || 'operation failed');
+        }
+        return op;
+      }
+      await this._sleep(2_000);
+    }
+  }
+
   /**
    * Start the VM if it is not already running / provisioning.
-   * Rate-limited by cooldownMs.
    * @param {number} cooldownMs
-   * @returns {Promise<{ started: boolean, status: string, externalIp: string|null, skipped?: string }>}
    */
   async ensureStarted(cooldownMs = 30_000) {
     const current = await this.getStatus();
@@ -69,18 +92,13 @@ export class GceController {
     }
     this._lastStartAttempt = now;
 
-    const [operation] = await this.instances.start({
-      project: this.projectId,
-      zone: this.zone,
-      instance: this.instance,
+    const { data: operation } = await this._request({
+      url: `${this._zoneBase()}/instances/${this.instance}/start`,
+      method: 'POST',
     });
 
     if (operation?.name) {
-      await this.operations.wait({
-        project: this.projectId,
-        zone: this.zone,
-        operation: operation.name,
-      });
+      await this._waitOperation(operation.name);
     }
 
     const after = await this.getStatus();
@@ -96,18 +114,13 @@ export class GceController {
       return { stopped: false, ...current };
     }
 
-    const [operation] = await this.instances.stop({
-      project: this.projectId,
-      zone: this.zone,
-      instance: this.instance,
+    const { data: operation } = await this._request({
+      url: `${this._zoneBase()}/instances/${this.instance}/stop`,
+      method: 'POST',
     });
 
     if (operation?.name) {
-      await this.operations.wait({
-        project: this.projectId,
-        zone: this.zone,
-        operation: operation.name,
-      });
+      await this._waitOperation(operation.name);
     }
 
     const after = await this.getStatus();
@@ -145,8 +158,6 @@ export async function waitForHealthy(opts) {
       const res = await fetchImpl(url, {
         method: 'GET',
         headers: { Host: host, Accept: 'application/json' },
-        // Node undici / fetch: allow self-signed / hostname mismatch for IP targets
-        // (nodejs native fetch does not support rejectUnauthorized; we use https agent in probe)
         signal: AbortSignal.timeout(5_000),
       });
       if (res.ok) {
@@ -167,7 +178,6 @@ export async function waitForHealthy(opts) {
 
 /**
  * HTTPS health probe that tolerates certificate hostname mismatch (IP target).
- * Uses Node https module so we can set rejectUnauthorized: false.
  */
 export async function probeOriginHttps({ ip, host, path, timeoutMs = 5_000 }) {
   const https = await import('node:https');

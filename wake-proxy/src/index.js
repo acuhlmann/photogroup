@@ -29,26 +29,41 @@ function setState(patch) {
   wakeState = { ...wakeState, ...patch, updatedAt: Date.now() };
 }
 
-/** Drop cached origin when the VM stopped or got a new ephemeral IP. */
+/** Sync in-memory wake state with GCE (no HTTP probe — that would reset idle-stop). */
 async function reconcileOriginState() {
-  if (!wakeState.ready && !wakeState.externalIp) return;
-
   try {
     const vm = await gce.getStatus();
     if (vm.status !== 'RUNNING') {
-      setState({
-        phase: 'idle',
-        ready: false,
-        message: 'VM stopped',
-        externalIp: null,
-      });
+      if (wakeState.ready || wakeState.externalIp || wakeState.phase !== 'idle') {
+        setState({
+          phase: 'idle',
+          ready: false,
+          message: 'VM stopped',
+          externalIp: null,
+        });
+      }
       return;
     }
-    if (wakeState.externalIp && vm.externalIp !== wakeState.externalIp) {
+
+    if (!vm.externalIp) return;
+
+    if (wakeState.ready && wakeState.externalIp === vm.externalIp) return;
+
+    if (wakeState.externalIp && wakeState.externalIp !== vm.externalIp) {
       setState({
         phase: 'waiting_health',
         ready: false,
         message: 'Origin IP changed',
+        externalIp: vm.externalIp,
+      });
+      return;
+    }
+
+    if (!wakeState.externalIp || wakeState.phase === 'starting' || wakeState.phase === 'error') {
+      setState({
+        phase: wakeState.ready ? 'ready' : 'waiting_health',
+        ready: false,
+        message: 'Waiting for app health…',
         externalIp: vm.externalIp,
       });
     }
