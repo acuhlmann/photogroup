@@ -36,5 +36,11 @@ export function loadConfig(env = process.env) {
     idleMinutes,
     /** Alias used by starting-page / status. */
     idleMinutesHint: idleMinutes,
+    /**
+     * Hackernews (Hackersbot) runs on a separate always-on VM — proxied directly,
+     * without waking the PhotoGroup GCE instance.
+     */
+    hnOriginIp: env.HN_ORIGIN_IP || '',
+    hnOriginScheme: env.HN_ORIGIN_SCHEME || 'http',
   };
 }

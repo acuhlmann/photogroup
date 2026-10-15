@@ -5,7 +5,7 @@
  */
 export class ActivityStore {
   /**
-   * @param {{ gce: { getInstance: Function, instances: { setMetadata: Function }, projectId: string, zone: string, instance: string }, metadataKey?: string }} opts
+   * @param {{ gce: { getInstance: Function, setMetadata: Function }, metadataKey?: string }} opts
    */
   constructor(opts) {
     this.gce = opts.gce;
@@ -46,12 +46,7 @@ export class ActivityStore {
       }
       const items = [...(vm.metadata?.items || [])].filter((i) => i.key !== this.metadataKey);
       items.push({ key: this.metadataKey, value: String(ts) });
-      await this.gce.instances.setMetadata({
-        project: this.gce.projectId,
-        zone: this.gce.zone,
-        instance: this.gce.instance,
-        metadataResource: { fingerprint, items },
-      });
+      await this.gce.setMetadata({ fingerprint, items });
       // Intentionally do not wait on the zone operation — best-effort for idle tracking.
     } catch (err) {
       console.error('[wake-proxy] activity write failed:', err.message);

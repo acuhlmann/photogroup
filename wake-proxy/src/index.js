@@ -7,6 +7,7 @@ import { loadConfig } from './config.js';
 import { GceController, waitForOriginReady } from './gce.js';
 import { createOriginProxy, proxyHttp, proxyWs, wantsHtml } from './proxy.js';
 import { renderStartingPage } from './starting-page.js';
+import { evaluateRequest } from './bot-filter.js';
 import { ActivityStore } from './activity.js';
 
 const config = loadConfig();
@@ -30,9 +31,67 @@ function setState(patch) {
   wakeState = { ...wakeState, ...patch, updatedAt: Date.now() };
 }
 
+/** Sync in-memory wake state with GCE (no HTTP probe — that would reset idle-stop). */
+async function reconcileOriginState() {
+  try {
+    const vm = await gce.getStatus();
+    if (vm.status !== 'RUNNING') {
+      if (wakeState.ready || wakeState.externalIp || wakeState.phase !== 'idle') {
+        setState({
+          phase: 'idle',
+          ready: false,
+          message: 'VM stopped',
+          externalIp: null,
+        });
+      }
+      return;
+    }
+
+    if (!vm.externalIp) return;
+
+    if (wakeState.ready && wakeState.externalIp === vm.externalIp) return;
+
+    if (wakeState.externalIp && wakeState.externalIp !== vm.externalIp) {
+      setState({
+        phase: 'waiting_health',
+        ready: false,
+        message: 'Origin IP changed',
+        externalIp: vm.externalIp,
+      });
+      return;
+    }
+
+    if (!wakeState.externalIp || wakeState.phase === 'starting' || wakeState.phase === 'error') {
+      setState({
+        phase: wakeState.ready ? 'ready' : 'waiting_health',
+        ready: false,
+        message: 'Waiting for app health…',
+        externalIp: vm.externalIp,
+      });
+    }
+  } catch (err) {
+    console.error('[wake-proxy] reconcileOriginState:', err.message);
+  }
+}
+
 function brandForHost(host = '') {
-  if (host.startsWith('hackernews.')) return 'Hackersbot';
+  if (hostName(host).startsWith('hackernews.')) return 'Hackersbot';
   return 'PhotoGroup';
+}
+
+function hostName(host = '') {
+  return (host || '').split(':')[0].toLowerCase();
+}
+
+function isHackernewsHost(host = '') {
+  return hostName(host).startsWith('hackernews.');
+}
+
+function hnOriginTarget() {
+  if (!config.hnOriginIp) {
+    throw new Error('HN_ORIGIN_IP not configured');
+  }
+  return { scheme: config.hnOriginScheme, ip: config.hnOriginIp };
 }
 
 function touchActivity() {
@@ -89,6 +148,7 @@ async function ensureReady(host) {
       touchActivity();
       return { scheme: config.originScheme, ip: ready.ip };
     } finally {
+      // Allow a later retry after failure; keep success cached via wakeState.ready
       ensureReadyPromise = null;
     }
   })();
@@ -97,23 +157,8 @@ async function ensureReady(host) {
 }
 
 async function handleWakeStatus(_req, res) {
-  if (wakeState.ready && wakeState.externalIp) {
-    const probeHost = 'photogroup.network';
-    try {
-      const { probeOriginHttp, probeOriginHttps } = await import('./gce.js');
-      const probeFn = config.originScheme === 'https' ? probeOriginHttps : probeOriginHttp;
-      const probe = await probeFn({
-        ip: wakeState.externalIp,
-        host: probeHost,
-        path: config.healthPath,
-      });
-      if (!probe.ok) {
-        setState({ ready: false, phase: 'waiting_health', message: 'Origin lost health' });
-      }
-    } catch {
-      // ignore probe errors in status
-    }
-  }
+  // GCE API only — do not HTTP-probe nginx here (that resets idle-stop).
+  await reconcileOriginState();
 
   const lastActivityMs = await activity.getLastActivityMs();
   res.writeHead(200, {
@@ -129,6 +174,16 @@ async function handleWakeStatus(_req, res) {
     lastActivityMs,
     lastActivityIso: lastActivityMs ? new Date(lastActivityMs).toISOString() : null,
   }));
+}
+
+/** Reject junk without waking the VM or touching nginx. */
+function rejectBot(res, reason) {
+  console.log(`[wake-proxy] blocked (${reason})`);
+  res.writeHead(404, {
+    'Content-Type': 'text/plain',
+    'Cache-Control': 'no-store',
+  });
+  res.end('Not found');
 }
 
 async function handleWakeStop(req, res) {
@@ -244,8 +299,27 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // Real user traffic — refresh idle timer
+  // Never wake or proxy scanner traffic (also when VM is already warm).
+  const verdict = evaluateRequest(req);
+  if (!verdict.allow) {
+    return rejectBot(res, verdict.reason);
+  }
+
+  // Hackernews runs on hn-vm (always on) — skip PhotoGroup VM wake entirely.
+  if (isHackernewsHost(host)) {
+    try {
+      return proxyHttp(proxy, req, res, hnOriginTarget());
+    } catch (err) {
+      res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ error: 'hn_origin_unconfigured', message: err.message }));
+      return;
+    }
+  }
+
+  // Real PhotoGroup traffic — refresh idle timer (after bot/HN filters).
   touchActivity();
+
+  await reconcileOriginState();
 
   // Fast path: already ready
   if (wakeState.ready && wakeState.externalIp) {
@@ -257,6 +331,7 @@ async function handleRequest(req, res) {
 
   // Browser navigations get the starting page immediately while boot continues
   if (wantsHtml(req)) {
+    // Kick off boot without awaiting
     ensureReady(host).catch((err) => {
       console.error('[wake-proxy] ensureReady failed:', err.message);
     });
@@ -304,10 +379,25 @@ const server = http.createServer((req, res) => {
 
 server.on('upgrade', (req, socket, head) => {
   const host = req.headers.host || 'photogroup.network';
-  touchActivity();
 
   const go = async () => {
     try {
+      const verdict = evaluateRequest(req);
+      if (!verdict.allow) {
+        console.log(`[wake-proxy] blocked ws (${verdict.reason})`);
+        socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      if (isHackernewsHost(host)) {
+        proxyWs(proxy, req, socket, head, hnOriginTarget());
+        return;
+      }
+
+      touchActivity();
+
+      await reconcileOriginState();
       let target;
       if (wakeState.ready && wakeState.externalIp) {
         target = { scheme: config.originScheme, ip: wakeState.externalIp };

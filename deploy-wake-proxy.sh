@@ -13,7 +13,8 @@
 set -euo pipefail
 
 ZONE="${ZONE:-asia-east2-a}"
-REGION="${REGION:-asia-east2}"
+# Domain mappings are not supported in asia-east2; use asia-southeast1 for Cloud Run.
+REGION="${REGION:-asia-southeast1}"
 INSTANCE="${INSTANCE:-main}"
 PROJECT="${PROJECT:-photogroup-215600}"
 SERVICE="${WAKE_SERVICE:-photogroup-wake}"
@@ -33,13 +34,23 @@ echo ""
 
 gcloud config set project "$PROJECT" >/dev/null
 
-# Enable required APIs (idempotent)
-gcloud services enable \
-  run.googleapis.com \
-  compute.googleapis.com \
-  artifactregistry.googleapis.com \
-  cloudbuild.googleapis.com \
-  --project "$PROJECT" >/dev/null
+# Enable required APIs (idempotent). The deploy service account may lack
+# serviceusage.services.enable; APIs are usually already on from initial setup.
+enable_required_apis() {
+  local apis=(
+    run.googleapis.com
+    compute.googleapis.com
+    artifactregistry.googleapis.com
+    cloudbuild.googleapis.com
+  )
+  if gcloud services enable "${apis[@]}" --project "$PROJECT" >/dev/null 2>&1; then
+    echo "Required GCP APIs are enabled."
+    return 0
+  fi
+  echo "WARNING: Could not enable GCP APIs (likely already enabled or missing serviceusage permission). Continuing..."
+  return 0
+}
+enable_required_apis
 
 # Service account for the wake proxy
 SA_NAME="photogroup-wake"
@@ -81,6 +92,20 @@ gcloud auth configure-docker --quiet
 docker push "$IMAGE"
 
 ENV_VARS="GCP_PROJECT=${PROJECT},GCE_ZONE=${ZONE},GCE_INSTANCE=${INSTANCE},ORIGIN_SCHEME=http,HEALTH_PATH=/api/__rtcConfig__,IDLE_MINUTES=${IDLE_MINUTES}"
+
+HN_ORIGIN_IP="${HN_ORIGIN_IP:-}"
+if [ -z "$HN_ORIGIN_IP" ]; then
+  HN_ORIGIN_IP=$(gcloud compute instances describe hn-vm \
+    --project "$PROJECT" --zone us-central1-a \
+    --format='get(networkInterfaces[0].accessConfigs[0].natIP)' 2>/dev/null || true)
+fi
+if [ -n "$HN_ORIGIN_IP" ]; then
+  echo "Hackernews origin (hn-vm): $HN_ORIGIN_IP"
+  ENV_VARS="${ENV_VARS},HN_ORIGIN_IP=${HN_ORIGIN_IP},HN_ORIGIN_SCHEME=http"
+else
+  echo "WARNING: hn-vm IP not found — hackernews.photogroup.network will 503 until HN_ORIGIN_IP is set"
+fi
+
 if [ -n "${WAKE_STOP_SECRET:-}" ]; then
   ENV_VARS="${ENV_VARS},WAKE_STOP_SECRET=${WAKE_STOP_SECRET}"
 fi
@@ -120,7 +145,10 @@ echo ""
 echo "=========================================="
 echo "Next: point DNS at Cloud Run"
 echo "=========================================="
-echo "1) Map custom domains (if supported in $REGION):"
+echo "1) Map custom domains (must use $REGION — not asia-east2):"
+echo "     ./setup-domain-mappings.sh"
+echo "   (Run on your laptop after: gcloud auth login)"
+echo "   Or manually:"
 echo "     gcloud beta run domain-mappings create --service $SERVICE --domain photogroup.network --region $REGION --project $PROJECT"
 echo "     gcloud beta run domain-mappings create --service $SERVICE --domain www.photogroup.network --region $REGION --project $PROJECT"
 echo "     gcloud beta run domain-mappings create --service $SERVICE --domain hackernews.photogroup.network --region $REGION --project $PROJECT"

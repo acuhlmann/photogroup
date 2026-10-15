@@ -6,7 +6,7 @@
 set -euo pipefail
 
 IDLE_MINUTES="${IDLE_MINUTES:-60}"
-ACCESS_LOG="${ACCESS_LOG:-/var/log/nginx/access.log}"
+ACCESS_LOG="${ACCESS_LOG:-/var/log/nginx/wake-access.log}"
 METADATA="http://metadata.google.internal/computeMetadata/v1"
 META_HEADER="Metadata-Flavor: Google"
 

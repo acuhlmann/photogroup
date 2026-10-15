@@ -36,7 +36,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 Environment=IDLE_MINUTES=${IDLE_MINUTES}
-Environment=ACCESS_LOG=/var/log/nginx/access.log
+Environment=ACCESS_LOG=/var/log/nginx/wake-access.log
 ExecStart=/opt/photogroup/idle-stop.sh
 EOF
 

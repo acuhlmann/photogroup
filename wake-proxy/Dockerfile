@@ -1,5 +1,5 @@
 # Wake proxy — Cloud Run service that boots the GCE VM on demand
-FROM node:24-alpine
+FROM node:24.18-alpine
 
 WORKDIR /app
 
