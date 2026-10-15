@@ -152,9 +152,9 @@ function FrontView({ master }) {
             })}
         >
             <Stack
-                alignItems="center"
                 spacing={0}
                 sx={{
+                    alignItems: 'center',
                     width: '100%',
                     maxWidth: { xs: '100%', sm: 500 },
                     textAlign: 'center',
