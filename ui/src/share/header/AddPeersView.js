@@ -218,7 +218,7 @@ function AddPeersView({ master }) {
             <Dialog
                 open={open}
                 onClose={() => show(false)}
-                TransitionComponent={Transition}
+                slots={{ transition: Transition }}
                 keepMounted
                 fullScreen={isMobile}
                 maxWidth="sm"
@@ -236,7 +236,7 @@ function AddPeersView({ master }) {
                 >
                     {/* Share Room Section */}
                     {(hasRoomValue || createdRoom) && (
-                        <Stack spacing={2.5} alignItems="center" sx={{ width: '100%' }}>
+                        <Stack spacing={2.5} sx={{ alignItems: 'center', width: '100%' }}>
                             <Typography variant="subtitle1" fontWeight={600}>
                                 Share Room
                             </Typography>
@@ -261,9 +261,9 @@ function AddPeersView({ master }) {
                             {/* Room ID with copy */}
                             <Stack
                                 direction="row"
-                                alignItems="center"
                                 spacing={1}
                                 sx={{
+                                    alignItems: 'center',
                                     bgcolor: 'action.hover',
                                     borderRadius: 1,
                                     px: 2,
@@ -291,7 +291,7 @@ function AddPeersView({ master }) {
                             </Stack>
 
                             {/* Share buttons row */}
-                            <Stack direction="row" spacing={1.5} justifyContent="center">
+                            <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'center' }}>
                                 {canShare && (
                                     <Button
                                         variant="outlined"

@@ -21,7 +21,7 @@ P2P photo sharing web app. Users create rooms, drop photos, and share them direc
 |------|------|-------|
 | Server start | `server/app.js` | Creates Express app, initializes all services, listens on :8081 |
 | UI start | `ui/src/index.js` | React 19 createRoot, renders `<App />` |
-| Build config | `ui/vite.config.js` | Dev server :3000, proxies /api to :8081, Node.js polyfills |
+| Build config | `ui/vite.config.mjs` | Dev server :3000, proxies /api to :8081, Node.js polyfills |
 | Wake proxy | `wake-proxy/src/index.js` | Cloud Run ingress: start VM, cold-start page, HTTP/WS proxy |
 | Tests (all) | `package.json` → `test` script | Runs `test-all.js` which parallelizes server + UI tests |
 | CI/CD | `.github/workflows/test.yml` + `deploy.yml` | Test on push, deploy on success |
@@ -129,7 +129,7 @@ No Redux/Zustand -- state lives in `RoomsService.js` which is a plain class mana
 - `ui/public/parsetorrent.js` is a browserified bundle of parse-torrent, not source code -- don't edit it
 - `server/ui/` contains the built UI copied during deploy -- it's gitignored, not source
 - The WebSocket tracker port (9000) must be accessible alongside the HTTP port (8081)
-- Node.js polyfills in `ui/src/compatibility/` and `ui/vite.config.js` are required because WebTorrent uses Node.js APIs
+- Node.js polyfills in `ui/src/compatibility/` and `ui/vite.config.mjs` are required because WebTorrent uses Node.js APIs
 - `wrtc` npm package (native WebRTC for Node.js) can be tricky to install on some platforms
 - Production DNS should target Cloud Run (`photogroup-wake`), not the VM IP; the VM uses an ephemeral IP that changes on each start
 - CI deploy starts the VM if it was idle-stopped before pushing nginx/Docker updates

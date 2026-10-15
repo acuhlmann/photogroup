@@ -277,8 +277,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
                                 <Stack
                                     direction="row"
                                     spacing={1}
-                                    alignItems="center"
-                                    sx={{ flexGrow: 1, minWidth: 0 }}
+                                    sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}
                                 >
                                     <HubRounded sx={{ fontSize: 22, opacity: 0.9 }} />
                                     <Stack direction="column" spacing={0}>
@@ -311,7 +310,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
                                 </Stack>
 
                                 {/* Action buttons */}
-                                <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0 }}>
+                                <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center', flexShrink: 0 }}>
                                     <AddPeersView master={masterRef.current}/>
                                     <Uploader
                                         model={masterRef.current.torrentAddition}

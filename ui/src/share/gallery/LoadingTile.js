@@ -194,7 +194,7 @@ function LoadingTile({tile, master, name}) {
             {/* Content area */}
             <Box sx={{ p: 1.5 }}>
                 {/* Status row */}
-                <Stack direction="row" alignItems="center" spacing={1}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     {/* Status icon */}
                     {have ? (
                         <CheckRounded sx={{ color: 'success.main', fontSize: 20 }} />

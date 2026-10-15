@@ -7,7 +7,7 @@
  */
 import Logger from 'js-logger';
 import exifr from 'exifr/dist/full.esm.mjs';
-import * as musicMetadata from 'music-metadata-browser';
+import * as musicMetadata from 'music-metadata';
 
 /**
  * Default maximum size for thumbnails (width or height)

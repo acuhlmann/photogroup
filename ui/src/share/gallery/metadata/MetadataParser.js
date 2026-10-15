@@ -4,7 +4,7 @@ import ExifParser from "./ExifParser";
 import * as exifr from 'exifr';
 import FileUtil from "../../util/FileUtil";
 import Logger from 'js-logger';
-import * as mm from 'music-metadata-browser';
+import * as mm from 'music-metadata';
 import StringUtil from "../../util/StringUtil";
 import _ from 'lodash';
 import humanizeDuration from 'humanize-duration';
@@ -101,7 +101,7 @@ export default class MetadataParser {
             console.log('There will be no more data.');
         });
 
-        mm.parseReadableStream(stream, {
+        mm.parseWebStream(stream, {
             size: tile.torrentFile.length,
             mimeType: tile.torrentFile.name})
             .then(metadata => {

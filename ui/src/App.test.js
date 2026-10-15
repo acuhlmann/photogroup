@@ -57,11 +57,6 @@ vi.mock('visibilityjs', () => ({
 // Mock audiomotion-analyzer - it's an ES module that Vitest can't parse
 // Mock is now in setupTests.js
 
-vi.mock('online-js', () => ({
-  __esModule: true,
-  default: vi.fn()
-}));
-
 vi.mock('webtorrent', () => ({
   __esModule: true,
   default: vi.fn().mockImplementation(() => ({

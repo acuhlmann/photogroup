@@ -55,7 +55,7 @@ function PhotoDetails({master, classes, tile, open, parser, handleClose}) {
         <div className={classes.root} ref={componentRef}>
             <Dialog
                 fullScreen={true}
-                TransitionComponent={Transition}
+                slots={{ transition: Transition }}
                 open={open}
                 onClose={handleClose}
                 aria-labelledby="alert-dialog-title"

@@ -241,7 +241,7 @@ function SettingsView(props) {
             <Dialog
                 open={open}
                 onClose={handleClose}
-                TransitionComponent={Transition}
+                slots={{ transition: Transition }}
                 keepMounted
                 maxWidth="sm"
                 fullWidth

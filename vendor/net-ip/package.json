@@ -1,0 +1,7 @@
+{
+  "name": "ip",
+  "version": "2.0.2",
+  "description": "Patched fork of ip@2.0.1. isPublic no longer treats short, octal, or mixed-case special addresses as globally routable (CVE-2024-29415).",
+  "main": "lib/ip.js",
+  "license": "MIT"
+}

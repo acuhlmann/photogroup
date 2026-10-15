@@ -1,17 +1,13 @@
 import { vi } from 'vitest';
 
-// Mock localStorage for jsdom
+// Mock localStorage for jsdom. jsdom 30 exposes it as a getter-only Window property.
 const localStorageMock = {
   getItem: vi.fn(),
   setItem: vi.fn(),
   removeItem: vi.fn(),
   clear: vi.fn(),
 };
-global.localStorage = localStorageMock;
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock,
-  writable: true,
-});
+vi.stubGlobal('localStorage', localStorageMock);
 
 // Mock audiomotion-analyzer - it's an ES module that Vitest can't parse
 vi.mock('audiomotion-analyzer', () => {

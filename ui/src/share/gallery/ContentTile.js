@@ -236,7 +236,7 @@ function ContentTile(props) {
                 <Typography variant="body2" sx={{ mb: 1.5 }}>
                     Decrypt with
                 </Typography>
-                <Stack direction="row" spacing={1} alignItems="center">
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <PasswordInput onChange={value => setPassword(value)} />
                     <Button
                         onClick={() => decrypt(tile, password)}
@@ -334,10 +334,10 @@ function ContentTile(props) {
             <Collapse in={listView}>
                 <Box sx={{ px: 1.5, py: 1 }}>
                     {/* File info row */}
-                    <Stack direction="row" alignItems="center" spacing={1} sx={{ minHeight: 28 }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minHeight: 28 }}>
                         {/* Loading progress inline */}
                         {isLoading && (
-                            <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexShrink: 0 }}>
+                            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', flexShrink: 0 }}>
                                 <Typography
                                     variant="caption"
                                     sx={{
