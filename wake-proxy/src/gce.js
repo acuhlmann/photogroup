@@ -126,6 +126,19 @@ export class GceController {
     const after = await this.getStatus();
     return { stopped: true, ...after };
   }
+
+  /**
+   * Replace instance metadata items (fingerprint must be current).
+   * Fire-and-forget friendly — does not wait for the zone operation.
+   * @param {{ fingerprint: string, items: Array<{ key: string, value: string }> }} metadata
+   */
+  async setMetadata(metadata) {
+    await this._request({
+      url: `${this._zoneBase()}/instances/${this.instance}/setMetadata`,
+      method: 'POST',
+      data: metadata,
+    });
+  }
 }
 
 /**

@@ -8,10 +8,12 @@ import { GceController, waitForOriginReady } from './gce.js';
 import { createOriginProxy, proxyHttp, proxyWs, wantsHtml } from './proxy.js';
 import { renderStartingPage } from './starting-page.js';
 import { evaluateRequest } from './bot-filter.js';
+import { ActivityStore } from './activity.js';
 
 const config = loadConfig();
 const gce = new GceController(config);
 const proxy = createOriginProxy();
+const activity = new ActivityStore({ gce });
 
 /** @type {{ phase: string, ready: boolean, message: string, externalIp: string|null, updatedAt: number }} */
 let wakeState = {
@@ -92,6 +94,10 @@ function hnOriginTarget() {
   return { scheme: config.hnOriginScheme, ip: config.hnOriginIp };
 }
 
+function touchActivity() {
+  activity.touch().catch(() => {});
+}
+
 /**
  * Ensure VM is running and origin is healthy. Returns origin target or throws.
  */
@@ -139,6 +145,7 @@ async function ensureReady(host) {
         message: 'Ready',
         externalIp: ready.ip,
       });
+      touchActivity();
       return { scheme: config.originScheme, ip: ready.ip };
     } finally {
       // Allow a later retry after failure; keep success cached via wakeState.ready
@@ -153,6 +160,7 @@ async function handleWakeStatus(_req, res) {
   // GCE API only — do not HTTP-probe nginx here (that resets idle-stop).
   await reconcileOriginState();
 
+  const lastActivityMs = await activity.getLastActivityMs();
   res.writeHead(200, {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-store',
@@ -162,7 +170,9 @@ async function handleWakeStatus(_req, res) {
     projectId: config.projectId,
     zone: config.zone,
     instance: config.instance,
-    idleMinutesHint: config.idleMinutesHint,
+    idleMinutesHint: config.idleMinutes,
+    lastActivityMs,
+    lastActivityIso: lastActivityMs ? new Date(lastActivityMs).toISOString() : null,
   }));
 }
 
@@ -205,6 +215,69 @@ async function handleWakeStop(req, res) {
   }
 }
 
+/**
+ * Public idle-stop: stops the VM only if it has been idle longer than IDLE_MINUTES.
+ * Safe to expose — worst case an attacker stops an already-idle VM.
+ */
+async function handleStopIfIdle(_req, res) {
+  try {
+    const status = await gce.getStatus();
+    if (status.status === 'TERMINATED' || status.status === 'STOPPED') {
+      setState({ phase: 'idle', ready: false, message: 'Already stopped', externalIp: null });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ action: 'none', reason: 'already_stopped', status }));
+      return;
+    }
+
+    const lastActivityMs = await activity.getLastActivityMs();
+    const idleMs = Date.now() - (lastActivityMs || 0);
+    const thresholdMs = config.idleMinutes * 60_000;
+
+    if (!lastActivityMs) {
+      // No activity recorded yet — do not stop a freshly started VM blindly.
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        action: 'none',
+        reason: 'no_activity_recorded',
+        status,
+      }));
+      return;
+    }
+
+    if (idleMs < thresholdMs) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        action: 'none',
+        reason: 'still_active',
+        idleMinutes: Math.round(idleMs / 60_000),
+        thresholdMinutes: config.idleMinutes,
+        lastActivityIso: new Date(lastActivityMs).toISOString(),
+        status,
+      }));
+      return;
+    }
+
+    const result = await gce.ensureStopped();
+    setState({
+      phase: 'idle',
+      ready: false,
+      message: 'Stopped (idle)',
+      externalIp: null,
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      action: 'stopped',
+      reason: 'idle',
+      idleMinutes: Math.round(idleMs / 60_000),
+      thresholdMinutes: config.idleMinutes,
+      result,
+    }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
 async function handleRequest(req, res) {
   const url = req.url || '/';
   const path = url.split('?')[0];
@@ -216,7 +289,10 @@ async function handleRequest(req, res) {
   if (path === '/__wake__/stop' && req.method === 'POST') {
     return handleWakeStop(req, res);
   }
-  // Cloud Run / LB health checks — do not start the VM
+  if (path === '/__wake__/stop-if-idle' && (req.method === 'POST' || req.method === 'GET')) {
+    return handleStopIfIdle(req, res);
+  }
+  // Cloud Run / LB health checks — do not start the VM or count as activity
   if (path === '/__wake__/healthz' || path === '/robots.txt') {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end(path === '/robots.txt' ? 'User-agent: *\nDisallow: /\n' : 'ok');
@@ -240,6 +316,9 @@ async function handleRequest(req, res) {
     }
   }
 
+  // Real PhotoGroup traffic — refresh idle timer (after bot/HN filters).
+  touchActivity();
+
   await reconcileOriginState();
 
   // Fast path: already ready
@@ -259,7 +338,7 @@ async function handleRequest(req, res) {
     const html = renderStartingPage({
       brand: brandForHost(host),
       statusText: 'Starting the server…',
-      idleMinutes: config.idleMinutesHint,
+      idleMinutes: config.idleMinutes,
     });
     res.writeHead(503, {
       'Content-Type': 'text/html; charset=utf-8',
@@ -316,6 +395,8 @@ server.on('upgrade', (req, socket, head) => {
         return;
       }
 
+      touchActivity();
+
       await reconcileOriginState();
       let target;
       if (wakeState.ready && wakeState.externalIp) {
@@ -335,4 +416,5 @@ server.on('upgrade', (req, socket, head) => {
 server.listen(config.port, () => {
   console.log(`[wake-proxy] listening on :${config.port}`);
   console.log(`[wake-proxy] target VM ${config.projectId}/${config.zone}/${config.instance}`);
+  console.log(`[wake-proxy] idle stop after ${config.idleMinutes}m via /__wake__/stop-if-idle`);
 });
