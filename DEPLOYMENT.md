@@ -5,7 +5,7 @@
 - **Project ID**: `photogroup-215600`
 - **Domain**: `photogroup.network`
 - **Additional service**: `hackernews.photogroup.network` (reverse-proxied to a Docker container on the same VM)
-- **Zone**: `asia-east2-a`
+- **Zone**: `us-central1-a`
 - **Instance Name**: `main`
 - **Public ingress**: Cloud Run wake proxy (`photogroup-wake`) — DNS points here, not at the VM
 - **VM IP**: Ephemeral (released when the instance is stopped). Do **not** reserve a static IP unless you intentionally use the legacy DNS→VM setup.

@@ -3,9 +3,10 @@
 # Deploy PhotoGroup app to GCP VM using Docker
 # This script builds the Docker image locally, pushes it to the VM, and runs it
 
-ZONE=asia-east2-a
-INSTANCE=main
-PROJECT=photogroup-215600
+# Honor ZONE/INSTANCE/PROJECT from the environment. The VM lives in us-central1-a.
+ZONE="${ZONE:-us-central1-a}"
+INSTANCE="${INSTANCE:-main}"
+PROJECT="${PROJECT:-photogroup-215600}"
 IMAGE_NAME=photogroup-ai
 CONTAINER_NAME=photogroup-app
 

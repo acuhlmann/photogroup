@@ -15,7 +15,7 @@ export function loadConfig(env = process.env) {
   return {
     port: intEnv(env, 'PORT', 8080),
     projectId: env.GCP_PROJECT || env.GOOGLE_CLOUD_PROJECT || 'photogroup-215600',
-    zone: env.GCE_ZONE || 'asia-east2-a',
+    zone: env.GCE_ZONE || 'us-central1-a',
     instance: env.GCE_INSTANCE || 'main',
     /** Origin scheme when talking to the VM (nginx TLS). */
     originScheme: env.ORIGIN_SCHEME || 'http',

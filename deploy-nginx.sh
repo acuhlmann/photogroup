@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-ZONE=asia-east2-a
-INSTANCE=main
-PROJECT=photogroup-215600
+# Honor ZONE/INSTANCE/PROJECT from the environment. The VM lives in us-central1-a.
+ZONE="${ZONE:-us-central1-a}"
+INSTANCE="${INSTANCE:-main}"
+PROJECT="${PROJECT:-photogroup-215600}"
 DOMAIN=photogroup.network
 
 echo "Deploying nginx configuration..."

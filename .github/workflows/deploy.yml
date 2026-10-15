@@ -61,19 +61,34 @@ jobs:
         with:
           project_id: photogroup-215600
 
+      # The VM has moved zones (it is us-central1-a now, not asia-east2-a).
+      # Look it up by name so a later move does not 404 the deploy.
       - name: Ensure VM is running
+        id: vm
         run: |
-          STATUS=$(gcloud compute instances describe main \
-            --project photogroup-215600 --zone asia-east2-a \
-            --format='get(status)' 2>/dev/null || echo "UNKNOWN")
+          PROJECT=photogroup-215600
+          INSTANCE=main
+          ZONE_URL=$(gcloud compute instances list \
+            --project "$PROJECT" \
+            --filter="name=${INSTANCE}" \
+            --format='value(zone)' | head -n 1)
+          if [ -z "$ZONE_URL" ]; then
+            echo "ERROR: VM '$INSTANCE' was not found in project $PROJECT"
+            exit 1
+          fi
+          ZONE="${ZONE_URL##*/}"
+          echo "zone=$ZONE" >> "$GITHUB_OUTPUT"
+          echo "VM $INSTANCE is in $ZONE"
+          STATUS=$(gcloud compute instances describe "$INSTANCE" \
+            --project "$PROJECT" --zone "$ZONE" \
+            --format='get(status)')
           echo "VM status: $STATUS"
           if [ "$STATUS" != "RUNNING" ]; then
             echo "Starting VM for deployment..."
-            gcloud compute instances start main \
-              --project photogroup-215600 --zone asia-east2-a
-            # Wait until SSH-ready (boot can take a minute)
+            gcloud compute instances start "$INSTANCE" \
+              --project "$PROJECT" --zone "$ZONE"
             for i in $(seq 1 30); do
-              if gcloud compute ssh main --project photogroup-215600 --zone asia-east2-a \
+              if gcloud compute ssh "$INSTANCE" --project "$PROJECT" --zone "$ZONE" \
                 --command "true" 2>/dev/null; then
                 echo "VM is reachable"
                 break
@@ -90,7 +105,7 @@ jobs:
           ./deploy-nginx.sh
         timeout-minutes: 5
         env:
-          ZONE: asia-east2-a
+          ZONE: ${{ steps.vm.outputs.zone }}
           INSTANCE: main
           PROJECT: photogroup-215600
       
@@ -100,7 +115,7 @@ jobs:
           ./deploy-docker.sh
         timeout-minutes: 15
         env:
-          ZONE: asia-east2-a
+          ZONE: ${{ steps.vm.outputs.zone }}
           INSTANCE: main
           PROJECT: photogroup-215600
           # Pass version number to Docker build for Settings view
@@ -116,7 +131,7 @@ jobs:
           ./deploy-wake-proxy.sh
         timeout-minutes: 20
         env:
-          ZONE: asia-east2-a
+          ZONE: ${{ steps.vm.outputs.zone }}
           REGION: asia-southeast1
           INSTANCE: main
           PROJECT: photogroup-215600
@@ -127,7 +142,7 @@ jobs:
         run: |
           echo "✅ Deployment completed successfully!"
           echo "Instance: main"
-          echo "Zone: asia-east2-a"
+          echo "Zone: ${{ steps.vm.outputs.zone }}"
           echo "Project: photogroup-215600"
           echo "Wake proxy redeployed: ${{ steps.wake_proxy.outputs.changed }}"
           echo "Deployment method: Docker + Cloud Run wake proxy"

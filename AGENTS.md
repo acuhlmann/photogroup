@@ -13,7 +13,7 @@ P2P photo sharing web app. Users create rooms, drop photos, and share them direc
 - **WebTorrent for P2P** -- not a custom WebRTC solution; uses BitTorrent protocol over WebRTC
 - **SSE not WebSocket for updates** -- real-time room updates use Server-Sent Events, not socket.io
 - **Vite, not CRA** -- migrated from create-react-app to Vite
-- **Wake proxy + auto-stop** -- public DNS hits Cloud Run (`wake-proxy/`); GCE VM starts on demand and idle-stops; ephemeral IP (no static IP) for ~$0 idle cost in `asia-east2`
+- **Wake proxy + auto-stop** -- public DNS hits Cloud Run (`wake-proxy/`); GCE VM starts on demand and idle-stops; ephemeral IP (no static IP) for ~$0 idle cost. The VM `main` is in `us-central1-a`.
 
 ## Entry Points
 
@@ -172,4 +172,4 @@ gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
 gcloud config set project photogroup-215600
 rm /tmp/gcp-key.json
 ```
-GCP project: `photogroup-215600`, zone: `asia-east2-a`, VM instance: `main`. Deployment scripts: `deploy-docker.sh`, `deploy-nginx.sh`, `deploy-app.sh`. See `DEPLOYMENT.md` for full details.
+GCP project: `photogroup-215600`, zone: `us-central1-a`, VM instance: `main`. Deployment scripts: `deploy-docker.sh`, `deploy-nginx.sh`, `deploy-app.sh`. See `DEPLOYMENT.md` for full details.

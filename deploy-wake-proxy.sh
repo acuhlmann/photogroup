@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-ZONE="${ZONE:-asia-east2-a}"
+ZONE="${ZONE:-us-central1-a}"
 # Domain mappings are not supported in asia-east2; use asia-southeast1 for Cloud Run.
 REGION="${REGION:-asia-southeast1}"
 INSTANCE="${INSTANCE:-main}"

@@ -15,7 +15,7 @@ describe('loadConfig', () => {
   it('uses defaults', () => {
     const cfg = loadConfig({});
     assert.equal(cfg.projectId, 'photogroup-215600');
-    assert.equal(cfg.zone, 'asia-east2-a');
+    assert.equal(cfg.zone, 'us-central1-a');
     assert.equal(cfg.instance, 'main');
     assert.equal(cfg.originScheme, 'http');
     assert.equal(cfg.healthPath, '/api/__rtcConfig__');
