@@ -102,7 +102,7 @@ function getEdgeColor(edge, isDark) {
 }
 
 function getNodeColor(node, isMe, isDark) {
-    if (isMe) return isDark ? '#00e5ff' : '#0d9488';
+    if (isMe) return isDark ? '#3dd6c3' : '#0f766e';
     if (node.type === 'nat') return '#ffab00';
     if (node.type === 'relay') return '#ff1744';
     return isDark ? '#8899aa' : '#667788';
@@ -140,15 +140,14 @@ class ParticleSystem {
             ctx.beginPath();
             ctx.arc(x, y, 3, 0, Math.PI * 2);
             ctx.fillStyle = isDark
-                ? `rgba(0,229,255,${alpha})`
-                : `rgba(13,148,136,${alpha})`;
+                ? `rgba(61,214,195,${alpha})`
+                : `rgba(15,118,110,${alpha})`;
             ctx.fill();
-            // Glow
             ctx.beginPath();
             ctx.arc(x, y, 6, 0, Math.PI * 2);
             ctx.fillStyle = isDark
-                ? `rgba(0,229,255,${alpha * 0.2})`
-                : `rgba(13,148,136,${alpha * 0.2})`;
+                ? `rgba(61,214,195,${alpha * 0.2})`
+                : `rgba(15,118,110,${alpha * 0.2})`;
             ctx.fill();
         });
     }
@@ -212,11 +211,11 @@ function drawPhotoBadge(ctx, x, y, count, isDark) {
     ctx.arcTo(badgeX - badgeW / 2, badgeY + badgeH / 2, badgeX - badgeW / 2, badgeY, r);
     ctx.arcTo(badgeX - badgeW / 2, badgeY - badgeH / 2, badgeX + badgeW / 2, badgeY - badgeH / 2, r);
     ctx.closePath();
-    ctx.fillStyle = isDark ? '#e040fb' : '#9c27b0';
+    ctx.fillStyle = isDark ? '#3dd6c3' : '#0f766e';
     ctx.fill();
 
     // Badge text
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = isDark ? '#06221d' : '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, badgeX, badgeY);
@@ -675,8 +674,8 @@ function TopologyView({ master, fillHeight, active = true }) {
                     const h = 32;
                     drawRoundedRect(ctx, x - w / 2, y - h / 2, w, h, 6);
                     ctx.fillStyle = isDark
-                        ? (isMe ? 'rgba(0,229,255,0.1)' : 'rgba(136,153,170,0.08)')
-                        : (isMe ? 'rgba(13,148,136,0.08)' : 'rgba(100,120,140,0.06)');
+                        ? (isMe ? 'rgba(61,214,195,0.12)' : 'rgba(136,153,170,0.08)')
+                        : (isMe ? 'rgba(15,118,110,0.1)' : 'rgba(100,120,140,0.06)');
                     ctx.fill();
                     ctx.strokeStyle = color;
                     ctx.lineWidth = isMe ? 2 : 1;
@@ -684,9 +683,9 @@ function TopologyView({ master, fillHeight, active = true }) {
 
                     // Glow for own node
                     if (isMe && isDark) {
-                        ctx.shadowColor = '#00e5ff';
-                        ctx.shadowBlur = 12;
-                        ctx.strokeStyle = '#00e5ff';
+                        ctx.shadowColor = '#3dd6c3';
+                        ctx.shadowBlur = 10;
+                        ctx.strokeStyle = '#3dd6c3';
                         ctx.stroke();
                         ctx.shadowBlur = 0;
                     }
@@ -699,8 +698,8 @@ function TopologyView({ master, fillHeight, active = true }) {
 
                 // Label
                 const label = (node.label || '').split('\n')[0];
-                ctx.font = '11px "JetBrains Mono", "Source Sans 3", monospace';
-                ctx.fillStyle = isDark ? '#e4e8ee' : '#1a1a2e';
+                ctx.font = '11px "JetBrains Mono", "IBM Plex Sans", monospace';
+                ctx.fillStyle = isDark ? '#e8eef6' : '#141820';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(_.truncate(label, { length: 16 }), x, y);
@@ -829,9 +828,9 @@ function TopologyView({ master, fillHeight, active = true }) {
                         sx={{
                             height: 18,
                             fontSize: '0.6rem',
-                            bgcolor: 'rgba(0,230,118,0.15)',
-                            color: '#00e676',
-                            border: '1px solid rgba(0,230,118,0.3)',
+                            bgcolor: isDark ? 'rgba(61,222,139,0.12)' : 'rgba(4,120,87,0.1)',
+                            color: isDark ? '#3dde8b' : '#047857',
+                            border: isDark ? '1px solid rgba(61,222,139,0.35)' : '1px solid rgba(4,120,87,0.28)',
                             '& .MuiChip-label': { px: 1 },
                         }}
                     />
@@ -841,9 +840,9 @@ function TopologyView({ master, fillHeight, active = true }) {
                         sx={{
                             height: 18,
                             fontSize: '0.6rem',
-                            bgcolor: 'rgba(255,171,0,0.15)',
-                            color: '#ffab00',
-                            border: '1px solid rgba(255,171,0,0.3)',
+                            bgcolor: isDark ? 'rgba(245,185,66,0.12)' : 'rgba(180,83,9,0.1)',
+                            color: isDark ? '#f5b942' : '#b45309',
+                            border: isDark ? '1px solid rgba(245,185,66,0.35)' : '1px solid rgba(180,83,9,0.28)',
                             '& .MuiChip-label': { px: 1 },
                         }}
                     />
@@ -853,9 +852,9 @@ function TopologyView({ master, fillHeight, active = true }) {
                         sx={{
                             height: 18,
                             fontSize: '0.6rem',
-                            bgcolor: 'rgba(255,23,68,0.15)',
-                            color: '#ff1744',
-                            border: '1px solid rgba(255,23,68,0.3)',
+                            bgcolor: isDark ? 'rgba(255,93,115,0.12)' : 'rgba(190,18,60,0.08)',
+                            color: isDark ? '#ff5d73' : '#be123c',
+                            border: isDark ? '1px solid rgba(255,93,115,0.35)' : '1px solid rgba(190,18,60,0.25)',
                             '& .MuiChip-label': { px: 1 },
                         }}
                     />
@@ -865,9 +864,9 @@ function TopologyView({ master, fillHeight, active = true }) {
                         sx={{
                             height: 18,
                             fontSize: '0.6rem',
-                            bgcolor: isDark ? 'rgba(224,64,251,0.15)' : 'rgba(156,39,176,0.15)',
-                            color: isDark ? '#e040fb' : '#9c27b0',
-                            border: isDark ? '1px solid rgba(224,64,251,0.3)' : '1px solid rgba(156,39,176,0.3)',
+                            bgcolor: isDark ? 'rgba(61,214,195,0.12)' : 'rgba(15,118,110,0.1)',
+                            color: isDark ? '#3dd6c3' : '#0f766e',
+                            border: isDark ? '1px solid rgba(61,214,195,0.35)' : '1px solid rgba(15,118,110,0.28)',
                             '& .MuiChip-label': { px: 1 },
                         }}
                     />
@@ -881,7 +880,7 @@ function TopologyView({ master, fillHeight, active = true }) {
                     py: 1,
                     borderTop: '1px solid',
                     borderColor: 'divider',
-                    bgcolor: isDark ? 'rgba(17,24,32,0.8)' : 'rgba(240,244,248,0.9)',
+                    bgcolor: isDark ? 'rgba(16,20,28,0.88)' : 'rgba(255,255,255,0.9)',
                 }}>
                     <Typography
                         variant="caption"

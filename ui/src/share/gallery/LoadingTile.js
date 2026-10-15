@@ -121,14 +121,16 @@ function LoadingTile({tile, master, name}) {
 
     return (
         <Paper
+            elevation={0}
+            className="media-card"
             sx={{
                 borderRadius: 2,
                 overflow: 'hidden',
                 bgcolor: 'background.paper',
                 position: 'relative',
-                animation: 'pulse 2s ease-in-out infinite',
-                border: '1px solid',
-                borderColor: hasError ? 'error.main' : 'divider',
+                borderColor: hasError ? 'error.main' : undefined,
+                borderTop: '2px solid',
+                borderTopColor: hasError ? 'error.main' : 'primary.main',
             }}
         >
             {/* Preview thumbnail with blur overlay */}

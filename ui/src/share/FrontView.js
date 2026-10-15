@@ -8,39 +8,30 @@ import CropFreeRounded from '@mui/icons-material/CropFreeRounded';
 import Slide from '@mui/material/Slide';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-import { keyframes } from '@mui/system';
-
-const float = keyframes`
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-`;
 
 const frames = [
     {
         title: 'Harbor',
         detail: '4.2 MB',
-        wash: 'linear-gradient(145deg, #7dd3fc 0%, #0f766e 70%)',
-        shift: -72,
-        tilt: -8,
-        delay: '0s',
+        wash: 'linear-gradient(165deg, #16343c 0%, #0f766e 100%)',
+        shift: -78,
+        tilt: -7,
         z: 1,
     },
     {
         title: 'Kitchen',
         detail: 'f/1.8 · 1/125',
-        wash: 'linear-gradient(160deg, #fde68a 0%, #f97316 55%, #7c2d12 100%)',
+        wash: 'linear-gradient(165deg, #3a291c 0%, #c2410c 100%)',
         shift: 0,
-        tilt: 2,
-        delay: '0.4s',
+        tilt: 1.5,
         z: 2,
     },
     {
         title: 'Night bus',
         detail: '12:41 Oct 15',
-        wash: 'linear-gradient(200deg, #c4b5fd 0%, #312e81 80%)',
-        shift: 72,
-        tilt: 8,
-        delay: '0.8s',
+        wash: 'linear-gradient(195deg, #1e1b4b 0%, #312e81 100%)',
+        shift: 78,
+        tilt: 7,
         z: 1,
     },
 ];
@@ -67,29 +58,27 @@ function PhotoStack() {
                         width: 132,
                         ml: '-66px',
                         zIndex: frame.z,
-                        animation: `${float} 5s ease-in-out ${frame.delay} infinite`,
-                        '@media (prefers-reduced-motion: reduce)': {
-                            animation: 'none',
-                        },
                     }}
                 >
                     <Box
                         sx={{
                             transform: `translateX(${frame.shift}px) rotate(${frame.tilt}deg)`,
-                            borderRadius: 2,
+                            borderRadius: 1.5,
                             overflow: 'hidden',
                             bgcolor: 'background.paper',
+                            border: '1px solid',
+                            borderColor: 'divider',
                             boxShadow: (theme) => theme.palette.mode === 'dark'
-                                ? '0 12px 30px rgba(0,0,0,0.35)'
-                                : '0 12px 30px rgba(15,23,42,0.12)',
+                                ? '0 16px 36px rgba(0,0,0,0.4)'
+                                : '0 14px 28px rgba(20,24,32,0.1)',
                         }}
                     >
-                        <Box sx={{ height: 78, background: frame.wash }} />
-                        <Box sx={{ px: 1, py: 0.75, textAlign: 'left' }}>
-                            <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
+                        <Box sx={{ height: 72, background: frame.wash }} />
+                        <Box sx={{ px: 1, py: 0.7, textAlign: 'left' }}>
+                            <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: 'text.primary', lineHeight: 1.2, letterSpacing: '-0.01em' }}>
                                 {frame.title}
                             </Typography>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', fontFamily: 'var(--font-mono)' }}>
                                 {frame.detail}
                             </Typography>
                         </Box>
@@ -149,34 +138,31 @@ function FrontView({ master }) {
 
     const buildView = () => (
         <Box
-            sx={(theme) => ({
+            sx={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                minHeight: 'calc(100vh - 64px)',
+                minHeight: 'calc(100vh - 72px)',
                 width: '100%',
                 px: { xs: 2, sm: 3 },
-                py: { xs: 4, sm: 6 },
-                '--dot-color': theme.palette.primary.main,
-                color: theme.palette.text.secondary,
-            })}
+                py: { xs: 3, sm: 5 },
+            }}
         >
             <Stack
                 spacing={0}
-                sx={{
-                    alignItems: 'center',
-                    width: '100%',
-                    maxWidth: { xs: '100%', sm: 500 },
-                    textAlign: 'center',
-                }}
+                className="stage-panel glass"
+                sx={{ alignItems: 'center' }}
             >
+                <Typography className="eyebrow" sx={{ mb: 1.25 }}>
+                    PhotoGroup
+                </Typography>
                 <Typography
                     variant="h3"
                     component="h1"
                     sx={{
-                        fontWeight: 800,
-                        letterSpacing: '-0.03em',
+                        fontWeight: 600,
                         color: 'text.primary',
+                        fontSize: { xs: '2rem', sm: '2.5rem' },
                         mb: 1,
                     }}
                 >
@@ -185,14 +171,14 @@ function FrontView({ master }) {
 
                 <Typography
                     variant="body1"
-                    sx={{ color: 'text.secondary', maxWidth: 420 }}
+                    sx={{ color: 'text.secondary', maxWidth: 420, lineHeight: 1.55 }}
                 >
                     Pass them around with the camera details still attached, see how big they are, and save them on your phone.
                 </Typography>
 
                 <PhotoStack />
 
-                <Stack spacing={1.5} sx={{ width: '100%', maxWidth: 320 }}>
+                <Stack spacing={1.25} sx={{ width: '100%', maxWidth: 320 }}>
                     <Button
                         onClick={openRoom}
                         variant="contained"
@@ -200,29 +186,36 @@ function FrontView({ master }) {
                         size="large"
                         fullWidth
                         startIcon={<AddPhotoAlternateRounded />}
-                        sx={{ py: 1.5, fontSize: '1rem' }}
+                        sx={{ py: 1.25, fontSize: '0.98rem' }}
                     >
                         Create Room
                     </Button>
                     <Button
                         onClick={() => master.emitter.emit('openQr')}
                         variant="outlined"
+                        color="inherit"
                         fullWidth
                         size="large"
                         startIcon={<CropFreeRounded />}
-                        sx={{ py: 1.3 }}
+                        sx={{ py: 1.15, color: 'text.primary' }}
                     >
                         Scan QR to Join
                     </Button>
                 </Stack>
 
-                {/* Bottom caption */}
+                <Box className="spec-row" aria-hidden="true">
+                    <span>Direct</span>
+                    <span>Original</span>
+                    <span>No account</span>
+                </Box>
+
                 <Typography
                     variant="body2"
                     sx={{
-                        mt: 4,
+                        mt: 2.5,
                         color: 'text.secondary',
                         maxWidth: 380,
+                        lineHeight: 1.5,
                     }}
                 >
                     Pictures move straight from one person to another. The room shows how you're connected.
@@ -232,7 +225,7 @@ function FrontView({ master }) {
     );
 
     return (
-        <Slide direction="up" in={!hasRoom() && visible} mountOnEnter unmountOnExit>
+        <Slide direction="up" in={!hasRoom() && visible} mountOnEnter unmountOnExit timeout={160}>
             <div>
                 {buildView()}
             </div>

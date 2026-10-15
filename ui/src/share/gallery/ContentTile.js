@@ -208,23 +208,13 @@ function ContentTile(props) {
 
     return (
         <Paper
+            elevation={0}
+            className="media-card"
             sx={{
                 position: 'relative',
                 borderRadius: 2,
                 overflow: 'hidden',
                 bgcolor: 'background.paper',
-                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                '&:hover': {
-                    transform: 'translateY(-2px)',
-                    boxShadow: (t) =>
-                        t.palette.mode === 'dark'
-                            ? '0 8px 32px rgba(0,229,255,0.08)'
-                            : '0 8px 32px rgba(0,0,0,0.12)',
-                },
-                '@media (prefers-reduced-motion: reduce)': {
-                    transition: 'none',
-                    '&:hover': { transform: 'none' },
-                },
             }}
         >
             <Box
@@ -271,7 +261,7 @@ function ContentTile(props) {
                     {tile.fileName}
                 </Typography>
                 {tile.fileSize && (
-                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.35, fontFamily: 'var(--font-mono)' }}>
                         {tile.fileSize}
                     </Typography>
                 )}
