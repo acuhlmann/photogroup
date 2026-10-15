@@ -146,11 +146,16 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 px: 2,
-                py: 1.5,
+                py: 1.25,
                 borderBottom: 1,
                 borderColor: 'divider',
             }}>
-                <Typography variant="subtitle2">How you connect</Typography>
+                <Box>
+                    <Typography className="tech-text" sx={{ color: 'primary.main', lineHeight: 1.2 }}>
+                        Link
+                    </Typography>
+                    <Typography variant="subtitle2" sx={{ mt: 0.25 }}>How you connect</Typography>
+                </Box>
                 <IconButton
                     size="small"
                     aria-label="Hide connection map"
@@ -200,7 +205,9 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
                         minHeight: 0,
                         borderLeft: 1,
                         borderColor: 'divider',
-                        bgcolor: 'background.default',
+                        bgcolor: 'transparent',
+                        background: 'color-mix(in srgb, var(--paper) 86%, transparent)',
+                        backdropFilter: 'blur(16px)',
                     }}>
                         {connectionPanel}
                     </Box>

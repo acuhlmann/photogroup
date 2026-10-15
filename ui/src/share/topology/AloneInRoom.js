@@ -20,12 +20,16 @@ function AloneInRoom({ onInvite }) {
             }}
         >
             <Stack
+                className="glass"
                 spacing={1.25}
                 sx={{
                     alignItems: 'center',
                     pointerEvents: 'auto',
                     textAlign: 'center',
-                    maxWidth: 240,
+                    maxWidth: 260,
+                    px: 2,
+                    py: 2,
+                    borderRadius: 2,
                 }}
             >
                 <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>

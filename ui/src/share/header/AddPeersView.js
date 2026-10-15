@@ -252,16 +252,18 @@ function AddPeersView({ master }) {
                             {/* QR Code on dark background */}
                             <Box
                                 sx={{
-                                    bgcolor: '#111820',
+                                    bgcolor: '#10141c',
                                     p: 2.5,
                                     borderRadius: 2,
+                                    border: '1px solid',
+                                    borderColor: 'divider',
                                     display: 'inline-flex',
                                 }}
                             >
                                 <QRCodeSVG
                                     value={url}
-                                    bgColor="#111820"
-                                    fgColor="#e4e8ee"
+                                    bgColor="#10141c"
+                                    fgColor="#e8eef6"
                                     size={180}
                                 />
                             </Box>

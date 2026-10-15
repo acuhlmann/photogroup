@@ -3,7 +3,6 @@ import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import { useTheme } from '@mui/material/styles';
 
 import TopologyView from './topology/TopologyView';
 import MeView from './MeView';
@@ -25,7 +24,6 @@ function TabPanel({ children, value, index }) {
 }
 
 function NetworkPanel({ master, isMobile, isCenter, wtNumPeers }) {
-    const theme = useTheme();
     const [tabValue, setTabValue] = useState(0);
 
     const handleTabChange = useCallback((event, newValue) => {
@@ -37,7 +35,7 @@ function NetworkPanel({ master, isMobile, isCenter, wtNumPeers }) {
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
-            bgcolor: 'background.default',
+            bgcolor: 'transparent',
         }}>
             {/* Tabs */}
             <Tabs
@@ -45,21 +43,19 @@ function NetworkPanel({ master, isMobile, isCenter, wtNumPeers }) {
                 onChange={handleTabChange}
                 variant="fullWidth"
                 sx={{
-                    minHeight: 36,
+                    minHeight: 40,
+                    borderBottom: 1,
+                    borderColor: 'divider',
                     '& .MuiTab-root': {
-                        minHeight: 36,
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        textTransform: 'none',
-                    },
-                    '& .MuiTabs-indicator': {
-                        height: 2,
-                        borderRadius: 1,
+                        minHeight: 40,
+                        fontSize: '0.78rem',
+                        fontFamily: 'var(--font-mono)',
+                        letterSpacing: '0.04em',
                     },
                 }}
             >
-                <Tab label="Network Map" />
-                <Tab label="My Connection" />
+                <Tab label="Map" />
+                <Tab label="This device" />
             </Tabs>
 
             {/* Tab content */}

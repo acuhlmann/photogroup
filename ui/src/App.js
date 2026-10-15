@@ -25,7 +25,6 @@ import Uploader from "./share/header/Uploader";
 import { SnackbarProvider } from 'notistack';
 import Visibility from "visibilityjs";
 import AddPeersView from "./share/header/AddPeersView";
-import HubRounded from '@mui/icons-material/HubRounded';
 
 // Helper function to open IndexedDB for share target files
 function openShareTargetDB() {
@@ -263,48 +262,44 @@ function App({theme: propsTheme, prefersDarkMode}) {
                 maxSnack={3}>
                 <div className="App">
                     <header className="App-header">
-                        <AppBar position="static" enableColorOnDark>
+                        <AppBar position="static" enableColorOnDark sx={{ color: 'text.primary' }}>
                             <Toolbar
                                 variant="dense"
                                 sx={{
-                                    gap: 1,
-                                    py: 0.5,
-                                    minHeight: { xs: 48, sm: 56 },
+                                    gap: 1.25,
+                                    py: 0.75,
+                                    minHeight: { xs: 52, sm: 58 },
                                     alignItems: 'center',
                                 }}
                             >
-                                {/* Logo + title */}
                                 <Stack
                                     direction="row"
-                                    spacing={1}
+                                    spacing={1.25}
                                     sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}
                                 >
-                                    <HubRounded sx={{ fontSize: 22, opacity: 0.9 }} />
+                                    <Box className="mark" aria-hidden="true" />
                                     <Stack direction="column" spacing={0}>
                                         <Typography
                                             variant="subtitle1"
                                             component="h1"
                                             sx={{
-                                                fontWeight: 700,
-                                                lineHeight: 1.2,
-                                                fontSize: { xs: '0.95rem', sm: '1.1rem' },
-                                                letterSpacing: '-0.01em',
+                                                fontWeight: 600,
+                                                lineHeight: 1.15,
+                                                fontSize: { xs: '0.98rem', sm: '1.05rem' },
+                                                letterSpacing: '-0.03em',
                                             }}
                                         >
                                             PhotoGroup
                                         </Typography>
                                         <Typography
-                                            variant="caption"
+                                            className="tech-text"
                                             sx={{
-                                                opacity: 0.7,
                                                 display: { xs: 'none', sm: 'block' },
                                                 lineHeight: 1.2,
-                                                fontSize: '0.65rem',
-                                                fontFamily: 'var(--font-mono)',
-                                                letterSpacing: '0.04em',
+                                                color: 'text.secondary',
                                             }}
                                         >
-                                            Share pictures, keep the details
+                                            Peer to peer · lossless
                                         </Typography>
                                     </Stack>
                                 </Stack>
@@ -327,39 +322,39 @@ function App({theme: propsTheme, prefersDarkMode}) {
                             {/* Network status bar */}
                             {(networkStatus.peers > 0 || hasActivity) && (
                                 <Box
-                                    className="network-status-bar"
+                                    className="telemetry"
                                     sx={{
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: 1.5,
                                         px: 2,
-                                        py: 0.25,
-                                        borderTop: '1px solid',
-                                        borderColor: 'rgba(255,255,255,0.06)',
-                                        bgcolor: 'rgba(0,0,0,0.15)',
+                                        py: 0.4,
+                                        borderTop: 1,
+                                        borderColor: 'divider',
+                                        color: 'text.secondary',
                                     }}
                                 >
+                                    <Box className="live-dot" aria-hidden="true" />
                                     {networkStatus.peers > 0 && (
                                         <Chip
                                             size="small"
                                             label={`${networkStatus.peers} peer${networkStatus.peers !== 1 ? 's' : ''}`}
                                             variant="outlined"
                                             sx={{
-                                                height: 18,
-                                                fontSize: '0.65rem',
-                                                borderColor: 'rgba(255,255,255,0.15)',
-                                                color: 'inherit',
+                                                height: 20,
+                                                borderColor: 'divider',
+                                                color: 'text.secondary',
                                                 '& .MuiChip-label': { px: 1 },
                                             }}
                                         />
                                     )}
                                     {networkStatus.downSpeed && (
-                                        <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.8 }}>
+                                        <Typography variant="caption" sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'text.secondary' }}>
                                             ↓ {networkStatus.downSpeed}
                                         </Typography>
                                     )}
                                     {networkStatus.upSpeed && (
-                                        <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.8 }}>
+                                        <Typography variant="caption" sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'text.secondary' }}>
                                             ↑ {networkStatus.upSpeed}
                                         </Typography>
                                     )}

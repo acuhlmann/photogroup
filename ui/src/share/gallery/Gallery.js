@@ -376,30 +376,16 @@ function Gallery(props) {
                 <Box
                     component="label"
                     htmlFor="contained-button-file"
-                    sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        minHeight: '60vh',
-                        px: 3,
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        border: '2px dashed',
-                        borderColor: 'divider',
-                        borderRadius: 3,
-                        color: 'text.secondary',
-                        '&:hover': {
-                            borderColor: 'primary.main',
-                            color: 'primary.main',
-                        },
-                    }}
+                    className="drop-target"
                 >
-                    <CloudUploadIcon sx={{ fontSize: 56, mb: 1.5 }} />
-                    <Typography variant="h6" sx={{ color: 'text.primary', mb: 0.5 }}>
+                    <CloudUploadIcon sx={{ fontSize: 40, mb: 1.5, color: 'primary.main' }} />
+                    <Typography className="tech-text" sx={{ mb: 1, color: 'primary.main' }}>
+                        Drop or choose
+                    </Typography>
+                    <Typography variant="h6" sx={{ color: 'text.primary', mb: 0.5, fontWeight: 600 }}>
                         Share a photo
                     </Typography>
-                    <Typography variant="body2">
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                         Drop pictures here, or tap to choose some from this device.
                     </Typography>
                 </Box>
@@ -425,22 +411,15 @@ function Gallery(props) {
 
             {dragOver && (
                 <Box
+                    className="drop-target"
                     sx={{
                         position: 'absolute',
                         inset: 0,
                         zIndex: 20,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        border: '2px dashed',
-                        borderColor: 'primary.main',
+                        minHeight: 0,
                         borderRadius: 2,
-                        backgroundColor: (t) =>
-                            t.palette.mode === 'dark'
-                                ? 'rgba(255,255,255,0.06)'
-                                : 'rgba(0,0,0,0.04)',
-                        backdropFilter: 'blur(4px)',
+                        backgroundColor: 'var(--accent-soft)',
+                        backdropFilter: 'blur(6px)',
                         pointerEvents: 'none',
                     }}
                 >

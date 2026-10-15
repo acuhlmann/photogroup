@@ -66,7 +66,7 @@ function MetadataRows({ items }) {
         <Box component="dl" sx={{ m: 0 }}>
             {items.map(item => (
                 <Box key={item.key} sx={{ py: 1, borderBottom: 1, borderColor: 'divider' }}>
-                    <Typography component="dt" variant="caption" sx={{ color: 'text.secondary' }}>
+                    <Typography component="dt" variant="caption" sx={{ color: 'text.secondary', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '0.65rem' }}>
                         {labelForMetadataKey(item.key)}
                     </Typography>
                     <Typography component="dd" variant="body2" sx={{ m: 0 }}>
@@ -173,7 +173,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                     minHeight: 0,
                     display: 'flex',
                     flexDirection: 'column',
-                    bgcolor: '#0a0e14',
+                    bgcolor: '#07090d',
                 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
                         <IconButton aria-label="Close photo" onClick={onClose} sx={{ color: '#fff' }}>
@@ -204,7 +204,19 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                             <Typography sx={{ color: '#fff' }}>{tile.fileName}</Typography>
                         )}
                     </Box>
-                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', p: 2 }}>
+                    <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{
+                            alignItems: 'center',
+                            mx: 1.5,
+                            mb: 1.5,
+                            p: 1,
+                            borderRadius: 2,
+                            bgcolor: 'rgba(255,255,255,0.04)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                        }}
+                    >
                         <IconButton
                             aria-label="Previous photo"
                             onClick={() => onIndexChange(index - 1)}
@@ -245,7 +257,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                         {tile.fileName}
                     </Typography>
                     {tile.fileSize && (
-                        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
                             {tile.fileSize}
                         </Typography>
                     )}
