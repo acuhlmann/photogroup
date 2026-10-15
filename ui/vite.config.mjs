@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import fs from 'fs';
 import path from 'path';
+import { transformSync } from 'rolldown/experimental';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
@@ -35,6 +37,50 @@ window.process = window.process || {
   };
 };
 
+// Source files use JSX inside .js. Vite 8's production transform parses .js as
+// plain JavaScript, so compile those files to JS before that pass.
+const jsxInJsPlugin = () => ({
+  name: 'jsx-in-js',
+  enforce: 'pre',
+  load(id) {
+    const file = id.split('?')[0];
+    if (!file.endsWith('.js') || !file.includes(`${path.sep}src${path.sep}`)) {
+      return null;
+    }
+    const source = fs.readFileSync(file, 'utf8');
+    const result = transformSync(file, source, {
+      lang: 'jsx',
+      jsx: { runtime: 'automatic' },
+      sourcemap: true,
+    });
+    if (result.errors?.length) {
+      const message = result.errors.map((error) => error.message || String(error)).join('\n');
+      this.error(message);
+    }
+    return {
+      code: result.code,
+      map: result.map,
+      moduleType: 'js',
+    };
+  },
+});
+
+// WebTorrent's browser field nulls conn-pool, but the client still reads UTP_SUPPORT.
+const webtorrentBrowserPlugin = () => ({
+  name: 'webtorrent-browser-stubs',
+  enforce: 'pre',
+  transform(code, id) {
+    const file = id.split('?')[0];
+    if (!file.endsWith(`${path.sep}webtorrent${path.sep}index.js`)) return null;
+    if (!code.includes('ConnPool.UTP_SUPPORT')) return null;
+    // Vite replaces the browser-excluded conn-pool module with undefined.
+    return code.replaceAll(
+      'ConnPool.UTP_SUPPORT',
+      '(ConnPool == null ? false : ConnPool.UTP_SUPPORT)'
+    );
+  },
+});
+
 // Plugin to resolve Node.js built-in modules to browser stubs
 const nodePolyfillPlugin = () => {
   return {
@@ -53,6 +99,8 @@ const nodePolyfillPlugin = () => {
 
 export default defineConfig({
   plugins: [
+    jsxInJsPlugin(),
+    webtorrentBrowserPlugin(),
     processPolyfillPlugin(),
     nodePolyfillPlugin(),
     react()
@@ -67,21 +115,39 @@ export default defineConfig({
     },
   },
   publicDir: 'public',
-  esbuild: {
-    loader: 'jsx',
+  // Vite 8 transforms with Oxc. .js sources contain JSX, and the default
+  // exclude drops .js files unless it is cleared and lang is set to jsx.
+  oxc: {
     include: /src\/.*\.jsx?$/,
     exclude: [],
+    lang: 'jsx',
+    jsx: {
+      runtime: 'classic',
+    },
   },
   optimizeDeps: {
-    esbuildOptions: {
-      loader: {
+    rolldownOptions: {
+      plugins: [{
+        name: 'webtorrent-utp-guard',
+        transform(code, id) {
+          if (!id.includes(`${path.sep}webtorrent${path.sep}index.js`)) return null;
+          if (!code.includes('ConnPool.UTP_SUPPORT')) return null;
+          return code.replaceAll(
+            'ConnPool.UTP_SUPPORT',
+            '(ConnPool == null ? false : ConnPool.UTP_SUPPORT)'
+          );
+        },
+      }],
+      moduleTypes: {
         '.js': 'jsx',
       },
-      define: {
-        global: 'globalThis',
-        'process.env.NODE_ENV': '"development"',
-        'process.browser': 'true',
-        'process.version': '"v20.0.0"',
+      transform: {
+        define: {
+          global: 'globalThis',
+          'process.env.NODE_ENV': '"development"',
+          'process.browser': 'true',
+          'process.version': '"v20.0.0"',
+        },
       },
     },
     exclude: ['bittorrent-dht', 'load-ip-set'],
@@ -101,6 +167,9 @@ export default defineConfig({
       'fs': path.resolve(__dirname, 'src/compatibility/fs-stub.js'),
       'os': path.resolve(__dirname, 'src/compatibility/os-stub.js'),
       'buffer': 'buffer',
+      // Vite externalizes Node's events builtin. The npm package supports both
+      // `class extends EventEmitter` and legacy `EventEmitter.call(this)`.
+      'events': path.resolve(__dirname, 'node_modules/events/events.js'),
       '@mui/styles': path.resolve(__dirname, 'src/share/compatibility/muiStyles.js'),
     },
     conditions: ['browser', 'module', 'import'],

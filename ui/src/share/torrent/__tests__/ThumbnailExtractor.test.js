@@ -9,7 +9,7 @@ import {
 
 // Note: getPreviewFromImage, getPreviewFromAudio, and extractThumbnails
 // require browser APIs (Canvas, Image, URL.createObjectURL) and external
-// dependencies (exifr, music-metadata-browser) that are difficult to mock.
+// dependencies (exifr, music-metadata) that are difficult to mock.
 // These functions are better tested in integration/e2e tests.
 // Here we test the pure utility functions.
 

@@ -144,7 +144,7 @@ photogroup2/
 │   │   │   └── security/           # Encryption features
 │   │   └── compatibility/          # Node.js polyfills for browser
 │   ├── e2e/                 # Playwright end-to-end tests
-│   └── vite.config.js       # Build config (proxies /api to :8081)
+│   └── vite.config.mjs      # Build config (proxies /api to :8081)
 ├── .github/workflows/       # CI/CD (test.yml, deploy.yml)
 ├── Dockerfile               # Multi-stage production build
 ├── Dockerfile.dev           # Development with hot reload

@@ -213,13 +213,15 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
                     ModalProps={{
                         keepMounted: true, // Keep Gallery mounted so it receives photo events while closed
                     }}
-                    PaperProps={{
+                    slotProps={{
+                        paper: {
                         sx: {
                             width: isMobile ? '100%' : galleryDrawerWidth,
                             height: isMobile ? '85vh' : '100%',
                             borderTopLeftRadius: isMobile ? 16 : 0,
                             borderTopRightRadius: isMobile ? 16 : 0,
                             bgcolor: 'background.default',
+                        },
                         },
                     }}
                 >

@@ -80,7 +80,8 @@ function PasswordInput({classes, onChange}) {
                 label="Password"
                 value={password}
                 onChange={handleChange}
-                InputProps={{
+                slotProps={{
+                    input: {
                     endAdornment: (
                         <InputAdornment position="end">
                             <IconButton
@@ -91,6 +92,7 @@ function PasswordInput({classes, onChange}) {
                             </IconButton>
                         </InputAdornment>
                     ),
+                    },
                 }}
             />
 

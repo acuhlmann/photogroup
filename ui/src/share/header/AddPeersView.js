@@ -218,7 +218,7 @@ function AddPeersView({ master }) {
             <Dialog
                 open={open}
                 onClose={() => show(false)}
-                TransitionComponent={Transition}
+                slots={{ transition: Transition }}
                 keepMounted
                 fullScreen={isMobile}
                 maxWidth="sm"
