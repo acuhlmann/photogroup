@@ -304,7 +304,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
                                                 letterSpacing: '0.04em',
                                             }}
                                         >
-                                            P2P Photo Collaboration
+                                            Share pictures, keep the details
                                         </Typography>
                                     </Stack>
                                 </Stack>

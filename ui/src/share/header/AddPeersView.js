@@ -151,6 +151,12 @@ function AddPeersView({ master }) {
             setOpenQr(true);
         };
 
+        const handleOpenShare = () => {
+            setVisible(true);
+            setOpen(true);
+            setOpenQr(false);
+        };
+
         const handleNumPeersChange = (numPeers) => {
             setNumPeers(numPeers);
         };
@@ -158,12 +164,14 @@ function AddPeersView({ master }) {
         emitter.on('openRoomStart', handleOpenRoomStart);
         emitter.on('openRoomEnd', handleOpenRoomEnd);
         emitter.on('openQr', handleOpenQr);
+        emitter.on('openShare', handleOpenShare);
         emitter.on('numPeersChange', handleNumPeersChange);
 
         return () => {
             emitter.removeListener('openRoomStart', handleOpenRoomStart);
             emitter.removeListener('openRoomEnd', handleOpenRoomEnd);
             emitter.removeListener('openQr', handleOpenQr);
+            emitter.removeListener('openShare', handleOpenShare);
             emitter.removeListener('numPeersChange', handleNumPeersChange);
         };
     }, [master.emitter]);

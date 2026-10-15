@@ -115,31 +115,18 @@ async function dismissDialogs(page) {
 }
 
 /**
- * Open the gallery drawer by clicking the gallery FAB button.
- * The gallery is inside a slide-in drawer triggered by a FAB with a CollectionsRounded icon.
- * Safe to call repeatedly in polling loops - returns quickly if drawer is already open or FAB not found.
+ * Photos render on the main canvas, so there is no gallery drawer to open.
+ * Dismiss a blocking dialog (for example the share-room dialog) if one is up.
+ * Safe to call repeatedly in polling loops.
  * @param {Page} page - Playwright page object
  */
 async function openGalleryDrawer(page) {
-  // Quick check: is the drawer already open?
-  const drawerOpen = await page.locator('text=Received Photos').isVisible().catch(() => false);
-  if (drawerOpen) return;
-
-  // Dismiss any blocking dialog (e.g. Share Room dialog) before trying to click FAB
   await dismissDialogs(page);
-
-  // Try to click the gallery FAB
-  const galleryFab = page.locator('button[class*="MuiFab"]');
-  const fabVisible = await galleryFab.isVisible().catch(() => false);
-  if (fabVisible) {
-    await galleryFab.click({ force: true }).catch(() => {});
-    await page.waitForTimeout(400);
-  }
 }
 
 /**
  * Wait for an image to appear in the page (content image, not UI icons).
- * Opens the gallery drawer first since images are displayed inside it.
+ * The gallery is the main view, so images are on the page.
  * @param {Page} page - Playwright page object
  * @param {number} timeout - Maximum time to wait in milliseconds
  * @returns {Promise<boolean>} - True if content image found

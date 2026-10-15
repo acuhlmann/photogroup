@@ -4,10 +4,9 @@ import Gallery from "./gallery/Gallery";
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import CloseRounded from '@mui/icons-material/CloseRounded';
-import CollectionsRounded from '@mui/icons-material/CollectionsRounded';
+import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
+import HubRounded from '@mui/icons-material/HubRounded';
 import Box from '@mui/material/Box';
-import Badge from '@mui/material/Badge';
-import Fab from '@mui/material/Fab';
 import Drawer from '@mui/material/Drawer';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -23,12 +22,13 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
     const deferredPromptRef = useRef(null);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-    const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
 
     const [hasRoom, setHasRoom] = useState(false);
     const [wtNumPeers, setWtNumPeers] = useState(0);
-    const [galleryOpen, setGalleryOpen] = useState(false);
-    const [photoCount, setPhotoCount] = useState(0);
+    const [peopleOpen, setPeopleOpen] = useState(() => {
+        if (typeof window === 'undefined') return true;
+        return window.matchMedia('(min-width: 900px)').matches;
+    });
 
     useEffect(() => {
         if(!WebTorrent.WEBRTC_SUPPORT) {
@@ -55,18 +55,9 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             setWtNumPeers(torrent.numPeers);
         };
 
-        const handlePhotos = (data) => {
-            if (data.type === 'add') {
-                setPhotoCount(prev => prev + (Array.isArray(data.item) ? data.item.length : 1));
-            } else if (data.type === 'delete') {
-                setPhotoCount(prev => Math.max(0, prev - 1));
-            }
-        };
-
         master.emitter.on('showError', handleShowError);
         master.emitter.on('readyToUpload', handleReadyToUpload);
         master.emitter.on('wire', handleWire);
-        master.emitter.on('photos', handlePhotos);
 
         const handleBeforeInstallPrompt = (e) => {
             console.info('beforeinstallprompt');
@@ -95,7 +86,6 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             master.emitter.removeListener('showError', handleShowError);
             master.emitter.removeListener('readyToUpload', handleReadyToUpload);
             master.emitter.removeListener('wire', handleWire);
-            master.emitter.removeListener('photos', handlePhotos);
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
             window.removeEventListener('appinstalled', handleAppInstalled);
         };
@@ -123,12 +113,6 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
         });
     }, [enqueueSnackbar, closeSnackbar]);
 
-    const subscribeToPush = useCallback(() => {
-        Notification.requestPermission(status => {
-            console.info('Notification.status' + status);
-        });
-    }, []);
-
     const install = useCallback(() => {
         if (deferredPromptRef.current) {
             deferredPromptRef.current.prompt();
@@ -155,125 +139,129 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
         );
     }, [snack, install]);
 
-    // Gallery drawer width
-    const galleryDrawerWidth = isDesktop ? 480 : 380;
+    const connectionPanel = (
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+            <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                px: 2,
+                py: 1.5,
+                borderBottom: 1,
+                borderColor: 'divider',
+            }}>
+                <Typography variant="subtitle2">How you connect</Typography>
+                <IconButton
+                    size="small"
+                    aria-label="Hide connection map"
+                    onClick={() => setPeopleOpen(false)}
+                >
+                    <ChevronRightRounded fontSize="small" />
+                </IconButton>
+            </Box>
+            <Box sx={{ flex: 1, minHeight: 0 }}>
+                <NetworkPanel
+                    master={master}
+                    isMobile={isMobile}
+                    isCenter
+                    wtNumPeers={wtNumPeers}
+                />
+            </Box>
+        </Box>
+    );
 
-    // When room is active: network-centric layout with gallery drawer
+    // Room: photos fill the page. The peer map sits beside them, or in a sheet on a phone.
     if (hasRoom) {
         return (
             <Box sx={{
+                flex: 1,
+                minHeight: 0,
                 display: 'flex',
-                flexDirection: 'column',
-                height: 'calc(100vh - 56px)',
                 overflow: 'hidden',
                 position: 'relative',
             }}>
-                {/* Main content: Network map takes center stage */}
                 <Box sx={{
                     flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden',
+                    minWidth: 0,
+                    overflow: 'auto',
+                    px: { xs: 1.5, sm: 2 },
+                    pt: { xs: 1.5, sm: 2 },
+                    pb: isMobile ? 10 : 2,
                 }}>
-                    <NetworkPanel
-                        master={master}
-                        isMobile={false}
-                        isCenter={true}
-                        wtNumPeers={wtNumPeers}
-                    />
+                    <Gallery master={master} />
                 </Box>
 
-                {/* Gallery FAB - only show when photos received */}
-                {photoCount > 0 && (
-                    <Fab
-                        size="medium"
-                        color="primary"
-                        onClick={() => setGalleryOpen(true)}
-                        sx={{
-                            position: 'fixed',
-                            bottom: 20,
-                            right: 20,
-                            zIndex: 1050,
-                            boxShadow: theme.palette.mode === 'dark'
-                                ? '0 0 24px rgba(0,229,255,0.3)'
-                                : '0 4px 12px rgba(0,0,0,0.15)',
-                        }}
-                    >
-                        <Badge badgeContent={photoCount} color="secondary" overlap="circular">
-                            <CollectionsRounded />
-                        </Badge>
-                    </Fab>
+                {!isMobile && peopleOpen && (
+                    <Box sx={{
+                        width: 360,
+                        flexShrink: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minHeight: 0,
+                        borderLeft: 1,
+                        borderColor: 'divider',
+                        bgcolor: 'background.default',
+                    }}>
+                        {connectionPanel}
+                    </Box>
                 )}
 
-                {/* Gallery drawer - slides in from right */}
-                <Drawer
-                    anchor={isMobile ? "bottom" : "right"}
-                    open={galleryOpen}
-                    onClose={() => setGalleryOpen(false)}
-                    ModalProps={{
-                        keepMounted: true, // Keep Gallery mounted so it receives photo events while closed
-                    }}
-                    slotProps={{
-                        paper: {
-                        sx: {
-                            width: isMobile ? '100%' : galleryDrawerWidth,
-                            height: isMobile ? '85vh' : '100%',
-                            borderTopLeftRadius: isMobile ? 16 : 0,
-                            borderTopRightRadius: isMobile ? 16 : 0,
-                            bgcolor: 'background.default',
-                        },
-                        },
-                    }}
-                >
-                    {/* Drawer header */}
+                {!isMobile && !peopleOpen && (
                     <Box sx={{
+                        width: 48,
+                        flexShrink: 0,
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        px: 2,
-                        py: 1.5,
-                        borderBottom: `1px solid ${theme.palette.divider}`,
-                        bgcolor: 'background.paper',
+                        alignItems: 'flex-start',
+                        justifyContent: 'center',
+                        pt: 1,
+                        borderLeft: 1,
+                        borderColor: 'divider',
                     }}>
-                        {isMobile && (
-                            <Box sx={{
-                                position: 'absolute',
-                                top: 8,
-                                left: '50%',
-                                transform: 'translateX(-50%)',
-                                width: 40,
-                                height: 4,
-                                borderRadius: 2,
-                                bgcolor: 'divider',
-                            }} />
-                        )}
-                        <Typography
-                            variant="subtitle2"
-                            sx={{
-                                fontFamily: 'var(--font-mono)',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.1em',
-                                fontSize: '0.75rem',
-                                color: 'text.secondary',
-                                mt: isMobile ? 1.5 : 0,
-                            }}
+                        <IconButton
+                            aria-label="Show how people connect"
+                            onClick={() => setPeopleOpen(true)}
                         >
-                            Received Photos
-                        </Typography>
-                        <IconButton size="small" onClick={() => setGalleryOpen(false)}>
-                            <CloseRounded fontSize="small" />
+                            <HubRounded />
                         </IconButton>
                     </Box>
+                )}
 
-                    {/* Gallery content */}
-                    <Box sx={{
-                        overflow: 'auto',
-                        flex: 1,
-                        p: 2,
-                    }}>
-                        <Gallery master={master} />
-                    </Box>
-                </Drawer>
+                {isMobile && (
+                    <>
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            startIcon={<HubRounded />}
+                            aria-label="Show how people connect"
+                            onClick={() => setPeopleOpen(true)}
+                            sx={{
+                                position: 'fixed',
+                                bottom: 16,
+                                right: 16,
+                                zIndex: 10,
+                            }}
+                        >
+                            People
+                        </Button>
+                        <Drawer
+                            anchor="bottom"
+                            open={peopleOpen}
+                            onClose={() => setPeopleOpen(false)}
+                            slotProps={{
+                                paper: {
+                                    sx: {
+                                        height: '72vh',
+                                        borderTopLeftRadius: 16,
+                                        borderTopRightRadius: 16,
+                                        bgcolor: 'background.default',
+                                    },
+                                },
+                            }}
+                        >
+                            {connectionPanel}
+                        </Drawer>
+                    </>
+                )}
             </Box>
         );
     }
@@ -281,7 +269,9 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
     // No room: show FrontView landing
     return (
         <Box sx={{
-            minHeight: 'calc(100vh - 48px)',
+            flex: 1,
+            overflow: 'auto',
+            minHeight: 0,
             px: { xs: 1.5, sm: 2 },
             py: { xs: 1.5, sm: 2 },
         }}>

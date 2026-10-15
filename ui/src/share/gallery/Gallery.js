@@ -13,14 +13,17 @@ import LoadingTile from "./LoadingTile";
 import StringUtil from "../util/StringUtil";
 import ContentTile from "./ContentTile";
 import GalleryPhotoHandler from "./GalleryPhotoHandler";
+import PhotoViewer from "./PhotoViewer";
 import { getBlobAndEmit } from "../torrent/BlobUtils";
 import { cacheGet } from "../util/ImageBlobCache";
+import { runViewTransition } from "./viewTransition";
 
 function Gallery(props) {
     const {master} = props;
     const theme = useTheme();
     const [tiles, setTiles] = useState([]);
     const [dragOver, setDragOver] = useState(false);
+    const [selectedIndex, setSelectedIndex] = useState(null);
     const photoHandlerRef = useRef(null);
     const dragCounterRef = useRef(0);
 
@@ -52,7 +55,11 @@ function Gallery(props) {
         e.stopPropagation();
         setDragOver(false);
         dragCounterRef.current = 0;
-    }, []);
+        const files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files.length > 0 && master.torrentAddition) {
+            master.torrentAddition.seed(files);
+        }
+    }, [master]);
 
     const getBlob = useCallback((photo) => {
         // Use the simplified BlobUtils module for blob retrieval
@@ -317,42 +324,105 @@ function Gallery(props) {
         updateGalleryState();
     }, [tiles, updateGalleryState]);
 
+    const openAt = useCallback((index) => {
+        runViewTransition(() => setSelectedIndex(index));
+    }, []);
+
+    const showIndex = useCallback((index) => {
+        setSelectedIndex(index);
+    }, []);
+
+    const closeViewer = useCallback(() => {
+        runViewTransition(() => setSelectedIndex(null));
+    }, []);
+
+    useEffect(() => {
+        if (selectedIndex != null && selectedIndex >= tiles.length) {
+            setSelectedIndex(tiles.length ? tiles.length - 1 : null);
+        }
+    }, [tiles.length, selectedIndex]);
+
     const buildTile = useCallback((tile, index, master) => {
         tile.picSummary = StringUtil.addEmptySpaces([tile.picDateTaken, FileUtil.truncateFileName(tile.fileName)]);
         let name = StringUtil.addEmptySpaces([tile.picSummary, tile.fileSize, tile.cameraSettings]);
+        const key = tile.infoHash || index;
 
         if(tile.loading) {
-            return <LoadingTile key={index} name={name} tile={tile}
+            return <LoadingTile key={key} name={name} tile={tile}
                                 master={master}/>
         } else {
-            return <ContentTile key={index} name={name} tile={tile}
-                                master={master} />
+            return <ContentTile key={key} name={name} tile={tile}
+                                master={master}
+                                selected={selectedIndex === index}
+                                hero={tiles.length === 1}
+                                onOpen={() => openAt(index)} />
         }
-    }, []);
+    }, [openAt, selectedIndex, tiles.length]);
 
     return (
         <Box
-            className="stagger-children"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             sx={{
                 position: 'relative',
-                columnCount: { xs: 1, sm: 2, md: 2, lg: 3, xl: 4 },
-                columnGap: theme.spacing(2),
                 width: '100%',
-                padding: theme.spacing(1, 0, 3),
+                minHeight: tiles.length === 0 ? '60vh' : undefined,
                 backgroundColor: 'background.default',
-                '& > *': {
-                    breakInside: 'avoid',
-                    marginBottom: theme.spacing(2),
-                },
             }}
         >
-            {tiles.map((tile, index) => buildTile(tile, index, master))}
+            {tiles.length === 0 ? (
+                <Box
+                    component="label"
+                    htmlFor="contained-button-file"
+                    sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minHeight: '60vh',
+                        px: 3,
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        border: '2px dashed',
+                        borderColor: 'divider',
+                        borderRadius: 3,
+                        color: 'text.secondary',
+                        '&:hover': {
+                            borderColor: 'primary.main',
+                            color: 'primary.main',
+                        },
+                    }}
+                >
+                    <CloudUploadIcon sx={{ fontSize: 56, mb: 1.5 }} />
+                    <Typography variant="h6" sx={{ color: 'text.primary', mb: 0.5 }}>
+                        Share a photo
+                    </Typography>
+                    <Typography variant="body2">
+                        Drop pictures here, or tap to choose some from this device.
+                    </Typography>
+                </Box>
+            ) : (
+                <Box
+                    className="stagger-children"
+                    sx={{
+                        columnCount: tiles.length < 2 ? 1 : { xs: 1, sm: 2, xl: 3 },
+                        columnGap: theme.spacing(2),
+                        width: '100%',
+                        maxWidth: tiles.length < 2 ? 880 : 'none',
+                        mx: tiles.length < 2 ? 'auto' : 0,
+                        padding: theme.spacing(0, 0, 3),
+                        '& > *': {
+                            breakInside: 'avoid',
+                            marginBottom: theme.spacing(2),
+                        },
+                    }}
+                >
+                    {tiles.map((tile, index) => buildTile(tile, index, master))}
+                </Box>
+            )}
 
-            {/* Drag-drop overlay */}
             {dragOver && (
                 <Box
                     sx={{
@@ -376,9 +446,19 @@ function Gallery(props) {
                 >
                     <CloudUploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
                     <Typography variant="subtitle1" sx={{ color: 'primary.main' }}>
-                        Drop files to upload
+                        Drop files to share
                     </Typography>
                 </Box>
+            )}
+
+            {selectedIndex != null && tiles[selectedIndex] && (
+                <PhotoViewer
+                    master={master}
+                    tiles={tiles}
+                    index={selectedIndex}
+                    onClose={closeViewer}
+                    onIndexChange={showIndex}
+                />
             )}
         </Box>
     );

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 
 import Button from '@mui/material/Button';
-import PlayCircleFilledWhiteRoundedIcon from '@mui/icons-material/PlayCircleFilledWhiteRounded';
+import AddPhotoAlternateRounded from '@mui/icons-material/AddPhotoAlternateRounded';
 import Typography from '@mui/material/Typography';
 import CropFreeRounded from '@mui/icons-material/CropFreeRounded';
 import Slide from '@mui/material/Slide';
@@ -10,82 +10,92 @@ import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import { keyframes } from '@mui/system';
 
-const travel1 = keyframes`
-  0%   { offset-distance: 0%; opacity: 0; }
-  10%  { opacity: 1; }
-  90%  { opacity: 1; }
-  100% { offset-distance: 100%; opacity: 0; }
+const float = keyframes`
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
 `;
 
-const travel2 = keyframes`
-  0%   { offset-distance: 0%; opacity: 0; }
-  10%  { opacity: 1; }
-  90%  { opacity: 1; }
-  100% { offset-distance: 100%; opacity: 0; }
-`;
+const frames = [
+    {
+        title: 'Harbor',
+        detail: '4.2 MB',
+        wash: 'linear-gradient(145deg, #7dd3fc 0%, #0f766e 70%)',
+        shift: -72,
+        tilt: -8,
+        delay: '0s',
+        z: 1,
+    },
+    {
+        title: 'Kitchen',
+        detail: 'f/1.8 · 1/125',
+        wash: 'linear-gradient(160deg, #fde68a 0%, #f97316 55%, #7c2d12 100%)',
+        shift: 0,
+        tilt: 2,
+        delay: '0.4s',
+        z: 2,
+    },
+    {
+        title: 'Night bus',
+        detail: '12:41 Oct 15',
+        wash: 'linear-gradient(200deg, #c4b5fd 0%, #312e81 80%)',
+        shift: 72,
+        tilt: 8,
+        delay: '0.8s',
+        z: 1,
+    },
+];
 
-const pulse = keyframes`
-  0%, 100% { transform: scale(1); opacity: 0.7; }
-  50%      { transform: scale(1.3); opacity: 1; }
-`;
-
-function NetworkIllustration() {
-    // Three nodes in a triangle, with animated dots traveling along the edges
-    const nodes = [
-        { cx: 60, cy: 20 },   // top
-        { cx: 20, cy: 80 },   // bottom-left
-        { cx: 100, cy: 80 },  // bottom-right
-    ];
-    const lines = [
-        { x1: 60, y1: 20, x2: 20, y2: 80 },
-        { x1: 20, y1: 80, x2: 100, y2: 80 },
-        { x1: 100, y1: 80, x2: 60, y2: 20 },
-    ];
-
+function PhotoStack() {
     return (
-        <Box sx={{ width: 120, height: 100, position: 'relative', mx: 'auto', my: 2 }}>
-            <svg
-                viewBox="0 0 120 100"
-                width="120"
-                height="100"
-                style={{ display: 'block' }}
-            >
-                {/* Lines */}
-                {lines.map((l, i) => (
-                    <line
-                        key={`line-${i}`}
-                        x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
-                        stroke="currentColor"
-                        strokeOpacity={0.2}
-                        strokeWidth={1}
-                    />
-                ))}
-                {/* Traveling dots along each line */}
-                {lines.map((l, i) => (
-                    <circle
-                        key={`dot-${i}`}
-                        r="2.5"
-                        fill="var(--dot-color, #00e5ff)"
-                        style={{
-                            offsetPath: `path("M${l.x1},${l.y1} L${l.x2},${l.y2}")`,
-                            animation: `${i % 2 === 0 ? travel1 : travel2} ${2 + i * 0.6}s ease-in-out ${i * 0.7}s infinite`,
+        <Box
+            aria-hidden="true"
+            sx={{
+                position: 'relative',
+                width: 280,
+                height: 168,
+                mx: 'auto',
+                my: 3,
+            }}
+        >
+            {frames.map((frame) => (
+                <Box
+                    key={frame.title}
+                    sx={{
+                        position: 'absolute',
+                        left: '50%',
+                        top: 12,
+                        width: 132,
+                        ml: '-66px',
+                        zIndex: frame.z,
+                        animation: `${float} 5s ease-in-out ${frame.delay} infinite`,
+                        '@media (prefers-reduced-motion: reduce)': {
+                            animation: 'none',
+                        },
+                    }}
+                >
+                    <Box
+                        sx={{
+                            transform: `translateX(${frame.shift}px) rotate(${frame.tilt}deg)`,
+                            borderRadius: 2,
+                            overflow: 'hidden',
+                            bgcolor: 'background.paper',
+                            boxShadow: (theme) => theme.palette.mode === 'dark'
+                                ? '0 12px 30px rgba(0,0,0,0.35)'
+                                : '0 12px 30px rgba(15,23,42,0.12)',
                         }}
-                    />
-                ))}
-                {/* Node circles */}
-                {nodes.map((n, i) => (
-                    <circle
-                        key={`node-${i}`}
-                        cx={n.cx} cy={n.cy} r="5"
-                        fill="currentColor"
-                        opacity={0.6}
-                        style={{
-                            animation: `${pulse} ${3 + i * 0.4}s ease-in-out ${i * 0.5}s infinite`,
-                            transformOrigin: `${n.cx}px ${n.cy}px`,
-                        }}
-                    />
-                ))}
-            </svg>
+                    >
+                        <Box sx={{ height: 78, background: frame.wash }} />
+                        <Box sx={{ px: 1, py: 0.75, textAlign: 'left' }}>
+                            <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
+                                {frame.title}
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                                {frame.detail}
+                            </Typography>
+                        </Box>
+                    </Box>
+                </Box>
+            ))}
         </Box>
     );
 }
@@ -160,40 +170,36 @@ function FrontView({ master }) {
                     textAlign: 'center',
                 }}
             >
-                {/* Title */}
                 <Typography
                     variant="h3"
                     component="h1"
                     sx={{
                         fontWeight: 800,
-                        letterSpacing: '-0.02em',
+                        letterSpacing: '-0.03em',
                         color: 'text.primary',
                         mb: 1,
                     }}
                 >
-                    PhotoGroup
+                    Share the pictures
                 </Typography>
 
-                {/* Tagline */}
                 <Typography
-                    variant="body2"
-                    sx={{ color: 'text.secondary', mb: 3 }}
+                    variant="body1"
+                    sx={{ color: 'text.secondary', maxWidth: 420 }}
                 >
-                    Zero Install, Peer-to-Peer Photo Collaboration
+                    Pass them around with the camera details still attached, see how big they are, and save them on your phone.
                 </Typography>
 
-                {/* Network illustration */}
-                <NetworkIllustration />
+                <PhotoStack />
 
-                {/* Action buttons */}
-                <Stack spacing={1.5} sx={{ width: '100%', maxWidth: 320, mt: 3 }}>
+                <Stack spacing={1.5} sx={{ width: '100%', maxWidth: 320 }}>
                     <Button
                         onClick={openRoom}
                         variant="contained"
                         color="primary"
                         size="large"
                         fullWidth
-                        startIcon={<PlayCircleFilledWhiteRoundedIcon />}
+                        startIcon={<AddPhotoAlternateRounded />}
                         sx={{ py: 1.5, fontSize: '1rem' }}
                     >
                         Create Room
@@ -212,16 +218,14 @@ function FrontView({ master }) {
 
                 {/* Bottom caption */}
                 <Typography
-                    variant="caption"
+                    variant="body2"
                     sx={{
-                        mt: 6,
-                        fontFamily: 'var(--font-mono)',
+                        mt: 4,
                         color: 'text.secondary',
-                        opacity: 0.7,
-                        fontSize: '0.7rem',
+                        maxWidth: 380,
                     }}
                 >
-                    Photos transfer directly between browsers via WebRTC
+                    Pictures move straight from one person to another. The room shows how you're connected.
                 </Typography>
             </Stack>
         </Box>

@@ -10,6 +10,7 @@ import Logger from 'js-logger';
 import _ from "lodash";
 import update from "immutability-helper";
 import StringUtil from "../util/StringUtil";
+import AloneInRoom from "./AloneInRoom";
 
 // Force-directed layout constants - tuned for better viewport utilization
 const REPULSION = 5000;
@@ -712,18 +713,6 @@ function TopologyView({ master, fillHeight, active = true }) {
                 }
             });
 
-            // Empty state message
-            if (nodes.length === 0) {
-                ctx.font = '15px "Source Sans 3", sans-serif';
-                ctx.fillStyle = isDark ? '#556677' : '#aabbcc';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('Waiting for peer connections...', width / 2, height / 2 - 10);
-                ctx.font = '12px "JetBrains Mono", monospace';
-                ctx.fillStyle = isDark ? '#3d4a5c' : '#c1c9d2';
-                ctx.fillText('Create a room and share the link', width / 2, height / 2 + 16);
-            }
-
             animFrameRef.current = requestAnimationFrame(render);
         }
 
@@ -820,6 +809,10 @@ function TopologyView({ master, fillHeight, active = true }) {
                         height: '100%',
                     }}
                 />
+
+                {graph.nodes.length === 0 && (
+                    <AloneInRoom onInvite={() => master.emitter.emit('openShare')} />
+                )}
 
                 {/* Legend overlay */}
                 <Box sx={{

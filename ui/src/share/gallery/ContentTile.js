@@ -1,50 +1,35 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
-import OwnersList from "./OwnersList";
 import IconButton from "@mui/material/IconButton";
 import CloudDownloadRounded from "@mui/icons-material/CloudDownloadRounded";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
-import InfoOutlined from "@mui/icons-material/InfoOutlined";
-import PhotoDetails from "./metadata/PhotoDetails";
 import Logger from "js-logger";
-import download from "downloadjs";
 import update from "immutability-helper";
 import Button from "@mui/material/Button";
 import { withSnackbar } from '../compatibility/withSnackbar';
-import Collapse from '@mui/material/Collapse';
 import FileUtil from "../util/FileUtil";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
 import PasswordInput from "../security/PasswordInput";
 import WebCrypto from "../security/WebCrypto";
 import RenderContent from "./RenderContent";
-import StringUtil from "../util/StringUtil";
-import _ from "lodash";
+import { saveLabel, savePhoto } from "./savePhoto";
+import { photoTransitionName } from "./viewTransition";
 
 function ContentTile(props) {
-    const {master, tile, enqueueSnackbar, closeSnackbar} = props;
+    const {master, tile, enqueueSnackbar, closeSnackbar, onOpen, selected, hero} = props;
 
-    const [open, setOpen] = useState(false);
-    const [listView, setListView] = useState(true);
     const [localDownloaded, setLocalDownloaded] = useState([]);
     const [localDownloading, setLocalDownloading] = useState([]);
     const [there, setThere] = useState(true);
-    const [progress, setProgress] = useState(null);
     const [downSpeed, setDownSpeed] = useState('');
     const [upSpeed, setUpSpeed] = useState('');
     const [timeRemaining, setTimeRemaining] = useState('');
     const [password, setPassword] = useState('');
     const [isDecrypted, setIsDecrypted] = useState(false);
     const [previewThumbnail, setPreviewThumbnail] = useState(null);
-    const [hovered, setHovered] = useState(false);
-
-    const torrentListenerAttachedRef = useRef(false);
-
-    const handleGalleryListView = useCallback((isList) => {
-        setListView(isList);
-    }, []);
 
     const handleDisconnectNode = useCallback((photo) => {
         if(photo.infoHash === tile.infoHash) {
@@ -55,7 +40,6 @@ function ContentTile(props) {
     const handleDownloadProgress = useCallback((event) => {
         const torrent = event.torrent;
         if(torrent.infoHash === tile.infoHash) {
-            setProgress(event.progress);
             setDownSpeed(event.speed);
             setTimeRemaining(event.timeRemaining);
         }
@@ -64,19 +48,10 @@ function ContentTile(props) {
     const handleUploadProgress = useCallback((event) => {
         const torrent = event.torrent;
         if(torrent.infoHash === tile.infoHash) {
-            setProgress(event.progress);
             setUpSpeed(event.speed);
             setTimeRemaining(event.timeRemaining);
         }
     }, [tile.infoHash]);
-
-    const handleDone = useCallback(() => {
-        setProgress(100);
-    }, []);
-
-    const handleTorrentReady = useCallback(() => {
-        listenToPreview();
-    }, []);
 
     const listenToPreview = useCallback(() => {
         if(tile.torrentFileThumb && tile.isAudio && typeof tile.torrentFileThumb.getBlobURL === 'function') {
@@ -89,80 +64,46 @@ function ContentTile(props) {
         }
     }, [tile.torrentFileThumb, tile.isAudio]);
 
-    const attachTorrentListener = useCallback((tile) => {
-        if(tile && tile.torrent && !torrentListenerAttachedRef.current) {
-            tile.torrent.on('done', handleDone);
-            torrentListenerAttachedRef.current = true;
-        }
-    }, [handleDone]);
+    const handleTorrentReady = useCallback(() => {
+        listenToPreview();
+    }, [listenToPreview]);
 
     useEffect(() => {
         const emitter = master.emitter;
 
-        emitter.on('galleryListView', handleGalleryListView);
         emitter.on('disconnectNode', handleDisconnectNode);
         emitter.on('downloadProgress', handleDownloadProgress);
         emitter.on('uploadProgress', handleUploadProgress);
         emitter.on('torrentReady', handleTorrentReady);
 
-        attachTorrentListener(tile);
         listenToPreview();
 
         return () => {
-            emitter.removeListener('galleryListView', handleGalleryListView);
             emitter.removeListener('disconnectNode', handleDisconnectNode);
             emitter.removeListener('downloadProgress', handleDownloadProgress);
             emitter.removeListener('uploadProgress', handleUploadProgress);
             emitter.removeListener('torrentReady', handleTorrentReady);
-
-            if(tile.torrent && torrentListenerAttachedRef.current) {
-                tile.torrent.removeListener('done', handleDone);
-                torrentListenerAttachedRef.current = false;
-            }
         };
-    }, [master.emitter, handleGalleryListView, handleDisconnectNode, handleDownloadProgress, handleUploadProgress, handleTorrentReady, attachTorrentListener, tile, listenToPreview, handleDone]);
-
-    useEffect(() => {
-        if(tile.torrent && !torrentListenerAttachedRef.current) {
-            attachTorrentListener(tile);
-        }
-    }, [tile.torrent, attachTorrentListener]);
-
-    const handleOpen = useCallback(() => {
-        setOpen(true);
-    }, []);
-
-    const handleClose = useCallback(() => {
-        setOpen(false);
-    }, []);
-
-    const _download = useCallback((infoHash, elem, fileName) => {
-        download(elem, fileName);
-        setLocalDownloaded(prev => update(prev, {$push: [infoHash]}));
-    }, []);
+    }, [master.emitter, handleDisconnectNode, handleDownloadProgress, handleUploadProgress, handleTorrentReady, listenToPreview]);
 
     const downloadFromServer = useCallback((tile) => {
         Logger.info('downloadFromServer ' + tile.fileName);
-
-        if(tile.elem) {
-            _download(tile.infoHash, tile.elem, tile.fileName);
-        } else {
-            setLocalDownloading(prev => update(prev, {$push: [tile.infoHash]}));
-
-            tile.torrentFile.getBlob((err, elem) => {
+        setLocalDownloading(prev => update(prev, {$push: [tile.infoHash]}));
+        savePhoto(tile)
+            .then(() => {
+                setLocalDownloaded(prev => update(prev, {$push: [tile.infoHash]}));
+            })
+            .catch(err => {
+                Logger.error(err && err.message ? err.message : err);
+            })
+            .finally(() => {
                 setLocalDownloading(prev => {
                     const index = prev.findIndex(item => item === tile.infoHash);
+                    if (index < 0) return prev;
                     return update(prev, {$splice: [[index, 1]]});
                 });
-
-                if (err) {
-                    Logger.error(err.message);
-                } else {
-                    _download(tile.infoHash, elem, tile.fileName);
-                }
             });
-        }
-    }, [_download]);
+    }, []);
 
     const handleDelete = useCallback(async (tile) => {
         setThere(false);
@@ -210,9 +151,6 @@ function ContentTile(props) {
         setIsDecrypted(true);
     }, [snack]);
 
-    let name = StringUtil.addEmptySpaces([
-        tile.picSummary, tile.fileSize, tile.cameraSettings]) || props.name;
-
     const isLoading = tile.torrentFile && !tile.torrentFile.done;
     let progressPercentage, downloaded;
     if(isLoading && tile.torrentFile) {
@@ -222,6 +160,12 @@ function ContentTile(props) {
 
     const isDownloadingFile = localDownloading.includes(tile.infoHash);
     const downloadedFile = localDownloaded.includes(tile.infoHash);
+    const canSave = !isLoading && (tile.elem || (tile.torrentFile && typeof tile.torrentFile.getBlob === 'function'));
+    const transitionName = selected ? undefined : photoTransitionName(tile.infoHash);
+
+    if (!there) {
+        return null;
+    }
 
     // Encrypted content that needs decryption
     if(tile.secure && !tile.seed && !isDecrypted) {
@@ -254,10 +198,16 @@ function ContentTile(props) {
         );
     }
 
+    const arrival = [
+        isLoading ? `${progressPercentage}%` : '',
+        downloaded,
+        downSpeed ? `↓ ${downSpeed}` : '',
+        upSpeed ? `↑ ${upSpeed}` : '',
+        timeRemaining,
+    ].filter(Boolean).join(' · ');
+
     return (
         <Paper
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
             sx={{
                 position: 'relative',
                 borderRadius: 2,
@@ -271,55 +221,37 @@ function ContentTile(props) {
                             ? '0 8px 32px rgba(0,229,255,0.08)'
                             : '0 8px 32px rgba(0,0,0,0.12)',
                 },
+                '@media (prefers-reduced-motion: reduce)': {
+                    transition: 'none',
+                    '&:hover': { transform: 'none' },
+                },
             }}
         >
-            {/* Media content */}
-            <Box sx={{ position: 'relative' }}>
+            <Box
+                component="button"
+                type="button"
+                aria-label={tile.fileName ? `View ${tile.fileName}` : 'View photo'}
+                onClick={() => onOpen && onOpen()}
+                sx={{
+                    display: 'block',
+                    width: '100%',
+                    p: 0,
+                    border: 0,
+                    background: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    viewTransitionName: transitionName,
+                    '& img': hero ? {
+                        width: '100%',
+                        height: 'auto',
+                        maxHeight: 'min(72vh, 720px)',
+                        objectFit: 'contain',
+                    } : undefined,
+                }}
+            >
                 <RenderContent tile={tile} master={master} />
-
-                {/* Hover overlay with action buttons */}
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        alignItems: 'flex-end',
-                        justifyContent: 'center',
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 60%)',
-                        opacity: hovered ? 1 : 0,
-                        transition: 'opacity 0.2s ease',
-                        pointerEvents: hovered ? 'auto' : 'none',
-                        pb: 1,
-                    }}
-                >
-                    <Stack direction="row" spacing={0.5}>
-                        <IconButton
-                            size="small"
-                            disabled={isDownloadingFile}
-                            onClick={() => downloadFromServer(tile)}
-                            sx={{ color: '#fff' }}
-                        >
-                            <CloudDownloadRounded fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                            size="small"
-                            onClick={handleOpen}
-                            sx={{ color: '#fff' }}
-                        >
-                            <InfoOutlined fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                            size="small"
-                            onClick={() => handleDelete(tile)}
-                            sx={{ color: '#fff' }}
-                        >
-                            <DeleteRounded fontSize="small" />
-                        </IconButton>
-                    </Stack>
-                </Box>
             </Box>
 
-            {/* Audio preview thumbnail */}
             {previewThumbnail && (
                 <Box sx={{ width: '100%' }}>
                     <img
@@ -330,90 +262,56 @@ function ContentTile(props) {
                 </Box>
             )}
 
-            {/* Metadata strip */}
-            <Collapse in={listView}>
-                <Box sx={{ px: 1.5, py: 1 }}>
-                    {/* File info row */}
-                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minHeight: 28 }}>
-                        {/* Loading progress inline */}
-                        {isLoading && (
-                            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', flexShrink: 0 }}>
-                                <Typography
-                                    variant="caption"
-                                    sx={{
-                                        fontFamily: 'var(--font-mono)',
-                                        fontSize: '0.65rem',
-                                        color: 'primary.main',
-                                    }}
-                                >
-                                    {progressPercentage}%
-                                </Typography>
-                                <Typography
-                                    variant="caption"
-                                    sx={{
-                                        fontFamily: 'var(--font-mono)',
-                                        fontSize: '0.65rem',
-                                        color: 'text.secondary',
-                                    }}
-                                >
-                                    {downloaded}
-                                </Typography>
-                            </Stack>
-                        )}
+            <Box sx={{ px: 1.5, py: 1.25 }}>
+                <Typography
+                    variant="body2"
+                    sx={{ wordBreak: 'break-word', lineHeight: 1.3 }}
+                    title={tile.fileName}
+                >
+                    {tile.fileName}
+                </Typography>
+                {tile.fileSize && (
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
+                        {tile.fileSize}
+                    </Typography>
+                )}
 
-                        {/* File name / metadata */}
-                        <Typography
-                            variant="caption"
-                            onClick={tile.hasMetadata ? handleOpen : undefined}
-                            sx={{
-                                flex: 1,
-                                wordBreak: 'break-word',
-                                color: tile.hasMetadata ? 'primary.main' : 'text.secondary',
-                                cursor: tile.hasMetadata ? 'pointer' : 'default',
-                                fontSize: '0.7rem',
-                                lineHeight: 1.3,
-                                '&:hover': tile.hasMetadata ? { textDecoration: 'underline' } : {},
-                            }}
-                            title={tile.picSummary}
-                        >
-                            {name}
-                        </Typography>
+                {arrival && (
+                    <Typography
+                        variant="caption"
+                        sx={{
+                            display: 'block',
+                            mt: 0.5,
+                            fontFamily: 'var(--font-mono)',
+                            color: 'primary.main',
+                        }}
+                    >
+                        {arrival}
+                    </Typography>
+                )}
 
-                        {downloadedFile && (
-                            <Typography
-                                variant="caption"
-                                sx={{
-                                    color: 'success.main',
-                                    fontSize: '0.65rem',
-                                    fontFamily: 'var(--font-mono)',
-                                    flexShrink: 0,
-                                }}
-                            >
-                                Downloaded
-                            </Typography>
-                        )}
-                    </Stack>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 1 }}>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        startIcon={<CloudDownloadRounded />}
+                        disabled={!canSave || isDownloadingFile}
+                        onClick={() => downloadFromServer(tile)}
+                    >
+                        {saveLabel(tile.fileSize, isDownloadingFile, downloadedFile)}
+                    </Button>
+                    <IconButton
+                        aria-label={`Remove ${tile.fileName || 'photo'}`}
+                        onClick={() => handleDelete(tile)}
+                        size="small"
+                    >
+                        <DeleteRounded fontSize="small" />
+                    </IconButton>
+                </Stack>
 
-                    {/* Pieces loading view */}
-                    <PiecesLoadingView master={master} tile={tile} />
-
-                    {/* Owners list */}
-                    <OwnersList
-                        emitter={master.emitter}
-                        tile={tile}
-                        peers={master.peers}
-                        myPeerId={master.client.peerId}
-                    />
-                </Box>
-
-                <PhotoDetails
-                    open={open}
-                    tile={tile}
-                    master={master}
-                    parser={master.metadata}
-                    handleClose={handleClose}
-                />
-            </Collapse>
+                <PiecesLoadingView master={master} tile={tile} />
+            </Box>
         </Paper>
     );
 }

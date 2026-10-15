@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from '@mui/material/styles';
 import { vi } from 'vitest';
@@ -69,14 +69,25 @@ describe('FrontView', () => {
     root.unmount();
   });
 
-  it('renders start room button when no room in URL', () => {
+  it('renders start room button when no room in URL', async () => {
     window.location.search = '';
     const div = document.createElement('div');
+    document.body.appendChild(div);
     const root = createRoot(div);
-    root.render(renderFrontView(<FrontView master={mockMaster} />));
-    mockMaster.emitter.emit('iceDone');
-    expect(div).toBeTruthy();
-    root.unmount();
+    await act(async () => {
+      root.render(renderFrontView(<FrontView master={mockMaster} />));
+    });
+    await act(async () => {
+      mockMaster.emitter.emit('iceDone');
+    });
+    expect(document.body.textContent).toContain('Share the pictures');
+    expect(document.body.textContent).toContain('Create Room');
+    expect(document.body.textContent).toContain('Scan QR to Join');
+    expect(document.body.textContent).toContain('4.2 MB');
+    await act(async () => {
+      root.unmount();
+    });
+    div.remove();
   });
 
   it('does not render when room is in URL', () => {
