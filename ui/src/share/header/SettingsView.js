@@ -231,6 +231,7 @@ function SettingsView(props) {
     return (
         <div>
             <IconButton
+                aria-label="Settings"
                 aria-haspopup="true"
                 onClick={showLogs}
                 color="inherit"

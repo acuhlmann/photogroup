@@ -14,7 +14,8 @@ const frames = [
         title: 'Harbor',
         detail: '4.2 MB',
         wash: 'linear-gradient(165deg, #16343c 0%, #0f766e 100%)',
-        shift: -78,
+        shift: -124,
+        shiftXs: -98,
         tilt: -7,
         z: 1,
     },
@@ -23,6 +24,7 @@ const frames = [
         detail: 'f/1.8 · 1/125',
         wash: 'linear-gradient(165deg, #3a291c 0%, #c2410c 100%)',
         shift: 0,
+        shiftXs: 0,
         tilt: 1.5,
         z: 2,
     },
@@ -30,7 +32,8 @@ const frames = [
         title: 'Night bus',
         detail: '12:41 Oct 15',
         wash: 'linear-gradient(195deg, #1e1b4b 0%, #312e81 100%)',
-        shift: 78,
+        shift: 124,
+        shiftXs: 98,
         tilt: 7,
         z: 1,
     },
@@ -42,10 +45,11 @@ function PhotoStack() {
             aria-hidden="true"
             sx={{
                 position: 'relative',
-                width: 280,
-                height: 168,
+                width: '100%',
+                maxWidth: 440,
+                height: { xs: 150, sm: 164 },
                 mx: 'auto',
-                my: 3,
+                my: { xs: 2, sm: 3 },
             }}
         >
             {frames.map((frame) => (
@@ -54,15 +58,18 @@ function PhotoStack() {
                     sx={{
                         position: 'absolute',
                         left: '50%',
-                        top: 12,
-                        width: 132,
-                        ml: '-66px',
+                        top: 8,
+                        width: { xs: 104, sm: 132 },
+                        ml: { xs: '-52px', sm: '-66px' },
                         zIndex: frame.z,
                     }}
                 >
                     <Box
                         sx={{
-                            transform: `translateX(${frame.shift}px) rotate(${frame.tilt}deg)`,
+                            transform: {
+                                xs: `translateX(${frame.shiftXs}px) rotate(${frame.tilt}deg)`,
+                                sm: `translateX(${frame.shift}px) rotate(${frame.tilt}deg)`,
+                            },
                             borderRadius: 1.5,
                             overflow: 'hidden',
                             bgcolor: 'background.paper',

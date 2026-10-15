@@ -385,7 +385,7 @@ function Gallery(props) {
                     <Typography variant="h6" sx={{ color: 'text.primary', mb: 0.5, fontWeight: 600 }}>
                         Share a photo
                     </Typography>
-                    <Typography variant="body2">
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                         Drop pictures here, or tap to choose some from this device.
                     </Typography>
                 </Box>
