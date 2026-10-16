@@ -8,6 +8,14 @@ import PhotoRelay, { MAX_PHOTO_BYTES, PhotoTooLargeError } from './PhotoRelay.js
 import express from 'express';
 import _ from 'lodash';
 
+const SAFE_MEDIA_TYPES = new Set([
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/bmp',
+    'image/x-icon', 'image/vnd.microsoft.icon',
+    'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime',
+    'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/webm', 'audio/wav', 'audio/x-wav',
+    'audio/aac', 'audio/flac'
+]);
+
 export default class Rooms {
 
     constructor(updateChannel, remoteLog, app, emitter, ice, tracker) {
@@ -273,6 +281,10 @@ export default class Rooms {
             if (!infoHash) return response.status(400).send('Expected infoHash');
             const photo = this.findPhoto(room, infoHash);
             if (!photo) return response.status(404).send('Photo not found');
+            const peerId = request.query.peerId;
+            if (typeof peerId !== 'string' || !peerId) return response.status(400).send('Expected uploader peerId');
+            if (peerId !== photo.peerId) return response.status(403).send('Only the photo owner can upload a server copy');
+            if (photo.hasServerCopy) return response.status(409).send('Server copy already exists');
             if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
                 return response.status(400).send('Expected photo bytes');
             }
@@ -301,7 +313,9 @@ export default class Rooms {
             if (!copy) return response.status(404).send('No server copy for this photo');
             const photo = this.findPhoto(room, infoHash);
             const safeName = String(photo?.fileName || 'photo').replace(/["\r\n]/g, '');
-            response.header('Content-Type', photo?.fileType || copy.contentType);
+            const contentType = String(photo?.fileType || copy.contentType).split(';')[0].trim().toLowerCase();
+            response.header('Content-Type', SAFE_MEDIA_TYPES.has(contentType) ? contentType : 'application/octet-stream');
+            response.header('X-Content-Type-Options', 'nosniff');
             response.header('Content-Length', copy.size);
             response.header('Content-Disposition', `inline; filename="${safeName}"`);
             response.header('Cache-Control', 'private, max-age=3600');

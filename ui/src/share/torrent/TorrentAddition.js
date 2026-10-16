@@ -5,7 +5,7 @@ import {format} from 'date-fns';
 import _ from 'lodash';
 import FileUtil from "../util/FileUtil";
 import React from "react";
-import { getTorrent, getBaseInfoHash, isDuplicateTorrentError, extractDuplicateTorrentId } from './WebTorrentUtils';
+import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isDuplicateTorrentError, extractDuplicateTorrentId } from './WebTorrentUtils';
 import { getPreviewFromImage, getPreviewFromAudio } from './ThumbnailExtractor';
 import { cachePut } from '../util/ImageBlobCache';
 
@@ -40,19 +40,15 @@ export default class TorrentAddition {
         }
 
         if(serverPhotos.length > 1) {
-            const infoHashes = serverPhotos.map(photo => {
-                return photo.infoHash.split('-');
-            });
-
-            const torrentId = infoHashes[0][0];
+            const torrentId = getBaseInfoHash(serverPhotos[0].infoHash);
             const torrent = getTorrent(this.master.client, torrentId);
             
             if(!torrent) {
-                this._add(torrentId, serverPhotos, false, infoHashes.map(item => item[1]))
+                return this._add(torrentId, serverPhotos, false, serverPhotos.map(photo => getFilePathFromInfoHash(photo.infoHash)));
             }
         } else if(serverPhotos.length === 1) {
             const photo = serverPhotos[0];
-            this.add(photo.infoHash, photo);
+            return this.add(getBaseInfoHash(photo.infoHash), photo);
         }
     }
 
@@ -398,6 +394,11 @@ export default class TorrentAddition {
                 });
 
                 const toBeShared = this.stripClientOnlyPhotoFields(addedInfoHash);
+                const serverCopies = photos.map((photo, index) => ({
+                    infoHash: toBeShared[index].infoHash,
+                    blob: photo.file || photo.origFile,
+                    fileName: photo.fileName
+                }));
 
                 Logger.info('seed.infoHash photo sharing');
                 this.service.share(toBeShared).then(result => {
@@ -407,12 +408,11 @@ export default class TorrentAddition {
                     // Leave a temporary server copy receivers can fall back
                     // to. Fire-and-forget - never block sharing on it.
                     if (typeof this.service.uploadServerCopy === 'function') {
-                        photos.forEach(photo => {
-                            const blob = photo.file || photo.origFile;
-                            if (blob && photo.infoHash) {
-                                this.service.uploadServerCopy(photo.infoHash, blob)
-                                    .then(() => Logger.info('server copy stored for ' + photo.fileName))
-                                    .catch(err => Logger.warn('server copy failed for ' + photo.fileName + ': ' + err.message));
+                        serverCopies.forEach(({ infoHash, blob, fileName }) => {
+                            if (blob && infoHash) {
+                                this.service.uploadServerCopy(infoHash, blob)
+                                    .then(() => Logger.info('server copy stored for ' + fileName))
+                                    .catch(err => Logger.warn('server copy failed for ' + fileName + ': ' + err.message));
                             }
                         });
                     }

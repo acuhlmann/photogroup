@@ -103,6 +103,8 @@ export default class TorrentMaster {
         if (!photo?.infoHash) return false;
         try { this.restartTrackers(); } catch { /* trackers may not be ready */ }
         const baseInfoHash = getBaseInfoHash(photo.infoHash);
+        const room = await this.service.getRoom();
+        const photos = (room?.photos || [photo]).filter(item => getBaseInfoHash(item.infoHash) === baseInfoHash);
         const torrent = getTorrent(this.client, baseInfoHash);
         if (torrent) {
             await new Promise(resolve => {
@@ -110,7 +112,11 @@ export default class TorrentMaster {
                 catch { resolve(); }
             });
         }
-        await this.torrentAddition.add(baseInfoHash, photo).catch(() => null);
+        try {
+            await this.torrentAddition.handlePhotoAddEvent(photos);
+        } catch (err) {
+            Logger.warn('retryPhoto add failed: ' + err);
+        }
         return true;
     }
 

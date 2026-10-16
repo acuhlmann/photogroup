@@ -21,12 +21,19 @@ describe('withFallbackIceServers', () => {
     it('supplies STUN servers when config is empty/missing', () => {
         expect(withFallbackIceServers(null).iceServers.length).toBeGreaterThan(2);
         expect(withFallbackIceServers({ iceServers: [] }).iceServers.length).toBeGreaterThan(2);
+        expect(withFallbackIceServers({ iceTransportPolicy: 'all' })).toMatchObject({ iceTransportPolicy: 'all' });
     });
-    it('preserves TURN and does not duplicate STUN', () => {
+    it('preserves a custom STUN list without appending fallbacks', () => {
+        const iceServers = [{ urls: 'stun:custom.example:3478' }];
+        expect(withFallbackIceServers({ iceServers }).iceServers).toBe(iceServers);
+    });
+    it('preserves a populated configuration unchanged', () => {
         const turn = { urls: 'turn:turn.example:3478', username: 'u', credential: 'c' };
-        const result = withFallbackIceServers({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, turn] });
+        const config = Object.freeze({ iceTransportPolicy: 'relay', iceServers: Object.freeze([turn]) });
+        const result = withFallbackIceServers(config);
+        expect(result).toBe(config);
+        expect(result.iceServers).toEqual([turn]);
         expect(result.iceServers).toContainEqual(turn);
-        expect(result.iceServers.filter(s => s.urls === 'stun:stun.l.google.com:19302')).toHaveLength(1);
         expect(hasTurnServer(result)).toBe(true);
     });
 });

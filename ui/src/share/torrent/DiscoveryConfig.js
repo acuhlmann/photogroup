@@ -55,16 +55,12 @@ export function buildAnnounceList(ownTrackerUrl, extraTrackers = PUBLIC_WS_TRACK
  * Ensure an RTC config always contains usable STUN servers. A config that
  * came back empty (Twilio not configured / fetch failed) previously left
  * WebRTC with no way to learn its public address on mobile data at all.
- * Existing servers (including any TURN) are preserved and never duplicated.
+ * Populated configurations (including any TURN) are preserved unchanged.
  */
 export function withFallbackIceServers(rtcConfig) {
     const existing = Array.isArray(rtcConfig?.iceServers) ? rtcConfig.iceServers : [];
-    const known = new Set(existing.flatMap(urlsOf).filter(Boolean));
-    const merged = [...existing];
-    for (const server of FALLBACK_ICE_SERVERS) {
-        if (!known.has(server.urls)) merged.push({ ...server });
-    }
-    return { ...(rtcConfig || {}), iceServers: merged };
+    if (existing.length > 0) return rtcConfig;
+    return { ...(rtcConfig || {}), iceServers: FALLBACK_ICE_SERVERS.map(server => ({ ...server })) };
 }
 
 export function hasTurnServer(rtcConfig) {
