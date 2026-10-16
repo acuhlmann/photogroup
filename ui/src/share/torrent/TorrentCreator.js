@@ -1,7 +1,7 @@
 import NetworkTopologyFinder from "../topology/NetworkTopologyFinder";
 import Logger from 'js-logger';
 import WebTorrent from 'webtorrent';
-import createTorrent from 'create-torrent';
+import { buildAnnounceList, withFallbackIceServers } from './DiscoveryConfig';
 
 export default class TorrentCreator {
 
@@ -30,15 +30,10 @@ export default class TorrentCreator {
             Logger.warn('Using fallback tracker URL: ' + wsUrl);
         }
         
-        //window.WEBTORRENT_ANNOUNCE = createTorrent.announceList
-        window.WEBTORRENT_ANNOUNCE = []
-            .map(arr => {
-                return arr[0]
-            })
-            .filter(url => {
-                return url.indexOf('wss://') === 0 || url.indexOf('ws://') === 0
-            })
-            .concat(wsUrl);
+        // Own tracker first, then public WebSocket trackers: if our tracker
+        // socket dies (mobile backgrounding, network handover) discovery
+        // still has somewhere to go.
+        window.WEBTORRENT_ANNOUNCE = buildAnnounceList(wsUrl);
 
         Logger.info('trackers ' + window.WEBTORRENT_ANNOUNCE);
     }
@@ -58,7 +53,7 @@ export default class TorrentCreator {
             //iceServers.iceServers.unshift({ urls: 'stun:stun.l.google.com:19302'});
         }
 
-        this.iceServers = iceServers;
+        this.iceServers = withFallbackIceServers(iceServers);
         
         // Store the tracker WebSocket URL for use by other components
         this.trackerWsUrl = trackerConfig?.wsUrl;

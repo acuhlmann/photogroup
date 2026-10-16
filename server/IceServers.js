@@ -89,7 +89,10 @@ export default class IceServers {
             // Set fallback ICE servers if Twilio is not available
             this.iceServers = [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:23.21.150.121' }
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun.cloudflare.com:3478' },
+                { urls: 'stun:stun.nextcloud.com:443' }
             ];
             console.log('ICE servers: Using fallback STUN servers:', this.iceServers.length);
         }

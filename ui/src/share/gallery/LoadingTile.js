@@ -95,6 +95,8 @@ function LoadingTile({tile, master, name}) {
     let have = tile.owners?.find(owner => owner.peerId === master.client.peerId && !owner.loading);
     const isLoading = !!currentProgress;
     let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
+    if (!have && tile.fromServerCopy) loadingText = 'Received via server (P2P unavailable)';
+    else if (!have && tile.hasServerCopy && !isLoading) loadingText = 'Find Network Path · server copy ready if needed';
     const isRendering = loadingText === 'Rendering';
     const hasError = !!tile.uploadError;
 
