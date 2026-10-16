@@ -91,6 +91,15 @@ export default class TorrentAddition {
             Logger.info('_add done ' + torrent.name);
         });
 
+        // If P2P stalls and a server copy exists, ServerFallback delivers it.
+        if (torrent && this.master.serverFallback) {
+            photos.forEach(photo => {
+                this.master.serverFallback.watch(photo, () => ({
+                    progress: torrent.progress, done: torrent.done, hasServerCopy: photo.hasServerCopy
+                }));
+            });
+        }
+
         const self = this;
         return new Promise((resolve, reject) => {
 
@@ -393,6 +402,20 @@ export default class TorrentAddition {
                 Logger.info('seed.infoHash photo sharing');
                 this.service.share(toBeShared).then(result => {
                     Logger.info('photo shared ' + result);
+                    // Insurance for the common in-person failure: P2P never
+                    // connects (CGNAT / isolated Wi-Fi) or this phone locks.
+                    // Leave a temporary server copy receivers can fall back
+                    // to. Fire-and-forget - never block sharing on it.
+                    if (typeof this.service.uploadServerCopy === 'function') {
+                        photos.forEach(photo => {
+                            const blob = photo.file || photo.origFile;
+                            if (blob && photo.infoHash) {
+                                this.service.uploadServerCopy(photo.infoHash, blob)
+                                    .then(() => Logger.info('server copy stored for ' + photo.fileName))
+                                    .catch(err => Logger.warn('server copy failed for ' + photo.fileName + ': ' + err.message));
+                            }
+                        });
+                    }
                 }).catch(err => {
                     Logger.error('Failed to share photo: ' + err);
                     self.emitter.emit('showError', 'Failed to share photo: ' + (err.message || err));
@@ -732,6 +755,24 @@ export default class TorrentAddition {
 
     async done(torrent) {
         Logger.info('done ' + torrent.name);
+
+        // Receivers cache what they downloaded too (previously only the
+        // uploader did), so a receiver's reload / later re-share does not
+        // depend on finding a peer again.
+        if (torrent.files) {
+            torrent.files
+                .filter(file => !file.name.startsWith('Thumbnail '))
+                .forEach(file => {
+                    if (typeof file.getBlob !== 'function') return;
+                    file.getBlob((err, blob) => {
+                        if (err || !blob) return;
+                        const key = torrent.files.filter(f => !f.name.startsWith('Thumbnail ')).length > 1
+                            ? torrent.infoHash + '-' + file.path
+                            : torrent.infoHash;
+                        cachePut(key, blob).catch(() => {});
+                    });
+                });
+        }
 
         //Checks to make sure that ImmediateChunkStore has finished writing to store before destroying the torrent!
         /*const isMemStoreEmpty = setInterval(()=>{

@@ -1,6 +1,7 @@
 import Logger from 'js-logger';
 import shortid  from 'shortid';
 import cryptoRandomString from "crypto-random-string";
+import { backoffDelay } from './util/ConnectionRecovery';
 
 /**
  * @emits RoomsService#urlChange
@@ -62,10 +63,46 @@ export default class RoomsService {
         window.history.replaceState({}, '', decodeURIComponent(`${location.pathname}?${params}`));
     }
 
+    closeUpdates() {
+        this._sseIntentionallyClosed = true;
+        if (this._sseReconnectTimer) { clearTimeout(this._sseReconnectTimer); this._sseReconnectTimer = null; }
+        try { this._eventSource?.close(); } catch { /* noop */ }
+        this._eventSource = null;
+    }
+
+    /** Force an immediate SSE reconnect (e.g. page became visible again). */
+    reconnectUpdates() {
+        if (!this.hasRoom) return;
+        if (this._sseReconnectTimer) { clearTimeout(this._sseReconnectTimer); this._sseReconnectTimer = null; }
+        try { this._eventSource?.close(); } catch { /* noop */ }
+        this._eventSource = null;
+        this._sseReconnectAttempt = 0;
+        this.listenToUrlChanges();
+    }
+
+    scheduleSseReconnect() {
+        if (this._sseIntentionallyClosed || this._sseReconnectTimer) return;
+        const delay = backoffDelay(this._sseReconnectAttempt || 0);
+        this._sseReconnectAttempt = (this._sseReconnectAttempt || 0) + 1;
+        Logger.warn('SSE dropped, reconnecting in ' + delay + 'ms');
+        this._sseReconnectTimer = setTimeout(() => {
+            this._sseReconnectTimer = null;
+            this.listenToUrlChanges();
+            // Anything broadcast while we were asleep is missed: ask the
+            // app to re-sync room state and re-announce to trackers.
+            this.emitter.emit('sseReconnected');
+        }, delay);
+    }
+
     listenToUrlChanges() {
         const scope = this;
+        // Never stack EventSources: backgrounded phones used to accumulate
+        // one per reconnect, duplicating every photo/peer event.
+        try { this._eventSource?.close(); } catch { /* noop */ }
+        this._sseIntentionallyClosed = false;
 
-        const source = new window.EventSource('/api/rooms/' + this.id + '/updates/?sessionId=' + this.sessionId);
+        const source = this._eventSource = new window.EventSource('/api/rooms/' + this.id + '/updates/?sessionId=' + this.sessionId);
+        source.addEventListener('open', () => { scope._sseReconnectAttempt = 0; }, false);
 
         source.addEventListener('photos', event => {
 
@@ -133,14 +170,37 @@ export default class RoomsService {
 
         source.addEventListener('error', e => {
             Logger.error('sse error: ' + JSON.stringify(e))
-            if (e.readyState === EventSource.CLOSED) {
+            if (source.readyState === EventSource.CLOSED) {
                 Logger.error('Connection was closed');
+                scope.scheduleSseReconnect();
             }
         }, false);
 
         source.onerror = e => {
             Logger.error('sse error: ' + JSON.stringify(e));
+            if (source.readyState === EventSource.CLOSED) {
+                scope.scheduleSseReconnect();
+            }
         };
+    }
+
+    /** Leave a temporary server copy of a photo as P2P insurance. */
+    async uploadServerCopy(infoHash, blob) {
+        if (!infoHash || !blob) throw new Error('uploadServerCopy needs infoHash and blob');
+        const response = await fetch(this.url + '/' + this.id + '/photos/blob?infoHash=' + encodeURIComponent(infoHash), {
+            method: 'POST',
+            headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+            body: blob
+        });
+        if (!response.ok) throw new Error('Server copy upload failed (' + response.status + ')');
+        return response.json();
+    }
+
+    /** Download the server copy of a photo when P2P has stalled. */
+    async fetchServerCopy(infoHash) {
+        const response = await fetch(this.url + '/' + this.id + '/photos/blob?infoHash=' + encodeURIComponent(infoHash));
+        if (!response.ok) return null;
+        return response.blob();
     }
 
     getRtcConfig() {

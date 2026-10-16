@@ -12,7 +12,9 @@ import _ from 'lodash';
 import humanizeDuration from 'humanize-duration'
 import MetadataParser from "../gallery/metadata/MetadataParser";
 import { getTorrent, getBaseInfoHash } from './WebTorrentUtils';
-import { cacheGet } from '../util/ImageBlobCache';
+import { cacheGet, cachePut } from '../util/ImageBlobCache';
+import ServerFallback from './ServerFallback';
+import ConnectionRecovery from '../util/ConnectionRecovery';
 
 export default class TorrentMaster {
 
@@ -63,6 +65,67 @@ export default class TorrentMaster {
         this.emitter.on('strategyPreference', value => {
             this.strategyPreference = value;
         });
+
+        // Fallback tier: fetch the server copy when P2P stalls.
+        this.serverFallback = new ServerFallback({
+            fetchCopy: infoHash => this.service.fetchServerCopy ? this.service.fetchServerCopy(infoHash) : Promise.resolve(null),
+            cachePut,
+            emitter: this.emitter
+        });
+
+        // Phones freeze pages in background: on return, re-announce to
+        // trackers, reopen SSE and re-sync anything missed while asleep.
+        this._lastResumeAt = 0;
+        this.connectionRecovery = new ConnectionRecovery({
+            onResume: reason => this.handleResume(reason)
+        });
+        try { this.connectionRecovery.start(); } catch { /* non-browser env */ }
+
+        this.emitter.on('sseReconnected', () => this.handleResume('sse'));
+        this.emitter.on('fetchServerCopyNow', photo => { this.fetchServerCopyNow(photo).catch(() => {}); });
+        this.emitter.on('retryTorrent', photo => { this.retryPhoto(photo).catch(err => Logger.warn('retryPhoto: ' + err)); });
+    }
+
+    /** User tapped "use server copy" on a stalled tile. */
+    async fetchServerCopyNow(photo) {
+        if (!photo?.infoHash || !this.serverFallback) return false;
+        if (!this.serverFallback.watched.has(photo.infoHash)) {
+            const torrent = getTorrent(this.client, getBaseInfoHash(photo.infoHash));
+            this.serverFallback.watch(photo, () => torrent
+                ? { progress: torrent.progress, done: torrent.done }
+                : { progress: 0, done: false });
+        }
+        return this.serverFallback.fetchNow(photo.infoHash);
+    }
+
+    /** User tapped "retry connection": re-announce and re-add the torrent. */
+    async retryPhoto(photo) {
+        if (!photo?.infoHash) return false;
+        try { this.restartTrackers(); } catch { /* trackers may not be ready */ }
+        const baseInfoHash = getBaseInfoHash(photo.infoHash);
+        const torrent = getTorrent(this.client, baseInfoHash);
+        if (torrent) {
+            await new Promise(resolve => {
+                try { this.client.remove(baseInfoHash, () => resolve()); }
+                catch { resolve(); }
+            });
+        }
+        await this.torrentAddition.add(baseInfoHash, photo).catch(() => null);
+        return true;
+    }
+
+    handleResume(reason) {
+        const now = Date.now();
+        if (now - this._lastResumeAt < 2000) return; // visibility + online fire together
+        this._lastResumeAt = now;
+        Logger.info('ConnectionRecovery: resuming trackers and room sync');
+        try { this.restartTrackers(); } catch (err) { Logger.warn('restartTrackers on resume: ' + err); }
+        if (reason !== 'sse') {
+            try { this.service.reconnectUpdates?.(); } catch { /* SSE already handled */ }
+        }
+        if (this.service.hasRoom && this.service.joinRoom) {
+            this.findExistingContent(this.service.joinRoom).catch(err => Logger.warn('resume re-sync failed: ' + err));
+        }
     }
 
     async findExistingContent(roomPromise) {
@@ -440,6 +503,17 @@ export default class TorrentMaster {
             } else if(event.type === 'delete') {
 
                 this.torrentDeletion.handlePhotoDeleteEvent(event.item);
+                this.serverFallback?.unwatch(typeof event.item === 'string' ? event.item : event.item?.infoHash);
+            } else if(event.type === 'update') {
+                // A server copy may appear after we already started (and
+                // stalled on) the P2P download - start watching it then.
+                const items = Array.isArray(event.item) ? event.item : [event.item];
+                items.filter(item => item?.hasServerCopy).forEach(item => {
+                    const torrent = getTorrent(this.client, getBaseInfoHash(item.infoHash));
+                    if (torrent && this.client.peerId !== item.peerId) {
+                        this.serverFallback?.watch(item, () => ({ progress: torrent.progress, done: torrent.done }));
+                    }
+                });
             }
         });
     }

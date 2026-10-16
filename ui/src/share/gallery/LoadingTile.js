@@ -13,7 +13,9 @@ import StringUtil from "../util/StringUtil";
 import IconButton from "@mui/material/IconButton";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
 import Logger from "js-logger";
+import Button from "@mui/material/Button";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
+import { isTransferStalled, P2P_STALL_MS } from "../torrent/ServerFallback";
 
 function LoadingTile({tile, master, name}) {
     const [progress, setProgress] = useState(null);
@@ -21,6 +23,39 @@ function LoadingTile({tile, master, name}) {
     const [downSpeed, setDownSpeed] = useState('');
     const [upSpeed, setUpSpeed] = useState('');
     const [previewThumbnail, setPreviewThumbnail] = useState(null);
+    const [stalled, setStalled] = useState(false);
+    const [stallSnoozedAt, setStallSnoozedAt] = useState(0);
+    const progressTrackRef = React.useRef({ progress: -1, at: Date.now() });
+
+    // A spinner that never moves helps nobody: if no bytes have arrived for
+    // a while, say so and offer a way out instead of spinning forever.
+    useEffect(() => {
+        if (!tile.loading) return undefined;
+        const id = setInterval(() => {
+            const p = tile.torrentFile ? tile.torrentFile.progress : (progress != null ? progress / 100 : 0);
+            const track = progressTrackRef.current;
+            if (p > track.progress) { track.progress = p; track.at = Date.now(); }
+            setStalled(isTransferStalled({
+                progress: p, done: false,
+                lastProgressAt: track.at, startedAt: track.at,
+                now: Date.now(), stallMs: P2P_STALL_MS + 5000
+            }) && Date.now() - stallSnoozedAt > 30000);
+        }, 1000);
+        return () => clearInterval(id);
+    }, [tile.loading, tile.torrentFile, progress, stallSnoozedAt]);
+
+    const handleUseServerCopy = useCallback(() => {
+        master.emitter.emit('fetchServerCopyNow', tile);
+        setStallSnoozedAt(Date.now());
+        setStalled(false);
+    }, [master.emitter, tile]);
+
+    const handleRetry = useCallback(() => {
+        master.emitter.emit('retryTorrent', tile);
+        progressTrackRef.current = { progress: -1, at: Date.now() };
+        setStallSnoozedAt(Date.now());
+        setStalled(false);
+    }, [master.emitter, tile]);
 
     const listenToPreview = useCallback(() => {
         if(tile.loading && tile.torrentFileThumb && typeof tile.torrentFileThumb.getBlobURL === 'function') {
@@ -95,6 +130,9 @@ function LoadingTile({tile, master, name}) {
     let have = tile.owners?.find(owner => owner.peerId === master.client.peerId && !owner.loading);
     const isLoading = !!currentProgress;
     let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
+    if (stalled && !have) loadingText = 'Connection stalled';
+    else if (!have && tile.fromServerCopy) loadingText = 'Received via server (P2P unavailable)';
+    else if (!have && tile.hasServerCopy && !isLoading) loadingText = 'Find Network Path · server copy ready if needed';
     const isRendering = loadingText === 'Rendering';
     const hasError = !!tile.uploadError;
 
@@ -301,6 +339,24 @@ function LoadingTile({tile, master, name}) {
                         <DeleteRounded fontSize="small" />
                     </IconButton>
                 </Stack>
+
+                {stalled && !have && !hasError && (
+                    <Box sx={{ mt: 1.5 }}>
+                        <Typography variant="caption" sx={{ display: 'block', color: 'warning.main', lineHeight: 1.4 }}>
+                            No data for a while — the other phone may be locked, out of range, or on a network that blocks direct connections.
+                        </Typography>
+                        <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                            {tile.hasServerCopy && (
+                                <Button size="small" variant="contained" onClick={handleUseServerCopy}>
+                                    Use server copy
+                                </Button>
+                            )}
+                            <Button size="small" variant="outlined" onClick={handleRetry}>
+                                Retry connection
+                            </Button>
+                        </Stack>
+                    </Box>
+                )}
 
                 {/* File name */}
                 {displayName && (

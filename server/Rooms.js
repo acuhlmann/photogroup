@@ -4,6 +4,8 @@ import ServerPeer from './ServerPeer.js';
 import Topology from './Topology.js';
 import Peers from './Peers.js';
 import MyDht from './MyDht.js';
+import PhotoRelay, { MAX_PHOTO_BYTES, PhotoTooLargeError } from './PhotoRelay.js';
+import express from 'express';
 import _ from 'lodash';
 
 export default class Rooms {
@@ -35,6 +37,7 @@ export default class Rooms {
         this.registerPeerRoutes(this.app);
         this.registerOwnerRoutes(this.app);
         this.registerConnectionRoutes(this.app);
+        this.registerPhotoRelayRoutes(this.app);
     }
 
     reset() {
@@ -100,6 +103,7 @@ export default class Rooms {
             };
             room.peers = new Peers(this.updateChannel, this.remoteLog, this.app, this.emitter);
             room.topology = new Topology(room.peers, this.updateChannel);
+            room.relay = new PhotoRelay();
             //room.serverPeer = new ServerPeer(room.topology, this.remoteLog, this, this.ice, this.emitter, this.tracker);
             rooms.set(id, room);
 
@@ -234,6 +238,7 @@ export default class Rooms {
                         if (item.infoHash === infoHash) {
                             room.photos.splice(index, 1);
                             this.removeFromPhotoIndex(room, infoHash);
+                            room.relay?.delete(infoHash);
                             return true;
                         }
                         return false;
@@ -250,6 +255,62 @@ export default class Rooms {
             } else {
                 response.status(404).send('Room not found');
             }
+        });
+    }
+
+    /**
+     * Temporary server copy ("relay") of a photo. Uploaded by the sharer as
+     * insurance; downloaded by a peer only when P2P stalls. The infoHash is
+     * passed as a query parameter because compound hashes contain '/'.
+     */
+    registerPhotoRelayRoutes(app) {
+        const rawBody = express.raw({ type: () => true, limit: MAX_PHOTO_BYTES });
+
+        app.post('/api/rooms/:id/photos/blob', rawBody, (request, response) => {
+            const room = this.rooms.get(request.params.id);
+            if (!room) return response.status(404).send('Room not found');
+            const infoHash = request.query.infoHash ? decodeURIComponent(request.query.infoHash) : null;
+            if (!infoHash) return response.status(400).send('Expected infoHash');
+            const photo = this.findPhoto(room, infoHash);
+            if (!photo) return response.status(404).send('Photo not found');
+            if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
+                return response.status(400).send('Expected photo bytes');
+            }
+            room.relay = room.relay || new PhotoRelay();
+            try {
+                const stored = room.relay.put(infoHash, request.body, request.headers['content-type']);
+                photo.hasServerCopy = true;
+                photo.serverCopySize = stored.size;
+                if (!photo.fileType && stored.contentType !== 'application/octet-stream') {
+                    photo.fileType = stored.contentType;
+                }
+                this.sendPhotos(room, this.allRoomClients(room), 'update', [photo]);
+                return response.send({ infoHash, size: stored.size, hasServerCopy: true });
+            } catch (err) {
+                if (err instanceof PhotoTooLargeError) return response.status(413).send(err.message);
+                throw err;
+            }
+        });
+
+        app.get('/api/rooms/:id/photos/blob', (request, response) => {
+            const room = this.rooms.get(request.params.id);
+            if (!room) return response.status(404).send('Room not found');
+            const infoHash = request.query.infoHash ? decodeURIComponent(request.query.infoHash) : null;
+            if (!infoHash) return response.status(400).send('Expected infoHash');
+            const copy = room.relay?.get(infoHash);
+            if (!copy) return response.status(404).send('No server copy for this photo');
+            const photo = this.findPhoto(room, infoHash);
+            const safeName = String(photo?.fileName || 'photo').replace(/["\r\n]/g, '');
+            response.header('Content-Type', photo?.fileType || copy.contentType);
+            response.header('Content-Length', copy.size);
+            response.header('Content-Disposition', `inline; filename="${safeName}"`);
+            response.header('Cache-Control', 'private, max-age=3600');
+            return response.send(copy.buffer);
+        });
+
+        app.use('/api/rooms/:id/photos/blob', (err, request, response, next) => {
+            if (err?.type === 'entity.too.large') return response.status(413).send('Photo copy too large');
+            return next(err);
         });
     }
 
