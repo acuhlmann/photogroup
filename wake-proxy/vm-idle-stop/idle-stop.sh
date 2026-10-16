@@ -12,29 +12,48 @@ META_HEADER="Metadata-Flavor: Google"
 
 log() { echo "[idle-stop] $(date -u +%Y-%m-%dT%H:%M:%SZ) $*"; }
 
-# Skip if someone is actively connected right now (optional soft check)
+# Skip if someone is actively connected right now (HTTP/HTTPS or SSH deploy)
 if command -v ss >/dev/null 2>&1; then
-  ACTIVE=$(ss -tn state established '( sport = :443 or sport = :80 )' 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')
+  ACTIVE=$(ss -tn state established '( sport = :443 or sport = :80 or sport = :22 )' 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')
   if [ "${ACTIVE:-0}" -gt 0 ]; then
-    log "active TCP connections on 80/443 ($ACTIVE) — not stopping"
+    log "active TCP connections on 80/443/22 ($ACTIVE) — not stopping"
+    exit 0
+  fi
+fi
+
+NOW_EPOCH=$(date +%s)
+IDLE_SECONDS=$((IDLE_MINUTES * 60))
+
+# Never stop within IDLE_MINUTES of system boot (protects fresh boots & active deploys)
+if [ -r /proc/uptime ]; then
+  UP_SECONDS=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
+  if [ "${UP_SECONDS:-0}" -gt 0 ] && [ "$UP_SECONDS" -lt "$IDLE_SECONDS" ]; then
+    log "system uptime ${UP_SECONDS}s (< ${IDLE_SECONDS}s) — not stopping"
     exit 0
   fi
 fi
 
 if [ ! -f "$ACCESS_LOG" ]; then
-  log "access log missing ($ACCESS_LOG) — treating as idle"
+  log "access log missing ($ACCESS_LOG) — treating log mtime as 0"
   LAST_ACTIVITY_EPOCH=0
 else
   # Prefer mtime of access log (updated on each request)
   LAST_ACTIVITY_EPOCH=$(stat -c %Y "$ACCESS_LOG" 2>/dev/null || echo 0)
 fi
 
-NOW_EPOCH=$(date +%s)
-IDLE_SECONDS=$((IDLE_MINUTES * 60))
+# Also check wake-last-activity-ms in GCE instance metadata (set by Cloud Run wake proxy)
+META_ACT_MS=$(curl -fsS -H "$META_HEADER" "$METADATA/instance/attributes/wake-last-activity-ms" 2>/dev/null || echo 0)
+if [[ "${META_ACT_MS:-0}" =~ ^[0-9]+$ ]] && [ "$META_ACT_MS" -gt 0 ]; then
+  META_ACT_EPOCH=$((META_ACT_MS / 1000))
+  if [ "$META_ACT_EPOCH" -gt "$LAST_ACTIVITY_EPOCH" ]; then
+    LAST_ACTIVITY_EPOCH=$META_ACT_EPOCH
+  fi
+fi
+
 AGE=$((NOW_EPOCH - LAST_ACTIVITY_EPOCH))
 
 if [ "$AGE" -lt "$IDLE_SECONDS" ]; then
-  log "last nginx activity ${AGE}s ago (< ${IDLE_SECONDS}s) — not stopping"
+  log "last activity ${AGE}s ago (< ${IDLE_SECONDS}s) — not stopping"
   exit 0
 fi
 

@@ -125,3 +125,16 @@ describe('waitForHealthy', () => {
     assert.equal(result.healthy, false);
   });
 });
+
+describe('nginx wake-access.log and idle-stop config', () => {
+  it('does not cancel wake-access.log with access_log off in photogroup.network server block', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const nginxCfg = fs.readFileSync(path.resolve(__dirname, '../../server/config/photogroup.network'), 'utf8');
+    const mainServerBlock = nginxCfg.split('server_name photogroup.network')[1] || '';
+    assert.match(mainServerBlock, /access_log\s+\/var\/log\/nginx\/wake-access\.log\s+combined\s+if=\$log_wake;/);
+    assert.doesNotMatch(mainServerBlock, /^\s*access_log\s+off;/m);
+  });
+});

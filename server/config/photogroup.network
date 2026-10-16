@@ -45,8 +45,9 @@ server {
         listen [::]:80;
         server_name photogroup.network www.photogroup.network;
 
+        # Note: Do NOT add `access_log off;` in this server block — in nginx,
+        # `access_log off` cancels all access_log directives at the same level.
         access_log /var/log/nginx/wake-access.log combined if=$log_wake;
-        access_log off;
 
         location /.well-known/acme-challenge/ {
                 root /var/www/certbot;
