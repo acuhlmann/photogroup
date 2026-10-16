@@ -30,4 +30,16 @@ describe('ip.isPublic classification', () => {
   it('converts an announce integer to dotted ipv4', () => {
     assert.strictEqual(ip.toString(Buffer.from([8, 8, 8, 8])), '8.8.8.8');
   });
+
+  it('copies vendor/net-ip into all Dockerfile stages that install dependencies', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const { fileURLToPath } = await import('url');
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const dockerfile = fs.readFileSync(path.resolve(__dirname, '../../../Dockerfile'), 'utf8');
+    // Stage 1 (WORKDIR /app/ui) needs /app/vendor/net-ip for file:../vendor/net-ip
+    assert.match(dockerfile, /COPY\s+vendor\/?\s+\/app\/vendor\/?/);
+    // Server stages (WORKDIR /app) need /vendor/net-ip for file:../vendor/net-ip
+    assert.match(dockerfile, /COPY\s+vendor\/?\s+\/vendor\/?/);
+  });
 });

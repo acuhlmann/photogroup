@@ -8,6 +8,9 @@ ENV VITE_APP_VERSION=$VITE_APP_VERSION
 
 WORKDIR /app/ui
 
+# Copy vendored packages referenced via file:../vendor/*
+COPY vendor/ /app/vendor/
+
 # Copy UI package files
 COPY ui/package*.json ./
 
@@ -27,6 +30,9 @@ WORKDIR /app
 
 # Install build tools for native modules (wrtc, bittorrent-dht)
 RUN apk add --no-cache python3 make g++
+
+# Copy vendored packages referenced via file:../vendor/*
+COPY vendor/ /vendor/
 
 # Copy server package files
 COPY server/package*.json ./
@@ -55,6 +61,9 @@ RUN addgroup -g 1001 -S nodejs && \
 # Install build tools for native modules (needed for npm install)
 RUN apk add --no-cache python3 make g++
 
+# Copy vendored packages referenced via file:../vendor/*
+COPY vendor/ /vendor/
+
 # Copy server package files
 COPY server/package*.json ./
 
@@ -75,7 +84,7 @@ COPY --from=server-builder /app/ui ./ui
 RUN mkdir -p secret
 
 # Change ownership to non-root user
-RUN chown -R nodejs:nodejs /app
+RUN chown -R nodejs:nodejs /app /vendor
 
 # Switch to non-root user
 USER nodejs

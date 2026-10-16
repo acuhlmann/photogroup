@@ -156,9 +156,19 @@ async function ensureReady(host) {
   return ensureReadyPromise;
 }
 
-async function handleWakeStatus(_req, res) {
-  // GCE API only — do not HTTP-probe nginx here (that resets idle-stop).
+async function handleWakeStatus(req, res) {
+  // GCE API only when stopped or already ready — do not HTTP-probe nginx once ready (that resets idle-stop).
   await reconcileOriginState();
+
+  // If the VM is RUNNING (externalIp present) but readiness hasn't been confirmed yet
+  // and no probe loop is in flight (e.g. new Cloud Run instance or prior timeout),
+  // start ensureReady in the background so starting-page pollers can transition to ready.
+  if (wakeState.externalIp && !wakeState.ready && !ensureReadyPromise) {
+    const host = req.headers.host || 'photogroup.network';
+    ensureReady(host).catch((err) => {
+      console.error('[wake-proxy] ensureReady (from status) failed:', err.message);
+    });
+  }
 
   const lastActivityMs = await activity.getLastActivityMs();
   res.writeHead(200, {

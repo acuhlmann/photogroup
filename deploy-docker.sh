@@ -144,8 +144,21 @@ run_gcloud_ssh "
     # Bind to 127.0.0.1 so nginx can reach it (not exposed publicly)
     sudo $DOCKER_RUN_CMD
 
-    # Verify container is running
-    sudo docker ps | grep $CONTAINER_NAME
+    # Wait for the server inside the container to respond (catches immediate crash loops)
+    READY=0
+    for i in \$(seq 1 15); do
+        if curl -fsS http://127.0.0.1:8081/api/__rtcConfig__ >/dev/null 2>&1; then
+            READY=1
+            break
+        fi
+        sleep 2
+    done
+    if [ \"\$READY\" -ne 1 ]; then
+        echo 'ERROR: Container failed health check on http://127.0.0.1:8081/api/__rtcConfig__'
+        sudo docker ps -a --filter name=$CONTAINER_NAME
+        sudo docker logs --tail 50 $CONTAINER_NAME || true
+        exit 1
+    fi
 
     # Prune unused Docker resources to free disk space on the VM
     # (removes previous photogroup-ai image and any stopped containers)
