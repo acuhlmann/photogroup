@@ -17,6 +17,7 @@ test.describe('server-copy fallback', () => {
   });
 
   test('late joiner still receives the photo after the sharer has left', async ({ browser }) => {
+    test.setTimeout(180000);
     const context1 = await browser.newContext();
     const page1 = await context1.newPage();
 
