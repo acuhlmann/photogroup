@@ -18,9 +18,10 @@ describe('ServerFallback', () => {
     it('delivers the server copy, caches it and emits torrentReady when stalled', async () => {
         const emitter = { emit: vi.fn() };
         const cachePut = vi.fn().mockResolvedValue();
+        let clock = 1000;
         const fallback = new ServerFallback({
             fetchCopy: vi.fn().mockResolvedValue(new Blob(['jpg'], { type: 'image/jpeg' })),
-            cachePut, emitter, stallMs: 100, pollMs: 5, now: () => 1000
+            cachePut, emitter, stallMs: 100, pollMs: 5, now: () => (clock += 200)
         });
         const photo = { infoHash: 'h1', fileName: 'a.jpg', fileType: 'image/jpeg', hasServerCopy: true };
         fallback.watch(photo, () => ({ progress: 0, done: false }));
