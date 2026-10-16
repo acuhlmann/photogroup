@@ -82,6 +82,36 @@ export default class TorrentMaster {
         try { this.connectionRecovery.start(); } catch { /* non-browser env */ }
 
         this.emitter.on('sseReconnected', () => this.handleResume('sse'));
+        this.emitter.on('fetchServerCopyNow', photo => { this.fetchServerCopyNow(photo).catch(() => {}); });
+        this.emitter.on('retryTorrent', photo => { this.retryPhoto(photo).catch(err => Logger.warn('retryPhoto: ' + err)); });
+    }
+
+    /** User tapped "use server copy" on a stalled tile. */
+    async fetchServerCopyNow(photo) {
+        if (!photo?.infoHash || !this.serverFallback) return false;
+        if (!this.serverFallback.watched.has(photo.infoHash)) {
+            const torrent = getTorrent(this.client, getBaseInfoHash(photo.infoHash));
+            this.serverFallback.watch(photo, () => torrent
+                ? { progress: torrent.progress, done: torrent.done }
+                : { progress: 0, done: false });
+        }
+        return this.serverFallback.fetchNow(photo.infoHash);
+    }
+
+    /** User tapped "retry connection": re-announce and re-add the torrent. */
+    async retryPhoto(photo) {
+        if (!photo?.infoHash) return false;
+        try { this.restartTrackers(); } catch { /* trackers may not be ready */ }
+        const baseInfoHash = getBaseInfoHash(photo.infoHash);
+        const torrent = getTorrent(this.client, baseInfoHash);
+        if (torrent) {
+            await new Promise(resolve => {
+                try { this.client.remove(baseInfoHash, () => resolve()); }
+                catch { resolve(); }
+            });
+        }
+        await this.torrentAddition.add(baseInfoHash, photo).catch(() => null);
+        return true;
     }
 
     handleResume(reason) {
