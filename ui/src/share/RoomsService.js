@@ -187,7 +187,8 @@ export default class RoomsService {
     /** Leave a temporary server copy of a photo as P2P insurance. */
     async uploadServerCopy(infoHash, blob) {
         if (!infoHash || !blob) throw new Error('uploadServerCopy needs infoHash and blob');
-        const response = await fetch(this.url + '/' + this.id + '/photos/blob?infoHash=' + encodeURIComponent(infoHash), {
+        const response = await fetch(this.url + '/' + this.id + '/photos/blob?infoHash=' + encodeURIComponent(infoHash)
+            + '&peerId=' + encodeURIComponent(this.master.client.peerId), {
             method: 'POST',
             headers: { 'Content-Type': blob.type || 'application/octet-stream' },
             body: blob
