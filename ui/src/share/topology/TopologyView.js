@@ -246,6 +246,182 @@ function drawConnectionStatusLabel(ctx, fromNode, toNode, edge, isDark) {
     ctx.fillText(text, midX, midY);
 }
 
+function isNatType(natType) {
+    return natType.includes('srflx') || natType.includes('prflx');
+}
+
+function createShortNetworkLabel(item) {
+    // Use human-readable display name (ISP, city, hostname) instead of IP
+    return StringUtil.createDisplayName(item);
+}
+
+function addHosts(peer, nodes, isMe) {
+    if (nodes.find(item => item.id === peer.peerId)) return;
+    const hosts = peer.networkChain.filter(item => item.typeDetail === 'host');
+    const host = hosts.find(item => item.label) || hosts[0];
+    if (host) {
+        const platform = StringUtil.slimPlatform(peer.originPlatform);
+        const node = {
+            id: peer.peerId,
+            label: peer.name || _.truncate(platform),
+            type: 'client',
+            peer: peer,
+            network: host,
+            networks: hosts,
+            isMe: isMe,
+        };
+        nodes.push(node);
+        return host;
+    }
+}
+
+function addNats(peer, nodes, isMe) {
+    const nats = peer.networkChain.filter(item => isNatType(item.typeDetail));
+    const nat = nats.find(item => item.label) || nats[0];
+    if (nat) {
+        if (nodes.find(item => item.id === nat.ip)) return nat;
+        const node = {
+            id: nat.ip,
+            label: createShortNetworkLabel(nat),
+            network: nat,
+            networks: nats,
+            peer: peer,
+            type: 'nat',
+            isMe: isMe,
+        };
+        nodes.push(node);
+        return node;
+    }
+}
+
+function addRelays(peer, nodes, isMe) {
+    const relays = peer.networkChain.filter(item => item.typeDetail === 'relay');
+    return relays.map(relay => {
+        const shortName = createShortNetworkLabel(relay);
+        const existing = nodes.find(item => item.id === shortName);
+        if (!existing) {
+            const node = {
+                id: shortName,
+                label: shortName,
+                relays: new Map([[relay.ip, relay]]),
+                type: 'relay',
+                network: relay,
+                networks: [relay],
+                peer: peer,
+                isMe: isMe,
+            };
+            nodes.push(node);
+            return node;
+        } else {
+            existing.relays.set(relay.ip, relay);
+            existing.networks.push(relay);
+            return existing;
+        }
+    }).filter(item => item);
+}
+
+function addPeerChains(peers, myPeerId, nodes, edges) {
+    peers.forEach(peer => {
+        if (peer.networkChain) {
+            const isMe = peer.peerId === myPeerId;
+            const host = addHosts(peer, nodes, isMe);
+            const nat = addNats(peer, nodes, isMe);
+            const relays = addRelays(peer, nodes, isMe);
+
+            if (nat) {
+                edges.push({
+                    from: peer.peerId,
+                    to: nat.id || nat.ip,
+                    type: 'chain',
+                    network: host,
+                });
+                relays.forEach(relay => {
+                    edges.push({
+                        from: nat.id || nat.ip,
+                        to: relay.id || relay.ip,
+                        type: 'chain',
+                    });
+                });
+            }
+        }
+    });
+}
+
+function addConnections(connections, edges) {
+    connections.forEach(conn => {
+        const from = conn.connectionType === 'p2p' ? conn.fromPeerId : conn.from;
+        const to = conn.connectionType === 'p2p' ? conn.toPeerId : conn.to;
+        const edge = {
+            id: conn.id,
+            from,
+            to,
+            type: 'connection',
+            network: conn,
+        };
+        if (!edges.find(item => item.from === edge.from && item.to === edge.to)) {
+            edges.push(edge);
+        }
+    });
+}
+
+// Show the user's own node from local ICE discovery until the server
+// echoes our peer back with its network chain.
+function addLocalNetwork(networkChain, myPeerId, me, nodes, edges) {
+    if (nodes.find(n => n.id === myPeerId)) return;
+
+    const hosts = networkChain.filter(item => item.typeDetail === 'host');
+    const host = hosts.find(item => item.label) || hosts[0];
+    if (host) {
+        const platform = StringUtil.slimPlatform(me.originPlatform || '');
+        nodes.push({
+            id: myPeerId,
+            label: me.name || _.truncate(platform) || 'Me',
+            type: 'client',
+            peer: { ...me, peerId: myPeerId, networkChain },
+            network: host,
+            networks: hosts,
+            isMe: true,
+        });
+    }
+
+    const nats = networkChain.filter(item =>
+        item.typeDetail && (item.typeDetail.includes('srflx') || item.typeDetail.includes('prflx'))
+    );
+    const nat = nats.find(item => item.label) || nats[0];
+    if (nat && !nodes.find(n => n.id === nat.ip)) {
+        nodes.push({
+            id: nat.ip,
+            label: createShortNetworkLabel(nat),
+            network: nat,
+            networks: nats,
+            peer: { peerId: myPeerId, networkChain },
+            type: 'nat',
+            isMe: true,
+        });
+        edges.push({
+            from: myPeerId,
+            to: nat.ip,
+            type: 'chain',
+            network: host,
+        });
+    }
+}
+
+// The map mounts each time it is opened (the phone's People sheet unmounts it
+// on close), so build it from what master already knows rather than starting
+// empty and waiting for the next server event.
+function readGraph(master) {
+    const myPeerId = master.client?.peerId;
+    const nodes = [];
+    const edges = [];
+    addConnections(master.peers?.connections || [], edges);
+    addPeerChains(master.peers?.items || [], myPeerId, nodes, edges);
+    if (myPeerId && master.localNetwork) {
+        addLocalNetwork(master.localNetwork, myPeerId, master.me || {}, nodes, edges);
+    }
+    return { nodes, edges };
+}
+
 function TopologyView({ master, fillHeight, active = true }) {
     const muiTheme = useTheme();
     const isDark = muiTheme.palette.mode === 'dark';
@@ -262,7 +438,7 @@ function TopologyView({ master, fillHeight, active = true }) {
     const [visible, setVisible] = useState(false);
     const [showTopology, setShowTopology] = useState(true);
     const [selectedNodeLabel, setSelectedNodeLabel] = useState('');
-    const [graph, setGraph] = useState({ nodes: [], edges: [] });
+    const [graph, setGraph] = useState(() => readGraph(master));
     const [peerPhotoCounts, setPeerPhotoCounts] = useState({});
 
     // Helper methods (kept from original)
@@ -276,110 +452,42 @@ function TopologyView({ master, fillHeight, active = true }) {
             || platform.indexOf('iOS') > -1;
     }, []);
 
-    const isNatType = useCallback((natType) => {
-        return natType.includes('srflx') || natType.includes('prflx');
-    }, []);
-
-    const createShortNetworkLabel = useCallback((item) => {
-        // Use human-readable display name (ISP, city, hostname) instead of IP
-        return StringUtil.createDisplayName(item);
-    }, []);
-
-    const addHosts = useCallback((peer, nodes, isMe) => {
-        if (nodes.find(item => item.id === peer.peerId)) return;
-        const hosts = peer.networkChain.filter(item => item.typeDetail === 'host');
-        const host = hosts.find(item => item.label) || hosts[0];
-        if (host) {
-            const platform = StringUtil.slimPlatform(peer.originPlatform);
-            const node = {
-                id: peer.peerId,
-                label: peer.name || _.truncate(platform),
-                type: 'client',
-                peer: peer,
-                network: host,
-                networks: hosts,
-                isMe: isMe,
-            };
-            nodes.push(node);
-            return host;
-        }
-    }, []);
-
-    const addNats = useCallback((peer, nodes, isMe) => {
-        const nats = peer.networkChain.filter(item => isNatType(item.typeDetail));
-        const nat = nats.find(item => item.label) || nats[0];
-        if (nat) {
-            if (nodes.find(item => item.id === nat.ip)) return nat;
-            const node = {
-                id: nat.ip,
-                label: createShortNetworkLabel(nat),
-                network: nat,
-                networks: nats,
-                peer: peer,
-                type: 'nat',
-                isMe: isMe,
-            };
-            nodes.push(node);
-            return node;
-        }
-    }, [isNatType, createShortNetworkLabel]);
-
-    const addRelays = useCallback((peer, nodes, isMe) => {
-        const relays = peer.networkChain.filter(item => item.typeDetail === 'relay');
-        return relays.map(relay => {
-            const shortName = createShortNetworkLabel(relay);
-            const existing = nodes.find(item => item.id === shortName);
-            if (!existing) {
-                const node = {
-                    id: shortName,
-                    label: shortName,
-                    relays: new Map([[relay.ip, relay]]),
-                    type: 'relay',
-                    network: relay,
-                    networks: [relay],
-                    peer: peer,
-                    isMe: isMe,
-                };
-                nodes.push(node);
-                return node;
-            } else {
-                existing.relays.set(relay.ip, relay);
-                existing.networks.push(relay);
-                return existing;
-            }
-        }).filter(item => item);
-    }, [createShortNetworkLabel]);
-
     // Track photo counts per peer
     useEffect(() => {
         const emitter = master.emitter;
 
-        const handlePhotos = (data) => {
-            // Recalculate photo counts from room photos when ownership changes
-            if (data.type === 'add' || data.type === 'addOwner' || data.type === 'removeOwner' || data.type === 'updateOwner' || data.type === 'delete') {
-                // Fetch current room state to get accurate photo counts
-                if (masterRef.current.service && masterRef.current.service.hasRoom) {
-                    masterRef.current.service.getRoom().then(room => {
-                        if (room && room.photos) {
-                            const counts = {};
-                            room.photos.forEach(photo => {
-                                if (photo.owners) {
-                                    photo.owners.forEach(owner => {
-                                        counts[owner.peerId] = (counts[owner.peerId] || 0) + 1;
-                                    });
-                                }
-                                // Also count by peerId (the original uploader)
-                                if (photo.peerId) {
-                                    counts[photo.peerId] = counts[photo.peerId] || 0;
-                                }
-                            });
-                            setPeerPhotoCounts(counts);
-                        }
-                    }).catch(() => {});
-                }
+        // Fetch current room state to get accurate photo counts
+        const refreshPhotoCounts = () => {
+            if (masterRef.current.service && masterRef.current.service.hasRoom) {
+                masterRef.current.service.getRoom().then(room => {
+                    if (room && room.photos) {
+                        const counts = {};
+                        room.photos.forEach(photo => {
+                            if (photo.owners) {
+                                photo.owners.forEach(owner => {
+                                    counts[owner.peerId] = (counts[owner.peerId] || 0) + 1;
+                                });
+                            }
+                            // Also count by peerId (the original uploader)
+                            if (photo.peerId) {
+                                counts[photo.peerId] = counts[photo.peerId] || 0;
+                            }
+                        });
+                        setPeerPhotoCounts(counts);
+                    }
+                }).catch(() => {});
             }
         };
 
+        const handlePhotos = (data) => {
+            // Recalculate photo counts from room photos when ownership changes
+            if (data.type === 'add' || data.type === 'addOwner' || data.type === 'removeOwner' || data.type === 'updateOwner' || data.type === 'delete') {
+                refreshPhotoCounts();
+            }
+        };
+
+        // Counts die with the map on close; fetch them again when it opens.
+        refreshPhotoCounts();
         emitter.on('photos', handlePhotos);
         return () => {
             emitter.removeListener('photos', handlePhotos);
@@ -393,140 +501,32 @@ function TopologyView({ master, fillHeight, active = true }) {
         const handleShowTopology = (value) => setShowTopology(value);
         const handleReadyToUpload = () => setVisible(true);
 
-        // Show the user's own node immediately when local ICE discovery completes,
-        // rather than waiting for the server round-trip.
-        const handleLocalNetwork = (networkChain) => {
-            if (!networkChain || !Array.isArray(networkChain) || networkChain.length === 0) return;
-            const myPeerId = masterRef.current?.client?.peerId;
-            if (!myPeerId) return;
-
-            setGraph(state => {
-                // Don't overwrite if we already have this node from server data
-                if (state.nodes.find(n => n.id === myPeerId)) return state;
-
-                const nodes = [...state.nodes];
-                const edges = [...state.edges];
-                const hosts = networkChain.filter(item => item.typeDetail === 'host');
-                const host = hosts.find(item => item.label) || hosts[0];
-                if (host) {
-                    const me = masterRef.current.me || {};
-                    const platform = StringUtil.slimPlatform(me.originPlatform || '');
-                    nodes.push({
-                        id: myPeerId,
-                        label: me.name || _.truncate(platform) || 'Me',
-                        type: 'client',
-                        peer: { ...me, peerId: myPeerId, networkChain },
-                        network: host,
-                        networks: hosts,
-                        isMe: true,
-                    });
-                }
-
-                const nats = networkChain.filter(item =>
-                    item.typeDetail && (item.typeDetail.includes('srflx') || item.typeDetail.includes('prflx'))
-                );
-                const nat = nats.find(item => item.label) || nats[0];
-                if (nat && !nodes.find(n => n.id === nat.ip)) {
-                    nodes.push({
-                        id: nat.ip,
-                        label: createShortNetworkLabel(nat),
-                        network: nat,
-                        networks: nats,
-                        peer: { peerId: myPeerId, networkChain },
-                        type: 'nat',
-                        isMe: true,
-                    });
-                    edges.push({
-                        from: myPeerId,
-                        to: nat.ip,
-                        type: 'chain',
-                        network: host,
-                    });
-                }
-
-                return { nodes, edges };
-            });
-        };
-
         emitter.on('showTopology', handleShowTopology);
         emitter.on('readyToUpload', handleReadyToUpload);
-        emitter.on('localNetwork', handleLocalNetwork);
 
         return () => {
             emitter.removeListener('showTopology', handleShowTopology);
             emitter.removeListener('readyToUpload', handleReadyToUpload);
-            emitter.removeListener('localNetwork', handleLocalNetwork);
         };
-    }, [master.emitter, createShortNetworkLabel]);
+    }, [master.emitter]);
 
-    // Peer and connection data
+    // Peer, connection and local network data. master has already applied
+    // these events by the time they reach us, so rebuild from it.
     useEffect(() => {
         const emitter = master.emitter;
 
-        const handlePeers = () => {
-            const myPeerId = masterRef.current.client.peerId;
-            const peers = masterRef.current.peers;
-            const nodes = [];
+        const refreshGraph = () => setGraph(readGraph(masterRef.current));
 
-            setGraph(state => {
-                const edges = (state.edges || []).filter(item => item.type === 'connection');
-                peers.items.forEach(peer => {
-                    if (peer.networkChain) {
-                        const isMe = peer.peerId === myPeerId;
-                        const host = addHosts(peer, nodes, isMe);
-                        const nat = addNats(peer, nodes, isMe);
-                        const relays = addRelays(peer, nodes, isMe);
-
-                        if (nat) {
-                            edges.push({
-                                from: peer.peerId,
-                                to: nat.id || nat.ip,
-                                type: 'chain',
-                                network: host,
-                            });
-                            relays.forEach(relay => {
-                                edges.push({
-                                    from: nat.id || nat.ip,
-                                    to: relay.id || relay.ip,
-                                    type: 'chain',
-                                });
-                            });
-                        }
-                    }
-                });
-                return { nodes, edges };
-            });
-        };
-
-        const handlePeerConnections = (connections) => {
-            setGraph(state => {
-                let edges = (state.edges || []).filter(item => item.type !== 'connection');
-                connections.forEach(conn => {
-                    const from = conn.connectionType === 'p2p' ? conn.fromPeerId : conn.from;
-                    const to = conn.connectionType === 'p2p' ? conn.toPeerId : conn.to;
-                    const edge = {
-                        id: conn.id,
-                        from,
-                        to,
-                        type: 'connection',
-                        network: conn,
-                    };
-                    if (!edges.find(item => item.from === edge.from && item.to === edge.to)) {
-                        edges.push(edge);
-                    }
-                });
-                return { nodes: state.nodes, edges };
-            });
-        };
-
-        emitter.on('peers', handlePeers);
-        emitter.on('peerConnections', handlePeerConnections);
+        emitter.on('peers', refreshGraph);
+        emitter.on('peerConnections', refreshGraph);
+        emitter.on('localNetwork', refreshGraph);
 
         return () => {
-            emitter.removeListener('peers', handlePeers);
-            emitter.removeListener('peerConnections', handlePeerConnections);
+            emitter.removeListener('peers', refreshGraph);
+            emitter.removeListener('peerConnections', refreshGraph);
+            emitter.removeListener('localNetwork', refreshGraph);
         };
-    }, [master.emitter, addHosts, addNats, addRelays]);
+    }, [master.emitter]);
 
     // Canvas rendering
     useEffect(() => {

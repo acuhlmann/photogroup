@@ -60,68 +60,41 @@ function ChainCard({ icon, title, children, borderColor }) {
     );
 }
 
+function findNat(chain) {
+    return chain?.find(item => item.typeDetail?.includes('srflx') || item.typeDetail?.includes('prflx'));
+}
+
+// This panel mounts each time it is opened, so read what master already knows
+// rather than waiting for events that fired before. Prefer the room's copy of
+// our peer (the server adds ISP and location) over the local ICE result.
+function readDevice(master) {
+    const originPlatform = master.me ? StringUtil.slimPlatform(master.me.originPlatform || '') : '';
+    const myPeerId = master.client?.peerId;
+    const myPeer = master.peers?.items?.find(item => item.peerId === myPeerId);
+    const chain = myPeer?.networkChain?.length ? myPeer.networkChain : master.localNetwork;
+    const host = chain?.find(item => item.typeDetail === 'host');
+    return {
+        originPlatform,
+        me: host ? { ...host, label: originPlatform + ' ' + host.ip } : { label: originPlatform },
+        myNat: findNat(chain) || null,
+    };
+}
+
 function MeView({ master }) {
     const [showMe, setShowMe] = useState(false);
     const [galleryHasImages, setGalleryHasImages] = useState(false);
-    const [me, setMe] = useState({});
-    const [myNat, setMyNat] = useState(null);
-    const [connectionSpeedType, setConnectionSpeedType] = useState('');
-    const [originPlatform, setOriginPlatform] = useState('');
-
-    const findNat = useCallback((chain) => {
-        return chain?.find(item => item.typeDetail?.includes('srflx') || item.typeDetail?.includes('prflx'));
-    }, []);
+    const [device, setDevice] = useState(() => readDevice(master));
+    const [connectionSpeedType, setConnectionSpeedType] = useState(master.connectionSpeedType || '');
+    const { me, myNat, originPlatform } = device;
 
     useEffect(() => {
         const emitter = master.emitter;
 
-        const handleLocalNetwork = (chain) => {
-            if (me?.label && myNat?.network?.hostname) return;
-            if (!chain?.find) return;
-
-            const meItem = chain.find(item => item.typeDetail === 'host');
-            if (meItem) {
-                meItem.label = originPlatform + ' ' + meItem.ip;
-            }
-            const natItem = findNat(chain);
-            if (natItem) {
-                natItem.label = natItem.typeDetail + ' ' + natItem.ip;
-                natItem.network = {};
-            }
-
-            setMe(meItem || {});
-            setMyNat(natItem);
-        };
-
-        const handlePeers = (event) => {
-            if (event.type === 'update') {
-                const myPeer = event.item;
-                if (myPeer && myPeer.peerId === master.client.peerId && myPeer.networkChain) {
-                    const natItem = findNat(myPeer.networkChain);
-                    if (natItem && !natItem.network) {
-                        natItem.network = {};
-                    }
-                    if (natItem) {
-                        natItem.label = StringUtil.createNetworkLabel(natItem);
-                    }
-                    const meItem = myPeer.networkChain.find(item => item.typeDetail === 'host');
-                    if (meItem) {
-                        meItem.label = originPlatform + ' ' + meItem.ip;
-                    }
-                    setMyNat(natItem);
-                    setMe(meItem || {});
-                }
-            }
-        };
+        // master has already applied these by the time they reach us.
+        const refreshDevice = () => setDevice(readDevice(master));
 
         const handleConnectionSpeedType = (type) => {
-            setConnectionSpeedType(type + ' ');
-        };
-
-        const handleAddPeerDone = (peer) => {
-            const platform = StringUtil.slimPlatform(peer.originPlatform);
-            setOriginPlatform(platform);
-            setMe({ label: platform });
+            setConnectionSpeedType(type || '');
         };
 
         const handleShowMe = (value) => {
@@ -132,22 +105,22 @@ function MeView({ master }) {
             setGalleryHasImages(hasImages);
         };
 
-        emitter.on('localNetwork', handleLocalNetwork);
-        emitter.on('peers', handlePeers);
+        emitter.on('localNetwork', refreshDevice);
+        emitter.on('peers', refreshDevice);
         emitter.on('connectionSpeedType', handleConnectionSpeedType);
-        emitter.on('addPeerDone', handleAddPeerDone);
+        emitter.on('addPeerDone', refreshDevice);
         emitter.on('showMe', handleShowMe);
         emitter.on('galleryHasImages', handleGalleryHasImages);
 
         return () => {
-            emitter.removeListener('localNetwork', handleLocalNetwork);
-            emitter.removeListener('peers', handlePeers);
+            emitter.removeListener('localNetwork', refreshDevice);
+            emitter.removeListener('peers', refreshDevice);
             emitter.removeListener('connectionSpeedType', handleConnectionSpeedType);
-            emitter.removeListener('addPeerDone', handleAddPeerDone);
+            emitter.removeListener('addPeerDone', refreshDevice);
             emitter.removeListener('showMe', handleShowMe);
             emitter.removeListener('galleryHasImages', handleGalleryHasImages);
         };
-    }, [master, findNat, me, myNat, originPlatform]);
+    }, [master]);
 
     const batchChangeName = useCallback((event) => {
         if (!event.target) return;

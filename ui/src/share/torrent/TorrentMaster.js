@@ -66,6 +66,15 @@ export default class TorrentMaster {
             this.strategyPreference = value;
         });
 
+        // The network panel mounts whenever it is opened, long after these
+        // fire once, so keep the latest values for it to start from.
+        this.emitter.on('localNetwork', chain => {
+            if (Array.isArray(chain) && chain.length > 0) this.localNetwork = chain;
+        });
+        this.emitter.on('connectionSpeedType', type => {
+            this.connectionSpeedType = type;
+        });
+
         // Fallback tier: fetch the server copy when P2P stalls.
         this.serverFallback = new ServerFallback({
             fetchCopy: infoHash => this.service.fetchServerCopy ? this.service.fetchServerCopy(infoHash) : Promise.resolve(null),
