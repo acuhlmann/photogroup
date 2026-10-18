@@ -14,6 +14,7 @@ import StringUtil from "../util/StringUtil";
 import ContentTile from "./ContentTile";
 import GalleryPhotoHandler from "./GalleryPhotoHandler";
 import PhotoViewer from "./PhotoViewer";
+import NetworkReadout from "../topology/NetworkReadout";
 import { getBlobAndEmit } from "../torrent/BlobUtils";
 import { cacheGet } from "../util/ImageBlobCache";
 import { runViewTransition } from "./viewTransition";
@@ -373,10 +374,12 @@ function Gallery(props) {
             }}
         >
             {tiles.length === 0 ? (
+                <>
                 <Box
                     component="label"
                     htmlFor="contained-button-file"
                     className="drop-target"
+                    sx={{ minHeight: 'min(40vh, 360px) !important' }}
                 >
                     <CloudUploadIcon sx={{ fontSize: 40, mb: 1.5, color: 'primary.main' }} />
                     <Typography className="tech-text" sx={{ mb: 1, color: 'primary.main' }}>
@@ -389,6 +392,10 @@ function Gallery(props) {
                         Drop pictures here, or tap to choose some from this device.
                     </Typography>
                 </Box>
+                <Box sx={{ maxWidth: 560, mx: 'auto' }}>
+                    <NetworkReadout master={master} />
+                </Box>
+                </>
             ) : (
                 <Box
                     className="stagger-children"
