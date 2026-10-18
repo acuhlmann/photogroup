@@ -99,12 +99,17 @@ export default class MetadataParser {
     parseMediaMetadata(tile) {
         const mimeType = tile.fileType || tile.elem?.type || tile.file?.type;
         const size = tile.torrentFile?.length ?? tile.file?.size ?? tile.elem?.size;
+        const parseOptions = {
+            size,
+            mimeType: mimeType || tile.torrentFile?.name || tile.fileName,
+        };
 
         if (tile.torrentFile && typeof tile.torrentFile.createReadStream === 'function') {
             const stream = tile.torrentFile.createReadStream();
-            return mm.parseWebStream(stream, {
-                size,
-                mimeType: mimeType || tile.torrentFile.name
+            return mm.parseWebStream(stream, parseOptions).finally(() => {
+                if (typeof stream.destroy === 'function') {
+                    stream.destroy();
+                }
             });
         }
 

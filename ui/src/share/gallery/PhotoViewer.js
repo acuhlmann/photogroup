@@ -48,17 +48,55 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
         }
     }, [tile?.infoHash, debouncedRename]);
 
+    const applyMetadataSummary = useCallback((sourceTile) => {
+        if (!sourceTile || !master.metadata || typeof master.metadata.createMetadataSummary !== 'function') {
+            setSummary(null);
+            return;
+        }
+        if (sourceTile.metadata) {
+            setSummary(master.metadata.createMetadataSummary(sourceTile.metadata, sourceTile) || null);
+        } else {
+            setSummary(null);
+        }
+    }, [master.metadata]);
+
     useEffect(() => {
         if (!tile) return;
         setFileName(FileUtil.getFileNameWithoutSuffix(tile.fileName) || '');
         setSaved(false);
         setSaving(false);
-        if (tile.metadata && master.metadata && typeof master.metadata.createMetadataSummary === 'function') {
-            setSummary(master.metadata.createMetadataSummary(tile.metadata, tile) || null);
-        } else {
-            setSummary(null);
-        }
-    }, [tile, tile && tile.metadata, tile && tile.fileName, master.metadata]);
+        applyMetadataSummary(tile);
+    }, [tile, tile && tile.metadata, tile && tile.fileName, applyMetadataSummary]);
+
+    useEffect(() => {
+        if (!tile?.infoHash) return undefined;
+
+        const handlePhotos = (event) => {
+            if (event.type !== 'update' || !Array.isArray(event.item)) return;
+            const updated = event.item.find(item => item.infoHash === tile.infoHash);
+            if (updated) {
+                applyMetadataSummary(updated);
+            }
+        };
+
+        master.emitter.on('photos', handlePhotos);
+        return () => master.emitter.removeListener('photos', handlePhotos);
+    }, [tile?.infoHash, master.emitter, applyMetadataSummary]);
+
+    useEffect(() => {
+        if (!tile || tile.hasMetadata || tile.metadata) return;
+        if (!(tile.isVideo || tile.isAudio)) return;
+        if (!tile.torrentFile && !tile.file && !tile.elem) return;
+
+        master.metadata.readMetadata(tile, (updatedTile, metadata) => {
+            if (metadata && Object.keys(metadata).length > 0) {
+                applyMetadataSummary(updatedTile);
+            }
+            if (typeof master.emitter.emit === 'function') {
+                master.emitter.emit('photos', { type: 'update', item: [{ ...updatedTile }] });
+            }
+        });
+    }, [tile?.infoHash, tile?.hasMetadata, tile?.isVideo, tile?.isAudio, master, applyMetadataSummary]);
 
     useEffect(() => {
         const onKey = (event) => {

@@ -20,6 +20,7 @@ const master = {
     emitter: {
         on: () => {},
         removeListener: () => {},
+        emit: () => {},
     },
     client: { peerId: 'me' },
     peers: { items: [] },
@@ -70,6 +71,68 @@ describe('PhotoViewer', () => {
         expect(text).toContain('More metadata');
         expect(text).toContain('FUJIFILM');
         expect(text).toContain('Make');
+
+        await act(async () => {
+            root.unmount();
+        });
+        div.remove();
+    });
+
+    it('shows video technical details when metadata arrives after open', async () => {
+        const videoTile = {
+            infoHash: 'vid123',
+            fileName: 'clip.mp4',
+            fileSize: '12 MB',
+            isVideo: true,
+            isImage: false,
+            torrentFile: { length: 12_000_000, createReadStream: () => ({}) },
+            owners: [],
+        };
+
+        const videoMaster = {
+            ...master,
+            metadata: {
+                createMetadataSummary: () => ([
+                    {
+                        key: 'format',
+                        value: { duration: '1 min', codec: 'h264', container: 'MP4' },
+                    },
+                ]),
+                readMetadata: (tile, callback) => {
+                    const metadata = {
+                        format: { duration: '1 min', codec: 'h264', container: 'MP4' },
+                    };
+                    tile.metadata = metadata;
+                    tile.hasMetadata = true;
+                    callback(tile, metadata);
+                },
+            },
+        };
+
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+
+        await act(async () => {
+            root.render(
+                <ThemeProvider theme={createAppTheme('dark')}>
+                    <PhotoViewer
+                        master={videoMaster}
+                        tiles={[videoTile]}
+                        index={0}
+                        onClose={() => {}}
+                        onIndexChange={() => {}}
+                    />
+                </ThemeProvider>
+            );
+        });
+
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+
+        expect(document.body.textContent).toContain('Codec');
+        expect(document.body.textContent).toContain('h264');
 
         await act(async () => {
             root.unmount();

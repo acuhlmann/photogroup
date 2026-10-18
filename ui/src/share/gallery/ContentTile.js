@@ -239,7 +239,24 @@ function ContentTile(props) {
                     } : undefined,
                 }}
             >
-                <RenderContent tile={tile} master={master} />
+                {selected && (tile.isVideo || tile.isAudio) ? (
+                    <Box
+                        sx={{
+                            minHeight: hero ? 280 : 160,
+                            bgcolor: '#0a0c10',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            px: 2,
+                        }}
+                    >
+                        <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+                            Playing in full view
+                        </Typography>
+                    </Box>
+                ) : (
+                    <RenderContent tile={tile} master={master} />
+                )}
             </Box>
 
             {previewThumbnail && (
