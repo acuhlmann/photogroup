@@ -54,15 +54,15 @@ export default class NetworkTopologyFinder {
             if(!calledNetwork && firstChain.length >= 3) {
                 calledNetwork = true;
 
+                // Saved even when already in a room: a phone coming back from
+                // the lock screen re-joins, and that join must carry it.
+                scope.service.saveNetwork(firstChain);
                 if(scope.service.hasRoom) {
 
                     scope.service.updatePeer({networkChain: firstChain}).then(() => {
 
                         Logger.info('addNetwork no 1');
                     });
-
-                } else {
-                    scope.service.saveNetwork(firstChain);
                 }
             }
 
@@ -85,6 +85,7 @@ export default class NetworkTopologyFinder {
 
                     const networkChain = NetworkTopologyFinder.translateSdp(pc.localDescription.sdp, natType);
                     scope.emitter.emit('localNetwork', networkChain);
+                    scope.service.saveNetwork(networkChain);
                     if(scope.service.hasRoom) {
                         scope.service.updatePeer({networkChain: networkChain}).then(() => {
 
@@ -97,8 +98,6 @@ export default class NetworkTopologyFinder {
                             //this is now in Uploader
                             scope.emitter.emit('topStateMessage', '');
                         });
-                    } else {
-                        scope.service.saveNetwork(networkChain);
                     }
 
                     //pc.close();

@@ -11,7 +11,12 @@ export default class Peers {
         emitter.on('peers', event => {
 
             if(event.type === 'add') {
-                this.items = update(this.items, {$push: [event.item]});
+                // A peer re-joining (e.g. a phone back from the lock screen)
+                // is announced again; replace it rather than list it twice.
+                const index = this.items.findIndex(item => item.peerId === event.item.peerId);
+                this.items = index > -1
+                    ? update(this.items, {$splice: [[index, 1, event.item]]})
+                    : update(this.items, {$push: [event.item]});
             } else if(event.type === 'delete') {
                 const index = this.items.findIndex(item => item.peerId === event.item);
                 if(index > -1)

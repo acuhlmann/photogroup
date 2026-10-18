@@ -1,16 +1,23 @@
 import IpTranslator from './IpTranslator.js';
 import _ from 'lodash';
 
+// Phones drop their update stream on every screen lock, tab switch or network
+// handover and reopen it moments later; only a session that stays away this
+// long has left the room.
+const LEAVE_GRACE_MS = 10000;
+
 export default class Peers {
 
-    constructor(updateChannel, remoteLog, app, emitter) {
+    constructor(updateChannel, remoteLog, app, emitter, { leaveGraceMs = LEAVE_GRACE_MS } = {}) {
         this.updateChannel = updateChannel;
         this.remoteLog = remoteLog;
         this.app = app;
         this.emitter = emitter;
+        this.leaveGraceMs = leaveGraceMs;
 
         this.webPeers = new Map();
         this.clientsBySessionId = new Map();
+        this.leaveTimers = new Map();
 
         emitter.on('iceEvent', event => {
 
@@ -21,6 +28,8 @@ export default class Peers {
     reset() {
         this.webPeers.clear();
         this.clientsBySessionId.clear();
+        this.leaveTimers.forEach(timer => clearTimeout(timer));
+        this.leaveTimers.clear();
     }
 
     get peers() {
@@ -129,9 +138,22 @@ export default class Peers {
         //this.peerIdBySessionId.set(sessionId, sessionId);
     }
 
-    disconnect(request) {
+    disconnect(request, response) {
         const sessionId = request.query.sessionId;
+        // A resuming phone opens its new stream before the old one's close
+        // reaches us; only the session's current stream counts.
+        if(response && this.clientsBySessionId.get(sessionId) !== response) return;
         this.clientsBySessionId.delete(sessionId);
+
+        clearTimeout(this.leaveTimers.get(sessionId));
+        const timer = setTimeout(() => this.leave(sessionId), this.leaveGraceMs);
+        timer.unref?.();
+        this.leaveTimers.set(sessionId, timer);
+    }
+
+    leave(sessionId) {
+        this.leaveTimers.delete(sessionId);
+        if(this.clientsBySessionId.has(sessionId)) return; // came back in time
 
         const peer = [...this.webPeers.values()].find(item => item.sessionId === sessionId);
         if(peer) {
