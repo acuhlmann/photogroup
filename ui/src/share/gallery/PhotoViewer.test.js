@@ -78,7 +78,7 @@ describe('PhotoViewer', () => {
         div.remove();
     });
 
-    it('shows video technical details when metadata arrives after open', async () => {
+    it('shows video technical details when gallery metadata updates arrive', async () => {
         const videoTile = {
             infoHash: 'vid123',
             fileName: 'clip.mp4',
@@ -89,8 +89,21 @@ describe('PhotoViewer', () => {
             owners: [],
         };
 
+        const photosListeners = [];
         const videoMaster = {
             ...master,
+            emitter: {
+                on: (event, handler) => {
+                    if (event === 'photos') photosListeners.push(handler);
+                },
+                removeListener: (event, handler) => {
+                    if (event === 'photos') {
+                        const index = photosListeners.indexOf(handler);
+                        if (index >= 0) photosListeners.splice(index, 1);
+                    }
+                },
+                emit: () => {},
+            },
             metadata: {
                 createMetadataSummary: () => ([
                     {
@@ -98,14 +111,6 @@ describe('PhotoViewer', () => {
                         value: { duration: '1 min', codec: 'h264', container: 'MP4' },
                     },
                 ]),
-                readMetadata: (tile, callback) => {
-                    const metadata = {
-                        format: { duration: '1 min', codec: 'h264', container: 'MP4' },
-                    };
-                    tile.metadata = metadata;
-                    tile.hasMetadata = true;
-                    callback(tile, metadata);
-                },
             },
         };
 
@@ -128,7 +133,16 @@ describe('PhotoViewer', () => {
         });
 
         await act(async () => {
-            await new Promise(resolve => setTimeout(resolve, 0));
+            photosListeners.forEach(handler => handler({
+                type: 'update',
+                item: [{
+                    infoHash: 'vid123',
+                    hasMetadata: true,
+                    metadata: {
+                        format: { duration: '1 min', codec: 'h264', container: 'MP4' },
+                    },
+                }],
+            }));
         });
 
         expect(document.body.textContent).toContain('Codec');

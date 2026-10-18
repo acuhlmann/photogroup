@@ -378,8 +378,10 @@ function RenderContent(props) {
         }
         
         // For seeded images, if elem is already set (from mergePostloadMetadata), ensure img is set and read metadata
+        // Local file metadata only — torrent metadata runs after appendTo so it does not
+        // compete with the video/audio read stream used for playback.
         if ((currentTile.isVideo || currentTile.isAudio) && !currentTile.hasMetadata
-            && (currentTile.torrentFile || currentTile.file || currentTile.elem)) {
+            && (currentTile.file || currentTile.elem) && !currentTile.torrentFile) {
             if (readMetadataRef.current) {
                 readMetadataRef.current(currentTile);
             }

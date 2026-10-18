@@ -84,21 +84,6 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     }, [tile?.infoHash, master.emitter, applyMetadataSummary]);
 
     useEffect(() => {
-        if (!tile || tile.hasMetadata || tile.metadata) return;
-        if (!(tile.isVideo || tile.isAudio)) return;
-        if (!tile.torrentFile && !tile.file && !tile.elem) return;
-
-        master.metadata.readMetadata(tile, (updatedTile, metadata) => {
-            if (metadata && Object.keys(metadata).length > 0) {
-                applyMetadataSummary(updatedTile);
-            }
-            if (typeof master.emitter.emit === 'function') {
-                master.emitter.emit('photos', { type: 'update', item: [{ ...updatedTile }] });
-            }
-        });
-    }, [tile?.infoHash, tile?.hasMetadata, tile?.isVideo, tile?.isAudio, master, applyMetadataSummary]);
-
-    useEffect(() => {
         const onKey = (event) => {
             const tag = event.target && event.target.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -140,7 +125,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
         />
     ) : (
         <Box sx={{ width: '100%', maxWidth: '100%', px: 1 }}>
-            <RenderContent tile={tile} master={master} />
+            <RenderContent key={tile.infoHash} tile={tile} master={master} />
         </Box>
     );
 
@@ -248,6 +233,12 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                     {tile.fileSize && (
                         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
                             {tile.fileSize}
+                        </Typography>
+                    )}
+
+                    {(tile.isVideo || tile.isAudio) && !tile.hasMetadata && !summary && (
+                        <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                            Reading file details…
                         </Typography>
                     )}
 
