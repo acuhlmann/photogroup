@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import Dialog from '@mui/material/Dialog';
 import Box from '@mui/material/Box';
@@ -10,73 +10,16 @@ import CloseRounded from '@mui/icons-material/CloseRounded';
 import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
-import StarOutlined from '@mui/icons-material/StarOutlined';
-import StarBorderOutlined from '@mui/icons-material/StarBorderOutlined';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
-import List from '@mui/material/List';
+import _ from 'lodash';
+import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import OwnersList from './OwnersList';
-import PhotoDetailsRenderer from './metadata/PhotoDetailsRenderer';
-import { groupPhotoMetadata, labelForMetadataKey } from './metadata/groupPhotoMetadata';
+import MediaMetadataPanel from './metadata/MediaMetadataPanel';
+import RenderContent from './RenderContent';
 import { saveLabel, savePhoto } from './savePhoto';
 import { photoTransitionName, supportsViewTransition } from './viewTransition';
-
-function RatingStars({ value }) {
-    const rating = Math.max(0, Math.min(5, Number(value) || 0));
-    const stars = [];
-    for (let i = 0; i < 5; i += 1) {
-        stars.push(i < rating
-            ? <StarOutlined key={i} fontSize="small" />
-            : <StarBorderOutlined key={i} fontSize="small" />);
-    }
-    return <span aria-label={`${rating} out of 5`}>{stars}</span>;
-}
-
-function MetadataValue({ item }) {
-    const { key, value } = item;
-
-    if (key === 'Rating XMP') {
-        return <RatingStars value={value} />;
-    }
-
-    if (value && typeof value === 'object' && value.lat != null && value.long != null) {
-        const href = `https://www.google.com/maps/@${value.lat},${value.long},15z`;
-        return (
-            <a href={href} target="_blank" rel="noopener noreferrer">
-                {`lat: ${value.lat}, long: ${value.long}`}
-            </a>
-        );
-    }
-
-    if (key === 'GPSAltitude') {
-        const text = String(value);
-        return <>{text.endsWith('m') ? text : `${text} m`}</>;
-    }
-
-    if (typeof value === 'object') {
-        return <>{JSON.stringify(value)}</>;
-    }
-
-    return <>{String(value)}</>;
-}
-
-function MetadataRows({ items }) {
-    return (
-        <Box component="dl" sx={{ m: 0 }}>
-            {items.map(item => (
-                <Box key={item.key} sx={{ py: 1, borderBottom: 1, borderColor: 'divider' }}>
-                    <Typography component="dt" variant="caption" sx={{ color: 'text.secondary', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '0.65rem' }}>
-                        {labelForMetadataKey(item.key)}
-                    </Typography>
-                    <Typography component="dd" variant="body2" sx={{ m: 0 }}>
-                        <MetadataValue item={item} />
-                    </Typography>
-                </Box>
-            ))}
-        </Box>
-    );
-}
 
 function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     const theme = useTheme();
@@ -86,13 +29,24 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     const [fileName, setFileName] = useState('');
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
-    const nameBridge = useRef({
-        setState: (next) => {
-            if (next && Object.prototype.hasOwnProperty.call(next, 'fileName')) {
-                setFileName(next.fileName);
-            }
-        },
-    });
+
+    const debouncedRename = useRef(
+        _.throttle((infoHash, value) => {
+            if (!value) return;
+            Logger.info('change name ' + value);
+            master.service.update([{
+                infoHash,
+                fileName: FileUtil.truncateFileName(value),
+            }]);
+        }, 1000, { leading: true, trailing: true })
+    ).current;
+
+    const handleFileNameChange = useCallback((value) => {
+        setFileName(value);
+        if (tile?.infoHash) {
+            debouncedRename(tile.infoHash, value);
+        }
+    }, [tile?.infoHash, debouncedRename]);
 
     useEffect(() => {
         if (!tile) return;
@@ -123,16 +77,9 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     if (!tile) return null;
 
     const isImage = !!tile.isImage;
-    const grouped = isImage ? groupPhotoMetadata(summary) : { lead: [], more: [] };
     const transitionName = photoTransitionName(tile.infoHash);
     const canSave = !!(tile.elem || (tile.torrentFile && typeof tile.torrentFile.getBlob === 'function'));
     const stillArriving = !!(tile.torrentFile && !tile.torrentFile.done);
-
-    let mediaDetails = null;
-    if (!isImage && summary && summary.length > 0) {
-        const details = new PhotoDetailsRenderer(master.service, nameBridge.current);
-        mediaDetails = details.render(summary, tile, fileName);
-    }
 
     const onSave = () => {
         setSaving(true);
@@ -141,6 +88,23 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
             .catch(() => {})
             .finally(() => setSaving(false));
     };
+
+    const mediaPreview = isImage && tile.img ? (
+        <img
+            src={tile.img}
+            alt={tile.fileName || 'Shared photo'}
+            style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                viewTransitionName: transitionName,
+            }}
+        />
+    ) : (
+        <Box sx={{ width: '100%', maxWidth: '100%', px: 1 }}>
+            <RenderContent tile={tile} master={master} />
+        </Box>
+    );
 
     return (
         <Dialog
@@ -189,20 +153,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                         px: 2,
                         overflow: 'hidden',
                     }}>
-                        {tile.img ? (
-                            <img
-                                src={tile.img}
-                                alt={tile.fileName || 'Shared photo'}
-                                style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    objectFit: 'contain',
-                                    viewTransitionName: transitionName,
-                                }}
-                            />
-                        ) : (
-                            <Typography sx={{ color: '#fff' }}>{tile.fileName}</Typography>
-                        )}
+                        {mediaPreview}
                     </Box>
                     <Stack
                         direction="row"
@@ -262,34 +213,12 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                         </Typography>
                     )}
 
-                    {isImage && grouped.lead.length > 0 && (
-                        <Box sx={{ mt: 2 }}>
-                            <MetadataRows items={grouped.lead} />
-                        </Box>
-                    )}
-
-                    {isImage && grouped.more.length > 0 && (
-                        <Box component="details" sx={{ mt: 2 }}>
-                            <Typography component="summary" variant="subtitle2" sx={{ cursor: 'pointer' }}>
-                                More
-                            </Typography>
-                            <MetadataRows items={grouped.more} />
-                        </Box>
-                    )}
-
-                    {isImage && grouped.lead.length === 0 && grouped.more.length === 0 && (
-                        <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-                            {summary
-                                ? 'This photo has no extra details.'
-                                : 'Details show up once the photo finishes loading.'}
-                        </Typography>
-                    )}
-
-                    {!isImage && mediaDetails && (
-                        <List sx={{ mt: 1 }}>
-                            {mediaDetails}
-                        </List>
-                    )}
+                    <MediaMetadataPanel
+                        summary={summary}
+                        tile={tile}
+                        fileName={fileName}
+                        onFileNameChange={handleFileNameChange}
+                    />
 
                     {Array.isArray(tile.owners) && master.peers && master.client
                         && tile.owners.some(owner => owner.peerId !== master.client.peerId) && (
