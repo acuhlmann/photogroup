@@ -9,6 +9,13 @@ import StringUtil from "../../util/StringUtil";
 import _ from 'lodash';
 import humanizeDuration from 'humanize-duration';
 
+/** One torrent/file metadata parse per item — avoids competing read streams with playback. */
+const mediaMetadataInflight = new Map();
+
+function mediaMetadataKey(tile) {
+    return tile.infoHash || tile.fileName || 'unknown';
+}
+
 export default class MetadataParser {
 
     constructor(master) {
@@ -44,23 +51,41 @@ export default class MetadataParser {
                 })
 
         } else if(tile.isAudio || tile.isVideo) {
-            this.parseMediaMetadata(tile)
-                .then(metadata => {
-                    if (metadata) {
-                        this.applyMediaMetadata(tile, metadata);
-                        tile.metadata = metadata;
-                        tile.hasMetadata = true;
-                        this.master.emitter.emit('photos', {type: 'update', item: [tile]});
-                        callback(tile, metadata);
-                    } else {
-                        callback(tile, {});
-                    }
-                })
+            if (tile.hasMetadata && tile.metadata) {
+                callback(tile, tile.metadata);
+                return;
+            }
+
+            const key = mediaMetadataKey(tile);
+            const isLeader = !mediaMetadataInflight.has(key);
+            let pending = mediaMetadataInflight.get(key);
+            if (!pending) {
+                pending = this.parseMediaMetadata(tile)
+                    .finally(() => mediaMetadataInflight.delete(key));
+                mediaMetadataInflight.set(key, pending);
+            }
+
+            pending
+                .then(metadata => this.applyMediaMetadataResult(tile, metadata, isLeader))
+                .then(metadata => callback(tile, metadata || {}))
                 .catch(e => {
                     Logger.error('error parsing media metadata ' + e);
                     callback(tile, {});
                 });
         }
+    }
+
+    applyMediaMetadataResult(tile, metadata, emitGalleryUpdate) {
+        if (metadata) {
+            this.applyMediaMetadata(tile, metadata);
+            tile.metadata = metadata;
+            tile.hasMetadata = true;
+            if (emitGalleryUpdate) {
+                this.master.emitter.emit('photos', {type: 'update', item: [tile]});
+            }
+            return metadata;
+        }
+        return null;
     }
 
     applyMediaMetadata(tile, metadata) {
@@ -99,20 +124,25 @@ export default class MetadataParser {
     parseMediaMetadata(tile) {
         const mimeType = tile.fileType || tile.elem?.type || tile.file?.type;
         const size = tile.torrentFile?.length ?? tile.file?.size ?? tile.elem?.size;
-
-        if (tile.torrentFile && typeof tile.torrentFile.createReadStream === 'function') {
-            const stream = tile.torrentFile.createReadStream();
-            return mm.parseWebStream(stream, {
-                size,
-                mimeType: mimeType || tile.torrentFile.name
-            });
-        }
+        const parseOptions = {
+            size,
+            mimeType: mimeType || tile.torrentFile?.name || tile.fileName,
+        };
 
         const localFile = tile.file || tile.elem;
         if (localFile && typeof localFile.stream === 'function') {
             return mm.parseWebStream(localFile.stream(), {
                 size: localFile.size,
                 mimeType: mimeType || localFile.name
+            });
+        }
+
+        if (tile.torrentFile && typeof tile.torrentFile.createReadStream === 'function') {
+            const stream = tile.torrentFile.createReadStream();
+            return mm.parseWebStream(stream, parseOptions).finally(() => {
+                if (typeof stream.destroy === 'function') {
+                    stream.destroy();
+                }
             });
         }
 

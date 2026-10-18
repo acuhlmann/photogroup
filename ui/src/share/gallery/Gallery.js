@@ -147,6 +147,10 @@ function Gallery(props) {
                 // video/audio must not be read entirely into memory here.
                 if (photo.isImage) {
                     getBlob(photo);
+                } else if ((photo.isVideo || photo.isAudio) && photo.file && master.metadata) {
+                    master.metadata.readMetadata(photo, (updatedTile) => {
+                        master.emitter.emit('photos', { type: 'update', item: [updatedTile] });
+                    });
                 }
             });
             renderTile(photos, isSeeding);

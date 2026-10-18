@@ -48,17 +48,40 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
         }
     }, [tile?.infoHash, debouncedRename]);
 
+    const applyMetadataSummary = useCallback((sourceTile) => {
+        if (!sourceTile || !master.metadata || typeof master.metadata.createMetadataSummary !== 'function') {
+            setSummary(null);
+            return;
+        }
+        if (sourceTile.metadata) {
+            setSummary(master.metadata.createMetadataSummary(sourceTile.metadata, sourceTile) || null);
+        } else {
+            setSummary(null);
+        }
+    }, [master.metadata]);
+
     useEffect(() => {
         if (!tile) return;
         setFileName(FileUtil.getFileNameWithoutSuffix(tile.fileName) || '');
         setSaved(false);
         setSaving(false);
-        if (tile.metadata && master.metadata && typeof master.metadata.createMetadataSummary === 'function') {
-            setSummary(master.metadata.createMetadataSummary(tile.metadata, tile) || null);
-        } else {
-            setSummary(null);
-        }
-    }, [tile, tile && tile.metadata, tile && tile.fileName, master.metadata]);
+        applyMetadataSummary(tile);
+    }, [tile, tile && tile.metadata, tile && tile.fileName, applyMetadataSummary]);
+
+    useEffect(() => {
+        if (!tile?.infoHash) return undefined;
+
+        const handlePhotos = (event) => {
+            if (event.type !== 'update' || !Array.isArray(event.item)) return;
+            const updated = event.item.find(item => item.infoHash === tile.infoHash);
+            if (updated) {
+                applyMetadataSummary(updated);
+            }
+        };
+
+        master.emitter.on('photos', handlePhotos);
+        return () => master.emitter.removeListener('photos', handlePhotos);
+    }, [tile?.infoHash, master.emitter, applyMetadataSummary]);
 
     useEffect(() => {
         const onKey = (event) => {
@@ -102,7 +125,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
         />
     ) : (
         <Box sx={{ width: '100%', maxWidth: '100%', px: 1 }}>
-            <RenderContent tile={tile} master={master} />
+            <RenderContent key={tile.infoHash} tile={tile} master={master} />
         </Box>
     );
 
@@ -210,6 +233,12 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                     {tile.fileSize && (
                         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
                             {tile.fileSize}
+                        </Typography>
+                    )}
+
+                    {(tile.isVideo || tile.isAudio) && !tile.hasMetadata && !summary && (
+                        <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                            Reading file details…
                         </Typography>
                     )}
 

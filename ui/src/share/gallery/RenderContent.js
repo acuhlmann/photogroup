@@ -34,13 +34,14 @@ const styles = theme => ({
 });
 
 function RenderContent(props) {
-    const {master, tile, classes, enqueueSnackbar, closeSnackbar} = props;
+    const {master, tile, classes, enqueueSnackbar, closeSnackbar, playbackActive = true} = props;
     const emitter = master.emitter;
     
     // Use refs for instance variables
     const webampRef = useRef(null);
     const webampNodeRef = useRef(null);
     const equalizerNodeRef = useRef(null);
+    const mediaContainerRef = useRef(null);
     const openedWebampRef = useRef(false);
     const handleDoneRef = useRef(null);
     const readMetadataRef = useRef(null);
@@ -200,8 +201,11 @@ function RenderContent(props) {
                     if (elem) {
                         elem.loop = true;
                         elem.controls = true;
+                        elem.playsInline = true;
                     }
                     master.metadata.readMetadata(tile, (updatedTile) => {
+                        const updateTile = {...updatedTile};
+                        master.emitter.emit('photos', {type: 'update', item: [updateTile]});
                         if (updatedTile.seed) {
                             master.emitter.emit('photoRendered', updatedTile);
                         }
@@ -252,9 +256,11 @@ function RenderContent(props) {
     }, [tile, master]);
 
     const handleContainerLoaded = useCallback((node, file) => {
-        if(!tile || !file || !node) {
+        if(!playbackActive || !tile || !file || !node) {
             return;
         }
+
+        mediaContainerRef.current = node;
 
         if(node.hasChildNodes()) {
             const tileInfoHash = tile.torrent?.infoHash;
@@ -271,7 +277,7 @@ function RenderContent(props) {
             node.infoHash = tile.torrent.infoHash;
             appendFile(tile, node, file);
         }
-    }, [tile, removeFile, appendFile]);
+    }, [playbackActive, tile, removeFile, appendFile]);
 
     const handleWebamp = useCallback((node, file) => {
         if(!tile || !file || !node || !tile.isAudio) {
@@ -372,6 +378,15 @@ function RenderContent(props) {
         }
         
         // For seeded images, if elem is already set (from mergePostloadMetadata), ensure img is set and read metadata
+        // Local file metadata only — torrent metadata runs after appendTo so it does not
+        // compete with the video/audio read stream used for playback.
+        if ((currentTile.isVideo || currentTile.isAudio) && !currentTile.hasMetadata
+            && (currentTile.file || currentTile.elem) && !currentTile.torrentFile) {
+            if (readMetadataRef.current) {
+                readMetadataRef.current(currentTile);
+            }
+        }
+
         if(isSeededImage) {
             // Ensure isImage is set for consistency
             if(!currentTile.isImage) {
@@ -414,6 +429,12 @@ function RenderContent(props) {
             const cleanupTile = tileRef.current;
             if(cleanupTile && cleanupTile.torrent) {
                 cleanupTile.torrent.removeListener('done', handleDone);
+            }
+            const container = mediaContainerRef.current;
+            if (container) {
+                removeFile(container);
+                container.infoHash = null;
+                mediaContainerRef.current = null;
             }
         };
     }, [tile.infoHash]); // Only depend on infoHash - when it changes, it's a new tile
