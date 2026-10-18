@@ -1,0 +1,280 @@
+/**
+ * TransferTelemetry - turns a live WebTorrent torrent into something a person
+ * can watch while they wait: which stage of the P2P pipeline we are in, what
+ * the swarm looks like, which network path WebRTC picked, and a timestamped
+ * log of the protocol events as they happen.
+ *
+ * Pure helpers live here so they can be unit tested; the React view is
+ * TransferConsole.js.
+ */
+
+export const PHASES = [
+    { id: 'signal', label: 'Announce', long: 'Tracker announce over WebSocket' },
+    { id: 'discover', label: 'Discover', long: 'Waiting for a peer offer' },
+    { id: 'handshake', label: 'Handshake', long: 'WebRTC ICE + BitTorrent handshake' },
+    { id: 'metadata', label: 'Metadata', long: 'Fetching info dictionary (BEP 9)' },
+    { id: 'pieces', label: 'Pieces', long: 'Exchanging pieces' },
+    { id: 'verify', label: 'Verify', long: 'SHA-1 verified, rendering' },
+];
+
+/** Short explainers, keyed by phase, rotated while the user waits. */
+export const PHASE_NOTES = {
+    signal: [
+        'The tracker only brokers SDP offers between browsers. It never sees a single byte of the photo.',
+        'Announce = "I want info_hash X". The tracker replies with offers from peers holding the same hash.',
+        'Browsers cannot open raw TCP sockets, so the BitTorrent wire protocol runs over WebRTC data channels.',
+    ],
+    discover: [
+        'No peer offer yet. The sender may be backgrounded: mobile browsers freeze WebRTC when the screen locks.',
+        'Peers are found three ways here: tracker offers, PEX (BEP 11) gossip, and the server-side seed.',
+        'Each offer carries ICE candidates: host (LAN), srflx (your public IP via STUN) and relay (TURN).',
+    ],
+    handshake: [
+        'ICE is testing candidate pairs in priority order, preferring host-to-host, then STUN, then TURN.',
+        'After DTLS completes, both sides send the 68-byte BitTorrent handshake: pstr, reserved bits, info_hash, peer_id.',
+        'Reserved bit 20 announces the extension protocol (BEP 10), which unlocks ut_metadata and ut_pex.',
+    ],
+    metadata: [
+        'A magnet link holds only the hash. The file list and piece hashes come from peers via ut_metadata in 16 KiB blocks.',
+        'The info dictionary is SHA-1 hashed on arrival. It must match the info_hash, so a peer cannot lie about content.',
+    ],
+    pieces: [
+        'Files are cut into fixed-size pieces. Each one is checked against its SHA-1 in the info dictionary before use.',
+        'Pieces travel as 16 KiB blocks. Several requests stay in flight per peer to keep the pipe full.',
+        'With several peers, WebTorrent fetches rarest pieces first so the swarm stays healthy.',
+        'Every piece you finish, you can serve too: as soon as a piece verifies, you are a partial seed.',
+    ],
+    verify: [
+        'All pieces verified. Reassembling the blob and decoding the image.',
+    ],
+};
+
+/** "a1b2c3d4…9f0e" style hash for narrow screens. */
+export function shortHash(hash, head = 8, tail = 4) {
+    if (!hash || typeof hash !== 'string') return '';
+    if (hash.length <= head + tail + 1) return hash;
+    return hash.slice(0, head) + '…' + hash.slice(-tail);
+}
+
+export function formatBytes(bytes) {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    const units = ['B', 'KiB', 'MiB', 'GiB'];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    const v = bytes / Math.pow(1024, i);
+    return (i === 0 ? v.toFixed(0) : v.toFixed(v >= 100 ? 0 : 1)) + ' ' + units[i];
+}
+
+/** "+12.3s" relative timestamps for the log. */
+export function formatElapsed(ms) {
+    if (!Number.isFinite(ms) || ms < 0) ms = 0;
+    if (ms < 60000) return '+' + (ms / 1000).toFixed(1) + 's';
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return '+' + m + 'm' + String(s).padStart(2, '0') + 's';
+}
+
+function countVerified(torrent) {
+    const bf = torrent.bitfield;
+    const n = torrent.pieces ? torrent.pieces.length : 0;
+    if (!bf || typeof bf.get !== 'function' || !n) return 0;
+    let c = 0;
+    for (let i = 0; i < n; i++) if (bf.get(i)) c++;
+    return c;
+}
+
+function describeWire(wire) {
+    const ext = wire.peerExtendedHandshake || {};
+    const client = ext.v ? String(ext.v) : null;
+    const extensions = ext.m ? Object.keys(ext.m) : [];
+    return {
+        peerId: wire.peerId || null,
+        type: wire.type || 'unknown',
+        remoteAddress: wire.remoteAddress || null,
+        downloaded: wire.downloaded || 0,
+        uploaded: wire.uploaded || 0,
+        choked: !!wire.peerChoking,
+        client,
+        extensions,
+    };
+}
+
+/** A safe, plain-data view of a torrent. Every field tolerates a half-built torrent. */
+export function snapshotTorrent(torrent) {
+    if (!torrent || !torrent.infoHash) return null;
+    const pieces = torrent.pieces ? torrent.pieces.length : 0;
+    let announce = [];
+    if (Array.isArray(torrent.announce)) announce = torrent.announce.slice(0, 3);
+    return {
+        infoHash: torrent.infoHash,
+        name: torrent.name || null,
+        numPeers: torrent.numPeers || 0,
+        wires: Array.isArray(torrent.wires) ? torrent.wires.map(describeWire) : [],
+        hasMetadata: !!(torrent.metadata || pieces > 0),
+        pieces,
+        pieceLength: torrent.pieceLength || 0,
+        verified: countVerified(torrent),
+        length: torrent.length || 0,
+        downloaded: torrent.downloaded || 0,
+        uploaded: torrent.uploaded || 0,
+        downloadSpeed: torrent.downloadSpeed || 0,
+        uploadSpeed: torrent.uploadSpeed || 0,
+        progress: torrent.progress || 0,
+        done: !!torrent.done,
+        announce,
+    };
+}
+
+/**
+ * Which phase the transfer is in. `seen` carries events that leave no trace on
+ * the torrent itself (an announce went out, a peer was offered).
+ */
+export function computePhase(snap, seen = {}) {
+    if (!snap) return 'signal';
+    if (snap.done || snap.progress >= 1) return 'verify';
+    if (snap.hasMetadata && (snap.downloaded > 0 || snap.verified > 0)) return 'pieces';
+    if (snap.wires.length > 0) return snap.hasMetadata ? 'pieces' : 'metadata';
+    if (seen.peerOffered || snap.numPeers > 0) return 'handshake';
+    if (seen.announced) return 'discover';
+    return 'signal';
+}
+
+export function phaseIndex(phaseId) {
+    return Math.max(0, PHASES.findIndex(p => p.id === phaseId));
+}
+
+const PATH_LABELS = {
+    host: 'direct LAN',
+    srflx: 'NAT-punched via STUN',
+    prflx: 'peer-reflexive',
+    relay: 'TURN relay',
+};
+
+/**
+ * Reads the selected ICE candidate pair out of an RTCStatsReport (or any
+ * iterable of stats objects) and says how the bytes are actually flowing.
+ */
+export function classifyCandidatePair(stats) {
+    if (!stats) return null;
+    const all = [];
+    if (typeof stats.forEach === 'function') stats.forEach(s => all.push(s));
+    else if (Array.isArray(stats)) all.push(...stats);
+    const byId = new Map(all.map(s => [s.id, s]));
+
+    let pair = null;
+    const transport = all.find(s => s.type === 'transport' && s.selectedCandidatePairId);
+    if (transport) pair = byId.get(transport.selectedCandidatePairId);
+    if (!pair) pair = all.find(s => s.type === 'candidate-pair' && (s.selected || s.nominated) && s.state === 'succeeded');
+    if (!pair) return null;
+
+    const local = byId.get(pair.localCandidateId) || {};
+    const remote = byId.get(pair.remoteCandidateId) || {};
+    const localType = local.candidateType || 'unknown';
+    const remoteType = remote.candidateType || 'unknown';
+    const relayed = localType === 'relay' || remoteType === 'relay';
+    const worst = relayed ? 'relay'
+        : (localType === 'srflx' || remoteType === 'srflx') ? 'srflx'
+        : (localType === 'prflx' || remoteType === 'prflx') ? 'prflx'
+        : localType === 'host' && remoteType === 'host' ? 'host' : localType;
+
+    return {
+        localType,
+        remoteType,
+        protocol: local.protocol || remote.protocol || pair.protocol || null,
+        remoteAddress: remote.address || remote.ip || null,
+        remotePort: remote.port || null,
+        rttMs: Number.isFinite(pair.currentRoundTripTime) ? Math.round(pair.currentRoundTripTime * 1000) : null,
+        outgoingBitrate: Number.isFinite(pair.availableOutgoingBitrate) ? pair.availableOutgoingBitrate : null,
+        relayed,
+        path: worst,
+        label: PATH_LABELS[worst] || worst,
+    };
+}
+
+/** WebRTC peers' RTCPeerConnections, by peer id. */
+function peerConnections(torrent) {
+    const out = [];
+    const peers = torrent && torrent._peers;
+    if (!peers || typeof peers.forEach !== 'function') return out;
+    peers.forEach((peer, id) => {
+        const pc = peer && peer.conn && peer.conn._pc;
+        if (pc && typeof pc.getStats === 'function') out.push({ id, pc, peer });
+    });
+    return out;
+}
+
+/** Asks every live WebRTC connection which ICE pair won. */
+export async function probeIcePaths(torrent) {
+    const results = [];
+    for (const { id, pc } of peerConnections(torrent)) {
+        try {
+            const info = classifyCandidatePair(await pc.getStats());
+            if (info) results.push({ id, ...info });
+        } catch {
+            // Closed connections throw; skip them.
+        }
+    }
+    return results;
+}
+
+/**
+ * Subscribes to protocol events and reports them as log lines.
+ * `push({kind, text})` is called for each; returns a detach function.
+ */
+export function attachTelemetryLog(torrent, push, seen = {}) {
+    if (!torrent || typeof torrent.on !== 'function') return () => {};
+    const handlers = [];
+    const on = (ev, fn) => { torrent.on(ev, fn); handlers.push([ev, fn]); };
+    let verifiedLogged = 0;
+
+    on('trackerAnnounce', () => {
+        if (!seen.announced) push({ kind: 'net', text: 'tracker ack: announce for ' + shortHash(torrent.infoHash) + ' accepted' });
+        seen.announced = true;
+    });
+    on('peer', id => {
+        seen.peerOffered = true;
+        const label = typeof id === 'string' && id.length > 20 ? shortHash(id, 6, 4) : String(id || '');
+        push({ kind: 'net', text: 'peer offered ' + label + ' · starting ICE' });
+    });
+    on('wire', (wire, addr) => {
+        const d = describeWire(wire);
+        push({
+            kind: 'ok',
+            text: 'wire up [' + d.type + '] ' + (addr || d.remoteAddress || '') +
+                (d.peerId ? ' peer_id ' + shortHash(d.peerId, 6, 2) : ''),
+        });
+        if (typeof wire.once === 'function') {
+            wire.once('extended', (ext, info) => {
+                if (ext !== 'handshake' || !info) return;
+                const m = info.m ? Object.keys(info.m).join(', ') : 'none';
+                const v = info.v ? String(info.v) : 'unknown client';
+                push({ kind: 'info', text: 'BEP 10 handshake: ' + v + ' · ext ' + m });
+            });
+            wire.once('close', () => push({ kind: 'warn', text: 'wire closed ' + (addr || '') }));
+        }
+    });
+    on('metadata', () => {
+        const n = torrent.pieces ? torrent.pieces.length : 0;
+        push({
+            kind: 'ok',
+            text: 'metadata ok: ' + (torrent.files ? torrent.files.length : 0) + ' file(s), ' +
+                formatBytes(torrent.length) + ', ' + n + ' × ' + formatBytes(torrent.pieceLength) + ' pieces',
+        });
+    });
+    on('verified', index => {
+        verifiedLogged++;
+        // Small files have few pieces: log them all. Big ones: every 8th.
+        const n = torrent.pieces ? torrent.pieces.length : 0;
+        if (n <= 16 || verifiedLogged % 8 === 1 || verifiedLogged === n) {
+            push({ kind: 'data', text: 'piece #' + index + ' SHA-1 ✓ (' + verifiedLogged + '/' + (n || '?') + ')' });
+        }
+    });
+    on('noPeers', source => push({ kind: 'warn', text: 'no peers via ' + source + ' yet' }));
+    on('warning', err => push({ kind: 'warn', text: String(err && err.message ? err.message : err).slice(0, 120) }));
+    on('done', () => push({ kind: 'ok', text: 'all pieces verified · ' + formatBytes(torrent.downloaded) + ' received' }));
+
+    return () => {
+        handlers.forEach(([ev, fn]) => {
+            if (typeof torrent.removeListener === 'function') torrent.removeListener(ev, fn);
+        });
+    };
+}

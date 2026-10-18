@@ -15,6 +15,7 @@ import DeleteRounded from "@mui/icons-material/DeleteRounded";
 import Logger from "js-logger";
 import Button from "@mui/material/Button";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
+import TransferConsole from "../torrent/TransferConsole";
 import { isTransferStalled, P2P_STALL_MS } from "../torrent/ServerFallback";
 
 function LoadingTile({tile, master, name}) {
@@ -356,6 +357,11 @@ function LoadingTile({tile, master, name}) {
                             </Button>
                         </Stack>
                     </Box>
+                )}
+
+                {/* Live P2P telemetry while we wait */}
+                {!have && !hasError && !isRendering && tile.infoHash && master.client && (
+                    <TransferConsole master={master} tile={tile} />
                 )}
 
                 {/* File name */}
