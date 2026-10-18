@@ -5,7 +5,15 @@
  * On first upload the original File is written here (keyed by photo infoHash).
  * On reload, Gallery checks this cache before falling through to the WebTorrent
  * piece-verification path that requires tracker/peer connectivity.
+ *
+ * Videos and other large media are intentionally excluded — caching them blocks
+ * the main thread and can freeze the tab during upload or download.
  */
+
+/** @param {string|undefined} fileType MIME type */
+export function shouldCacheBlob(fileType) {
+    return typeof fileType === 'string' && fileType.startsWith('image/');
+}
 import IdbKvStore from 'idb-kv-store';
 import Logger from 'js-logger';
 
@@ -25,7 +33,11 @@ function getDb() {
  * @param {Blob|File} blob
  * @returns {Promise<void>}
  */
-export function cachePut(infoHash, blob) {
+export function cachePut(infoHash, blob, fileType) {
+    const mime = fileType || blob?.type;
+    if (!shouldCacheBlob(mime)) {
+        return Promise.resolve();
+    }
     const db = getDb();
     if (!db) return Promise.resolve();
     return new Promise((resolve, reject) => {
