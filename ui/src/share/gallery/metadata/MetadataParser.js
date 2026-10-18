@@ -44,51 +44,83 @@ export default class MetadataParser {
                 })
 
         } else if(tile.isAudio || tile.isVideo) {
-
-            try {
-                const mmRef = mm;
-                mm.parseBlob(tile.elem).then(metadata => {
-                    const rating = _.get(metadata, ['common.rating']);
-                    Logger.info('MetadataParser ' + Object.keys(metadata).join(',') + ' ' + (rating || ''));
-
-                    const duration = metadata.format.duration
-                        ? humanizeDuration(metadata.format.duration * 1000, { round: true })
-                        : '';
-                    const sampleRate = metadata.format.sampleRate
-                        ? 'sample rate ' + metadata.format.sampleRate : '';
-                    const bitrate = metadata.format.bitrate ?
-                        'bitrate ' + Math.round(metadata.format.bitrate) : '';
-
-                    const starRating = metadata.common.rating ? mmRef.ratingToStars(metadata.common.rating) : '';
-                    metadata.common.starRating = starRating;
-
-                    if(tile.isVideo) {
-
-                        tile.picSummary = StringUtil.addEmptySpaces([
-                            tile.picDateTaken, duration, metadata.format.container, metadata.format.codec,
-                            sampleRate, bitrate], ', ');
-                        metadata.format.duration = duration;
-
-                    } else if(tile.isAudio) {
-                        tile.picSummary = StringUtil.addEmptySpaces([
-                            tile.picDateTaken, metadata.common.artist, metadata.common.title,
-                            metadata.common.album, metadata.common.genre,
-                            duration], ', ');
+            this.parseMediaMetadata(tile)
+                .then(metadata => {
+                    if (metadata) {
+                        this.applyMediaMetadata(tile, metadata);
+                        tile.metadata = metadata;
+                        tile.hasMetadata = true;
+                        this.master.emitter.emit('photos', {type: 'update', item: [tile]});
+                        callback(tile, metadata);
+                    } else {
+                        callback(tile, {});
                     }
-
-                    tile.metadata = metadata;
-                    tile.hasMetadata = true;
-                    this.master.emitter.emit('photos', {type: 'update', item: [tile]});
-                    callback(tile, metadata);
-                }).catch(e => {
+                })
+                .catch(e => {
                     Logger.error('error parsing media metadata ' + e);
                     callback(tile, {});
                 });
-            } catch(e) {
-                Logger.error('error parsing media metadata ' + e);
-                callback(tile, {});
-            }
         }
+    }
+
+    applyMediaMetadata(tile, metadata) {
+        const mmRef = mm;
+        const rating = _.get(metadata, ['common.rating']);
+        Logger.info('MetadataParser ' + Object.keys(metadata).join(',') + ' ' + (rating || ''));
+
+        const duration = metadata.format.duration
+            ? humanizeDuration(metadata.format.duration * 1000, { round: true })
+            : '';
+        const sampleRate = metadata.format.sampleRate
+            ? 'sample rate ' + metadata.format.sampleRate : '';
+        const bitrate = metadata.format.bitrate ?
+            'bitrate ' + Math.round(metadata.format.bitrate) : '';
+
+        const starRating = metadata.common.rating ? mmRef.ratingToStars(metadata.common.rating) : '';
+        metadata.common.starRating = starRating;
+
+        if (tile.isVideo) {
+            tile.picSummary = StringUtil.addEmptySpaces([
+                tile.picDateTaken, duration, metadata.format.container, metadata.format.codec,
+                sampleRate, bitrate], ', ');
+            metadata.format.duration = duration;
+        } else if (tile.isAudio) {
+            tile.picSummary = StringUtil.addEmptySpaces([
+                tile.picDateTaken, metadata.common.artist, metadata.common.title,
+                metadata.common.album, metadata.common.genre,
+                duration], ', ');
+        }
+    }
+
+    /**
+     * Parse audio/video metadata from a stream when possible so we never buffer
+     * an entire multi-hundred-MB file on the main thread.
+     */
+    parseMediaMetadata(tile) {
+        const mimeType = tile.fileType || tile.elem?.type || tile.file?.type;
+        const size = tile.torrentFile?.length ?? tile.file?.size ?? tile.elem?.size;
+
+        if (tile.torrentFile && typeof tile.torrentFile.createReadStream === 'function') {
+            const stream = tile.torrentFile.createReadStream();
+            return mm.parseWebStream(stream, {
+                size,
+                mimeType: mimeType || tile.torrentFile.name
+            });
+        }
+
+        const localFile = tile.file || tile.elem;
+        if (localFile && typeof localFile.stream === 'function') {
+            return mm.parseWebStream(localFile.stream(), {
+                size: localFile.size,
+                mimeType: mimeType || localFile.name
+            });
+        }
+
+        if (tile.elem) {
+            return mm.parseBlob(tile.elem);
+        }
+
+        return Promise.resolve(null);
     }
 
     readStreaming(tile, callback) {

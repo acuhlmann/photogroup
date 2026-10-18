@@ -12,7 +12,7 @@ import _ from 'lodash';
 import humanizeDuration from 'humanize-duration'
 import MetadataParser from "../gallery/metadata/MetadataParser";
 import { getTorrent, getBaseInfoHash } from './WebTorrentUtils';
-import { cacheGet, cachePut } from '../util/ImageBlobCache';
+import { cacheGet, cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 import ServerFallback from './ServerFallback';
 import ConnectionRecovery from '../util/ConnectionRecovery';
 
@@ -181,6 +181,7 @@ export default class TorrentMaster {
     async serveCachedPhotos(photos) {
         for (const photo of photos) {
             if (!photo.infoHash) continue;
+            if (!shouldCacheBlob(photo.fileType)) continue;
             try {
                 const blob = await cacheGet(photo.infoHash);
                 if (blob) {

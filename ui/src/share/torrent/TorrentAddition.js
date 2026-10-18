@@ -7,7 +7,7 @@ import FileUtil from "../util/FileUtil";
 import React from "react";
 import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isDuplicateTorrentError, extractDuplicateTorrentId } from './WebTorrentUtils';
 import { getPreviewFromImage, getPreviewFromAudio } from './ThumbnailExtractor';
-import { cachePut } from '../util/ImageBlobCache';
+import { cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 
 export default class TorrentAddition {
 
@@ -447,8 +447,8 @@ export default class TorrentAddition {
                     // needing tracker/peer connectivity on resurrection.
                     withoutThumbs.forEach((file, index) => {
                         const photo = photos[index];
-                        if (photo.file && photo.infoHash) {
-                            cachePut(photo.infoHash, photo.file).catch(err => {
+                        if (photo.file && photo.infoHash && shouldCacheBlob(photo.fileType || photo.file.type)) {
+                            cachePut(photo.infoHash, photo.file, photo.fileType || photo.file.type).catch(err => {
                                 Logger.warn('Failed to cache image blob for ' + photo.infoHash + ': ' + err);
                             });
                         }
@@ -766,10 +766,11 @@ export default class TorrentAddition {
                     if (typeof file.getBlob !== 'function') return;
                     file.getBlob((err, blob) => {
                         if (err || !blob) return;
+                        if (!shouldCacheBlob(blob.type)) return;
                         const key = torrent.files.filter(f => !f.name.startsWith('Thumbnail ')).length > 1
                             ? torrent.infoHash + '-' + file.path
                             : torrent.infoHash;
-                        cachePut(key, blob).catch(() => {});
+                        cachePut(key, blob, blob.type).catch(() => {});
                     });
                 });
         }

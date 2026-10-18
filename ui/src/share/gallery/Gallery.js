@@ -16,7 +16,7 @@ import GalleryPhotoHandler from "./GalleryPhotoHandler";
 import PhotoViewer from "./PhotoViewer";
 import NetworkReadout from "../topology/NetworkReadout";
 import { getBlobAndEmit } from "../torrent/BlobUtils";
-import { cacheGet } from "../util/ImageBlobCache";
+import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
 import { runViewTransition } from "./viewTransition";
 
 function Gallery(props) {
@@ -89,7 +89,7 @@ function Gallery(props) {
         photo.loading = false;
         const isImage = photo.fileType.includes('image/');
         photo.elem = (noElem && !isImage) ? null : file;
-        photo.img = URL.createObjectURL(file);
+        photo.img = isImage ? URL.createObjectURL(file) : null;
         photo.fileSize = photo.fileSize || FileUtil.formatBytes(noElem ? photo.torrentFile.length : (photo.elem ? photo.elem.size : file.size));
         photo.isVideo = photo.fileType.includes('video/');
         photo.isImage = isImage;
@@ -143,8 +143,11 @@ function Gallery(props) {
                     Logger.info('Seeded image ready, emitting blobDone for ' + photo.fileName);
                     master.emitter.emit('blobDone-' + photo.infoHash, photo);
                 }
-                // getBlob will also emit blobDone event (may be redundant but safe)
-                getBlob(photo);
+                // Full blobs are only needed for images (metadata + cache). Streaming
+                // video/audio must not be read entirely into memory here.
+                if (photo.isImage) {
+                    getBlob(photo);
+                }
             });
             renderTile(photos, isSeeding);
         } else {
@@ -154,7 +157,7 @@ function Gallery(props) {
                     // try to serve the blob directly from IndexedDB without touching the
                     // WebTorrent peer/tracker layer (which can hang when offline or after
                     // the browser returns from standby).
-                    if (photo.fromCache && photo.infoHash) {
+                    if (photo.fromCache && photo.infoHash && shouldCacheBlob(photo.fileType)) {
                         try {
                             const cachedBlob = await cacheGet(photo.infoHash);
                             if (cachedBlob) {
@@ -258,7 +261,6 @@ function Gallery(props) {
                             }
                         });
                     } else {
-                        getBlob(photo);
                         resolve(mergeStreamingMetadata(photo, extention));
                     }
                 });

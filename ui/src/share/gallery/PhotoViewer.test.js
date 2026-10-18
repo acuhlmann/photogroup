@@ -26,6 +26,9 @@ const master = {
     service: { update: () => {} },
     metadata: {
         createMetadataSummary: () => ([
+            { key: 'Title XMP', value: 'Harbor light' },
+            { key: 'x-Description', value: 'Misty morning on the dock.' },
+            { key: 'Rating XMP', value: 5 },
             { key: 'x-Camera', value: 'Fujifilm X-T5' },
             { key: 'DateTimeOriginal', value: '14:2 Oct 15 2026' },
             { key: 'Make', value: 'FUJIFILM' },
@@ -60,9 +63,11 @@ describe('PhotoViewer', () => {
 
         expect(save).toBeTruthy();
         expect(text).toContain('4.2 MB');
+        expect(text).toContain('Harbor light');
+        expect(text).toContain('Misty morning on the dock.');
         expect(text).toContain('Fujifilm X-T5');
         expect(text).toContain('Camera');
-        expect(text).toContain('More');
+        expect(text).toContain('More metadata');
         expect(text).toContain('FUJIFILM');
         expect(text).toContain('Make');
 

@@ -77,6 +77,15 @@ function RenderContent(props) {
                     master.emitter.emit('photoRendered', tile);
                 }
             });
+        } else if (currentTile.isVideo && (currentTile.torrentFile || currentTile.file)) {
+            Logger.info('readMetadata streaming media for ' + currentTile.fileName);
+            master.metadata.readMetadata(currentTile, (tile, metadata) => {
+                const updateTile = {...tile};
+                master.emitter.emit('photos', {type: 'update', item: [updateTile]});
+                if (tile.seed) {
+                    master.emitter.emit('photoRendered', tile);
+                }
+            });
         } else {
             Logger.info('readMetadata waiting for blobDone for ' + currentTile.fileName);
             master.emitter.on('blobDone-' + currentTile.infoHash, (photo) => {
@@ -156,8 +165,10 @@ function RenderContent(props) {
     // Define doAppendFile and related functions first
     const doAppendFile = useCallback((tile, file, node) => {
         const opts = {
-            autoplay: !tile.isAudio,
-            muted: !tile.isAudio, loop: true,
+            autoplay: false,
+            controls: tile.isVideo,
+            muted: tile.isVideo,
+            loop: tile.isVideo,
         };
 
         if(FileUtil.largerThanMaxBlobSize(tile.torrentFile.length)) {
@@ -185,15 +196,20 @@ function RenderContent(props) {
                     elem.style.width = '100%';
                 }
 
-                if(getBlobAndReadMetadataRef.current) {
-                    getBlobAndReadMetadataRef.current(tile);
-                }
-
                 if(tile.isVideo) {
-                    if(elem) {
+                    if (elem) {
                         elem.loop = true;
+                        elem.controls = true;
                     }
+                    master.metadata.readMetadata(tile, (updatedTile) => {
+                        if (updatedTile.seed) {
+                            master.emitter.emit('photoRendered', updatedTile);
+                        }
+                    });
                 } else if(tile.isAudio) {
+                    if (getBlobAndReadMetadataRef.current) {
+                        getBlobAndReadMetadataRef.current(tile);
+                    }
                     const audioMotion = new AudioMotionAnalyzer(
                         equalizerNodeRef.current,
                         {
@@ -306,6 +322,12 @@ function RenderContent(props) {
 
     const getBlobAndReadMetadata = useCallback((tile) => {
         Logger.info('streaming done ' + tile.torrentFile?.progress);
+        if (tile.isVideo && tile.torrentFile) {
+            if (readMetadataRef.current) {
+                readMetadataRef.current(tile);
+            }
+            return;
+        }
         if(tile.elem) {
             Logger.info('streaming getBlob ' + tile.torrentFile);
             if(readMetadataRef.current) {
