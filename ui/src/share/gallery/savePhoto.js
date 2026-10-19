@@ -1,15 +1,24 @@
 import download from 'downloadjs';
 import Logger from 'js-logger';
+import { embedDetails } from './metadata/embedDetails';
 
 /**
- * Save a shared photo onto the local device using the existing download path.
+ * Save a shared photo onto the local device using the existing download path,
+ * with the room's shared details written into its metadata where possible.
  * Resolves once the browser has been handed the file.
  */
 export function savePhoto(tile) {
     return new Promise((resolve, reject) => {
         const finish = (elem) => {
-            download(elem, tile.fileName);
-            resolve();
+            embedDetails(elem, tile.details)
+                .catch(err => {
+                    Logger.warn('Saving without photo details: ' + (err.message || String(err)));
+                    return elem;
+                })
+                .then(file => {
+                    download(file, tile.fileName);
+                    resolve();
+                });
         };
 
         if (tile.elem) {

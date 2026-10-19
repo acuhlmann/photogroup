@@ -57,7 +57,7 @@ Deploy: `./deploy-wake-proxy.sh` then point DNS at Cloud Run; release static IP 
 
 All routes are registered in `Rooms.js`. Pattern: `POST /api/rooms/` (create), `GET/POST /api/rooms/:id` (get/join), sub-resources for photos, connections, updates (SSE).
 
-Shared photo details (title, description, rating anyone in the room can edit) go through `PUT /api/rooms/:id/photos/details`, validated in `server/PhotoDetails.js` and gated on the caller's session token; the generic `PUT /api/rooms/:id/photos/` ignores `details`. In the UI they live on `tile.details` and override the file's embedded XMP (`groupPhotoMetadata.js`).
+Shared photo details (title, description, rating anyone in the room can edit) go through `PUT /api/rooms/:id/photos/details`, validated in `server/PhotoDetails.js` and gated on the caller's session token; the generic `PUT /api/rooms/:id/photos/` ignores `details`. In the UI they live on `tile.details` and override the file's embedded XMP (`groupPhotoMetadata.js`). Saving a photo writes them into a JPEG's XMP (`gallery/metadata/embedDetails.js`); other formats download unchanged.
 
 ### Important: No persistence
 
