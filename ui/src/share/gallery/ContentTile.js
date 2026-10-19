@@ -18,7 +18,7 @@ import PasswordInput from "../security/PasswordInput";
 import WebCrypto from "../security/WebCrypto";
 import RenderContent from "./RenderContent";
 import { saveLabel, savePhoto } from "./savePhoto";
-import { replaceFailureMessage, replaceKind, replaceLabel, replaceOriginal } from "./replaceOriginal";
+import { primePhotoCopy, replaceFailureMessage, replaceKind, replaceLabel, replaceOriginal } from "./replaceOriginal";
 import { photoTransitionName } from "./viewTransition";
 import { groupMetadataForDisplay } from "./metadata/groupPhotoMetadata";
 import { RatingStars, ColorLabel, StarPicker } from "./metadata/MediaMetadataPanel";
@@ -100,6 +100,10 @@ function ContentTile(props) {
     useEffect(() => {
         setReplaced(null);
     }, [tile.infoHash, tile.tileKey, tile.metadata, tile.details]);
+
+    useEffect(() => {
+        primePhotoCopy(tile);
+    }, [tile, tile.elem, tile.file, tile.infoHash, tile.tileKey]);
 
     const downloadFromServer = useCallback((tile) => {
         Logger.info('downloadFromServer ' + tile.fileName);

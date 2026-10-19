@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+let primePhotoCopy;
+
 const blob = new Blob([new Uint8Array([0x47, 0x49, 0x46])], { type: 'image/gif' });
+
+function copyReadsSettled() {
+    return new Promise(resolve => setTimeout(resolve, 0));
+}
 
 function writable(write = vi.fn().mockResolvedValue(undefined)) {
     return {
@@ -42,6 +48,7 @@ beforeEach(async () => {
         replaceHint,
         replaceFailureMessage,
         attachOriginalHandle,
+        primePhotoCopy,
     } = await import('./replaceOriginal'));
     clearOriginalFiles();
 });
@@ -102,11 +109,11 @@ describe('replaceOriginal', () => {
         expect(window.showSaveFilePicker).not.toHaveBeenCalled();
     });
 
-    it('opens the picker before reading a torrent file, so the gesture still counts', async () => {
+    it('starts reading a torrent file before the save dialog returns', async () => {
         const handle = handleWith();
         let read = false;
         window.showSaveFilePicker = vi.fn(async () => {
-            expect(read).toBe(false);
+            expect(read).toBe(true);
             return handle;
         });
 
@@ -157,6 +164,64 @@ describe('replaceOriginal', () => {
         const written = stream.write.mock.calls[0][0];
         expect(written).not.toBe(file);
         expect(new Uint8Array(await written.arrayBuffer())).toEqual(bytes);
+    });
+
+    it('uses a copy taken before the save dialog truncates the uploaded file', async () => {
+        const bytes = new Uint8Array([9, 8, 7, 6, 5]);
+        const file = new File([bytes], 'evening.jpg', { type: 'image/jpeg' });
+        let truncated = false;
+        const read = file.arrayBuffer.bind(file);
+        file.arrayBuffer = vi.fn(async () => {
+            if (truncated) {
+                const err = new Error('gone');
+                err.name = 'NotReadableError';
+                throw err;
+            }
+            return read();
+        });
+        const stream = writable();
+        window.showSaveFilePicker = vi.fn(async () => {
+            truncated = true;
+            return handleWith(stream);
+        });
+        const tile = {
+            elem: file,
+            fileName: 'evening.jpg',
+            fileType: 'image/jpeg',
+            tileKey: 'evening',
+            details: { title: 'Evening harbor' },
+        };
+
+        primePhotoCopy(tile);
+        await copyReadsSettled();
+        await replaceOriginal(tile);
+
+        const written = stream.write.mock.calls[0][0];
+        expect(new Uint8Array(await written.arrayBuffer())).toEqual(bytes);
+    });
+
+    it('starts reading the photo before the save dialog can return', async () => {
+        const bytes = new Uint8Array([1, 2, 3, 4]);
+        const file = new File([bytes], 'evening.jpg', { type: 'image/jpeg' });
+        let started = false;
+        file.arrayBuffer = vi.fn(async () => {
+            started = true;
+            return bytes.buffer.slice(0);
+        });
+        const stream = writable();
+        window.showSaveFilePicker = vi.fn(async () => {
+            expect(started).toBe(true);
+            return handleWith(stream);
+        });
+
+        await replaceOriginal({
+            elem: file,
+            fileName: 'evening.jpg',
+            fileType: 'image/jpeg',
+            tileKey: 'fresh',
+        });
+
+        expect(stream.close).toHaveBeenCalled();
     });
 
     it('stays quiet when the picker is cancelled', async () => {

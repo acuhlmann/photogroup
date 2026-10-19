@@ -21,7 +21,7 @@ import OwnersList from './OwnersList';
 import MediaMetadataPanel from './metadata/MediaMetadataPanel';
 import RenderContent from './RenderContent';
 import { saveLabel, savePhoto } from './savePhoto';
-import { replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
+import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
 import { photoTransitionName, supportsViewTransition } from './viewTransition';
 import { canSaveDetails, saveDetails } from './metadata/saveDetails';
 
@@ -71,6 +71,10 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
             setSummary(null);
         }
     }, [master.metadata]);
+
+    useEffect(() => {
+        if (tile) primePhotoCopy(tile);
+    }, [tile, tile && tile.elem, tile && tile.file]);
 
     useEffect(() => {
         if (!tile) return;

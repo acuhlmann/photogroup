@@ -4,6 +4,9 @@ import { fileForSave } from './savePhoto';
 
 const HANDLE = Symbol('originalHandle');
 const handles = new Map();
+const copies = new Map();
+const copySources = new Map();
+const copyReads = new Map();
 
 const MIME_BY_EXT = {
     jpg: 'image/jpeg',
@@ -99,6 +102,54 @@ export function captureDroppedHandles(dataTransfer) {
 
 export function clearOriginalFiles() {
     handles.clear();
+    copies.clear();
+    copySources.clear();
+    copyReads.clear();
+}
+
+function sourceBlob(tile) {
+    return tile && (tile.elem || tile.file);
+}
+
+/**
+ * Keep an in-memory copy of a photo. The save dialog truncates the chosen
+ * file as soon as it is confirmed, and the upload's File points at that
+ * same path, so the copy has to exist before the dialog returns.
+ */
+export function primePhotoCopy(tile) {
+    const key = tileKey(tile);
+    const source = sourceBlob(tile);
+    if (!key || !source || typeof source.arrayBuffer !== 'function') return;
+    if (copySources.get(key) === source) return;
+    copySources.set(key, source);
+    const pending = source.arrayBuffer().then(bytes => {
+        if (source.size > 0 && bytes.byteLength === 0) {
+            const err = new Error('Could not read the original file.');
+            err.name = 'NotReadableError';
+            throw err;
+        }
+        const copy = new Blob([bytes], { type: source.type || tile.fileType || '' });
+        copies.set(key, copy);
+        return copy;
+    }).catch(err => {
+        if (copySources.get(key) === source) copySources.delete(key);
+        copies.delete(key);
+        throw err;
+    });
+    copyReads.set(key, pending);
+}
+
+async function bytesForReplace(tile) {
+    const key = tileKey(tile);
+    primePhotoCopy(tile);
+    let copy = key && copies.get(key);
+    if (!copy && key && copyReads.get(key)) {
+        copy = await copyReads.get(key);
+    }
+    if (copy) return fileForSave({ ...tile, elem: copy });
+    const source = await fileForSave(tile);
+    const bytes = await source.arrayBuffer();
+    return new Blob([bytes], { type: source.type || '' });
 }
 
 /** True when this photo already has a location we can try to write back to. */
@@ -198,19 +249,6 @@ async function permissionGranted(handle) {
     return false;
 }
 
-/**
- * Copy the photo into memory before the destination is opened. The save
- * picker can point at the same file the upload came from, and opening it
- * for writing makes that file unreadable.
- */
-async function snapshot(blob) {
-    if (!blob || typeof blob.arrayBuffer !== 'function') {
-        throw new Error('This photo is not ready to save yet');
-    }
-    const bytes = await blob.arrayBuffer();
-    return new Blob([bytes], { type: blob.type || '' });
-}
-
 async function writeHandle(handle, blob) {
     let writable;
     let closed = false;
@@ -239,7 +277,7 @@ function namedFile(blob, tile) {
 }
 
 async function shareFile(tile) {
-    const blob = await snapshot(await fileForSave(tile));
+    const blob = await bytesForReplace(tile);
     const file = namedFile(blob, tile);
     if (navigator.canShare && !navigator.canShare({ files: [file] })) {
         throw new Error('This browser cannot put the file back in the same place.');
@@ -275,7 +313,7 @@ export async function replaceOriginal(tile) {
             throw denied;
         }
         try {
-            const blob = await snapshot(await fileForSave(tile));
+            const blob = await bytesForReplace(tile);
             await writeHandle(existing, blob);
             remember(tile, existing);
             return 'replaced';
@@ -290,14 +328,18 @@ export async function replaceOriginal(tile) {
     }
 
     if (typeof window.showSaveFilePicker === 'function') {
+        // Start the copy before the dialog. Confirming the dialog truncates
+        // the file, and the upload's File is a reference to that same path.
+        const prepared = bytesForReplace(tile);
         let handle;
         try {
             handle = await window.showSaveFilePicker(pickerOptions(tile));
         } catch (err) {
+            prepared.catch(() => {});
             if (err && err.name === 'AbortError') throw new SaveCancelled();
             throw err;
         }
-        const blob = await snapshot(await fileForSave(tile));
+        const blob = await prepared;
         await writeHandle(handle, blob);
         remember(tile, handle);
         return 'replaced';
