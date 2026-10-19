@@ -12,6 +12,12 @@ on:
   # Allow manual deployment trigger
   workflow_dispatch:
 
+# One deploy at a time: two runs would build and swap the same container
+# on the VM at once. Later runs wait instead of cancelling the one in flight.
+concurrency:
+  group: deploy-gcp-vm
+  cancel-in-progress: false
+
 jobs:
   deploy:
     # Only deploy if:
@@ -79,6 +85,16 @@ jobs:
           ZONE="${ZONE_URL##*/}"
           echo "zone=$ZONE" >> "$GITHUB_OUTPUT"
           echo "VM $INSTANCE is in $ZONE"
+          # Two idle checks can stop the VM: idle-stop.sh on the VM (live
+          # connections, nginx traffic) and the wake proxy's stop-if-idle,
+          # called every 15 minutes, which reads only this metadata key.
+          # Neither sees a deploy, so an idle VM was stopped mid-deploy.
+          # Record the deploy as activity before starting the VM, so a
+          # cold start is covered too.
+          gcloud compute instances add-metadata "$INSTANCE" \
+            --project "$PROJECT" --zone "$ZONE" \
+            --metadata "wake-last-activity-ms=$(date +%s%3N)" \
+            || echo "WARNING: could not record deploy activity on the VM"
           STATUS=$(gcloud compute instances describe "$INSTANCE" \
             --project "$PROJECT" --zone "$ZONE" \
             --format='get(status)')
@@ -97,14 +113,6 @@ jobs:
               sleep 10
             done
           fi
-          # The VM's idle-stop check only sees live connections and nginx
-          # traffic, so between deploy steps an idle VM looked unused and was
-          # stopped mid-deploy. Record the deploy as activity (idle-stop.sh
-          # reads this key) so the VM stays up for the idle window.
-          gcloud compute instances add-metadata "$INSTANCE" \
-            --project "$PROJECT" --zone "$ZONE" \
-            --metadata "wake-last-activity-ms=$(date +%s%3N)" \
-            || echo "WARNING: could not record deploy activity on the VM"
         timeout-minutes: 10
       
       - name: Deploy nginx configuration
