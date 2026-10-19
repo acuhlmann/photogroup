@@ -16,6 +16,17 @@ function mediaMetadataKey(tile) {
     return tile.infoHash || tile.fileName || 'unknown';
 }
 
+const XML_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+
+function decodeXmlEntities(value) {
+    if (typeof value !== 'string') return value;
+    return value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (match, entity) => {
+        if (entity[0] !== '#') return XML_ENTITIES[entity.toLowerCase()];
+        const code = entity[1].toLowerCase() === 'x' ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10);
+        return code <= 0x10FFFF ? String.fromCodePoint(code) : match;
+    });
+}
+
 export default class MetadataParser {
 
     constructor(master) {
@@ -186,8 +197,10 @@ export default class MetadataParser {
         ExifParser.parse(allMetadata);
 
         // exifr parses XMP/IPTC itself: dc:title/description arrive as
-        // {lang, value}, dc:subject/creator as a string or array.
-        const text = value => (value && typeof value === 'object' && !Array.isArray(value) ? value.value : value);
+        // {lang, value}, dc:subject/creator as a string or array, with XML
+        // entities such as &amp; left encoded.
+        const text = value => decodeXmlEntities(
+            value && typeof value === 'object' && !Array.isArray(value) ? value.value : value);
         const list = value => (Array.isArray(value) ? value.map(text).join(', ') : text(value));
         allMetadata['Title XMP'] = text(allMetadata.title) || allMetadata.ObjectName || allMetadata.Headline
             || allMetadata.XPTitle || allMetadata['Title XMP'];

@@ -56,6 +56,20 @@ describe('MetadataParser image catalog fields', () => {
         expect(md.title).toBeUndefined();
         expect(md.subject).toBeUndefined();
     });
+
+    it('decodes XML entities exifr leaves in XMP text', () => {
+        const exifr = {
+            title: { lang: 'x-default', value: 'Fish &amp; chips &lt;3' },
+            description: { lang: 'x-default', value: 'Caf&#xE9; &#8212; pier' },
+            subject: ['salt &amp; vinegar', 'sea'],
+        };
+        const tile = { isImage: true, fileName: 'a.jpg', torrent: { name: 'a.jpg' } };
+        const md = new MetadataParser({}).extractAndProcess(exifr, tile);
+
+        expect(md['Title XMP']).toBe('Fish & chips <3');
+        expect(md['x-Description']).toBe('Café — pier');
+        expect(md['Keywords XMP']).toBe('salt & vinegar, sea');
+    });
 });
 
 

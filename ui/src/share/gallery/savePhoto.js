@@ -1,6 +1,6 @@
 import download from 'downloadjs';
 import Logger from 'js-logger';
-import { embedDetails } from './metadata/embedDetails';
+import { embedDetails } from './metadata/embed/embedDetails';
 
 /**
  * Save a shared photo onto the local device using the existing download path,
