@@ -27,6 +27,34 @@ import { runViewTransition } from "./viewTransition";
  * An unsynced empty gallery waits for a snapshot or four seconds before showing the upload prompt.
  * `showNetworkReadout` controls the readout in the empty state and defaults to true.
  */
+function AddPhotosStrip({ narrow }) {
+    return (
+        <Box
+            component="label"
+            htmlFor="contained-button-file"
+            className="drop-target"
+            data-testid="add-photos-strip"
+            sx={{
+                minHeight: '0 !important',
+                flexDirection: 'row !important',
+                gap: 1,
+                py: '10px !important',
+                mb: 2,
+                maxWidth: narrow ? 880 : 'none',
+                mx: narrow ? 'auto' : 0,
+            }}
+        >
+            <AddPhotoAlternateRounded sx={{ fontSize: 20, color: 'primary.main' }} />
+            <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 600 }}>
+                Add photos
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                drop here or tap
+            </Typography>
+        </Box>
+    );
+}
+
 function Gallery(props) {
     const {master, showNetworkReadout = true} = props;
     const theme = useTheme();
@@ -36,6 +64,7 @@ function Gallery(props) {
     // Until the first room snapshot arrives, an empty gallery means "not
     // loaded yet", not "no photos": after a reload it looked like they were gone.
     const [roomSynced, setRoomSynced] = useState(() => !!master.roomSynced);
+    const [syncSlow, setSyncSlow] = useState(false);
     const photoHandlerRef = useRef(null);
     const dragCounterRef = useRef(0);
 
@@ -347,8 +376,9 @@ function Gallery(props) {
         const handlePhotos = event => {
             if (event && event.type === 'all') setRoomSynced(true);
         };
-        // Offline or a failed join must not leave the placeholder up forever.
-        const fallback = setTimeout(() => setRoomSynced(true), 4000);
+        // Only a room snapshot can say the room is empty; if it is slow (or
+        // the join failed), keep saying so but let people add photos anyway.
+        const fallback = setTimeout(() => setSyncSlow(true), 4000);
         emitter.on('photos', handlePhotos);
         return () => {
             clearTimeout(fallback);
@@ -407,12 +437,15 @@ function Gallery(props) {
             }}
         >
             {tiles.length === 0 && !roomSynced ? (
+                <>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, py: 6 }}>
                     <CircularProgress size={18} thickness={4} />
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        Loading this room's photos…
+                        {syncSlow ? 'Still loading this room\'s photos…' : 'Loading this room\'s photos…'}
                     </Typography>
                 </Box>
+                {syncSlow && <AddPhotosStrip narrow />}
+                </>
             ) : tiles.length === 0 ? (
                 <>
                 <Box
@@ -441,29 +474,7 @@ function Gallery(props) {
             ) : (
                 <>
                 {/* The empty-state drop zone, shrunk to one line once there are photos. */}
-                <Box
-                    component="label"
-                    htmlFor="contained-button-file"
-                    className="drop-target"
-                    data-testid="add-photos-strip"
-                    sx={{
-                        minHeight: '0 !important',
-                        flexDirection: 'row !important',
-                        gap: 1,
-                        py: '10px !important',
-                        mb: 2,
-                        maxWidth: tiles.length < 2 ? 880 : 'none',
-                        mx: tiles.length < 2 ? 'auto' : 0,
-                    }}
-                >
-                    <AddPhotoAlternateRounded sx={{ fontSize: 20, color: 'primary.main' }} />
-                    <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 600 }}>
-                        Add photos
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        drop here or tap
-                    </Typography>
-                </Box>
+                <AddPhotosStrip narrow={tiles.length < 2} />
                 <Box
                     className="stagger-children"
                     sx={{

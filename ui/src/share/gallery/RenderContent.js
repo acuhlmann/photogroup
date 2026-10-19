@@ -80,7 +80,8 @@ function RenderContent(props) {
     const openedWebampRef = useRef(false);
     const handleDoneRef = useRef(null);
     const readMetadataRef = useRef(null);
-    const [imgDecoded, setImgDecoded] = useState(false);
+    // The image source whose decode finished; a new source shows the preview again.
+    const [decodedSrc, setDecodedSrc] = useState(null);
 
     // Define readMetadata first so it can be used by other callbacks
     // Use a ref to access the current tile without including it in dependencies
@@ -401,8 +402,10 @@ function RenderContent(props) {
         rememberImageSize(tile, img);
         // Keep the preview behind the photo until it is decoded, otherwise a
         // large photo paints as an empty box for a few frames.
+        const src = img && img.getAttribute('src');
         const decoded = img && typeof img.decode === 'function' ? img.decode() : Promise.resolve();
-        decoded.catch(() => {}).then(() => setImgDecoded(true));
+        // A failed decode keeps the preview rather than revealing a broken image.
+        decoded.then(() => setDecodedSrc(src), () => {});
         // For images, when the img tag loads, try to read metadata
         if(readMetadataRef.current) {
             readMetadataRef.current(tile);
@@ -499,7 +502,7 @@ function RenderContent(props) {
                    // tile doesn't collapse while the full image decodes.
                    style={{width: '100%', maxWidth: '100%', height: 'auto', display: 'block',
                        aspectRatio: imageAspectRatio(currentTile), backgroundColor: '#3a3f47',
-                       ...(!imgDecoded && currentTile.previewUrl ? {
+                       ...(decodedSrc !== currentTile.img && currentTile.previewUrl ? {
                            backgroundImage: `url(${currentTile.previewUrl})`,
                            backgroundSize: 'cover',
                            backgroundPosition: 'center',

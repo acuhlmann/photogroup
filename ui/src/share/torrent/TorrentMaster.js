@@ -200,6 +200,14 @@ export default class TorrentMaster {
      * Missing hashes, non-image types, and cache misses are skipped; cache and blob
      * preparation errors are swallowed. Resolves without a value.
      */
+    /** A deleted photo no longer needs its cached file or blob URL. */
+    releaseCachedPhoto(infoHash) {
+        const cached = infoHash && this._cachedPhotos?.get(infoHash);
+        if (!cached) return;
+        URL.revokeObjectURL(cached.img);
+        this._cachedPhotos.delete(infoHash);
+    }
+
     async serveCachedPhoto(photo) {
         if (!photo.infoHash) return;
         if (!shouldCacheBlob(photo.fileType)) return;
@@ -571,8 +579,10 @@ export default class TorrentMaster {
 
             } else if(event.type === 'delete') {
 
+                const infoHash = typeof event.item === 'string' ? event.item : event.item?.infoHash;
+                this.releaseCachedPhoto(infoHash);
                 this.torrentDeletion.handlePhotoDeleteEvent(event.item);
-                this.serverFallback?.unwatch(typeof event.item === 'string' ? event.item : event.item?.infoHash);
+                this.serverFallback?.unwatch(infoHash);
             } else if(event.type === 'update') {
                 // A server copy may appear after we already started (and
                 // stalled on) the P2P download - start watching it then.
