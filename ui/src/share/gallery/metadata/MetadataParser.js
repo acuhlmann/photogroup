@@ -101,7 +101,9 @@ export default class MetadataParser {
         const bitrate = metadata.format.bitrate ?
             'bitrate ' + Math.round(metadata.format.bitrate) : '';
 
-        const starRating = metadata.common.rating ? mmRef.ratingToStars(metadata.common.rating) : '';
+        // common.rating is a list of {source, rating 0..1}
+        const rawRating = metadata.common.rating?.[0]?.rating;
+        const starRating = rawRating != null ? mmRef.ratingToStars(rawRating) : '';
         metadata.common.starRating = starRating;
 
         if (tile.isVideo) {
@@ -177,9 +179,23 @@ export default class MetadataParser {
         XmpParser.parse(allMetadata, allMetadata.xmp);
         ExifParser.parse(allMetadata);
 
-        allMetadata['Title XMP'] = _.get(allMetadata, 'title.value');
-        allMetadata['Description XMP'] = _.get(allMetadata, 'description.value');
-        allMetadata['Rating XMP'] = allMetadata.Rating;
+        // exifr parses XMP/IPTC itself: dc:title/description arrive as
+        // {lang, value}, dc:subject/creator as a string or array.
+        const text = value => (value && typeof value === 'object' && !Array.isArray(value) ? value.value : value);
+        const list = value => (Array.isArray(value) ? value.map(text).join(', ') : text(value));
+        allMetadata['Title XMP'] = text(allMetadata.title) || allMetadata.ObjectName || allMetadata.Headline
+            || allMetadata.XPTitle || allMetadata['Title XMP'];
+        allMetadata['Description XMP'] = text(allMetadata.description) || allMetadata.Caption
+            || allMetadata.XPComment || allMetadata['Description XMP'];
+        allMetadata['Rating XMP'] = allMetadata.Rating ?? allMetadata['Rating XMP'];
+        allMetadata['Keywords XMP'] = list(allMetadata.subject) || list(allMetadata.Keywords)
+            || allMetadata.XPKeywords || allMetadata['Keywords XMP'];
+        allMetadata['Label XMP'] = allMetadata.Label;
+        allMetadata['Creator XMP'] = list(allMetadata.creator) || allMetadata.Artist || allMetadata.Byline;
+        allMetadata['x-CreatorTool'] = allMetadata.CreatorTool || allMetadata['x-CreatorTool'];
+        ['title', 'description', 'Rating', 'subject', 'Keywords', 'XPKeywords', 'Label', 'creator',
+            'Artist', 'Byline', 'CreatorTool', 'ObjectName', 'Headline', 'XPTitle', 'Caption', 'XPComment', 'xmp']
+            .forEach(key => delete allMetadata[key]);
 
         allMetadata['x-file name'] = tile.torrent.name;
         const picDesc = MetadataParser.findBestDesc(allMetadata);
@@ -271,6 +287,8 @@ export default class MetadataParser {
                         newValueObj = valueObj;
                     } else if(key === 'DateTimeOriginal') {
                         newValueObj = MetadataParser.formatDate(valueObj);
+                    } else if(valueObj instanceof Date) {
+                        newValueObj = isNaN(valueObj) ? '' : format(valueObj, 'MMM d, yyyy HH:mm');
                     } else if(Array.isArray(valueObj)) {
                         newValueObj = valueObj.toString();
                     } else if(typeof valueObj === 'string' || valueObj instanceof String) {
@@ -299,9 +317,9 @@ export default class MetadataParser {
             }).filter(item => item.value);
 
         if(tile.isImage) {
-            ['x-file name', 'Title XMP', 'x-Description', 'Rating XMP', 'Keywords XMP', 'XPKeywords',
-                'DateTimeOriginal', 'x-Location', 'GPSAltitude',
-                'x-Pixel Size', 'x-Camera', 'x-Settings',
+            ['x-file name', 'Title XMP', 'Rating XMP', 'x-Description', 'Label XMP', 'Keywords XMP',
+                'DateTimeOriginal', 'Creator XMP', 'x-Location', 'x-Camera', 'LensModel', 'x-Settings',
+                'x-Pixel Size', 'GPSAltitude',
                 'DigitalZoomRation', 'Flash', 'WhiteBalance', 'MeteringMode',
                 'Software', 'x-Last Save with', 'x-Last Save at']
                 .reverse()

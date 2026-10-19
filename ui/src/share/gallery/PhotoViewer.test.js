@@ -68,9 +68,14 @@ describe('PhotoViewer', () => {
         expect(text).toContain('Misty morning on the dock.');
         expect(text).toContain('Fujifilm X-T5');
         expect(text).toContain('Camera');
-        expect(text).toContain('More metadata');
+        expect(text).toContain('All metadata');
         expect(text).toContain('FUJIFILM');
         expect(text).toContain('Make');
+        // Catalog fields lead, ahead of the technical details
+        expect(text.indexOf('Harbor light')).toBeLessThan(text.indexOf('Misty morning on the dock.'));
+        expect(text.indexOf('Misty morning on the dock.')).toBeLessThan(text.indexOf('Fujifilm X-T5'));
+        // Everything is visible without expanding anything
+        expect(document.body.querySelector('details').open).toBe(true);
 
         await act(async () => {
             root.unmount();

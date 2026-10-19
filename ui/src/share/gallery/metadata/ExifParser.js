@@ -4,7 +4,10 @@ export default class ExifParser {
         delete allMetadata['MakerNote'];
 
         if(allMetadata['Make'] && allMetadata['Model']) {
-            allMetadata['x-Camera'] = allMetadata['Make'] + ' ' + allMetadata['Model'];
+            // Many models already carry the brand ("Canon EOS R5")
+            const make = String(allMetadata['Make']).trim();
+            const model = String(allMetadata['Model']).trim();
+            allMetadata['x-Camera'] = model.toLowerCase().startsWith(make.toLowerCase()) ? model : make + ' ' + model;
             //delete allMetadata['Make'];
             delete allMetadata['Model'];
         }

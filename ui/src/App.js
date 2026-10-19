@@ -305,7 +305,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
                                 </Stack>
 
                                 {/* Action buttons */}
-                                <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center', flexShrink: 0 }}>
+                                <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexShrink: 0 }}>
                                     <AddPeersView master={masterRef.current}/>
                                     <Uploader
                                         model={masterRef.current.torrentAddition}

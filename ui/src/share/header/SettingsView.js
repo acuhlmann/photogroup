@@ -5,7 +5,8 @@ import Logger from 'js-logger';
 
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
-import Settings from '@mui/icons-material/Settings';
+import TuneRounded from '@mui/icons-material/TuneRounded';
+import { headerButtonSx } from './headerButtonSx';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
@@ -234,9 +235,9 @@ function SettingsView(props) {
                 aria-label="Settings"
                 aria-haspopup="true"
                 onClick={showLogs}
-                color="inherit"
+                sx={headerButtonSx}
             >
-                <Settings />
+                <TuneRounded />
             </IconButton>
 
             <Dialog
