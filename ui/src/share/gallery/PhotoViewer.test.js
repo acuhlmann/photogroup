@@ -33,6 +33,8 @@ const master = {
             { key: 'x-Camera', value: 'Fujifilm X-T5' },
             { key: 'DateTimeOriginal', value: '14:2 Oct 15 2026' },
             { key: 'Make', value: 'FUJIFILM' },
+            { key: 'Flash', value: 'Flash did not fire, compulsory flash mode' },
+            { key: 'XResolution', value: '72' },
         ]),
     },
 };
@@ -68,14 +70,20 @@ describe('PhotoViewer', () => {
         expect(text).toContain('Misty morning on the dock.');
         expect(text).toContain('Fujifilm X-T5');
         expect(text).toContain('Camera');
-        expect(text).toContain('All metadata');
-        expect(text).toContain('FUJIFILM');
-        expect(text).toContain('Make');
         // Catalog fields lead, ahead of the technical details
         expect(text.indexOf('Harbor light')).toBeLessThan(text.indexOf('Misty morning on the dock.'));
         expect(text.indexOf('Misty morning on the dock.')).toBeLessThan(text.indexOf('Fujifilm X-T5'));
-        // Everything is visible without expanding anything
-        expect(document.body.querySelector('details').open).toBe(true);
+        // The rest is one tap away, in plain words; Make is already in Camera
+        expect(document.body.querySelector('details').open).toBe(false);
+        expect(text).toContain('All metadata');
+        expect(text).toContain('No flash');
+        expect(text).not.toContain('FUJIFILM');
+        expect(text).not.toContain('XResolution');
+        // Important fields that are not set are named quietly, last
+        const missing = document.body.querySelector('[data-testid="metadata-missing"]').textContent;
+        expect(missing).toContain('Location');
+        expect(missing).not.toContain('Title');
+        expect(text.trim().endsWith(missing) || text.indexOf(missing) > text.indexOf('All metadata')).toBe(true);
 
         await act(async () => {
             root.unmount();

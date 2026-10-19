@@ -286,7 +286,8 @@ export default class MetadataParser {
                     if(key.substring(0, 2) === 'x-') {
                         newValueObj = valueObj;
                     } else if(key === 'DateTimeOriginal') {
-                        newValueObj = MetadataParser.formatDate(valueObj);
+                        const taken = valueObj instanceof Date ? valueObj : new Date(valueObj);
+                        newValueObj = isNaN(taken) ? String(valueObj) : format(taken, 'EEE, MMM d, yyyy · HH:mm');
                     } else if(valueObj instanceof Date) {
                         newValueObj = isNaN(valueObj) ? '' : format(valueObj, 'MMM d, yyyy HH:mm');
                     } else if(Array.isArray(valueObj)) {
