@@ -97,6 +97,14 @@ jobs:
               sleep 10
             done
           fi
+          # The VM's idle-stop check only sees live connections and nginx
+          # traffic, so between deploy steps an idle VM looked unused and was
+          # stopped mid-deploy. Record the deploy as activity (idle-stop.sh
+          # reads this key) so the VM stays up for the idle window.
+          gcloud compute instances add-metadata "$INSTANCE" \
+            --project "$PROJECT" --zone "$ZONE" \
+            --metadata "wake-last-activity-ms=$(date +%s%3N)" \
+            || echo "WARNING: could not record deploy activity on the VM"
         timeout-minutes: 10
       
       - name: Deploy nginx configuration

@@ -24,6 +24,10 @@ gcloud compute scp "$SCRIPT_DIR/idle-stop.sh" "$INSTANCE:/tmp/idle-stop.sh" \
 
 gcloud compute ssh "$INSTANCE" --project "$PROJECT" --zone "$ZONE" --command "
   set -e
+  # Re-enabling the timer below runs the idle check at once. A deploy is
+  # activity: mark it, or a VM nobody has visited for IDLE_MINUTES is stopped
+  # between this SSH session and the next deploy step.
+  sudo touch /var/log/nginx/wake-access.log
   sudo mkdir -p /opt/photogroup
   sudo mv /tmp/idle-stop.sh /opt/photogroup/idle-stop.sh
   sudo chmod 755 /opt/photogroup/idle-stop.sh
