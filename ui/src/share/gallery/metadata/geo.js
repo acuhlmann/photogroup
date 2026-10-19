@@ -75,12 +75,10 @@ function gpsTime(date, time) {
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-/** Raw GPS fields folded into the location, so they don't show up again as rows. */
-export const GPS_KEYS = [
-    'GPSLatitude', 'GPSLatitudeRef', 'GPSLongitude', 'GPSLongitudeRef', 'latitude', 'longitude',
-    'GPSAltitude', 'GPSAltitudeRef', 'GPSImgDirection', 'GPSImgDirectionRef', 'GPSHPositioningError',
-    'GPSDateStamp', 'GPSTimeStamp', 'GPSSpeed', 'GPSSpeedRef', 'GPSVersionID', 'GPSMapDatum',
-];
+/** Raw GPS fields (and exifr's derived latitude/longitude), folded into the location instead of shown as rows. */
+export function isGpsKey(key) {
+    return key.startsWith('GPS') || key === 'latitude' || key === 'longitude';
+}
 
 /**
  * The location in exifr output (EXIF GPS or XMP exif:GPS*), as
@@ -159,6 +157,17 @@ export function tilePosition(lat, long, zoom) {
     };
 }
 
+/** The point at a fractional slippy-map tile position; the inverse of tilePosition. */
+export function fromTilePosition(x, y, zoom) {
+    const scale = 2 ** zoom;
+    const wrapped = ((x % scale) + scale) % scale;
+    const clampedY = Math.max(0, Math.min(scale, y));
+    return {
+        lat: (Math.atan(Math.sinh(Math.PI * (1 - (2 * clampedY) / scale))) * 180) / Math.PI,
+        long: (wrapped / scale) * 360 - 180,
+    };
+}
+
 /** "Huangpu, Shanghai, China" from a Nominatim address. */
 export function describeAddress(result) {
     const address = (result && result.address) || {};
@@ -173,12 +182,58 @@ export function describeAddress(result) {
 }
 
 const placeCache = new Map();
+const knownPlaces = new Map();
+const placeListeners = new Set();
+
+/** The place name already looked up for these coordinates, without asking again; undefined if not yet. */
+export function knownPlaceName(lat, long) {
+    const near = rounded(lat, long);
+    return knownPlaces.get(`${near.lat},${near.long}`);
+}
+
+/** Be told whenever a place name arrives; returns the unsubscribe function. */
+export function onPlaceName(listener) {
+    placeListeners.add(listener);
+    return () => placeListeners.delete(listener);
+}
 let queue = Promise.resolve();
 const NOMINATIM_SPACING_MS = 1100; // its usage policy allows one request per second
 
 /** ~100 m: photos from the same spot share a lookup, and no finer position leaves the browser. */
 function rounded(lat, long) {
     return { lat: lat.toFixed(3), long: long.toFixed(3) };
+}
+
+const language = () => (typeof navigator !== 'undefined' && navigator.language) || 'en';
+
+/** Run a Nominatim request in turn, one per second, as its usage policy asks. */
+function inTurn(request) {
+    const result = queue.then(request);
+    queue = result.then(() => new Promise(resolve => setTimeout(resolve, NOMINATIM_SPACING_MS)));
+    return result;
+}
+
+/**
+ * Places matching a search, as [{name, label, lat, long}], from Nominatim.
+ * `name` is short ("The Bund, Huangpu, Shanghai, China"); `label` is its
+ * full address. Throws when the service can't be reached.
+ */
+export function searchPlaces(query, fetcher = (...args) => fetch(...args)) {
+    const text = String(query || '').trim();
+    if (!text) return Promise.resolve([]);
+    return inTurn(async () => {
+        const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6`
+            + `&q=${encodeURIComponent(text)}&accept-language=${encodeURIComponent(language())}`;
+        const response = await fetcher(url, { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error('Place search failed (' + response.status + ')');
+        const results = await response.json();
+        return (Array.isArray(results) ? results : []).map(result => {
+            const area = describeAddress({ address: result.address });
+            const name = result.name && !(area || '').startsWith(result.name)
+                ? [result.name, area].filter(Boolean).join(', ') : (area || result.display_name);
+            return { name, label: result.display_name, lat: Number(result.lat), long: Number(result.lon) };
+        }).filter(place => isValidLocation(place.lat, place.long));
+    });
 }
 
 /**
@@ -190,21 +245,22 @@ export function reverseGeocode(lat, long, fetcher = (...args) => fetch(...args))
     const key = `${near.lat},${near.long}`;
     if (placeCache.has(key)) return placeCache.get(key);
 
-    const language = (typeof navigator !== 'undefined' && navigator.language) || 'en';
-    const lookup = queue.then(async () => {
+    const lookup = inTurn(async () => {
         const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=${near.lat}&lon=${near.long}`
-            + `&accept-language=${encodeURIComponent(language)}`;
+            + `&accept-language=${encodeURIComponent(language())}`;
         try {
             const response = await fetcher(url, { headers: { Accept: 'application/json' } });
             if (!response.ok) throw new Error('status ' + response.status);
-            return describeAddress(await response.json());
+            const name = describeAddress(await response.json());
+            knownPlaces.set(key, name);
+            placeListeners.forEach(listener => listener(key, name));
+            return name;
         } catch (error) {
             Logger.warn('reverse geocode failed: ' + error.message);
             placeCache.delete(key); // try again next time
             return null;
         }
     });
-    queue = lookup.then(() => new Promise(resolve => setTimeout(resolve, NOMINATIM_SPACING_MS)));
     placeCache.set(key, lookup);
     return lookup;
 }

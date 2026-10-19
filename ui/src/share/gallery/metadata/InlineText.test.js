@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
-import InlineTitle from './InlineTitle';
+import InlineText from './InlineText';
 
 function setInput(input, value) {
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value').set;
@@ -16,11 +16,11 @@ async function render(props) {
     const div = document.createElement('div');
     document.body.appendChild(div);
     const root = createRoot(div);
-    await act(async () => root.render(<InlineTitle {...props} />));
+    await act(async () => root.render(<InlineText {...props} />));
     return { div, root };
 }
 
-describe('InlineTitle', () => {
+describe('InlineText', () => {
     it('adds a missing title in place and saves it on Enter', async () => {
         const onSave = vi.fn().mockResolvedValue({});
         const { div, root } = await render({ value: '', onSave });
@@ -81,4 +81,21 @@ describe('InlineTitle', () => {
         expect(div.textContent).toBe('Pier');
         await act(async () => root.unmount());
     });
+
+    it('edits a description over several lines and saves on Enter', async () => {
+        const onSave = vi.fn().mockResolvedValue({});
+        const { div, root } = await render({ kind: 'description', value: '', onSave });
+
+        await act(async () => div.querySelector('button[aria-label="Add description"]').click());
+        const input = div.querySelector('textarea');
+        expect(input.maxLength).toBe(4000);
+        await act(async () => setInput(input, 'Line one'));
+        await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true })));
+        expect(onSave).not.toHaveBeenCalled();
+        await act(async () => setInput(div.querySelector('textarea'), 'Line one\nLine two '));
+        await act(async () => key(div.querySelector('textarea'), 'Enter'));
+        expect(onSave).toHaveBeenCalledWith('Line one\nLine two');
+        await act(async () => root.unmount());
+    });
 });
+

@@ -29,7 +29,10 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
 import FileUtil from '../../util/FileUtil';
 import { groupMetadataForDisplay, humanizeMetadataValue, labelForMetadataKey } from './groupPhotoMetadata';
-import LocationCard from './LocationCard';
+import LocationCard, { LocationBlankNote } from './LocationCard';
+import LocationEditor from './LocationEditor';
+import KeywordEditor from './KeywordEditor';
+import AddLocationAltRounded from '@mui/icons-material/AddLocationAltRounded';
 
 const monoLabelSx = {
     fontFamily: 'var(--font-mono)',
@@ -137,7 +140,7 @@ const editableSx = {
  * fields show as "Add a …" prompts, text opens the editor on that field,
  * and stars save the rating with one tap.
  */
-function MetadataHero({ highlights, values, onEdit, onRate }) {
+function MetadataHero({ highlights, values, onEdit, onRate, onKeywords }) {
     const [ratingError, setRatingError] = useState('');
     const canEdit = typeof onEdit === 'function';
     if (!highlights.length && !canEdit) return null;
@@ -228,7 +231,9 @@ function MetadataHero({ highlights, values, onEdit, onRate }) {
                     <Box component="button" type="button" onClick={() => onEdit('description')} sx={placeholderSx}>Add a description</Box>
                 </Typography>
             )}
-            {keywords && <KeywordChips words={keywords.value} sx={{ mt: 0.5 }} />}
+            {canEdit && onKeywords
+                ? <KeywordEditor words={values.keywords || []} onChange={onKeywords} sx={{ mt: 0.5 }} />
+                : keywords && <KeywordChips words={keywords.value} sx={{ mt: 0.5 }} />}
         </Box>
     );
 }
@@ -325,7 +330,7 @@ function DetailsEditor({ values, focus, onSave, onCancel }) {
                 autoFocus={focus !== 'description' && focus !== 'rating'}
                 value={title}
                 onChange={event => setTitle(event.target.value)}
-                inputProps={{ maxLength: TITLE_MAX }}
+                slotProps={{ htmlInput: { maxLength: TITLE_MAX } }}
             />
             <TextField
                 label="Description"
@@ -337,7 +342,7 @@ function DetailsEditor({ values, focus, onSave, onCancel }) {
                 autoFocus={focus === 'description'}
                 value={description}
                 onChange={event => setDescription(event.target.value)}
-                inputProps={{ maxLength: DESCRIPTION_MAX }}
+                slotProps={{ htmlInput: { maxLength: DESCRIPTION_MAX } }}
             />
             <StarPicker value={rating} onChange={setRating} />
             {error && (
@@ -385,7 +390,7 @@ function EditedBy({ editedBy, editedAt, myPeerId }) {
     );
 }
 
-const EDITABLE_MISSING = { Title: 'title', Description: 'description', Rating: 'rating' };
+const EDITABLE_MISSING = { Title: 'title', Description: 'description', Rating: 'rating', Location: 'location' };
 
 const DETAIL_ICONS = {
     'DateTimeOriginal': EventRounded,
@@ -562,11 +567,13 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
     );
     // null, or the field to focus when the editor opens.
     const [editing, setEditing] = useState(null);
+    const [editingLocation, setEditingLocation] = useState(false);
     const infoHashRef = useRef(tile?.infoHash);
     useEffect(() => {
         if (infoHashRef.current !== tile?.infoHash) {
             infoHashRef.current = tile?.infoHash;
             setEditing(null);
+            setEditingLocation(false);
         }
     }, [tile?.infoHash]);
 
@@ -574,7 +581,7 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
     const showFileNameEditor = tile && onFileNameChange;
     const leadItems = grouped.lead.filter(item => item.key !== 'x-file name');
     const hasAnything = grouped.highlights.length > 0 || leadItems.length > 0 || grouped.more.length > 0
-        || !!grouped.location;
+        || !!grouped.location || grouped.locationBlank;
     // With editing, missing title/description/rating are prompted for in the hero instead.
     const missing = canEdit ? grouped.missing.filter(label => !EDITABLE_MISSING[label]) : grouped.missing;
 
@@ -594,15 +601,40 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
                         values={grouped.values || {}}
                         onEdit={canEdit ? setEditing : null}
                         onRate={canEdit ? (rating => onSaveDetails({ rating })) : null}
+                        onKeywords={canEdit ? (words => onSaveDetails({ keywords: words })) : null}
                     />
                     <EditedBy editedBy={grouped.editedBy} editedAt={grouped.editedAt} myPeerId={myPeerId} />
                 </>
             )}
 
-            {grouped.location && (
+            {(grouped.location || grouped.locationBlank || canEdit) && (
                 <Box sx={{ mt: 2.5 }}>
                     <SectionHeading>Location</SectionHeading>
-                    <LocationCard location={grouped.location} />
+                    {editingLocation ? (
+                        <LocationEditor
+                            initial={grouped.location}
+                            canRemove={!!grouped.location}
+                            onSave={async location => {
+                                await onSaveDetails({ location });
+                                setEditingLocation(false);
+                            }}
+                            onCancel={() => setEditingLocation(false)}
+                        />
+                    ) : grouped.location ? (
+                        <LocationCard location={grouped.location} onEdit={canEdit ? () => setEditingLocation(true) : null} />
+                    ) : grouped.locationBlank ? (
+                        <LocationBlankNote onAdd={canEdit ? () => setEditingLocation(true) : null} />
+                    ) : (
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<AddLocationAltRounded fontSize="small" />}
+                            onClick={() => setEditingLocation(true)}
+                            sx={{ borderStyle: 'dashed', color: 'text.secondary', textTransform: 'none' }}
+                        >
+                            Add a location
+                        </Button>
+                    )}
                 </Box>
             )}
 

@@ -140,7 +140,7 @@ describe('groupPhotoMetadata', () => {
         } };
         const grouped = groupMetadataForDisplay(summary, tile);
         expect(grouped.highlights.map(h => [h.kind, h.value])).toEqual([['title', 'Our harbour'], ['rating', 5]]);
-        expect(grouped.values).toEqual({ title: 'Our harbour', description: '', rating: 5 });
+        expect(grouped.values).toEqual({ title: 'Our harbour', description: '', rating: 5, keywords: [] });
         expect(grouped.editedBy.name).toBe('Bob');
         expect(grouped.missing).toContain('Description');
     });
@@ -148,5 +148,21 @@ describe('groupPhotoMetadata', () => {
     it('shows shared details before the file metadata has been read', () => {
         const grouped = groupMetadataForDisplay(null, { isImage: true, details: { title: 'Early', rating: 3 } });
         expect(grouped.highlights.map(h => h.kind)).toEqual(['title', 'rating']);
+    });
+
+    it('lets a location set in the room replace or hide the file\'s', () => {
+        const summary = [{ key: 'x-Location', value: { lat: 47.36, long: 8.54 } }];
+        const moved = groupMetadataForDisplay(summary, { isImage: true, details: { location: { lat: 31.24, long: 121.49, name: 'The Bund' } } });
+        expect(moved.location).toEqual({ lat: 31.24, long: 121.49, name: 'The Bund' });
+        expect(moved.locationShared).toBe(true);
+
+        const hidden = groupMetadataForDisplay(summary, { isImage: true, details: { location: null } });
+        expect(hidden.location).toBeNull();
+        expect(hidden.missing).toContain('Location');
+
+        const blank = [{ key: 'x-Location status', value: 'blank' }];
+        const fixed = groupMetadataForDisplay(blank, { isImage: true, details: { location: { lat: 1, long: 2 } } });
+        expect(fixed.locationBlank).toBe(false);
+        expect(fixed.location).toEqual({ lat: 1, long: 2 });
     });
 });

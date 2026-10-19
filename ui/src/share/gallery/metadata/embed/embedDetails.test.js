@@ -6,12 +6,16 @@ import { embedDetails } from './embedDetails';
 import { parseBoxes } from './isobmff';
 import { parseItemInfo, parseLocations } from './heif';
 import { readUint } from './binary';
+import { readLocation } from './mp4';
+import MetadataParser from '../MetadataParser';
 
 const DETAILS = { title: 'Fish & "chips" ü', description: 'At the pier', rating: 4 };
 
 function fixture(name) {
     return new Blob([readFileSync(fileURLToPath(new URL('./__fixtures__/' + name, import.meta.url)))]);
 }
+
+const latin1Text = bytes => Array.from(bytes, byte => String.fromCharCode(byte)).join('');
 
 async function bytesOf(blob) {
     return new Uint8Array(await blob.arrayBuffer());
@@ -221,4 +225,155 @@ describe('embedDetails', () => {
         const result = await embedDetails(fixture('song.mp3'), { title: '', description: '', rating: -1 });
         expect(await media(result)).toMatchObject({ title: undefined, comments: [], artist: 'Band', stars: null });
     });
+
+    describe('location', () => {
+        const BUND = { lat: 31.2400, long: 121.4905, name: 'The Bund' };
+        const readImage = async (blob, name) => {
+            const tile = { isImage: true, fileName: name };
+            const parser = new MetadataParser({});
+            return parser.extractAndProcess(await MetadataParser.parseImage(new File([blob], name)), tile);
+        };
+
+        it('fills in the EXIF GPS a phone blanked, as well as XMP', async () => {
+            const result = await embedDetails(fixture('blank-gps.jpg'), { location: BUND });
+            const location = (await readImage(result, 'a.jpg'))['x-Location'];
+            expect(location.lat).toBeCloseTo(31.24, 4);
+            expect(location.long).toBeCloseTo(121.4905, 4);
+            const [packet] = await xmpPackets(result);
+            expect(packet).toBeTruthy();
+            expect(new TextDecoder().decode(await bytesOf(result))).toContain('exif:GPSLatitude="31,14.4N"');
+        });
+
+        it('writes the location into XMP where there is no EXIF GPS', async () => {
+            for (const name of ['photo.jpg', 'photo.png']) {
+                const location = (await readImage(await embedDetails(fixture(name), { location: { lat: -33.8678, long: 151.2073 } }), name))['x-Location'];
+                expect(location.lat).toBeCloseTo(-33.8678, 4);
+                expect(location.long).toBeCloseTo(151.2073, 4);
+            }
+        });
+
+        it('hides a location in EXIF and XMP when it is removed', async () => {
+            const placed = await embedDetails(fixture('blank-gps.jpg'), { location: BUND });
+            const removed = await embedDetails(placed, { location: null });
+            const md = await readImage(removed, 'a.jpg');
+            expect(md['x-Location']).toBeUndefined();
+            expect(new TextDecoder().decode(await bytesOf(removed))).not.toContain('GPSLatitude=');
+        });
+
+        it('stores the location as an XMP item in a HEIC', async () => {
+            const { xmp } = await (await import('./heif')).readMetadataItems(await embedDetails(fixture('photo.heic'), { location: BUND }));
+            expect(xmp).toContain('exif:GPSLatitude="31,14.4N"');
+            expect(xmp).toContain('exif:GPSLongitude="121,29.43E"');
+        });
+
+        it('replaces a video\'s own location', async () => {
+            const tagged = await embedDetails(fixture('phone.mov'), { location: BUND });
+            const location = await readLocation(tagged);
+            expect(location).toEqual({ lat: 31.24, long: 121.4905 });
+            expect(await readLocation(await embedDetails(fixture('phone.mov'), { location: null }))).toBeNull();
+
+            // iPhone keyed metadata, under udta and straight under moov.
+            for (const name of ['iphone.mov', 'iphone-top.mov']) {
+                expect(await readLocation(fixture(name))).toMatchObject({ lat: 47.3769, long: 8.5417 });
+                const removed = await embedDetails(fixture(name), { location: null, title: 'Lake' });
+                expect(await readLocation(removed)).toBeNull();
+                const removedText = latin1Text(await bytesOf(removed));
+                expect(removedText).not.toContain('+47.3769');
+                expect(removedText).toContain('com.apple.quicktime.make');
+                expect(removedText).toContain('Lake');
+                const moved = await bytesOf(await embedDetails(fixture(name), { location: BUND }));
+                expect(latin1Text(moved)).not.toContain('+47.3769');
+                expect(await readLocation(new Blob([moved]))).toEqual({ lat: 31.24, long: 121.4905 });
+            }
+
+            const original = fixture('faststart.mp4');
+            const moved = await embedDetails(original, { location: BUND });
+            expect(await readLocation(moved)).toEqual({ lat: 31.24, long: 121.4905 });
+            expect(chunkStarts(await bytesOf(moved))).toEqual(chunkStarts(await bytesOf(original)));
+        });
+    });
+
+    it('replaces keywords in XMP and MP4', async () => {
+        const [packet] = await xmpPackets(await embedDetails(fixture('photo.jpg'), { keywords: ['harbour', 'night & lights'] }));
+        expect(packet.keywords).toEqual(['harbour', 'night & lights']);
+        const [cleared] = await xmpPackets(await embedDetails(fixture('photo.jpg'), { keywords: [] }));
+        expect(cleared.keywords).toEqual([]);
+        expect(cleared.titles).toEqual(['Old']);
+
+        const metadata = await mm.parseBuffer(await bytesOf(await embedDetails(fixture('faststart.mp4'), { keywords: ['pier', 'dusk'] })));
+        expect(metadata.common.keywords).toEqual(['pier, dusk']);
+    });
+
+    describe('more formats', () => {
+        const text = async blob => new TextDecoder().decode(await bytesOf(blob));
+        const audio = async blob => {
+            const metadata = await mm.parseBuffer(await bytesOf(blob));
+            const rating = metadata.common.rating?.[0]?.rating;
+            return {
+                title: metadata.common.title,
+                comments: (metadata.common.comment || []).map(comment => comment.text),
+                stars: rating == null ? null : mm.ratingToStars(rating),
+                duration: metadata.format.duration,
+            };
+        };
+
+        it('puts XMP in a GIF application extension, once', async () => {
+            const once = await embedDetails(fixture('anim.gif'), DETAILS);
+            const twice = await embedDetails(once, { title: 'Again' });
+            expect((await text(twice)).slice(0, 6)).toBe('GIF89a');
+            const packets = await xmpPackets(twice);
+            expect(packets).toHaveLength(1);
+            expect(packets[0]).toMatchObject({ titles: ['Again'], descriptions: [DETAILS.description], rating: 4 });
+            // Still ends with the trailer, frames untouched after the extension
+            const bytes = await bytesOf(twice);
+            expect(bytes[bytes.length - 1]).toBe(0x3B);
+        });
+
+        it('tags a WAV in its INFO list and an id3 chunk, keeping the audio', async () => {
+            const original = await audio(fixture('tone.wav'));
+            const result = await audio(await embedDetails(fixture('tone.wav'), DETAILS));
+            expect(result).toMatchObject({ title: DETAILS.title, stars: 4, duration: original.duration });
+            expect(result.comments).toContain(DETAILS.description);
+            expect(result.comments).not.toContain('Old text');
+        });
+
+        it.each(['tone.ogg', 'tone.opus'])('rewrites the Vorbis comments of %s', async name => {
+            const original = await audio(fixture(name));
+            expect(await audio(await embedDetails(fixture(name), DETAILS)))
+                .toMatchObject({ title: DETAILS.title, comments: [DETAILS.description], stars: 4, duration: original.duration });
+        });
+
+        it.each(['tone.ogg', 'tone.opus'])('pages %s again when the comments outgrow a page, and back', async name => {
+            const original = await audio(fixture(name));
+            const long = await embedDetails(fixture(name), { description: 'x'.repeat(70000) });
+            expect((await audio(long)).comments[0]).toHaveLength(70000);
+            expect((await audio(long)).duration).toBe(original.duration);
+            const short = await embedDetails(long, { description: 'short' });
+            expect(await audio(short)).toMatchObject({ comments: ['short'], duration: original.duration });
+        });
+
+        it.each([
+            ['clip.webm', 'appends the tags'],
+            ['recorded.webm', 'appends the tags to a live recording of unknown size'],
+            ['clip.mkv', 'appends the tags to an MKV with checksums'],
+        ])('tags %s: %s', async name => {
+            const original = await audio(fixture(name));
+            const result = await embedDetails(fixture(name), { ...DETAILS, keywords: ['pier', 'dusk'] });
+            expect(await audio(result)).toMatchObject({ title: DETAILS.title, duration: original.duration });
+            const content = await text(result);
+            expect(content).toContain('DESCRIPTION');
+            expect(content).toContain(DETAILS.description);
+            expect(content).toContain('pier, dusk');
+            expect(content).not.toContain('keepme');
+        });
+
+        it('rewrites the head of a WebM in place when there is room', async () => {
+            const original = fixture('roomy.webm');
+            const result = await embedDetails(original, DETAILS);
+            expect(result.size).toBe(original.size);
+            expect(await audio(result)).toMatchObject({ title: DETAILS.title, duration: (await audio(original)).duration });
+            expect(await text(result)).toContain(DETAILS.description);
+        });
+    });
 });
+

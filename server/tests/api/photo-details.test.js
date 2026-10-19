@@ -51,6 +51,39 @@ describe('Shared photo details', () => {
         assert.strictEqual(res.body.details.editedBy.name, 'Bob');
     });
 
+    it('sets, renames and hides a location', async () => {
+        const res = await edit(bob, { location: { lat: 31.2400004, long: 121.4905, name: ' The Bund ' } }).expect(200);
+        assert.deepStrictEqual(res.body.details.location, { lat: 31.24, long: 121.4905, name: 'The Bund' });
+
+        const unnamed = await edit(alice, { location: { lat: -33.8678, long: 151.2073 } }).expect(200);
+        assert.deepStrictEqual(unnamed.body.details.location, { lat: -33.8678, long: 151.2073 });
+
+        const hidden = await edit(alice, { location: null }).expect(200);
+        assert.strictEqual(hidden.body.details.location, null);
+        const room = await request(app).get(`/api/rooms/${roomId}`).expect(200);
+        assert.strictEqual(room.body.photos.find(p => p.infoHash === infoHash).details.location, null);
+    });
+
+    it('keeps keywords tidy and clears them with an empty list', async () => {
+        const res = await edit(bob, { keywords: [' beach ', 'Sunset', 'beach', '', 'sunset'] }).expect(200);
+        assert.deepStrictEqual(res.body.details.keywords, ['beach', 'Sunset']);
+        const cleared = await edit(alice, { keywords: [] }).expect(200);
+        assert.deepStrictEqual(cleared.body.details.keywords, []);
+
+        await edit(bob, { keywords: 'beach' }).expect(400);
+        await edit(bob, { keywords: [1] }).expect(400);
+        await edit(bob, { keywords: ['x'.repeat(51)] }).expect(400);
+        await edit(bob, { keywords: Array.from({ length: 31 }, (_, i) => 'k' + i) }).expect(400);
+    });
+
+    it('rejects locations that are not on the map', async () => {
+        await edit(bob, { location: { lat: 91, long: 0 } }).expect(400);
+        await edit(bob, { location: { lat: 10, long: -181 } }).expect(400);
+        await edit(bob, { location: { lat: '10', long: 5 } }).expect(400);
+        await edit(bob, { location: [10, 5] }).expect(400);
+        await edit(bob, { location: { lat: 10, long: 5, name: 'x'.repeat(201) } }).expect(400);
+    });
+
     it('requires a session token of someone in the room', async () => {
         await edit({ sessionId: bob.sessionId, sessionToken: 'wrong' }, { title: 'x' }).expect(403);
         await edit({ sessionId: 'stranger', sessionToken: undefined }, { title: 'x' }).expect(403);

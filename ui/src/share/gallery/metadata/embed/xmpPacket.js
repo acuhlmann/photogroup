@@ -8,6 +8,7 @@ const NS = {
     rdf: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
     dc: 'http://purl.org/dc/elements/1.1/',
     xmp: 'http://ns.adobe.com/xap/1.0/',
+    exif: 'http://ns.adobe.com/exif/1.0/',
     xmlns: 'http://www.w3.org/2000/xmlns/',
     xml: 'http://www.w3.org/XML/1998/namespace',
 };
@@ -15,6 +16,14 @@ const NS = {
 const EMPTY_PACKET = '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>'
     + `<x:xmpmeta xmlns:x="${NS.x}"><rdf:RDF xmlns:rdf="${NS.rdf}">`
     + '<rdf:Description rdf:about=""/></rdf:RDF></x:xmpmeta><?xpacket end="w"?>';
+
+/** XMP's GPS coordinate text, "DDD,MM.mmmmmmK" (degrees, decimal minutes, hemisphere). */
+export function xmpCoordinate(value, positive, negative) {
+    const abs = Math.abs(value);
+    const degrees = Math.floor(abs);
+    const minutes = Number(((abs - degrees) * 60).toFixed(6));
+    return `${degrees},${minutes}${value < 0 ? negative : positive}`;
+}
 
 function declare(element, prefix) {
     if (element.lookupNamespaceURI(prefix) !== NS[prefix]) {
@@ -49,7 +58,8 @@ function parsePacket(xml) {
 
 /**
  * Apply shared details to an XMP packet. A cleared title or description,
- * or a rating of 0, removes the field rather than writing it empty.
+ * a rating of 0, or a location of null removes the field rather than
+ * writing it empty.
  */
 export function applyDetailsToXmp(xml, details) {
     const doc = parsePacket(xml);
@@ -66,6 +76,18 @@ export function applyDetailsToXmp(xml, details) {
         if (details.rating !== undefined) {
             description.removeAttributeNS(NS.xmp, 'Rating');
             Array.from(description.getElementsByTagNameNS(NS.xmp, 'Rating')).forEach(node => node.remove());
+        }
+        if (details.keywords !== undefined) {
+            Array.from(description.getElementsByTagNameNS(NS.dc, 'subject')).forEach(node => node.remove());
+        }
+        if (details.location !== undefined) {
+            // A moved or hidden location makes the old altitude, heading and so on stale too.
+            Array.from(description.attributes)
+                .filter(attr => attr.namespaceURI === NS.exif && attr.localName.startsWith('GPS'))
+                .forEach(attr => description.removeAttributeNode(attr));
+            Array.from(description.getElementsByTagNameNS(NS.exif, '*'))
+                .filter(node => node.localName.startsWith('GPS'))
+                .forEach(node => node.remove());
         }
     });
 
@@ -87,6 +109,23 @@ export function applyDetailsToXmp(xml, details) {
     if (details.description) {
         declare(target, 'dc');
         target.appendChild(langAlt(doc, 'dc:description', details.description));
+    }
+    if (details.keywords && details.keywords.length) {
+        declare(target, 'dc');
+        const subject = doc.createElementNS(NS.dc, 'dc:subject');
+        const bag = doc.createElementNS(NS.rdf, 'rdf:Bag');
+        details.keywords.forEach(word => {
+            const li = doc.createElementNS(NS.rdf, 'rdf:li');
+            li.textContent = word;
+            bag.appendChild(li);
+        });
+        subject.appendChild(bag);
+        target.appendChild(subject);
+    }
+    if (details.location) {
+        declare(target, 'exif');
+        target.setAttributeNS(NS.exif, 'exif:GPSLatitude', xmpCoordinate(details.location.lat, 'N', 'S'));
+        target.setAttributeNS(NS.exif, 'exif:GPSLongitude', xmpCoordinate(details.location.long, 'E', 'W'));
     }
 
     return new XMLSerializer().serializeToString(doc);

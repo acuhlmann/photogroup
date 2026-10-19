@@ -21,7 +21,14 @@ import NetworkReadout from "../topology/NetworkReadout";
 import { getBlobAndEmit } from "../torrent/BlobUtils";
 import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
 import { runViewTransition } from "./viewTransition";
+import GalleryToolbar from "./GalleryToolbar";
+import RoomMap from "./RoomMap";
+import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
+import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { captureDroppedHandles } from "./replaceOriginal";
+
+/** A tile's identity across updates; an upload's infoHash changes once it is hashed. */
+const tileKeyOf = tile => tile.tileKey || tile.infoHash;
 
 /** Render the upload input's label, optionally limiting its width for a narrow gallery. */
 function AddPhotosStrip({ narrow }) {
@@ -62,7 +69,14 @@ function Gallery(props) {
     const theme = useTheme();
     const [tiles, setTiles] = useState([]);
     const [dragOver, setDragOver] = useState(false);
-    const [selectedIndex, setSelectedIndex] = useState(null);
+    // The open photo is tracked by key: sorting, filtering or an edit can move it in the list.
+    const [selectedKey, setSelectedKey] = useState(null);
+    const lastIndex = useRef(0);
+    const [view, setView] = useState(DEFAULT_VIEW);
+    const [mode, setMode] = useState('grid');
+    // Re-arrange when a place name arrives, since places can be filtered on.
+    const [, setPlaceNames] = useState(0);
+    useEffect(() => onPlaceName(() => setPlaceNames(count => count + 1)), []);
     // Until the first room snapshot arrives, an empty gallery means "not
     // loaded yet", not "no photos": after a reload it looked like they were gone.
     const [roomSynced, setRoomSynced] = useState(() => !!master.roomSynced);
@@ -400,23 +414,51 @@ function Gallery(props) {
         };
     }, [master.emitter]);
 
-    const openAt = useCallback((index) => {
-        runViewTransition(() => setSelectedIndex(index));
+    // The viewer, the grid and the map all work on the tiles the current view shows.
+    const arranged = arrangeTiles(tiles, view, master);
+    const visible = arranged.tiles;
+
+    // A photo an edit filters out stays open where it was until the viewer moves on.
+    let viewerTiles = visible;
+    let selectedIndex = selectedKey == null ? -1 : visible.findIndex(tile => tileKeyOf(tile) === selectedKey);
+    if (selectedIndex < 0 && selectedKey != null) {
+        const kept = tiles.find(tile => tileKeyOf(tile) === selectedKey);
+        if (kept) {
+            selectedIndex = Math.min(lastIndex.current, visible.length);
+            viewerTiles = [...visible.slice(0, selectedIndex), kept, ...visible.slice(selectedIndex)];
+        }
+    }
+    if (selectedIndex < 0) selectedIndex = null;
+    useEffect(() => {
+        if (selectedIndex != null) lastIndex.current = selectedIndex;
+    });
+
+    const openAt = useCallback((tile) => {
+        runViewTransition(() => setSelectedKey(tile ? tileKeyOf(tile) : null));
     }, []);
 
     const showIndex = useCallback((index) => {
-        setSelectedIndex(index);
-    }, []);
+        const tile = viewerTiles[index];
+        if (tile) setSelectedKey(tileKeyOf(tile));
+    }, [viewerTiles]);
 
     const closeViewer = useCallback(() => {
-        runViewTransition(() => setSelectedIndex(null));
+        runViewTransition(() => setSelectedKey(null));
     }, []);
+    const located = visible.filter(tile => arranged.facts.get(tile)?.location).map(tile => {
+        const facts = arranged.facts.get(tile);
+        return { tile, location: facts.location, label: facts.title || tile.fileName || 'photo' };
+    });
 
+    // Look up place names for located photos, so "Place" can offer them even before tiles do.
+    const unnamed = located.filter(item => !arranged.facts.get(item.tile).place)
+        .map(item => `${item.location.lat},${item.location.long}`).join('|');
     useEffect(() => {
-        if (selectedIndex != null && selectedIndex >= tiles.length) {
-            setSelectedIndex(tiles.length ? tiles.length - 1 : null);
-        }
-    }, [tiles.length, selectedIndex]);
+        unnamed.split('|').filter(Boolean).forEach(key => {
+            const [lat, long] = key.split(',').map(Number);
+            reverseGeocode(lat, long);
+        });
+    }, [unnamed]);
 
     const buildTile = useCallback((tile, index, master) => {
         tile.picSummary = StringUtil.addEmptySpaces([tile.picDateTaken, FileUtil.truncateFileName(tile.fileName)]);
@@ -431,11 +473,11 @@ function Gallery(props) {
                                master={master}/>
                 : <ContentTile name={name} tile={tile}
                                master={master}
-                               selected={selectedIndex === index}
-                               hero={tiles.length === 1}
-                               onOpen={() => openAt(index)} />}
+                               selected={selectedKey != null && tileKeyOf(tile) === selectedKey}
+                               hero={visible.length === 1}
+                               onOpen={() => openAt(tile)} />}
         </TileErrorBoundary>;
-    }, [openAt, selectedIndex, tiles.length]);
+    }, [openAt, selectedKey, visible.length]);
 
     return (
         <Box
@@ -491,14 +533,35 @@ function Gallery(props) {
                 <>
                 {/* The empty-state drop zone, shrunk to one line once there are photos. */}
                 <AddPhotosStrip narrow={tiles.length < 2} />
-                <Box
+                {tiles.length > 1 && (
+                    <GalleryToolbar
+                        view={view}
+                        onChange={setView}
+                        mode={mode}
+                        onModeChange={setMode}
+                        places={arranged.places}
+                        unplaced={arranged.unplaced}
+                        shown={visible.length}
+                        total={arranged.total}
+                    />
+                )}
+                {mode === 'map' && tiles.length > 1 && (
+                    <RoomMap items={located} unplaced={visible.length - located.length}
+                        onOpen={openAt} />
+                )}
+                {visible.length === 0 && (
+                    <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', py: 4 }}>
+                        No photos match these filters.
+                    </Typography>
+                )}
+                {(mode === 'grid' || tiles.length < 2) && <Box
                     className="stagger-children"
                     sx={{
-                        columnCount: tiles.length < 2 ? 1 : { xs: 1, sm: 2, xl: 3 },
+                        columnCount: visible.length < 2 ? 1 : { xs: 1, sm: 2, xl: 3 },
                         columnGap: theme.spacing(2),
                         width: '100%',
-                        maxWidth: tiles.length < 2 ? 880 : 'none',
-                        mx: tiles.length < 2 ? 'auto' : 0,
+                        maxWidth: visible.length < 2 ? 880 : 'none',
+                        mx: visible.length < 2 ? 'auto' : 0,
                         padding: theme.spacing(0, 0, 3),
                         '& > *': {
                             breakInside: 'avoid',
@@ -506,8 +569,8 @@ function Gallery(props) {
                         },
                     }}
                 >
-                    {tiles.map((tile, index) => buildTile(tile, index, master))}
-                </Box>
+                    {visible.map((tile, index) => buildTile(tile, index, master))}
+                </Box>}
                 </>
             )}
 
@@ -532,10 +595,10 @@ function Gallery(props) {
                 </Box>
             )}
 
-            {selectedIndex != null && tiles[selectedIndex] && (
+            {selectedIndex != null && (
                 <PhotoViewer
                     master={master}
-                    tiles={tiles}
+                    tiles={viewerTiles}
                     index={selectedIndex}
                     onClose={closeViewer}
                     onIndexChange={showIndex}

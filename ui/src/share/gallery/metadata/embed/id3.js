@@ -29,30 +29,29 @@ export function matches(head) {
     return ascii(head, 0, 3) === 'ID3' || isMpegFrame(head);
 }
 
-export async function embed(blob, details) {
+/**
+ * An ID3v2 tag (header included) with the shared details applied, from the
+ * existing `tag` or from scratch when it is null. Returns null for tags
+ * this can't safely rewrite: v2.2, unsynchronised, or with sizes that
+ * don't add up (the file is then kept as it is rather than losing frames).
+ */
+export function rewriteTag(tag, details) {
     let major = 3;
     let frames = [];
-    let audioStart = 0;
-    const head = await readBytes(blob, 0, 10);
-    if (ascii(head, 0, 3) === 'ID3') {
-        major = head[3];
-        const flags = head[5];
-        // v2.2 and whole-tag unsynchronisation use layouts not handled here.
-        if (major < 3 || major > 4 || flags & 0x80) return null;
-        const size = syncsafe(head, 6);
-        audioStart = 10 + size + (flags & 0x10 ? 10 : 0);
-
-        const tag = await readBytes(blob, 10, 10 + size);
+    if (tag) {
+        major = tag[3];
+        const flags = tag[5];
+        if (ascii(tag, 0, 3) !== 'ID3' || major < 3 || major > 4 || flags & 0x80) return null;
+        const body = tag.subarray(10, 10 + syncsafe(tag, 6));
         let offset = 0;
-        if (flags & 0x40) offset = major === 4 ? syncsafe(tag, 0) : readUint(tag, 0, 4) + 4;
-        if (offset > tag.length) return null;
-        while (offset + 10 <= tag.length && tag[offset] !== 0) {
-            const frameSize = major === 4 ? syncsafe(tag, offset + 4) : readUint(tag, offset + 4, 4);
+        if (flags & 0x40) offset = major === 4 ? syncsafe(body, 0) : readUint(body, 0, 4) + 4;
+        if (offset > body.length) return null;
+        while (offset + 10 <= body.length && body[offset] !== 0) {
+            const frameSize = major === 4 ? syncsafe(body, offset + 4) : readUint(body, offset + 4, 4);
             const end = offset + 10 + frameSize;
-            // A frame overrunning the tag means the layout was misread (some
-            // writers put plain sizes in v2.4); keep the file rather than lose frames.
-            if (end > tag.length) return null;
-            frames.push({ id: ascii(tag, offset, 4), bytes: tag.subarray(offset, end) });
+            // Some writers put plain sizes in v2.4; an overrun means the layout was misread.
+            if (end > body.length) return null;
+            frames.push({ id: ascii(body, offset, 4), bytes: body.subarray(offset, end) });
             offset = end;
         }
     }
@@ -70,6 +69,18 @@ export async function embed(blob, details) {
     if (rating !== null) added.push(frame('POPM', [0, Math.max(1, Math.round(rating * 255))], major));
 
     const body = concat([...frames.map(item => item.bytes), ...added]);
-    const header = concat([latin1('ID3'), [major, 0, 0], toSyncsafe(body.length)]);
-    return new Blob([header, body, blob.slice(audioStart)], { type: blob.type || 'audio/mpeg' });
+    return concat([latin1('ID3'), [major, 0, 0], toSyncsafe(body.length), body]);
+}
+
+export async function embed(blob, details) {
+    let tag = null;
+    let audioStart = 0;
+    const head = await readBytes(blob, 0, 10);
+    if (ascii(head, 0, 3) === 'ID3') {
+        audioStart = 10 + syncsafe(head, 6) + (head[5] & 0x10 ? 10 : 0);
+        tag = await readBytes(blob, 0, 10 + syncsafe(head, 6));
+    }
+    const rewritten = rewriteTag(tag, details);
+    if (!rewritten) return null;
+    return new Blob([rewritten, blob.slice(audioStart)], { type: blob.type || 'audio/mpeg' });
 }

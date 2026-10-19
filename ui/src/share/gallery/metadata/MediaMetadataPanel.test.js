@@ -37,6 +37,9 @@ describe('MediaMetadataPanel shared editing', () => {
         await act(async () => button(div, 'Save for everyone').click());
 
         expect(onSaveDetails).toHaveBeenCalledWith({ title: 'Harbour light', rating: 4 });
+        // The browser stops typing at the limits the server enforces
+        expect(title.maxLength).toBe(200);
+        expect(description.maxLength).toBe(4000);
         expect(description).toBeTruthy();
         // Editor closes after a successful save
         expect(button(div, 'Save for everyone')).toBeUndefined();
@@ -105,6 +108,16 @@ describe('MediaMetadataPanel shared editing', () => {
         await act(async () => root.unmount());
     });
 
+    it('explains a location that was removed before upload', async () => {
+        const { div, root } = await renderPanel({ summary: [{ key: 'x-Location status', value: 'blank' }], tile: { isImage: true, infoHash: 'n' } });
+        const note = div.querySelector('[data-testid="location-blank"]');
+        expect(note.textContent).toContain('Location removed before upload');
+        expect(note.textContent).toContain('Android');
+        expect(div.querySelector('[data-testid="location-card"]')).toBeNull();
+        expect(div.querySelector('[data-testid="metadata-missing"]').textContent).not.toContain('Location');
+        await act(async () => root.unmount());
+    });
+
     it('shows where a photo was taken with a map, the place and map links', async () => {
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
@@ -130,4 +143,55 @@ describe('MediaMetadataPanel shared editing', () => {
         vi.unstubAllGlobals();
         await act(async () => root.unmount());
     });
+
+    it('sets a location by searching for a place, and removes it again', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ([{ name: 'The Bund', display_name: 'The Bund, Huangpu, Shanghai, China', lat: '31.24', lon: '121.4905',
+                address: { suburb: 'Huangpu', city: 'Shanghai', country: 'China' } },
+            { name: 'Bund Center', display_name: 'Bund Center, Shanghai, China', lat: '31.236', lon: '121.485',
+                address: { city: 'Shanghai', country: 'China' } }]),
+        }));
+        const onSaveDetails = vi.fn().mockResolvedValue({});
+        const tile = { isImage: true, infoHash: 'loc' };
+        const { div, root } = await renderPanel({ summary: [{ key: 'x-Location status', value: 'blank' }], tile, onSaveDetails });
+
+        await act(async () => button(div, 'Set the location').click());
+        const editor = div.querySelector('[data-testid="location-editor"]');
+        expect(editor).not.toBeNull();
+        expect(button(div, 'Save for everyone').disabled).toBe(true);
+
+        await act(async () => setInput(div.querySelector('input[aria-label="Search a place"]'), 'bund'));
+        await act(async () => div.querySelector('form[aria-label="Set location"], [data-testid="location-editor"] form')
+            .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+        // Searches wait their turn behind other Nominatim requests (one a second).
+        for (let i = 0; i < 40 && !button(div, 'Bund Center'); i++) {
+            await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
+        }
+        await act(async () => button(div, 'The Bund, Huangpu, Shanghai, China').click());
+        await act(async () => button(div, 'Save for everyone').click());
+        expect(onSaveDetails).toHaveBeenCalledWith({ location: { lat: 31.24, long: 121.4905, name: 'The Bund, Huangpu, Shanghai, China' } });
+        expect(div.querySelector('[data-testid="location-editor"]')).toBeNull();
+
+        // Once set, the card offers to change it, and the editor can remove it
+        await act(async () => root.render(<ThemeProvider theme={createAppTheme('dark')}>
+            <MediaMetadataPanel summary={[]} tile={{ ...tile, details: { location: { lat: 31.24, long: 121.4905, name: 'The Bund' } } }}
+                onSaveDetails={onSaveDetails} />
+        </ThemeProvider>));
+        expect(div.querySelector('[data-testid="location-card"]').textContent).toContain('The Bund');
+        await act(async () => button(div, 'Change').click());
+        await act(async () => button(div, 'Remove location').click());
+        expect(onSaveDetails).toHaveBeenLastCalledWith({ location: null });
+        vi.unstubAllGlobals();
+        await act(async () => root.unmount());
+    });
+
+    it('offers to add a location when the file has none', async () => {
+        const { div, root } = await renderPanel({ summary: [{ key: 'x-Camera', value: 'Pixel' }], tile: { isImage: true, infoHash: 'none' }, onSaveDetails: vi.fn() });
+        await act(async () => button(div, 'Add a location').click());
+        expect(div.querySelector('[data-testid="location-editor"]')).not.toBeNull();
+        expect(button(div, 'Remove location')).toBeUndefined();
+        await act(async () => root.unmount());
+    });
 });
+

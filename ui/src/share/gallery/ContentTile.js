@@ -22,8 +22,9 @@ import { primePhotoCopy, replaceFailureMessage, replaceKind, replaceLabel, repla
 import { photoTransitionName } from "./viewTransition";
 import { groupMetadataForDisplay } from "./metadata/groupPhotoMetadata";
 import { RatingStars, ColorLabel, StarPicker } from "./metadata/MediaMetadataPanel";
-import InlineTitle from "./metadata/InlineTitle";
-import { LocationLine } from "./metadata/LocationCard";
+import InlineText from "./metadata/InlineText";
+import KeywordEditor from "./metadata/KeywordEditor";
+import { LocationBlankLine, LocationLine } from "./metadata/LocationCard";
 import { canSaveDetails, saveDetails } from "./metadata/saveDetails";
 
 /** Display loaded media and metadata highlights, with save, delete, and decryption controls. */
@@ -327,7 +328,7 @@ function ContentTile(props) {
 
             <Box sx={{ px: 1.5, py: 1.25 }}>
                 {/* Title, rating and description lead when the file has them; the file name is context. */}
-                <InlineTitle
+                <InlineText
                     value={title ? title.value : ''}
                     onSave={canEdit ? (value => saveField({ title: value })) : undefined}
                 />
@@ -349,24 +350,19 @@ function ContentTile(props) {
                         <ColorLabel value={rating.colorLabel} />
                     </Stack>
                 )}
-                {description && (
-                    <Typography
-                        variant="body2"
-                        sx={{
-                            mt: 0.5,
-                            color: 'text.secondary',
-                            lineHeight: 1.45,
-                            wordBreak: 'break-word',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                        }}
-                    >
-                        {description.value}
-                    </Typography>
-                )}
+                <InlineText
+                    kind="description"
+                    value={description ? description.value : ''}
+                    onSave={canEdit ? (value => saveField({ description: value })) : undefined}
+                    sx={{ mt: 0.5 }}
+                />
+                <KeywordEditor
+                    words={grouped.values.keywords || []}
+                    onChange={canEdit ? (words => saveField({ keywords: words })) : undefined}
+                    sx={{ mt: 0.75 }}
+                />
                 {grouped.location && <LocationLine location={grouped.location} />}
+                {!grouped.location && grouped.locationBlank && <LocationBlankLine />}
                 <Typography
                     variant={title ? 'caption' : 'body2'}
                     sx={{
