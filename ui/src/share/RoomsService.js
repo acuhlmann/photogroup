@@ -519,6 +519,33 @@ export default class RoomsService {
         }
     }
 
+    /**
+     * Set a photo's shared title, description or rating for everyone in the
+     * room. Only the fields passed change; '' or rating 0 clears one.
+     */
+    async updateDetails(infoHash, fields) {
+        const response = await fetch(this.url + '/' + this.id + '/photos/details', {
+            method: 'PUT',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                infoHash,
+                sessionId: this.sessionId,
+                sessionToken: this.sessionToken,
+                ...fields,
+            }),
+        });
+        if (!response.ok) {
+            const message = await response.text().catch(() => '');
+            const error = new Error(message || ('Could not save details (' + response.status + ')'));
+            error.status = response.status;
+            throw error;
+        }
+        return response.json();
+    }
+
     delete(infoHash) {
 
         return fetch(this.url + '/' + this.id + '/photos/', {
@@ -636,4 +663,4 @@ export default class RoomsService {
             return response.json();
         });
     }
-}
+}

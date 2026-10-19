@@ -126,6 +126,9 @@ const IMPORTANT_MISSING = {
     video: [['title', 'Title'], ['description', 'Description'], ['rating', 'Rating']],
 };
 
+/** Fields anyone in the room can edit; see server/PhotoDetails.js. */
+export const SHARED_FIELDS = ['title', 'description', 'rating'];
+
 const EMPTY_TEXT = new Set(['undefined', 'null', 'nan', '[]', '{}', 'unknown', '0000:00:00 00:00:00']);
 
 /** Reject nullish, nonfinite, blank, and placeholder values; arrays need a present member. */
@@ -256,22 +259,28 @@ function mediaKind(tile) {
  */
 export function groupMetadataForDisplay(summary, tile) {
     const flat = flattenMetadataSummary(summary, tile);
-    if (flat.length === 0) {
-        return { highlights: [], lead: [], more: [], missing: [] };
+    // What people in the room set wins over the file's own metadata, and
+    // an empty value they saved means "cleared", not "fall back".
+    const shared = (tile && tile.details) || {};
+    const hasShared = SHARED_FIELDS.some(key => shared[key] !== undefined);
+    if (flat.length === 0 && !hasShared) {
+        return { highlights: [], lead: [], more: [], missing: [], values: {}, editedBy: null, editedAt: null };
     }
+    const pick = (key, embedded) => (shared[key] !== undefined ? shared[key] : embedded);
 
     const highlights = [];
-    const title = firstValue(flat, ['Title XMP', 'media.title']);
+    const title = pick('title', firstValue(flat, ['Title XMP', 'media.title']));
     if (title) {
         highlights.push({ id: 'highlight-title', kind: 'title', label: 'Title', value: String(title).trim() });
     }
-    const rating = Number(firstValue(flat, ['Rating XMP', 'media.rating']));
+    const rating = Number(pick('rating', firstValue(flat, ['Rating XMP', 'media.rating'])));
     const colorLabel = firstValue(flat, ['Label XMP']);
     if ((Number.isFinite(rating) && rating !== 0) || colorLabel) {
         highlights.push({ id: 'highlight-rating', kind: 'rating', label: 'Rating',
             value: Number.isFinite(rating) && rating !== 0 ? rating : null, colorLabel });
     }
-    const description = firstValue(flat, ['x-Description', 'Description XMP', 'media.description', 'media.comment']);
+    const description = pick('description',
+        firstValue(flat, ['x-Description', 'Description XMP', 'media.description', 'media.comment']));
     if (description) {
         highlights.push({ id: 'highlight-description', kind: 'description', label: 'Description',
             value: String(description).trim() });
@@ -293,7 +302,13 @@ export function groupMetadataForDisplay(summary, tile) {
         .filter(([key]) => !kinds.has(key) && !shown.has(key))
         .map(([, label]) => label);
 
-    return { highlights, lead, more, missing };
+    const values = {
+        title: title ? String(title).trim() : '',
+        description: description ? String(description).trim() : '',
+        rating: Number.isFinite(rating) ? rating : 0,
+    };
+    return { highlights, lead, more, missing, values,
+        editedBy: shared.editedBy || null, editedAt: shared.editedAt || null };
 }
 
 /**

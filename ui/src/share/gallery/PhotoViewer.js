@@ -41,6 +41,12 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
         }, 1000, { leading: true, trailing: true })
     ).current;
 
+    const handleSaveDetails = useCallback(async (fields) => {
+        const saved = await master.service.updateDetails(tile.infoHash, fields);
+        // The room hears it over SSE too; show it here without waiting.
+        master.emitter.emit('photos', { type: 'update', item: [saved] });
+    }, [master, tile?.infoHash]);
+
     const handleFileNameChange = useCallback((value) => {
         setFileName(value);
         if (tile?.infoHash) {
@@ -247,6 +253,9 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                         tile={tile}
                         fileName={fileName}
                         onFileNameChange={handleFileNameChange}
+                        onSaveDetails={master.service && typeof master.service.updateDetails === 'function'
+                            ? handleSaveDetails : undefined}
+                        myPeerId={master.client && master.client.peerId}
                     />
 
                     {Array.isArray(tile.owners) && master.peers && master.client

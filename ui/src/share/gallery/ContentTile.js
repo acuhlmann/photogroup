@@ -156,10 +156,12 @@ function ContentTile(props) {
     }, [snack]);
 
     const highlights = useMemo(() => {
-        if (!tile.metadata || !master.metadata) return [];
-        return groupMetadataForDisplay(master.metadata.createMetadataSummary(tile.metadata, tile), tile).highlights;
+        // Shared details show even before this browser has read the file.
+        const summary = tile.metadata && master.metadata
+            ? master.metadata.createMetadataSummary(tile.metadata, tile) : null;
+        return groupMetadataForDisplay(summary, tile).highlights;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tile.metadata, master.metadata]);
+    }, [tile.metadata, tile.details, master.metadata]);
     const { title, rating, description } = Object.fromEntries(highlights.map(item => [item.kind, item]));
 
     const isLoading = tile.torrentFile && !tile.torrentFile.done;

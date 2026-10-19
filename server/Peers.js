@@ -184,6 +184,13 @@ export default class Peers {
         return true;
     }
 
+    // The peer behind a session, if the caller proves it owns that session.
+    peerForSession(sessionId, token) {
+        if(typeof sessionId !== 'string' || !sessionId) return null;
+        if(!token || this.sessionTokens.get(sessionId) !== token) return null;
+        return this.peers.find(peer => peer.sessionId === sessionId) || null;
+    }
+
     connect(sessionId) {
         //this.peerIdBySessionId.set(sessionId, sessionId);
     }

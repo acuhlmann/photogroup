@@ -372,6 +372,13 @@ function LoadingTile({tile, master, name}) {
                     <TransferConsole master={master} tile={tile} />
                 )}
 
+                {/* A title someone in the room gave it, while the file is still on its way */}
+                {tile.details && tile.details.title && (
+                    <Typography variant="body2" sx={{ display: 'block', mt: 1, fontWeight: 600, wordBreak: 'break-word' }}>
+                        {tile.details.title}
+                    </Typography>
+                )}
+
                 {/* File name */}
                 {displayName && (
                     <Typography

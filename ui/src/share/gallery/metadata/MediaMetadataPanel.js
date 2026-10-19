@@ -1,9 +1,13 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import EditRounded from '@mui/icons-material/EditRounded';
+import { formatDistanceToNow } from 'date-fns';
 import StarRounded from '@mui/icons-material/StarRounded';
 import StarOutlineRounded from '@mui/icons-material/StarOutlineRounded';
 import EventRounded from '@mui/icons-material/EventRounded';
@@ -117,7 +121,7 @@ export function KeywordChips({ words, sx }) {
 }
 
 /** Only what is set: a missing title or rating is listed quietly at the end instead. */
-function MetadataHero({ highlights }) {
+function MetadataHero({ highlights, onEdit }) {
     if (!highlights.length) return null;
     const byKind = Object.fromEntries(highlights.map(item => [item.kind, item]));
     const { title, rating, description, keywords } = byKind;
@@ -150,8 +154,18 @@ function MetadataHero({ highlights }) {
                 },
             }}
         >
+            {onEdit && (
+                <IconButton
+                    size="small"
+                    aria-label="Edit title, description and rating"
+                    onClick={() => onEdit()}
+                    sx={{ position: 'absolute', top: 6, right: 6, color: 'text.secondary' }}
+                >
+                    <EditRounded fontSize="small" />
+                </IconButton>
+            )}
             {title && (
-                <Typography variant="h5" component="h2" sx={{ lineHeight: 1.25, wordBreak: 'break-word' }}>
+                <Typography variant="h5" component="h2" sx={{ lineHeight: 1.25, wordBreak: 'break-word', pr: onEdit ? 4 : 0 }}>
                     {title.value}
                 </Typography>
             )}
@@ -165,6 +179,142 @@ function MetadataHero({ highlights }) {
         </Box>
     );
 }
+
+const TITLE_MAX = 200;
+const DESCRIPTION_MAX = 4000;
+
+/** Tap a star to rate; tap the current rating again to clear it. */
+function StarPicker({ value, onChange }) {
+    const rating = Math.max(0, Math.min(5, Math.round(Number(value) || 0)));
+    return (
+        <Stack direction="row" spacing={0.25} role="group" aria-label="Rating" sx={{ alignItems: 'center' }}>
+            {[1, 2, 3, 4, 5].map(stars => (
+                <IconButton
+                    key={stars}
+                    size="small"
+                    aria-label={`${stars} star${stars > 1 ? 's' : ''}`}
+                    aria-pressed={rating === stars}
+                    onClick={() => onChange(rating === stars ? 0 : stars)}
+                    sx={{ p: 0.25, color: stars <= rating ? 'primary.main' : 'text.disabled' }}
+                >
+                    {stars <= rating ? <StarRounded sx={{ fontSize: 28 }} /> : <StarOutlineRounded sx={{ fontSize: 28 }} />}
+                </IconButton>
+            ))}
+            <Box component="span" sx={{ ...monoLabelSx, ml: 1, color: rating ? 'text.primary' : 'text.disabled' }}>
+                {rating ? `${rating}/5` : 'Not rated'}
+            </Box>
+        </Stack>
+    );
+}
+
+/** Title, description and rating, shared with everyone in the room on save. */
+function DetailsEditor({ values, focus, onSave, onCancel }) {
+    const [title, setTitle] = useState(values.title || '');
+    const [description, setDescription] = useState(values.description || '');
+    const [rating, setRating] = useState(values.rating > 0 ? values.rating : 0);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    const save = async () => {
+        // Send only what changed, so two people editing different fields
+        // of the same photo don't overwrite each other.
+        const changes = {};
+        if (title.trim() !== (values.title || '')) changes.title = title.trim();
+        if (description.trim() !== (values.description || '')) changes.description = description.trim();
+        if (rating !== (values.rating > 0 ? values.rating : 0)) changes.rating = rating;
+        if (Object.keys(changes).length === 0) {
+            onCancel();
+            return;
+        }
+        setSaving(true);
+        setError('');
+        try {
+            await onSave(changes);
+            onCancel();
+        } catch (err) {
+            setError(err && err.status === 404
+                ? 'This photo is still being shared. Try again in a moment.'
+                : (err && err.message) || 'Could not save. Try again.');
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Box
+            component="form"
+            aria-label="Edit title, description and rating"
+            onSubmit={event => { event.preventDefault(); save(); }}
+            sx={{
+                mt: 1.5, p: 2, borderRadius: 2, border: 1, borderColor: 'primary.main',
+                bgcolor: 'var(--accent-soft)', display: 'flex', flexDirection: 'column', gap: 1.5,
+            }}
+        >
+            <TextField
+                label="Title"
+                size="small"
+                fullWidth
+                autoFocus={focus !== 'description' && focus !== 'rating'}
+                value={title}
+                onChange={event => setTitle(event.target.value)}
+                inputProps={{ maxLength: TITLE_MAX }}
+            />
+            <TextField
+                label="Description"
+                size="small"
+                fullWidth
+                multiline
+                minRows={2}
+                maxRows={8}
+                autoFocus={focus === 'description'}
+                value={description}
+                onChange={event => setDescription(event.target.value)}
+                inputProps={{ maxLength: DESCRIPTION_MAX }}
+            />
+            <StarPicker value={rating} onChange={setRating} />
+            {error && (
+                <Typography variant="body2" role="alert" sx={{ color: 'error.main' }}>{error}</Typography>
+            )}
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Button type="submit" variant="contained" size="small" disabled={saving}>
+                    {saving ? 'Saving…' : 'Save for everyone'}
+                </Button>
+                <Button size="small" onClick={onCancel} disabled={saving}>Cancel</Button>
+            </Stack>
+        </Box>
+    );
+}
+
+/** "Chrome on Android" from a platform.js description, for people without a nickname. */
+export function shortPlatform(platform) {
+    const text = String(platform || '');
+    const browser = (text.match(/^[A-Za-z]+/) || [''])[0];
+    const os = (text.match(/\b(Android|iOS|iPadOS|Windows|OS X|macOS|Chrome OS|Linux)\b/) || [''])[0]
+        .replace('OS X', 'macOS');
+    if (browser && os) return `${browser} on ${os}`;
+    return browser;
+}
+
+function editorName(editedBy, myPeerId) {
+    if (myPeerId && editedBy.peerId === myPeerId) return 'you';
+    return editedBy.name || shortPlatform(editedBy.platform) || 'someone';
+}
+
+function EditedBy({ editedBy, editedAt, myPeerId }) {
+    if (!editedBy) return null;
+    let when = '';
+    try {
+        when = editedAt ? formatDistanceToNow(new Date(editedAt), { addSuffix: true }) : '';
+    } catch {
+        when = '';
+    }
+    return (
+        <Typography variant="caption" data-testid="details-edited-by" sx={{ display: 'block', mt: 0.75, color: 'text.secondary' }}>
+            Edited by {editorName(editedBy, myPeerId)}{when ? ` · ${when}` : ''}
+        </Typography>
+    );
+}
+
+const EDITABLE_MISSING = { Title: 'title', Description: 'description', Rating: 'rating' };
 
 const DETAIL_ICONS = {
     'DateTimeOriginal': EventRounded,
@@ -358,21 +508,55 @@ function FileNameEditor({ tile, fileName, onFileNameChange }) {
  * A falsy summary means details are still loading; an empty array means none were found.
  * Providing `onFileNameChange` enables editing the file name without its suffix.
  */
-function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange }) {
+function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveDetails, myPeerId }) {
     const grouped = useMemo(
         () => groupMetadataForDisplay(summary, tile),
         [summary, tile]
     );
+    // null, or the field to focus when the editor opens.
+    const [editing, setEditing] = useState(null);
+    const infoHashRef = useRef(tile?.infoHash);
+    useEffect(() => {
+        if (infoHashRef.current !== tile?.infoHash) {
+            infoHashRef.current = tile?.infoHash;
+            setEditing(null);
+        }
+    }, [tile?.infoHash]);
 
+    const canEdit = typeof onSaveDetails === 'function';
     const showFileNameEditor = tile && onFileNameChange;
     const leadItems = grouped.lead.filter(item => item.key !== 'x-file name');
     const hasAnything = grouped.highlights.length > 0 || leadItems.length > 0 || grouped.more.length > 0;
+    const hasCatalog = grouped.highlights.length > 0;
 
     return (
         <Box sx={{ mt: 1 }}>
-            <MetadataHero highlights={grouped.highlights} />
+            {editing ? (
+                <DetailsEditor
+                    values={grouped.values || {}}
+                    focus={editing}
+                    onSave={onSaveDetails}
+                    onCancel={() => setEditing(null)}
+                />
+            ) : (
+                <>
+                    <MetadataHero highlights={grouped.highlights} onEdit={canEdit ? () => setEditing('title') : null} />
+                    {canEdit && !hasCatalog && (
+                        <Button
+                            size="small"
+                            startIcon={<EditRounded fontSize="small" />}
+                            onClick={() => setEditing('title')}
+                            sx={{ mt: 1.5, borderStyle: 'dashed', borderWidth: 1, borderColor: 'divider', color: 'text.secondary', px: 1.5 }}
+                            variant="outlined"
+                        >
+                            Add a title, description or rating
+                        </Button>
+                    )}
+                    <EditedBy editedBy={grouped.editedBy} editedAt={grouped.editedAt} myPeerId={myPeerId} />
+                </>
+            )}
 
-            {!hasAnything && (
+            {!hasAnything && !canEdit && (
                 <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
                     {summary
                         ? 'No embedded metadata was found for this file.'
@@ -415,7 +599,25 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange }) {
                     sx={{ display: 'block', mt: 2.5, color: 'text.disabled', lineHeight: 1.5 }}
                 >
                     <Box component="span" sx={{ ...monoLabelSx, color: 'text.disabled', mr: 0.75 }}>Not set</Box>
-                    {grouped.missing.join(' · ')}
+                    {grouped.missing.map((label, index) => (
+                        <React.Fragment key={label}>
+                            {index > 0 && ' · '}
+                            {canEdit && EDITABLE_MISSING[label] && !editing ? (
+                                <Box
+                                    component="button"
+                                    type="button"
+                                    onClick={() => setEditing(EDITABLE_MISSING[label])}
+                                    sx={{
+                                        p: 0, border: 0, background: 'none', font: 'inherit', color: 'inherit',
+                                        cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: '3px',
+                                        '&:hover': { color: 'primary.main' },
+                                    }}
+                                >
+                                    {label}
+                                </Box>
+                            ) : label}
+                        </React.Fragment>
+                    ))}
                 </Typography>
             )}
         </Box>
@@ -427,6 +629,8 @@ MediaMetadataPanel.propTypes = {
     tile: PropTypes.object.isRequired,
     fileName: PropTypes.string,
     onFileNameChange: PropTypes.func,
+    onSaveDetails: PropTypes.func,
+    myPeerId: PropTypes.string,
 };
 
 export default MediaMetadataPanel;

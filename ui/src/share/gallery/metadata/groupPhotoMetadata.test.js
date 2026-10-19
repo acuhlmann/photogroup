@@ -126,4 +126,26 @@ describe('groupPhotoMetadata', () => {
         expect(humanizeMetadataValue('Flash', 'Flash fired, auto mode')).toBe('Flash fired');
         expect(humanizeMetadataValue('LensModel', 'RF24-70mm')).toBe('RF24-70mm');
     });
+
+    it('lets details shared in the room override the file, including a clear', () => {
+        const summary = [
+            { key: 'Title XMP', value: 'From the camera' },
+            { key: 'x-Description', value: 'Embedded caption' },
+            { key: 'Rating XMP', value: 2 },
+        ];
+        const tile = { isImage: true, details: {
+            title: 'Our harbour', description: '', rating: 5,
+            editedBy: { peerId: 'p2', name: 'Bob' }, editedAt: 1000,
+        } };
+        const grouped = groupMetadataForDisplay(summary, tile);
+        expect(grouped.highlights.map(h => [h.kind, h.value])).toEqual([['title', 'Our harbour'], ['rating', 5]]);
+        expect(grouped.values).toEqual({ title: 'Our harbour', description: '', rating: 5 });
+        expect(grouped.editedBy.name).toBe('Bob');
+        expect(grouped.missing).toContain('Description');
+    });
+
+    it('shows shared details before the file metadata has been read', () => {
+        const grouped = groupMetadataForDisplay(null, { isImage: true, details: { title: 'Early', rating: 3 } });
+        expect(grouped.highlights.map(h => h.kind)).toEqual(['title', 'rating']);
+    });
 });
