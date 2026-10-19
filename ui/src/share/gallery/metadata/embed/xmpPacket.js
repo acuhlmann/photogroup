@@ -77,6 +77,9 @@ export function applyDetailsToXmp(xml, details) {
             description.removeAttributeNS(NS.xmp, 'Rating');
             Array.from(description.getElementsByTagNameNS(NS.xmp, 'Rating')).forEach(node => node.remove());
         }
+        if (details.keywords !== undefined) {
+            Array.from(description.getElementsByTagNameNS(NS.dc, 'subject')).forEach(node => node.remove());
+        }
         if (details.location !== undefined) {
             // A moved or hidden location makes the old altitude, heading and so on stale too.
             Array.from(description.attributes)
@@ -106,6 +109,18 @@ export function applyDetailsToXmp(xml, details) {
     if (details.description) {
         declare(target, 'dc');
         target.appendChild(langAlt(doc, 'dc:description', details.description));
+    }
+    if (details.keywords && details.keywords.length) {
+        declare(target, 'dc');
+        const subject = doc.createElementNS(NS.dc, 'dc:subject');
+        const bag = doc.createElementNS(NS.rdf, 'rdf:Bag');
+        details.keywords.forEach(word => {
+            const li = doc.createElementNS(NS.rdf, 'rdf:li');
+            li.textContent = word;
+            bag.appendChild(li);
+        });
+        subject.appendChild(bag);
+        target.appendChild(subject);
     }
     if (details.location) {
         declare(target, 'exif');

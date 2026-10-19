@@ -1,10 +1,31 @@
-// Title, description, rating and location anyone in the room can set for a photo.
+// Title, description, rating, keywords and location anyone in the room can set for a photo.
 // They live beside the file's own embedded metadata (the torrent's bytes
 // can't change) and take precedence over it in every viewer.
 
 export const MAX_TITLE_LENGTH = 200;
 export const MAX_DESCRIPTION_LENGTH = 4000;
 export const MAX_PLACE_LENGTH = 200;
+export const MAX_KEYWORDS = 30;
+export const MAX_KEYWORD_LENGTH = 50;
+
+/** Keywords as trimmed, non-empty strings, without repeats (ignoring case); [] clears them. */
+function parseKeywords(value) {
+    if (!Array.isArray(value)) throw new PhotoDetailsError('keywords must be a list of strings');
+    const seen = new Set();
+    const keywords = [];
+    for (const item of value) {
+        if (typeof item !== 'string') throw new PhotoDetailsError('keywords must be a list of strings');
+        const keyword = item.trim();
+        if (!keyword || seen.has(keyword.toLowerCase())) continue;
+        if (keyword.length > MAX_KEYWORD_LENGTH) {
+            throw new PhotoDetailsError(`a keyword is longer than ${MAX_KEYWORD_LENGTH} characters`);
+        }
+        seen.add(keyword.toLowerCase());
+        keywords.push(keyword);
+    }
+    if (keywords.length > MAX_KEYWORDS) throw new PhotoDetailsError(`more than ${MAX_KEYWORDS} keywords`);
+    return keywords;
+}
 
 export class PhotoDetailsError extends Error {}
 
@@ -63,6 +84,7 @@ export function parseDetails(body) {
         }
         changes.rating = body.rating;
     }
+    if (body.keywords !== undefined) changes.keywords = parseKeywords(body.keywords);
     if (body.location !== undefined) changes.location = parseLocation(body.location);
     if (Object.keys(changes).length === 0) throw new PhotoDetailsError('nothing to change');
     return changes;

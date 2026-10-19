@@ -64,6 +64,18 @@ describe('Shared photo details', () => {
         assert.strictEqual(room.body.photos.find(p => p.infoHash === infoHash).details.location, null);
     });
 
+    it('keeps keywords tidy and clears them with an empty list', async () => {
+        const res = await edit(bob, { keywords: [' beach ', 'Sunset', 'beach', '', 'sunset'] }).expect(200);
+        assert.deepStrictEqual(res.body.details.keywords, ['beach', 'Sunset']);
+        const cleared = await edit(alice, { keywords: [] }).expect(200);
+        assert.deepStrictEqual(cleared.body.details.keywords, []);
+
+        await edit(bob, { keywords: 'beach' }).expect(400);
+        await edit(bob, { keywords: [1] }).expect(400);
+        await edit(bob, { keywords: ['x'.repeat(51)] }).expect(400);
+        await edit(bob, { keywords: Array.from({ length: 31 }, (_, i) => 'k' + i) }).expect(400);
+    });
+
     it('rejects locations that are not on the map', async () => {
         await edit(bob, { location: { lat: 91, long: 0 } }).expect(400);
         await edit(bob, { location: { lat: 10, long: -181 } }).expect(400);

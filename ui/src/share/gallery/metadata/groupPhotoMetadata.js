@@ -11,6 +11,7 @@ export const HIGHLIGHT_SOURCE_KEYS = new Set([
     'media.description',
     'media.comment',
     'media.rating',
+    'media.keywords',
 ]);
 
 /** Details list, most relevant first (after the hero block). */
@@ -80,6 +81,7 @@ const MEDIA_COMMON_KEYS = [
     ['artist', 'media.artist'],
     ['album', 'media.album'],
     ['genre', 'media.genre'],
+    ['keywords', 'media.keywords'],
     ['year', 'media.year'],
     ['track', 'media.track'],
     ['comment', 'media.comment'],
@@ -127,7 +129,7 @@ const IMPORTANT_MISSING = {
 };
 
 /** Fields anyone in the room can edit; see server/PhotoDetails.js. */
-export const SHARED_FIELDS = ['title', 'description', 'rating', 'location'];
+export const SHARED_FIELDS = ['title', 'description', 'rating', 'keywords', 'location'];
 
 const EMPTY_TEXT = new Set(['undefined', 'null', 'nan', '[]', '{}', 'unknown', '0000:00:00 00:00:00']);
 
@@ -291,7 +293,8 @@ export function groupMetadataForDisplay(summary, tile) {
         highlights.push({ id: 'highlight-description', kind: 'description', label: 'Description',
             value: String(description).trim() });
     }
-    const keywords = splitKeywords(firstValue(flat, ['Keywords XMP', 'XPKeywords']));
+    const keywords = Array.isArray(shared.keywords)
+        ? shared.keywords : splitKeywords(firstValue(flat, ['Keywords XMP', 'XPKeywords', 'media.keywords']));
     if (keywords.length) {
         highlights.push({ id: 'highlight-keywords', kind: 'keywords', label: 'Keywords', value: keywords });
     }
@@ -320,6 +323,7 @@ export function groupMetadataForDisplay(summary, tile) {
         title: title ? String(title).trim() : '',
         description: description ? String(description).trim() : '',
         rating: Number.isFinite(rating) ? rating : 0,
+        keywords,
     };
     return { highlights, lead, more, missing, values, location: location || null, locationBlank, locationShared,
         editedBy: shared.editedBy || null, editedAt: shared.editedAt || null };

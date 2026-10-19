@@ -140,7 +140,7 @@ describe('groupPhotoMetadata', () => {
         } };
         const grouped = groupMetadataForDisplay(summary, tile);
         expect(grouped.highlights.map(h => [h.kind, h.value])).toEqual([['title', 'Our harbour'], ['rating', 5]]);
-        expect(grouped.values).toEqual({ title: 'Our harbour', description: '', rating: 5 });
+        expect(grouped.values).toEqual({ title: 'Our harbour', description: '', rating: 5, keywords: [] });
         expect(grouped.editedBy.name).toBe('Bob');
         expect(grouped.missing).toContain('Description');
     });

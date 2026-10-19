@@ -276,4 +276,16 @@ describe('embedDetails', () => {
             expect(chunkStarts(await bytesOf(moved))).toEqual(chunkStarts(await bytesOf(original)));
         });
     });
+
+    it('replaces keywords in XMP and MP4', async () => {
+        const [packet] = await xmpPackets(await embedDetails(fixture('photo.jpg'), { keywords: ['harbour', 'night & lights'] }));
+        expect(packet.keywords).toEqual(['harbour', 'night & lights']);
+        const [cleared] = await xmpPackets(await embedDetails(fixture('photo.jpg'), { keywords: [] }));
+        expect(cleared.keywords).toEqual([]);
+        expect(cleared.titles).toEqual(['Old']);
+
+        const metadata = await mm.parseBuffer(await bytesOf(await embedDetails(fixture('faststart.mp4'), { keywords: ['pier', 'dusk'] })));
+        expect(metadata.common.keywords).toEqual(['pier, dusk']);
+    });
 });
+

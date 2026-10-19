@@ -7,7 +7,7 @@ import { isValidLocation, parseIso6709 } from '../geo';
 // Rewriting moov changes its size, so when the media data comes after it
 // the chunk offset tables (stco/co64) are shifted to match.
 
-const ITEMS = { title: '©nam', description: 'desc', rating: 'rate', location: '©xyz' };
+const ITEMS = { title: '©nam', description: 'desc', rating: 'rate', keywords: 'keyw', location: '©xyz' };
 const QUICKTIME_TYPES = new Set(['moov', 'mdat', 'wide', 'free', 'skip']);
 
 function textItem(type, text) {
@@ -26,6 +26,7 @@ function newItems(details) {
     if (details.description) items.push(textItem(ITEMS.description, details.description));
     const rating = ratingFraction(details.rating);
     if (rating !== null) items.push(textItem(ITEMS.rating, String(Math.max(1, Math.round(rating * 100)))));
+    if (details.keywords && details.keywords.length) items.push(textItem(ITEMS.keywords, details.keywords.join(', ')));
     if (details.location) items.push(textItem(ITEMS.location, iso6709(details.location)));
     return items;
 }

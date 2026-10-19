@@ -31,6 +31,7 @@ import FileUtil from '../../util/FileUtil';
 import { groupMetadataForDisplay, humanizeMetadataValue, labelForMetadataKey } from './groupPhotoMetadata';
 import LocationCard, { LocationBlankNote } from './LocationCard';
 import LocationEditor from './LocationEditor';
+import KeywordEditor from './KeywordEditor';
 import AddLocationAltRounded from '@mui/icons-material/AddLocationAltRounded';
 
 const monoLabelSx = {
@@ -139,7 +140,7 @@ const editableSx = {
  * fields show as "Add a …" prompts, text opens the editor on that field,
  * and stars save the rating with one tap.
  */
-function MetadataHero({ highlights, values, onEdit, onRate }) {
+function MetadataHero({ highlights, values, onEdit, onRate, onKeywords }) {
     const [ratingError, setRatingError] = useState('');
     const canEdit = typeof onEdit === 'function';
     if (!highlights.length && !canEdit) return null;
@@ -230,7 +231,9 @@ function MetadataHero({ highlights, values, onEdit, onRate }) {
                     <Box component="button" type="button" onClick={() => onEdit('description')} sx={placeholderSx}>Add a description</Box>
                 </Typography>
             )}
-            {keywords && <KeywordChips words={keywords.value} sx={{ mt: 0.5 }} />}
+            {canEdit && onKeywords
+                ? <KeywordEditor words={values.keywords || []} onChange={onKeywords} sx={{ mt: 0.5 }} />
+                : keywords && <KeywordChips words={keywords.value} sx={{ mt: 0.5 }} />}
         </Box>
     );
 }
@@ -598,6 +601,7 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
                         values={grouped.values || {}}
                         onEdit={canEdit ? setEditing : null}
                         onRate={canEdit ? (rating => onSaveDetails({ rating })) : null}
+                        onKeywords={canEdit ? (words => onSaveDetails({ keywords: words })) : null}
                     />
                     <EditedBy editedBy={grouped.editedBy} editedAt={grouped.editedAt} myPeerId={myPeerId} />
                 </>
