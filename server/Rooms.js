@@ -56,6 +56,7 @@ export default class Rooms {
         this.rooms.clear();
     }
 
+    /** Register room and photo routes, including authenticated shared-detail updates. */
     registerRoomRoutes(app) {
         const rooms = this.rooms;
 

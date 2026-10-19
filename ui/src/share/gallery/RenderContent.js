@@ -65,7 +65,7 @@ export function renderMedia(tile, file, node, opts, callback) {
 
 /**
  * Render images or media players and request metadata as content becomes available.
- * Image previews remain until decoding settles, including a decode failure.
+ * Image previews remain until decoding succeeds; a decode failure keeps the preview.
  * `playbackActive` defaults to true; false skips attaching inline audio/video players.
  */
 function RenderContent(props) {
@@ -402,7 +402,7 @@ function RenderContent(props) {
     const getBlobAndReadMetadataRef = useRef(null);
     getBlobAndReadMetadataRef.current = getBlobAndReadMetadata;
 
-    /** Record image dimensions, request metadata, and retire the preview after decoding settles. */
+    /** Record image dimensions, request metadata, and retire the preview after decoding succeeds. */
     const imgLoaded = useCallback((event) => {
         const img = event?.target;
         if (!img) return;
@@ -496,6 +496,7 @@ function RenderContent(props) {
         };
     }, [tile.infoHash]); // Only depend on infoHash - when it changes, it's a new tile
 
+    /** Render the current image with its preview during decoding, or an audio/video container. */
     const renderMediaDom = () => {
         const currentTile = tileRef.current;
         // Ensure img is set if we have elem but no img (defensive check)

@@ -11,6 +11,7 @@ import { cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 
 export default class TorrentAddition {
 
+    /** Initialize torrent services and upload confirmation tracking, and subscribe to rendered photos. */
     constructor(service, torrentsDb, emitter, master) {
         this.service = service;
         this.torrentsDb = torrentsDb;
@@ -412,7 +413,7 @@ export default class TorrentAddition {
                 return;
             }
             
-            // Define helper function to process torrent when ready
+            /** Publish seeded photos and track room confirmation, waiting for metadata if needed. */
             const processTorrentReady = (torrent) => {
                 if(!torrent || !torrent.infoHash) {
                     Logger.error('processTorrentReady called with invalid torrent');

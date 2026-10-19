@@ -255,7 +255,7 @@ function mediaKind(tile) {
  * remaining metadata, and the important fields that are missing so the
  * panel can mention them quietly at the end.
  * Suppress raw fields covered by derived rows. An empty filtered summary
- * returns empty arrays for all four groups, including missing-field labels.
+ * returns empty groups when no shared fields are set, including missing-field labels.
  */
 export function groupMetadataForDisplay(summary, tile) {
     const flat = flattenMetadataSummary(summary, tile);
@@ -266,6 +266,7 @@ export function groupMetadataForDisplay(summary, tile) {
     if (flat.length === 0 && !hasShared) {
         return { highlights: [], lead: [], more: [], missing: [], values: {}, editedBy: null, editedAt: null };
     }
+    /** Prefer an explicitly shared value, including a cleared field, over embedded metadata. */
     const pick = (key, embedded) => (shared[key] !== undefined ? shared[key] : embedded);
 
     const highlights = [];

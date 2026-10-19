@@ -215,6 +215,7 @@ function DetailsEditor({ values, focus, onSave, onCancel }) {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
+    /** Save only changed fields, closing on success or no changes and displaying save failures. */
     const save = async () => {
         // Send only what changed, so two people editing different fields
         // of the same photo don't overwrite each other.
@@ -294,11 +295,13 @@ export function shortPlatform(platform) {
     return browser;
 }
 
+/** Prefer "you" for the local editor, then a nickname, platform name, or "someone". */
 function editorName(editedBy, myPeerId) {
     if (myPeerId && editedBy.peerId === myPeerId) return 'you';
     return editedBy.name || shortPlatform(editedBy.platform) || 'someone';
 }
 
+/** Show editor attribution with a relative timestamp when valid; omit absent editors. */
 function EditedBy({ editedBy, editedAt, myPeerId }) {
     if (!editedBy) return null;
     let when = '';

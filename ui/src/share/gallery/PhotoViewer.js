@@ -21,6 +21,7 @@ import RenderContent from './RenderContent';
 import { saveLabel, savePhoto } from './savePhoto';
 import { photoTransitionName, supportsViewTransition } from './viewTransition';
 
+/** Display the selected media in a dialog with navigation, saving, and shared metadata editing. */
 function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     const theme = useTheme();
     const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
@@ -41,6 +42,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
         }, 1000, { leading: true, trailing: true })
     ).current;
 
+    /** Save changed shared fields and publish the returned photo locally; save errors propagate. */
     const handleSaveDetails = useCallback(async (fields) => {
         const saved = await master.service.updateDetails(tile.infoHash, fields);
         // The room hears it over SSE too; show it here without waiting.

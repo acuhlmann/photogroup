@@ -194,12 +194,6 @@ export default class TorrentMaster {
         await Promise.all(photos.map(photo => this.serveCachedPhoto(photo)));
     }
 
-    /**
-     * Populate an image photo in place from its cached blob and mark it loaded.
-     * Reuse the retained File and blob URL on later lookups of the same infoHash.
-     * Missing hashes, non-image types, and cache misses are skipped; cache and blob
-     * preparation errors are swallowed. Resolves without a value.
-     */
     /** A deleted photo no longer needs its cached file or blob URL. */
     releaseCachedPhoto(infoHash) {
         const cached = infoHash && this._cachedPhotos?.get(infoHash);
@@ -208,6 +202,12 @@ export default class TorrentMaster {
         this._cachedPhotos.delete(infoHash);
     }
 
+    /**
+     * Populate an image photo in place from its cached blob and mark it loaded.
+     * Reuse the retained File and blob URL on later lookups of the same infoHash.
+     * Missing hashes, non-image types, and cache misses are skipped; cache and blob
+     * preparation errors are swallowed. Resolves without a value.
+     */
     async serveCachedPhoto(photo) {
         if (!photo.infoHash) return;
         if (!shouldCacheBlob(photo.fileType)) return;
@@ -570,6 +570,7 @@ export default class TorrentMaster {
         return torrent;
     }
 
+    /** Subscribe to photo changes to manage torrents, release deleted cache URLs, and watch server copies. */
     syncWithPhotoEvents() {
         this.emitter.on('photos', event => {
 

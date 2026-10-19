@@ -184,7 +184,7 @@ export default class Peers {
         return true;
     }
 
-    // The peer behind a session, if the caller proves it owns that session.
+    /** Return the session's peer for a matching token, or null if either lookup fails. */
     peerForSession(sessionId, token) {
         if(typeof sessionId !== 'string' || !sessionId) return null;
         if(!token || this.sessionTokens.get(sessionId) !== token) return null;

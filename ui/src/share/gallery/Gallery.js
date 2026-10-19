@@ -22,11 +22,7 @@ import { getBlobAndEmit } from "../torrent/BlobUtils";
 import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
 import { runViewTransition } from "./viewTransition";
 
-/**
- * Display room tiles, accept dropped uploads, and open the media viewer.
- * An unsynced empty gallery waits for a snapshot or four seconds before showing the upload prompt.
- * `showNetworkReadout` controls the readout in the empty state and defaults to true.
- */
+/** Render the upload input's label, optionally limiting its width for a narrow gallery. */
 function AddPhotosStrip({ narrow }) {
     return (
         <Box
@@ -55,6 +51,11 @@ function AddPhotosStrip({ narrow }) {
     );
 }
 
+/**
+ * Display room tiles, accept dropped uploads, and open the media viewer.
+ * An unsynced empty gallery waits for a snapshot or four seconds before showing the upload prompt.
+ * `showNetworkReadout` controls the readout in the empty state and defaults to true.
+ */
 function Gallery(props) {
     const {master, showNetworkReadout = true} = props;
     const theme = useTheme();
@@ -373,6 +374,7 @@ function Gallery(props) {
 
     useEffect(() => {
         const emitter = master.emitter;
+        /** Mark the room synced only after a complete photo snapshot arrives. */
         const handlePhotos = event => {
             if (event?.type === 'all' && Array.isArray(event.item)) {
                 clearTimeout(fallback);
