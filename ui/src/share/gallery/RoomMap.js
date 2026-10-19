@@ -11,6 +11,7 @@ import FitScreenRounded from '@mui/icons-material/FitScreenRounded';
 import PhotoRounded from '@mui/icons-material/PhotoRounded';
 import MovieRounded from '@mui/icons-material/MovieRounded';
 import MusicNoteRounded from '@mui/icons-material/MusicNoteRounded';
+import RouteRounded from '@mui/icons-material/RouteRounded';
 import TileMap from './metadata/TileMap';
 import { fromTilePosition, tilePosition } from './metadata/geo';
 
@@ -21,6 +22,8 @@ const MIN_ZOOM = 2;
 const MAX_ZOOM = 18;
 const PIN = 44;
 const PADDING = 56;
+// One per day of the trip, strong enough to read on OpenStreetMap tiles; repeats after eight days.
+const DAY_COLOURS = ['#e53935', '#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#00897b', '#d81b60', '#6d4c41'];
 
 /** The zoom and centre that fit every point in a box of width × height pixels. */
 export function fitView(points, width, height) {
@@ -40,19 +43,54 @@ export function fitView(points, width, height) {
     return { ...centre, zoom: MIN_ZOOM };
 }
 
+/** Where a location sits on the map, in pixels from its centre. */
+function offset(location, view) {
+    const centre = tilePosition(view.lat, view.long, view.zoom);
+    const spot = tilePosition(location.lat, location.long, view.zoom);
+    return { x: (spot.x - centre.x) * TILE, y: (spot.y - centre.y) * TILE };
+}
+
 /** Pins close enough to overlap at this zoom, grouped; each group sits where its first pin is. */
 export function clusterPins(items, view) {
-    const centre = tilePosition(view.lat, view.long, view.zoom);
     const clusters = [];
     items.forEach(item => {
-        const spot = tilePosition(item.location.lat, item.location.long, view.zoom);
-        const x = (spot.x - centre.x) * TILE;
-        const y = (spot.y - centre.y) * TILE;
+        const { x, y } = offset(item.location, view);
         const near = clusters.find(cluster => Math.hypot(cluster.x - x, cluster.y - y) < PIN);
         if (near) near.items.push(item);
         else clusters.push({ x, y, items: [item] });
     });
     return clusters;
+}
+
+/** The local calendar day of a time, as "2026-10-19". */
+function dayOf(time) {
+    const date = new Date(time);
+    return [date.getFullYear(), date.getMonth() + 1, date.getDate()].map(part => String(part).padStart(2, '0')).join('-');
+}
+
+/**
+ * The trip as one line per day, joining the dated photos in the order they
+ * were taken. Each day's line starts where the day before ended, so the
+ * route stays unbroken. Empty with fewer than two dated photos.
+ */
+export function tripRoute(items) {
+    const dated = items.filter(item => item.takenAt != null).sort((a, b) => a.takenAt - b.takenAt);
+    if (dated.length < 2) return [];
+    const days = [];
+    dated.forEach(item => {
+        const day = dayOf(item.takenAt);
+        let current = days[days.length - 1];
+        if (!current || current.day !== day) {
+            const [year, month, date] = day.split('-').map(Number);
+            current = {
+                day, date: new Date(year, month - 1, date), colour: DAY_COLOURS[days.length % DAY_COLOURS.length],
+                points: current ? [current.points[current.points.length - 1]] : [],
+            };
+            days.push(current);
+        }
+        current.points.push(item.location);
+    });
+    return days;
 }
 
 function Thumb({ item }) {
@@ -66,7 +104,8 @@ function Thumb({ item }) {
 
 /**
  * Every photo in view that has a location, as pins on one map. Tapping a
- * pin opens that photo; tapping a group of pins zooms in on it.
+ * pin opens that photo; tapping a group of pins zooms in on it. Photos with
+ * a date taken are joined into the trip's route, a colour for each day.
  */
 function RoomMap({ items, unplaced, onOpen }) {
     const boxRef = useRef(null);
@@ -74,6 +113,8 @@ function RoomMap({ items, unplaced, onOpen }) {
     const points = useMemo(() => items.map(item => item.location), [items]);
     const [view, setView] = useState(() => fitView(points, 800, HEIGHT));
     const fittedFor = useRef(null);
+    const [showRoute, setShowRoute] = useState(true);
+    const route = useMemo(() => tripRoute(items), [items]);
 
     useLayoutEffect(() => {
         const node = boxRef.current;
@@ -119,6 +160,22 @@ function RoomMap({ items, unplaced, onOpen }) {
             ) : (
                 <TileMap lat={view.lat} long={view.long} zoom={view.zoom} height={HEIGHT} maxWidth={MAX_WIDTH} showPin={false}
                     onPan={(lat, long) => setView(current => ({ ...current, lat, long }))}>
+                    {showRoute && route.length > 0 && (
+                        <Box component="svg" data-testid="trip-route" aria-hidden="true" width={1} height={1}
+                            sx={{ position: 'absolute', left: '50%', top: '50%', overflow: 'visible', pointerEvents: 'none' }}>
+                            {route.map(day => {
+                                const points = day.points.map(point => offset(point, view)).map(({ x, y }) => `${x},${y}`).join(' ');
+                                return (
+                                    <g key={day.day}>
+                                        <polyline points={points} fill="none" stroke="#fff" strokeOpacity={0.85} strokeWidth={7}
+                                            strokeLinecap="round" strokeLinejoin="round" />
+                                        <polyline points={points} fill="none" stroke={day.colour} strokeWidth={4}
+                                            strokeLinecap="round" strokeLinejoin="round" />
+                                    </g>
+                                );
+                            })}
+                        </Box>
+                    )}
                     {clusters.map(cluster => {
                         const first = cluster.items[0];
                         const label = cluster.items.length === 1
@@ -158,12 +215,15 @@ function RoomMap({ items, unplaced, onOpen }) {
                     <Stack spacing={0.5} sx={{ position: 'absolute', top: 8, right: 8 }} onPointerDown={event => event.stopPropagation()}>
                         {[['Zoom in', AddRounded, () => zoomTo(view.zoom + 1)],
                             ['Zoom out', RemoveRounded, () => zoomTo(view.zoom - 1)],
-                            ['Show all photos', FitScreenRounded, () => setView(fitView(points, width, HEIGHT))]]
-                            .map(([label, Icon, action]) => (
-                                <IconButton key={label} size="small" aria-label={label} onClick={action} sx={{
-                                    bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 1, p: 0.25,
-                                    '&:hover': { bgcolor: 'background.paper' },
-                                }}>
+                            ['Show all photos', FitScreenRounded, () => setView(fitView(points, width, HEIGHT))],
+                            ...(route.length ? [['Trip route', RouteRounded,
+                                () => setShowRoute(shown => !shown), showRoute]] : [])]
+                            .map(([label, Icon, action, pressed]) => (
+                                <IconButton key={label} size="small" aria-label={label}
+                                    aria-pressed={pressed} onClick={action} sx={{
+                                        bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 1, p: 0.25,
+                                        color: pressed ? 'primary.main' : undefined, '&:hover': { bgcolor: 'background.paper' },
+                                    }}>
                                     <Icon fontSize="small" />
                                 </IconButton>
                             ))}
@@ -174,6 +234,16 @@ function RoomMap({ items, unplaced, onOpen }) {
                 {items.length} {items.length === 1 ? 'photo' : 'photos'} on the map
                 {unplaced > 0 ? ` · ${unplaced} without a location` : ''}
             </Typography>
+            {showRoute && route.length > 0 && (
+                <Stack direction="row" data-testid="trip-days" useFlexGap sx={{ flexWrap: 'wrap', columnGap: 1.5, rowGap: 0.25, mt: 0.5 }}>
+                    {route.map((day, index) => (
+                        <Typography key={day.day} variant="caption" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+                            <Box component="span" sx={{ width: 14, height: 4, borderRadius: 2, bgcolor: day.colour }} />
+                            Day {index + 1} · {day.date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                        </Typography>
+                    ))}
+                </Stack>
+            )}
         </Box>
     );
 }
@@ -183,6 +253,7 @@ RoomMap.propTypes = {
         tile: PropTypes.object.isRequired,
         location: PropTypes.shape({ lat: PropTypes.number, long: PropTypes.number }).isRequired,
         label: PropTypes.string.isRequired,
+        takenAt: PropTypes.number,
     })).isRequired,
     unplaced: PropTypes.number,
     onOpen: PropTypes.func.isRequired,

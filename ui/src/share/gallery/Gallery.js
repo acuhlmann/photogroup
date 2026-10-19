@@ -447,7 +447,7 @@ function Gallery(props) {
     }, []);
     const located = visible.filter(tile => arranged.facts.get(tile)?.location).map(tile => {
         const facts = arranged.facts.get(tile);
-        return { tile, location: facts.location, label: facts.title || tile.fileName || 'photo' };
+        return { tile, location: facts.location, label: facts.title || tile.fileName || 'photo', takenAt: facts.takenAt };
     });
 
     // Look up place names for located photos, so "Place" can offer them even before tiles do.
