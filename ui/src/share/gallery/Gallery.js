@@ -21,6 +21,7 @@ import NetworkReadout from "../topology/NetworkReadout";
 import { getBlobAndEmit } from "../torrent/BlobUtils";
 import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
 import { runViewTransition } from "./viewTransition";
+import { captureDroppedHandles } from "./replaceOriginal";
 
 /** Render the upload input's label, optionally limiting its width for a narrow gallery. */
 function AddPhotosStrip({ narrow }) {
@@ -99,7 +100,9 @@ function Gallery(props) {
         dragCounterRef.current = 0;
         const files = e.dataTransfer && e.dataTransfer.files;
         if (files && files.length > 0 && master.torrentAddition) {
-            master.torrentAddition.seed(files);
+            captureDroppedHandles(e.dataTransfer).then(() => {
+                master.torrentAddition.seed(files);
+            });
         }
     }, [master]);
 

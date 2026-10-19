@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from '@mui/material/styles';
 import { createAppTheme } from '../../theme';
 import PhotoViewer from './PhotoViewer';
+import { clearOriginalFiles } from './replaceOriginal';
 
 const tile = {
     infoHash: 'abc123',
@@ -40,6 +41,11 @@ const master = {
 };
 
 describe('PhotoViewer', () => {
+    afterEach(() => {
+        delete window.showSaveFilePicker;
+        clearOriginalFiles();
+    });
+
     it('shows the file size, a save control, and the photo details', async () => {
         const div = document.createElement('div');
         document.body.appendChild(div);
@@ -65,6 +71,7 @@ describe('PhotoViewer', () => {
         );
 
         expect(save).toBeTruthy();
+        expect(text).not.toContain('Replace original');
         expect(text).toContain('4.2 MB');
         expect(text).toContain('Harbor light');
         expect(text).toContain('Misty morning on the dock.');
@@ -160,6 +167,56 @@ describe('PhotoViewer', () => {
 
         expect(document.body.textContent).toContain('Codec');
         expect(document.body.textContent).toContain('h264');
+
+        await act(async () => {
+            root.unmount();
+        });
+        div.remove();
+    });
+
+    it('replaces the original file when the browser can write it', async () => {
+        const stream = {
+            write: vi.fn().mockResolvedValue(undefined),
+            close: vi.fn().mockResolvedValue(undefined),
+            abort: vi.fn(),
+        };
+        window.showSaveFilePicker = vi.fn().mockResolvedValue({
+            kind: 'file',
+            createWritable: vi.fn().mockResolvedValue(stream),
+        });
+
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+
+        await act(async () => {
+            root.render(
+                <ThemeProvider theme={createAppTheme('dark')}>
+                    <PhotoViewer
+                        master={master}
+                        tiles={[tile]}
+                        index={0}
+                        onClose={() => {}}
+                        onIndexChange={() => {}}
+                    />
+                </ThemeProvider>
+            );
+        });
+
+        const button = document.body.querySelector('[data-testid="replace-original"]');
+        expect(button.textContent).toContain('Replace original…');
+        expect(document.body.textContent).toContain('Pick the original file and confirm replace');
+
+        await act(async () => {
+            button.click();
+        });
+
+        expect(window.showSaveFilePicker).toHaveBeenCalledWith(expect.objectContaining({
+            suggestedName: 'harbor.jpg',
+            id: 'photogroup-replace',
+        }));
+        expect(stream.write).toHaveBeenCalled();
+        expect(button.textContent).toContain('Replaced');
 
         await act(async () => {
             root.unmount();
