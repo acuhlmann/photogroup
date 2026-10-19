@@ -187,8 +187,7 @@ const placeListeners = new Set();
 
 /** The place name already looked up for these coordinates, without asking again; undefined if not yet. */
 export function knownPlaceName(lat, long) {
-    const near = rounded(lat, long);
-    return knownPlaces.get(`${near.lat},${near.long}`);
+    return knownPlaces.get(`${lat},${long}`);
 }
 
 /** Be told whenever a place name arrives; returns the unsubscribe function. */
@@ -198,11 +197,6 @@ export function onPlaceName(listener) {
 }
 let queue = Promise.resolve();
 const NOMINATIM_SPACING_MS = 1100; // its usage policy allows one request per second
-
-/** ~100 m: photos from the same spot share a lookup, and no finer position leaves the browser. */
-function rounded(lat, long) {
-    return { lat: lat.toFixed(3), long: long.toFixed(3) };
-}
 
 const language = () => (typeof navigator !== 'undefined' && navigator.language) || 'en';
 
@@ -241,12 +235,11 @@ export function searchPlaces(query, fetcher = (...args) => fetch(...args)) {
  * Lookups are cached and spaced out to respect the service's rate limit.
  */
 export function reverseGeocode(lat, long, fetcher = (...args) => fetch(...args)) {
-    const near = rounded(lat, long);
-    const key = `${near.lat},${near.long}`;
+    const key = `${lat},${long}`;
     if (placeCache.has(key)) return placeCache.get(key);
 
     const lookup = inTurn(async () => {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=${near.lat}&lon=${near.long}`
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=${lat}&lon=${long}`
             + `&accept-language=${encodeURIComponent(language())}`;
         try {
             const response = await fetcher(url, { headers: { Accept: 'application/json' } });

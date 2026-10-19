@@ -131,7 +131,7 @@ describe('describing a location', () => {
         vi.useFakeTimers();
         const ok = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ address: { town: 'Zermatt', country: 'Switzerland' } }) });
         const first = reverseGeocode(46.0207, 7.7491, ok);
-        const again = reverseGeocode(46.02071, 7.74912, ok);
+        const again = reverseGeocode(46.0207, 7.7491, ok);
         await vi.runAllTimersAsync();
         expect(await first).toBe('Zermatt, Switzerland');
         expect(await again).toBe('Zermatt, Switzerland');
