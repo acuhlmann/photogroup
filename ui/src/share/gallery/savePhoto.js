@@ -18,6 +18,10 @@ export function savePhoto(tile) {
                 .then(file => {
                     download(file, tile.fileName);
                     resolve();
+                })
+                .catch(err => {
+                    Logger.error(err && err.message ? err.message : String(err));
+                    reject(err);
                 });
         };
 

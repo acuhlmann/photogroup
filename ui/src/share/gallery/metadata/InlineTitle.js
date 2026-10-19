@@ -54,7 +54,8 @@ function InlineTitle({ value, onSave }) {
                 onChange={event => setDraft(event.target.value)}
                 onBlur={commit}
                 onKeyDown={event => {
-                    if (event.key === 'Enter') {
+                    // Enter also confirms an input-method candidate; that must not save.
+                    if (event.key === 'Enter' && !event.nativeEvent.isComposing && event.keyCode !== 229) {
                         event.preventDefault();
                         commit();
                     } else if (event.key === 'Escape') {

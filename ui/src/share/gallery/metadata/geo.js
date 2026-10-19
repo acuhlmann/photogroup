@@ -176,9 +176,9 @@ const placeCache = new Map();
 let queue = Promise.resolve();
 const NOMINATIM_SPACING_MS = 1100; // its usage policy allows one request per second
 
-function cacheKey(lat, long) {
-    // ~100 m: photos from the same spot share a lookup.
-    return `${lat.toFixed(3)},${long.toFixed(3)}`;
+/** ~100 m: photos from the same spot share a lookup, and no finer position leaves the browser. */
+function rounded(lat, long) {
+    return { lat: lat.toFixed(3), long: long.toFixed(3) };
 }
 
 /**
@@ -186,12 +186,13 @@ function cacheKey(lat, long) {
  * Lookups are cached and spaced out to respect the service's rate limit.
  */
 export function reverseGeocode(lat, long, fetcher = (...args) => fetch(...args)) {
-    const key = cacheKey(lat, long);
+    const near = rounded(lat, long);
+    const key = `${near.lat},${near.long}`;
     if (placeCache.has(key)) return placeCache.get(key);
 
     const language = (typeof navigator !== 'undefined' && navigator.language) || 'en';
     const lookup = queue.then(async () => {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=${lat}&lon=${long}`
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=${near.lat}&lon=${near.long}`
             + `&accept-language=${encodeURIComponent(language)}`;
         try {
             const response = await fetcher(url, { headers: { Accept: 'application/json' } });

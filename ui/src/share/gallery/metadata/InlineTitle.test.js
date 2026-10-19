@@ -36,6 +36,19 @@ describe('InlineTitle', () => {
         await act(async () => root.unmount());
     });
 
+    it('does not save on the Enter that confirms an input-method candidate', async () => {
+        const onSave = vi.fn().mockResolvedValue({});
+        const { div, root } = await render({ value: '', onSave });
+
+        await act(async () => div.querySelector('button').click());
+        const input = div.querySelector('input');
+        await act(async () => setInput(input, 'とうきょう'));
+        await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true, bubbles: true })));
+        expect(onSave).not.toHaveBeenCalled();
+        expect(div.querySelector('input')).not.toBeNull();
+        await act(async () => root.unmount());
+    });
+
     it('cancels on Escape and skips saving when nothing changed', async () => {
         const onSave = vi.fn().mockResolvedValue({});
         const { div, root } = await render({ value: 'Pier', onSave });

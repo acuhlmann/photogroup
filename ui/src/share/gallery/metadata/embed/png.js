@@ -64,7 +64,8 @@ export async function embed(blob, details) {
             const xml = await readXmp(await readBytes(blob, offset + 8, end - 4));
             if (xml !== undefined) existing = { start: offset, end, xml };
         }
-        if (type === 'IDAT' || type === 'IEND') break;
+        // iTXt may also follow the image data, so look all the way to IEND.
+        if (type === 'IEND') break;
         offset = end;
     }
     if (ihdrEnd === null) return null;

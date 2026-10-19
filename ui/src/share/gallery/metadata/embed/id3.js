@@ -45,10 +45,13 @@ export async function embed(blob, details) {
         const tag = await readBytes(blob, 10, 10 + size);
         let offset = 0;
         if (flags & 0x40) offset = major === 4 ? syncsafe(tag, 0) : readUint(tag, 0, 4) + 4;
+        if (offset > tag.length) return null;
         while (offset + 10 <= tag.length && tag[offset] !== 0) {
             const frameSize = major === 4 ? syncsafe(tag, offset + 4) : readUint(tag, offset + 4, 4);
             const end = offset + 10 + frameSize;
-            if (end > tag.length) break;
+            // A frame overrunning the tag means the layout was misread (some
+            // writers put plain sizes in v2.4); keep the file rather than lose frames.
+            if (end > tag.length) return null;
             frames.push({ id: ascii(tag, offset, 4), bytes: tag.subarray(offset, end) });
             offset = end;
         }

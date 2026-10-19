@@ -184,6 +184,32 @@ describe('embedDetails', () => {
             .toMatchObject({ title: DETAILS.title, comments: [DETAILS.description], stars: 4 });
     });
 
+    it('keeps an MP3 as it is when a frame size overruns the tag', async () => {
+        const bytes = await bytesOf(fixture('song.mp3'));
+        // Inflate the first frame's size past the end of the tag.
+        bytes.set([0x7F, 0xFF, 0xFF, 0xFF], 14);
+        const broken = new Blob([bytes]);
+        expect(await embedDetails(broken, DETAILS)).toBe(broken);
+    });
+
+    it('replaces PNG XMP that comes after the image data instead of adding a second packet', async () => {
+        const bytes = await bytesOf(fixture('photo.png'));
+        const chunks = [];
+        for (let offset = 8; offset < bytes.length;) {
+            const end = offset + 12 + readUint(bytes, offset, 4);
+            chunks.push({ type: new TextDecoder('latin1').decode(bytes.subarray(offset + 4, offset + 8)), bytes: bytes.subarray(offset, end) });
+            offset = end;
+        }
+        const xmp = chunks.find(item => item.type === 'iTXt');
+        const others = chunks.filter(item => item !== xmp);
+        const iend = others.pop();
+        const moved = new Blob([bytes.subarray(0, 8), ...others.map(item => item.bytes), xmp.bytes, iend.bytes]);
+
+        const packets = await xmpPackets(await embedDetails(moved, DETAILS));
+        expect(packets).toHaveLength(1);
+        expect(packets[0]).toMatchObject({ titles: [DETAILS.title], keywords: ['beach'] });
+    });
+
     it('writes FLAC Vorbis comments and keeps the others', async () => {
         const result = await embedDetails(fixture('song.flac'), DETAILS);
         expect(await media(result)).toMatchObject({

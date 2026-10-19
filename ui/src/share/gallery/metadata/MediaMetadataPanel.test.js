@@ -126,7 +126,7 @@ describe('MediaMetadataPanel shared editing', () => {
         expect(hrefs.some(href => href.startsWith('https://uri.amap.com/marker?position=121.473700,31.230400')
             && href.includes('coordinate=wgs84'))).toBe(true);
         expect(card.querySelectorAll('img[src^="https://tile.openstreetmap.org/14/"]').length).toBeGreaterThan(0);
-        expect(fetchMock.mock.calls[0][0]).toContain('nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=31.2304&lon=121.4737');
+        expect(fetchMock.mock.calls[0][0]).toContain('nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=31.230&lon=121.474');
         vi.unstubAllGlobals();
         await act(async () => root.unmount());
     });
