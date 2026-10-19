@@ -13,6 +13,7 @@ import RouterRounded from '@mui/icons-material/RouterRounded';
 import DnsRounded from '@mui/icons-material/DnsRounded';
 
 import StringUtil from './util/StringUtil';
+import NetworkReadout from './topology/NetworkReadout';
 
 const monoFont = 'var(--font-mono)';
 
@@ -235,6 +236,8 @@ function MeView({ master }) {
                     </>
                 )}
             </Box>
+
+            <NetworkReadout master={master} sx={{ mt: 0, mb: 0 }} />
         </Box>
     );
 }

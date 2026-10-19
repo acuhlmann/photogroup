@@ -48,7 +48,7 @@ function Row({ k, children }) {
  * What this device learned about its network while joining, and how a
  * transfer to each person in the room is likely to travel.
  */
-function NetworkReadout({ master }) {
+function NetworkReadout({ master, sx }) {
     const [state, setState] = useState(() => readState(master));
     const [events, setEvents] = useState([]);
     const [stunDone, setStunDone] = useState(false);
@@ -87,6 +87,7 @@ function NetworkReadout({ master }) {
             // Bottom margin keeps the floating People button off the last lines.
             mt: 2, mb: 9, p: 1.5, borderRadius: 2, textAlign: 'left',
             border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper',
+            ...sx,
         }}>
             <Typography className="tech-text" sx={{ color: 'primary.main', mb: 0.75 }}>
                 Your link, as ICE sees it
@@ -169,6 +170,7 @@ function NetworkReadout({ master }) {
 
 NetworkReadout.propTypes = {
     master: PropTypes.object.isRequired,
+    sx: PropTypes.object,
 };
 
 export default NetworkReadout;
