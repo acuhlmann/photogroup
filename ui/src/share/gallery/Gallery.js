@@ -25,6 +25,7 @@ import GalleryToolbar from "./GalleryToolbar";
 import RoomMap from "./RoomMap";
 import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
+import { captureDroppedHandles } from "./replaceOriginal";
 
 /** Render the upload input's label, optionally limiting its width for a narrow gallery. */
 function AddPhotosStrip({ narrow }) {
@@ -108,7 +109,9 @@ function Gallery(props) {
         dragCounterRef.current = 0;
         const files = e.dataTransfer && e.dataTransfer.files;
         if (files && files.length > 0 && master.torrentAddition) {
-            master.torrentAddition.seed(files);
+            captureDroppedHandles(e.dataTransfer).then(() => {
+                master.torrentAddition.seed(files);
+            });
         }
     }, [master]);
 
@@ -139,7 +142,9 @@ function Gallery(props) {
         photo.loading = false;
         const isImage = photo.fileType.includes('image/');
         photo.elem = (noElem && !isImage) ? null : file;
-        photo.img = isImage ? URL.createObjectURL(file) : null;
+        // A photo restored from cache already shows this file; a new URL would
+        // make the tile reload its image.
+        photo.img = isImage ? (photo.img || URL.createObjectURL(file)) : null;
         photo.fileSize = photo.fileSize || FileUtil.formatBytes(noElem ? photo.torrentFile.length : (photo.elem ? photo.elem.size : file.size));
         photo.isVideo = photo.fileType.includes('video/');
         photo.isImage = isImage;
@@ -366,7 +371,9 @@ function Gallery(props) {
         emitter.on('duplicate', handleDuplicate);
 
         photoHandlerRef.current = new GalleryPhotoHandler({ addMediaToDom, setTiles, master }, emitter);
-        photoHandlerRef.current.sync();
+        // This effect re-runs on every tile change; without unsubscribing,
+        // each photo event was handled once per past render.
+        const stopPhotoSync = photoHandlerRef.current.sync();
 
         // Emit initial gallery state
         updateGalleryState();
@@ -374,6 +381,7 @@ function Gallery(props) {
         return () => {
             emitter.removeListener('torrentReady', handleTorrentReady);
             emitter.removeListener('duplicate', handleDuplicate);
+            stopPhotoSync();
         };
     }, [master, updateGalleryState, addMediaToDom]);
 

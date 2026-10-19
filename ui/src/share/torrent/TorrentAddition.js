@@ -9,6 +9,15 @@ import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isDuplicateTorren
 import { getPreviewFromImage, getPreviewFromAudio } from './ThumbnailExtractor';
 import { cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 
+/** Read a torrent file into a Blob with either WebTorrent API; null when neither exists. */
+export function readFileBlob(file) {
+    if (typeof file.blob === 'function') return file.blob();
+    if (typeof file.getBlob !== 'function') return Promise.resolve(null);
+    return new Promise((resolve, reject) => {
+        file.getBlob((err, blob) => err ? reject(err) : resolve(blob));
+    });
+}
+
 export default class TorrentAddition {
 
     /** Initialize torrent services and upload confirmation tracking, and subscribe to rendered photos. */
@@ -183,7 +192,9 @@ export default class TorrentAddition {
                         }
                     }
                     photo.fromCache = fromCache;
-                    photo.loading = true;
+                    // A photo already served from the blob cache stays on
+                    // screen while its torrent is re-added after a reload.
+                    photo.loading = !photo.img;
                     photo.rendering = false;
                     photo.torrent = torrent;
                     photo.url = torrent.magnetURI;
@@ -834,19 +845,20 @@ export default class TorrentAddition {
         // uploader did), so a receiver's reload / later re-share does not
         // depend on finding a peer again.
         if (torrent.files) {
-            torrent.files
-                .filter(file => !file.name.startsWith('Thumbnail '))
-                .forEach(file => {
-                    if (typeof file.getBlob !== 'function') return;
-                    file.getBlob((err, blob) => {
-                        if (err || !blob) return;
-                        if (!shouldCacheBlob(blob.type)) return;
-                        const key = torrent.files.filter(f => !f.name.startsWith('Thumbnail ')).length > 1
-                            ? torrent.infoHash + '-' + file.path
-                            : torrent.infoHash;
-                        cachePut(key, blob, blob.type).catch(() => {});
-                    });
-                });
+            const files = torrent.files.filter(file => !file.name.startsWith('Thumbnail '));
+            files.forEach(file => {
+                // WebTorrent 3 replaced getBlob(cb) with blob(); with only the old
+                // call, receivers never cached anything and every reload showed
+                // their photos loading again.
+                if (file.type && !shouldCacheBlob(file.type)) return;
+                readFileBlob(file).then(blob => {
+                    if (!blob || !shouldCacheBlob(blob.type)) return;
+                    const key = files.length > 1
+                        ? torrent.infoHash + '-' + file.path
+                        : torrent.infoHash;
+                    return cachePut(key, blob, blob.type);
+                }).catch(() => {});
+            });
         }
 
         //Checks to make sure that ImmediateChunkStore has finished writing to store before destroying the torrent!

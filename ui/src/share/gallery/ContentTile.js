@@ -5,6 +5,8 @@ import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import IconButton from "@mui/material/IconButton";
 import CloudDownloadRounded from "@mui/icons-material/CloudDownloadRounded";
+import SaveRounded from "@mui/icons-material/SaveRounded";
+import IosShare from "@mui/icons-material/IosShare";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
 import Logger from "js-logger";
 import update from "immutability-helper";
@@ -16,6 +18,7 @@ import PasswordInput from "../security/PasswordInput";
 import WebCrypto from "../security/WebCrypto";
 import RenderContent from "./RenderContent";
 import { saveLabel, savePhoto } from "./savePhoto";
+import { primePhotoCopy, replaceFailureMessage, replaceKind, replaceLabel, replaceOriginal } from "./replaceOriginal";
 import { photoTransitionName } from "./viewTransition";
 import { groupMetadataForDisplay } from "./metadata/groupPhotoMetadata";
 import { RatingStars, ColorLabel, StarPicker } from "./metadata/MediaMetadataPanel";
@@ -30,6 +33,8 @@ function ContentTile(props) {
 
     const [localDownloaded, setLocalDownloaded] = useState([]);
     const [localDownloading, setLocalDownloading] = useState([]);
+    const [replacing, setReplacing] = useState(false);
+    const [replaced, setReplaced] = useState(null);
     const [there, setThere] = useState(true);
     const [downSpeed, setDownSpeed] = useState('');
     const [upSpeed, setUpSpeed] = useState('');
@@ -93,6 +98,14 @@ function ContentTile(props) {
         };
     }, [master.emitter, handleDisconnectNode, handleDownloadProgress, handleUploadProgress, handleTorrentReady, listenToPreview]);
 
+    useEffect(() => {
+        setReplaced(null);
+    }, [tile.infoHash, tile.tileKey, tile.metadata, tile.details]);
+
+    useEffect(() => {
+        primePhotoCopy(tile);
+    }, [tile, tile.elem, tile.file, tile.infoHash, tile.tileKey]);
+
     const downloadFromServer = useCallback((tile) => {
         Logger.info('downloadFromServer ' + tile.fileName);
         setLocalDownloading(prev => update(prev, {$push: [tile.infoHash]}));
@@ -135,6 +148,17 @@ function ContentTile(props) {
             }
         });
     }, [enqueueSnackbar, closeSnackbar]);
+
+    const replaceOnDevice = useCallback((tile) => {
+        setReplacing(true);
+        replaceOriginal(tile)
+            .then(kind => setReplaced(kind))
+            .catch(err => {
+                const message = replaceFailureMessage(err);
+                if (message) snack(message, 'error');
+            })
+            .finally(() => setReplacing(false));
+    }, [snack]);
 
     const decrypt = useCallback(async (tile, password) => {
         const elem = tile.elem;
@@ -182,7 +206,8 @@ function ContentTile(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [master, tile.infoHash]);
 
-    const isLoading = tile.torrentFile && !tile.torrentFile.done;
+    // A photo restored from cache is complete even while its torrent re-verifies.
+    const isLoading = tile.torrentFile && !tile.torrentFile.done && !tile.elem;
     let progressPercentage, downloaded;
     if(isLoading && tile.torrentFile) {
         progressPercentage = Math.round(tile.torrentFile.progress * 100);
@@ -192,6 +217,7 @@ function ContentTile(props) {
     const isDownloadingFile = localDownloading.includes(tile.infoHash);
     const downloadedFile = localDownloaded.includes(tile.infoHash);
     const canSave = !isLoading && (tile.elem || (tile.torrentFile && typeof tile.torrentFile.getBlob === 'function'));
+    const replaceMode = replaceKind();
     const transitionName = selected ? undefined : photoTransitionName(tile.infoHash);
 
     if (!there) {
@@ -371,17 +397,30 @@ function ContentTile(props) {
                     </Typography>
                 )}
 
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 1 }}>
+                <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 1 }}>
                     <Button
                         variant="contained"
                         color="primary"
                         size="small"
                         startIcon={<CloudDownloadRounded />}
-                        disabled={!canSave || isDownloadingFile}
+                        disabled={!canSave || isDownloadingFile || replacing}
                         onClick={() => downloadFromServer(tile)}
                     >
                         {saveLabel(tile.fileSize, isDownloadingFile, downloadedFile)}
                     </Button>
+                    {replaceMode && (
+                        <Button
+                            variant="outlined"
+                            color="primary"
+                            size="small"
+                            data-testid="replace-original"
+                            startIcon={replaceMode === 'share' ? <IosShare /> : <SaveRounded />}
+                            disabled={!canSave || isDownloadingFile || replacing}
+                            onClick={() => replaceOnDevice(tile)}
+                        >
+                            {replaceLabel(tile, { replacing, replaced })}
+                        </Button>
+                    )}
                     <IconButton
                         aria-label={`Remove ${tile.fileName || 'photo'}`}
                         onClick={() => handleDelete(tile)}

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import EventEmitter from 'eventemitter3';
 import GalleryPhotoHandler from '../GalleryPhotoHandler';
 
 describe('GalleryPhotoHandler', () => {
@@ -49,6 +50,17 @@ describe('GalleryPhotoHandler', () => {
             expect(capturedTiles.length).toBe(1);
             expect(capturedTiles[0].picDateTaken).toBeDefined();
             expect(typeof capturedTiles[0].picDateTaken).toBe('string');
+        });
+    });
+
+    describe('sync - subscription', () => {
+        it('returns an unsubscribe so re-running the gallery effect does not stack listeners', () => {
+            const emitter = new EventEmitter();
+            const view = { setTiles: vi.fn() };
+            const stop = new GalleryPhotoHandler(view, emitter).sync();
+            expect(emitter.listenerCount('photos')).toBe(1);
+            stop();
+            expect(emitter.listenerCount('photos')).toBe(0);
         });
     });
 
@@ -105,6 +117,14 @@ describe('GalleryPhotoHandler', () => {
             g.emit({ type: 'update', item: [{ infoHash: 'a', loading: false, img: 'blob:a', metadata: { Make: 'Google' } }] });
             g.emit({ type: 'all', item: [photo('a')] });
             expect(g.tiles()[0]).toMatchObject({ loading: false, img: 'blob:a', metadata: { Make: 'Google' } });
+        });
+
+        it('keeps the image already on screen when a resume hands it a new cached URL', () => {
+            const g = setup();
+            g.emit({ type: 'add', item: [photo('a')] });
+            g.emit({ type: 'update', item: [{ infoHash: 'a', loading: false, img: 'blob:shown', elem: 'shown-file' }] });
+            g.emit({ type: 'all', item: [photo('a', { img: 'blob:from-cache', elem: 'cached-file', loading: false })] });
+            expect(g.tiles()[0]).toMatchObject({ img: 'blob:shown', elem: 'shown-file', loading: false });
         });
 
         it('keeps an upload the room snapshot does not know about yet', () => {
