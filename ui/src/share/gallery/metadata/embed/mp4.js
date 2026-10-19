@@ -7,11 +7,17 @@ import { isValidLocation, parseIso6709 } from '../geo';
 // Rewriting moov changes its size, so when the media data comes after it
 // the chunk offset tables (stco/co64) are shifted to match.
 
-const ITEMS = { title: '©nam', description: 'desc', rating: 'rate' };
+const ITEMS = { title: '©nam', description: 'desc', rating: 'rate', location: '©xyz' };
 const QUICKTIME_TYPES = new Set(['moov', 'mdat', 'wide', 'free', 'skip']);
 
 function textItem(type, text) {
     return box(type, box('data', uint(1, 4), uint(0, 4), utf8(text)));
+}
+
+/** "+31.2400+121.4905/", the ISO 6709 form QuickTime uses. */
+export function iso6709(location) {
+    const part = (value, width) => (value < 0 ? '-' : '+') + Math.abs(value).toFixed(4).padStart(width, '0');
+    return `${part(location.lat, 7)}${part(location.long, 8)}/`;
 }
 
 function newItems(details) {
@@ -20,6 +26,7 @@ function newItems(details) {
     if (details.description) items.push(textItem(ITEMS.description, details.description));
     const rating = ratingFraction(details.rating);
     if (rating !== null) items.push(textItem(ITEMS.rating, String(Math.max(1, Math.round(rating * 100)))));
+    if (details.location) items.push(textItem(ITEMS.location, iso6709(details.location)));
     return items;
 }
 
@@ -137,7 +144,9 @@ function rebuildUserData(bytes, udta, details) {
     if (!ilst) metaParts.push(newIlst);
     const newMeta = box('meta', prefix, ...metaParts);
 
-    const parts = kids.map(kid => (kid === meta ? newMeta : raw(bytes, kid)));
+    // A location set in the room replaces the camera's own udta records of it.
+    const stale = new Set(details.location !== undefined ? ['\u00A9xyz', 'loci'] : []);
+    const parts = kids.filter(kid => !stale.has(kid.type)).map(kid => (kid === meta ? newMeta : raw(bytes, kid)));
     if (!meta) parts.push(newMeta);
     return box('udta', ...parts);
 }

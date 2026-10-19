@@ -6,6 +6,8 @@ import { embedDetails } from './embedDetails';
 import { parseBoxes } from './isobmff';
 import { parseItemInfo, parseLocations } from './heif';
 import { readUint } from './binary';
+import { readLocation } from './mp4';
+import MetadataParser from '../MetadataParser';
 
 const DETAILS = { title: 'Fish & "chips" ü', description: 'At the pier', rating: 4 };
 
@@ -220,5 +222,58 @@ describe('embedDetails', () => {
     it('drops cleared and rejected fields from audio tags', async () => {
         const result = await embedDetails(fixture('song.mp3'), { title: '', description: '', rating: -1 });
         expect(await media(result)).toMatchObject({ title: undefined, comments: [], artist: 'Band', stars: null });
+    });
+
+    describe('location', () => {
+        const BUND = { lat: 31.2400, long: 121.4905, name: 'The Bund' };
+        const readImage = async (blob, name) => {
+            const tile = { isImage: true, fileName: name };
+            const parser = new MetadataParser({});
+            return parser.extractAndProcess(await MetadataParser.parseImage(new File([blob], name)), tile);
+        };
+
+        it('fills in the EXIF GPS a phone blanked, as well as XMP', async () => {
+            const result = await embedDetails(fixture('blank-gps.jpg'), { location: BUND });
+            const location = (await readImage(result, 'a.jpg'))['x-Location'];
+            expect(location.lat).toBeCloseTo(31.24, 4);
+            expect(location.long).toBeCloseTo(121.4905, 4);
+            const [packet] = await xmpPackets(result);
+            expect(packet).toBeTruthy();
+            expect(new TextDecoder().decode(await bytesOf(result))).toContain('exif:GPSLatitude="31,14.4N"');
+        });
+
+        it('writes the location into XMP where there is no EXIF GPS', async () => {
+            for (const name of ['photo.jpg', 'photo.png']) {
+                const location = (await readImage(await embedDetails(fixture(name), { location: { lat: -33.8678, long: 151.2073 } }), name))['x-Location'];
+                expect(location.lat).toBeCloseTo(-33.8678, 4);
+                expect(location.long).toBeCloseTo(151.2073, 4);
+            }
+        });
+
+        it('hides a location in EXIF and XMP when it is removed', async () => {
+            const placed = await embedDetails(fixture('blank-gps.jpg'), { location: BUND });
+            const removed = await embedDetails(placed, { location: null });
+            const md = await readImage(removed, 'a.jpg');
+            expect(md['x-Location']).toBeUndefined();
+            expect(new TextDecoder().decode(await bytesOf(removed))).not.toContain('GPSLatitude=');
+        });
+
+        it('stores the location as an XMP item in a HEIC', async () => {
+            const { xmp } = await (await import('./heif')).readMetadataItems(await embedDetails(fixture('photo.heic'), { location: BUND }));
+            expect(xmp).toContain('exif:GPSLatitude="31,14.4N"');
+            expect(xmp).toContain('exif:GPSLongitude="121,29.43E"');
+        });
+
+        it('replaces a video\'s own location', async () => {
+            const tagged = await embedDetails(fixture('phone.mov'), { location: BUND });
+            const location = await readLocation(tagged);
+            expect(location).toEqual({ lat: 31.24, long: 121.4905 });
+            expect(await readLocation(await embedDetails(fixture('phone.mov'), { location: null }))).toBeNull();
+
+            const original = fixture('faststart.mp4');
+            const moved = await embedDetails(original, { location: BUND });
+            expect(await readLocation(moved)).toEqual({ lat: 31.24, long: 121.4905 });
+            expect(chunkStarts(await bytesOf(moved))).toEqual(chunkStarts(await bytesOf(original)));
+        });
     });
 });

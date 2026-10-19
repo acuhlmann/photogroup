@@ -11,11 +11,10 @@ import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
 import ContentCopyRounded from '@mui/icons-material/ContentCopyRounded';
 import LocationOffRounded from '@mui/icons-material/LocationOffRounded';
 import { format } from 'date-fns';
-import {
-    formatDecimal, formatDirection, formatDms, isValidLocation, mapLinks, reverseGeocode, tilePosition,
-} from './geo';
+import EditLocationAltRounded from '@mui/icons-material/EditLocationAltRounded';
+import { formatDecimal, formatDirection, formatDms, isValidLocation, mapLinks, reverseGeocode } from './geo';
+import TileMap from './TileMap';
 
-const TILE = 256;
 const MAP_ZOOM = 14;
 
 const factSx = {
@@ -29,13 +28,17 @@ const factSx = {
     fontVariantNumeric: 'tabular-nums',
 };
 
-/** The place name for a location, looked up once it is shown; null until known or when unknown. */
+/**
+ * The place name for a location: the one people in the room picked, or one
+ * looked up once it is shown; null until known or when unknown.
+ */
 export function usePlaceName(location) {
     const [place, setPlace] = useState({ key: null, name: null, pending: false });
     const lat = location && Number(location.lat);
     const long = location && Number(location.long);
     const valid = !!location && isValidLocation(lat, long);
-    const key = valid ? `${lat},${long}` : null;
+    const given = location && location.name;
+    const key = valid && !given ? `${lat},${long}` : null;
 
     useEffect(() => {
         if (!key) return undefined;
@@ -47,70 +50,16 @@ export function usePlaceName(location) {
         return () => { cancelled = true; };
     }, [key, lat, long]);
 
+    if (given) return { key: null, name: given, pending: false };
     return place.key === key ? place : { key, name: null, pending: valid };
 }
 
-/** A small OpenStreetMap preview centred on the point, with a pin. */
+/** A small map centred on the point; tapping it opens Google Maps. */
 function MapPreview({ lat, long, href }) {
-    const { x, y } = tilePosition(lat, long, MAP_ZOOM);
-    const scale = 2 ** MAP_ZOOM;
-    const tiles = [];
-    for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-            const tx = Math.floor(x) + dx;
-            const ty = Math.floor(y) + dy;
-            if (ty < 0 || ty >= scale) continue;
-            tiles.push({
-                key: `${dx},${dy}`,
-                left: (tx - x) * TILE,
-                top: (ty - y) * TILE,
-                src: `https://tile.openstreetmap.org/${MAP_ZOOM}/${((tx % scale) + scale) % scale}/${ty}.png`,
-            });
-        }
-    }
-
     return (
-        <Box sx={{ position: 'relative', height: 168, borderRadius: 2, overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: '#dfe6ea' }}>
-            <Box
-                component="a"
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Open the location in Google Maps"
-                sx={{ position: 'absolute', inset: 0, display: 'block' }}
-            >
-                <Box sx={{ position: 'absolute', left: '50%', top: '50%' }}>
-                    {tiles.map(tile => (
-                        <img
-                            key={tile.key}
-                            src={tile.src}
-                            alt=""
-                            loading="lazy"
-                            draggable={false}
-                            style={{ position: 'absolute', left: tile.left, top: tile.top, width: TILE, height: TILE, maxWidth: 'none' }}
-                        />
-                    ))}
-                </Box>
-                <PlaceRounded
-                    aria-hidden="true"
-                    sx={{
-                        position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -92%)',
-                        fontSize: 40, color: 'primary.main', filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.45))',
-                    }}
-                />
-            </Box>
-            <Box
-                component="a"
-                href="https://www.openstreetmap.org/copyright"
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{
-                    position: 'absolute', right: 0, bottom: 0, px: 0.6, py: 0.1, fontSize: '0.6rem',
-                    color: '#333', bgcolor: 'rgba(255,255,255,0.75)', textDecoration: 'none',
-                }}
-            >
-                © OpenStreetMap
-            </Box>
+        <Box component="a" href={href} target="_blank" rel="noopener noreferrer"
+            aria-label="Open the location in Google Maps" sx={{ display: 'block' }}>
+            <TileMap lat={lat} long={long} zoom={MAP_ZOOM} />
         </Box>
     );
 }
@@ -124,7 +73,7 @@ function formatGpsTime(iso) {
 }
 
 /** Where a photo was taken: map, place name, coordinates, GPS extras and links to map apps. */
-function LocationCard({ location }) {
+function LocationCard({ location, onEdit }) {
     const lat = Number(location.lat);
     const long = Number(location.long);
     const place = usePlaceName(location);
@@ -177,6 +126,12 @@ function LocationCard({ location }) {
                 </Stack>
             )}
             <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
+                {onEdit && (
+                    <Button size="small" variant="outlined" onClick={onEdit}
+                        startIcon={<EditLocationAltRounded sx={{ fontSize: '16px !important' }} />} sx={{ textTransform: 'none' }}>
+                        Change
+                    </Button>
+                )}
                 {links.map(link => (
                     <Button
                         key={link.id}
@@ -204,7 +159,9 @@ LocationCard.propTypes = {
         direction: PropTypes.number,
         accuracy: PropTypes.number,
         time: PropTypes.string,
+        name: PropTypes.string,
     }).isRequired,
+    onEdit: PropTypes.func,
 };
 
 /** One line for a gallery tile: the place (or coordinates) with links to Google Maps and Amap. */
@@ -240,7 +197,7 @@ export const LOCATION_BLANK_HELP = 'This photo has GPS fields, but they are blan
     + 'To keep it, upload the original file from a computer.';
 
 /** Says a photo's GPS fields were blanked before it reached the app, so "no location" isn't a mystery. */
-export function LocationBlankNote() {
+export function LocationBlankNote({ onAdd }) {
     return (
         <Stack direction="row" spacing={1.25} data-testid="location-blank" sx={{
             alignItems: 'flex-start', p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'action.hover',
@@ -251,6 +208,12 @@ export function LocationBlankNote() {
                 <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.5 }}>
                     {LOCATION_BLANK_HELP}
                 </Typography>
+                {onAdd && (
+                    <Button size="small" variant="outlined" onClick={onAdd} sx={{ mt: 1, textTransform: 'none' }}
+                        startIcon={<EditLocationAltRounded sx={{ fontSize: '16px !important' }} />}>
+                        Set the location
+                    </Button>
+                )}
             </Box>
         </Stack>
     );

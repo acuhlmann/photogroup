@@ -30,6 +30,8 @@ import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
 import FileUtil from '../../util/FileUtil';
 import { groupMetadataForDisplay, humanizeMetadataValue, labelForMetadataKey } from './groupPhotoMetadata';
 import LocationCard, { LocationBlankNote } from './LocationCard';
+import LocationEditor from './LocationEditor';
+import AddLocationAltRounded from '@mui/icons-material/AddLocationAltRounded';
 
 const monoLabelSx = {
     fontFamily: 'var(--font-mono)',
@@ -325,7 +327,7 @@ function DetailsEditor({ values, focus, onSave, onCancel }) {
                 autoFocus={focus !== 'description' && focus !== 'rating'}
                 value={title}
                 onChange={event => setTitle(event.target.value)}
-                inputProps={{ maxLength: TITLE_MAX }}
+                slotProps={{ htmlInput: { maxLength: TITLE_MAX } }}
             />
             <TextField
                 label="Description"
@@ -337,7 +339,7 @@ function DetailsEditor({ values, focus, onSave, onCancel }) {
                 autoFocus={focus === 'description'}
                 value={description}
                 onChange={event => setDescription(event.target.value)}
-                inputProps={{ maxLength: DESCRIPTION_MAX }}
+                slotProps={{ htmlInput: { maxLength: DESCRIPTION_MAX } }}
             />
             <StarPicker value={rating} onChange={setRating} />
             {error && (
@@ -385,7 +387,7 @@ function EditedBy({ editedBy, editedAt, myPeerId }) {
     );
 }
 
-const EDITABLE_MISSING = { Title: 'title', Description: 'description', Rating: 'rating' };
+const EDITABLE_MISSING = { Title: 'title', Description: 'description', Rating: 'rating', Location: 'location' };
 
 const DETAIL_ICONS = {
     'DateTimeOriginal': EventRounded,
@@ -562,11 +564,13 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
     );
     // null, or the field to focus when the editor opens.
     const [editing, setEditing] = useState(null);
+    const [editingLocation, setEditingLocation] = useState(false);
     const infoHashRef = useRef(tile?.infoHash);
     useEffect(() => {
         if (infoHashRef.current !== tile?.infoHash) {
             infoHashRef.current = tile?.infoHash;
             setEditing(null);
+            setEditingLocation(false);
         }
     }, [tile?.infoHash]);
 
@@ -599,10 +603,34 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
                 </>
             )}
 
-            {(grouped.location || grouped.locationBlank) && (
+            {(grouped.location || grouped.locationBlank || canEdit) && (
                 <Box sx={{ mt: 2.5 }}>
                     <SectionHeading>Location</SectionHeading>
-                    {grouped.location ? <LocationCard location={grouped.location} /> : <LocationBlankNote />}
+                    {editingLocation ? (
+                        <LocationEditor
+                            initial={grouped.location}
+                            canRemove={!!grouped.location}
+                            onSave={async location => {
+                                await onSaveDetails({ location });
+                                setEditingLocation(false);
+                            }}
+                            onCancel={() => setEditingLocation(false)}
+                        />
+                    ) : grouped.location ? (
+                        <LocationCard location={grouped.location} onEdit={canEdit ? () => setEditingLocation(true) : null} />
+                    ) : grouped.locationBlank ? (
+                        <LocationBlankNote onAdd={canEdit ? () => setEditingLocation(true) : null} />
+                    ) : (
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<AddLocationAltRounded fontSize="small" />}
+                            onClick={() => setEditingLocation(true)}
+                            sx={{ borderStyle: 'dashed', color: 'text.secondary', textTransform: 'none' }}
+                        >
+                            Add a location
+                        </Button>
+                    )}
                 </Box>
             )}
 

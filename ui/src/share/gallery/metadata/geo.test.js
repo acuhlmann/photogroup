@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-    describeAddress, extractLocation, formatDecimal, formatDirection, formatDms, isValidLocation, mapLinks,
-    parseCoordinate, parseIso6709, reverseGeocode, tilePosition,
+    describeAddress, extractLocation, formatDecimal, formatDirection, formatDms, fromTilePosition, isValidLocation, mapLinks,
+    parseCoordinate, parseIso6709, reverseGeocode, searchPlaces, tilePosition,
 } from './geo';
 import ExifParser from './ExifParser';
 
@@ -87,6 +87,37 @@ describe('describing a location', () => {
         const { x, y } = tilePosition(0, 0, 1);
         expect(x).toBeCloseTo(1, 6);
         expect(y).toBeCloseTo(1, 6);
+    });
+
+    it('turns map tile positions back into coordinates', () => {
+        const { x, y } = tilePosition(31.2304, 121.4737, 15);
+        const back = fromTilePosition(x, y, 15);
+        expect(back.lat).toBeCloseTo(31.2304, 6);
+        expect(back.long).toBeCloseTo(121.4737, 6);
+        // Dragging past the date line wraps around
+        expect(fromTilePosition(-0.25, 0.5, 0).long).toBeCloseTo(90, 6);
+    });
+
+    it('searches places and names them briefly', async () => {
+        vi.useFakeTimers();
+        const fetcher = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ([
+                { name: 'The Bund', display_name: 'The Bund, Zhongshan East 1st Road, Huangpu, Shanghai, China',
+                    lat: '31.2400', lon: '121.4905', address: { suburb: 'Huangpu', city: 'Shanghai', country: 'China' } },
+                { name: '', display_name: 'Nowhere', lat: 'x', lon: '0' },
+            ]),
+        });
+        const found = searchPlaces('bund shanghai', fetcher);
+        await vi.runAllTimersAsync();
+        expect(await found).toEqual([{
+            name: 'The Bund, Huangpu, Shanghai, China',
+            label: 'The Bund, Zhongshan East 1st Road, Huangpu, Shanghai, China',
+            lat: 31.24, long: 121.4905,
+        }]);
+        expect(fetcher.mock.calls[0][0]).toContain('/search?format=jsonv2&addressdetails=1&limit=6&q=bund%20shanghai');
+        expect(await searchPlaces('   ', fetcher)).toEqual([]);
+        vi.useRealTimers();
     });
 
     it('names a place from district, city and country', () => {
