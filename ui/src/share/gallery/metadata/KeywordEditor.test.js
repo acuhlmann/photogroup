@@ -34,6 +34,21 @@ describe('KeywordEditor', () => {
         await act(async () => root.unmount());
     });
 
+    it('keeps the field open after a comma for the next keyword', async () => {
+        const onChange = vi.fn().mockResolvedValue({});
+        const { div, root } = await render({ words: [], onChange });
+        await act(async () => button(div, 'Add keyword').click());
+        await act(async () => setInput(div.querySelector('input'), 'old town'));
+        await act(async () => div.querySelector('input').dispatchEvent(new KeyboardEvent('keydown', { key: ',', bubbles: true })));
+        expect(onChange).toHaveBeenCalledWith(['old town']);
+        expect(div.querySelector('input').value).toBe('');
+        // The next keyword joins the first even before the room's update arrives
+        await act(async () => setInput(div.querySelector('input'), 'morning'));
+        await act(async () => div.querySelector('input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+        expect(onChange).toHaveBeenLastCalledWith(['old town', 'morning']);
+        await act(async () => root.unmount());
+    });
+
     it('removes a keyword', async () => {
         const onChange = vi.fn().mockResolvedValue({});
         const { div, root } = await render({ words: ['beach', 'dusk'], onChange });

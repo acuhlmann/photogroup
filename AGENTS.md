@@ -61,6 +61,8 @@ Shared photo details (title, description, rating, keywords and location anyone i
 
 Location comes from EXIF/XMP GPS, HEIC Exif items and video `udta`/`meta` boxes (`metadata/geo.js`, `embed/heif.js`, `embed/mp4.js`) and shows as a map card (`metadata/LocationCard.js`) using OpenStreetMap tiles and Nominatim reverse geocoding (cached, one lookup per second), with Google Maps, Amap and OSM links. GPS fields present but blank (Android zeroes them when a browser picks a photo without location access) become `x-Location status: 'blank'` and show a "Location removed before upload" note instead of NaN rows. People can set or change a location (`metadata/LocationEditor.js`: Nominatim place search, device position, or dragging a `TileMap` under the pin) or hide the file's with `location: null`; saving writes it as XMP `exif:GPS*`, fills JPEG EXIF GPS fields in place when they exist (`embed/exifGps.js`), and as `©xyz` in MP4/MOV.
 
+The gallery toolbar (`gallery/GalleryToolbar.js`) sorts and filters tiles through `gallery/arrangeTiles.js` (rating, date taken, place grouped by town and country, text search over titles, descriptions, keywords and places) and switches to `gallery/RoomMap.js`, which pins every located photo on one map; the viewer pages through the tiles the current view shows.
+
 ### Important: No persistence
 
 Everything is in memory. Server restart = all rooms/photos gone. This is by design for the experimental stage.

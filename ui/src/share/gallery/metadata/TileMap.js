@@ -11,13 +11,16 @@ const TILE = 256;
  * `onPan`, dragging moves the map under the pin and reports the new centre,
  * which is how a place is picked.
  */
-function TileMap({ lat, long, zoom, height = 168, onPan, children }) {
+function TileMap({ lat, long, zoom, height = 168, maxWidth = 512, showPin = true, onPan, children }) {
     const drag = useRef(null);
     const { x, y } = tilePosition(lat, long, zoom);
     const scale = 2 ** zoom;
     const tiles = [];
-    for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
+    // Enough tiles around the centre to fill the box at any width up to maxWidth.
+    const spanX = Math.ceil(maxWidth / 2 / TILE) + 1;
+    const spanY = Math.ceil(height / 2 / TILE) + 1;
+    for (let dy = -spanY; dy <= spanY; dy++) {
+        for (let dx = -spanX; dx <= spanX; dx++) {
             const tx = Math.floor(x) + dx;
             const ty = Math.floor(y) + dy;
             if (ty < 0 || ty >= scale) continue;
@@ -69,13 +72,13 @@ function TileMap({ lat, long, zoom, height = 168, onPan, children }) {
                     />
                 ))}
             </Box>
-            <PlaceRounded
+            {showPin && <PlaceRounded
                 aria-hidden="true"
                 sx={{
                     position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -92%)', pointerEvents: 'none',
                     fontSize: 40, color: 'primary.main', filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.45))',
                 }}
-            />
+            />}
             {children}
             <Box
                 component="a"
@@ -99,6 +102,8 @@ TileMap.propTypes = {
     long: PropTypes.number.isRequired,
     zoom: PropTypes.number.isRequired,
     height: PropTypes.number,
+    maxWidth: PropTypes.number,
+    showPin: PropTypes.bool,
     onPan: PropTypes.func,
     children: PropTypes.node,
 };

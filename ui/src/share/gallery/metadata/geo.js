@@ -182,6 +182,20 @@ export function describeAddress(result) {
 }
 
 const placeCache = new Map();
+const knownPlaces = new Map();
+const placeListeners = new Set();
+
+/** The place name already looked up for these coordinates, without asking again; undefined if not yet. */
+export function knownPlaceName(lat, long) {
+    const near = rounded(lat, long);
+    return knownPlaces.get(`${near.lat},${near.long}`);
+}
+
+/** Be told whenever a place name arrives; returns the unsubscribe function. */
+export function onPlaceName(listener) {
+    placeListeners.add(listener);
+    return () => placeListeners.delete(listener);
+}
 let queue = Promise.resolve();
 const NOMINATIM_SPACING_MS = 1100; // its usage policy allows one request per second
 
@@ -237,7 +251,10 @@ export function reverseGeocode(lat, long, fetcher = (...args) => fetch(...args))
         try {
             const response = await fetcher(url, { headers: { Accept: 'application/json' } });
             if (!response.ok) throw new Error('status ' + response.status);
-            return describeAddress(await response.json());
+            const name = describeAddress(await response.json());
+            knownPlaces.set(key, name);
+            placeListeners.forEach(listener => listener(key, name));
+            return name;
         } catch (error) {
             Logger.warn('reverse geocode failed: ' + error.message);
             placeCache.delete(key); // try again next time

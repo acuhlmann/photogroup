@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -32,10 +32,19 @@ const chipSx = {
 function KeywordEditor({ words, onChange, sx }) {
     const [draft, setDraft] = useState(null);
     const [saving, setSaving] = useState(false);
+    // The list as of the last change, so typing on while a save is under way adds to it.
+    // An older list arriving from the room mid-save must not undo a newer local change.
+    const latest = useRef(words);
+    const pending = useRef(0);
+    useEffect(() => {
+        if (!pending.current) latest.current = words;
+    }, [words]);
     const editable = typeof onChange === 'function';
     if (!editable && !words.length) return null;
 
     const save = async (next) => {
+        latest.current = next;
+        pending.current += 1;
         setSaving(true);
         try {
             await onChange(next);
@@ -43,18 +52,27 @@ function KeywordEditor({ words, onChange, sx }) {
         } catch {
             return false; // the caller reports it
         } finally {
-            setSaving(false);
+            pending.current -= 1;
+            if (!pending.current) setSaving(false);
         }
     };
 
-    const add = async () => {
+    /** Add what was typed; a comma keeps the field open for the next keyword. */
+    const add = async (keepEditing = false) => {
+        const current = latest.current;
         const fresh = String(draft || '').split(',').map(word => word.trim()).filter(Boolean)
-            .filter(word => !words.some(existing => existing.toLowerCase() === word.toLowerCase()));
+            .filter(word => !current.some(existing => existing.toLowerCase() === word.toLowerCase()));
         if (!fresh.length) {
-            setDraft(null);
+            setDraft(keepEditing ? '' : null);
             return;
         }
-        if (await save([...words, ...fresh])) setDraft(null);
+        const typed = draft;
+        if (keepEditing) setDraft('');
+        if (await save([...current, ...fresh])) {
+            if (!keepEditing) setDraft(null);
+        } else if (keepEditing) {
+            setDraft(previous => (previous ? `${typed}, ${previous}` : typed));
+        }
     };
 
     return (
@@ -78,15 +96,17 @@ function KeywordEditor({ words, onChange, sx }) {
                 <InputBase
                     autoFocus
                     value={draft}
-                    disabled={saving}
                     placeholder="keyword"
                     inputProps={{ 'aria-label': 'New keyword', maxLength: MAX_KEYWORD_LENGTH * 4 }}
                     onChange={event => setDraft(event.target.value)}
-                    onBlur={() => (draft && draft.trim() ? add() : setDraft(null))}
+                    onBlur={() => {
+                        if (draft && draft.trim()) add();
+                        else if (!saving) setDraft(null);
+                    }}
                     onKeyDown={event => {
                         if ((event.key === 'Enter' || event.key === ',') && !event.nativeEvent.isComposing && event.keyCode !== 229) {
                             event.preventDefault();
-                            add();
+                            add(event.key === ',');
                         } else if (event.key === 'Escape') {
                             setDraft(null);
                         }
