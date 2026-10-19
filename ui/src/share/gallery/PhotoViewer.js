@@ -10,6 +10,8 @@ import CloseRounded from '@mui/icons-material/CloseRounded';
 import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
+import SaveRounded from '@mui/icons-material/SaveRounded';
+import IosShare from '@mui/icons-material/IosShare';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import _ from 'lodash';
@@ -19,6 +21,7 @@ import OwnersList from './OwnersList';
 import MediaMetadataPanel from './metadata/MediaMetadataPanel';
 import RenderContent from './RenderContent';
 import { saveLabel, savePhoto } from './savePhoto';
+import { replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
 import { photoTransitionName, supportsViewTransition } from './viewTransition';
 import { canSaveDetails, saveDetails } from './metadata/saveDetails';
 
@@ -31,6 +34,9 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     const [fileName, setFileName] = useState('');
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [replacing, setReplacing] = useState(false);
+    const [replaced, setReplaced] = useState(null);
+    const [replaceError, setReplaceError] = useState('');
 
     const debouncedRename = useRef(
         _.throttle((infoHash, value) => {
@@ -71,6 +77,8 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
         setFileName(FileUtil.getFileNameWithoutSuffix(tile.fileName) || '');
         setSaved(false);
         setSaving(false);
+        setReplaced(null);
+        setReplaceError('');
         applyMetadataSummary(tile);
     }, [tile, tile && tile.metadata, tile && tile.fileName, applyMetadataSummary]);
 
@@ -109,6 +117,8 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     const transitionName = photoTransitionName(tile.infoHash);
     const canSave = !!(tile.elem || (tile.torrentFile && typeof tile.torrentFile.getBlob === 'function'));
     const stillArriving = !!(tile.torrentFile && !tile.torrentFile.done);
+    const replaceMode = replaceKind();
+    const hint = replaceHint(tile);
 
     const onSave = () => {
         setSaving(true);
@@ -116,6 +126,15 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
             .then(() => setSaved(true))
             .catch(() => {})
             .finally(() => setSaving(false));
+    };
+
+    const onReplace = () => {
+        setReplacing(true);
+        setReplaceError('');
+        replaceOriginal(tile)
+            .then(kind => setReplaced(kind))
+            .catch(err => setReplaceError(replaceFailureMessage(err)))
+            .finally(() => setReplacing(false));
     };
 
     const mediaPreview = isImage && tile.img ? (
@@ -184,45 +203,76 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                     }}>
                         {mediaPreview}
                     </Box>
-                    <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{
-                            alignItems: 'center',
-                            mx: 1.5,
-                            mb: 1.5,
-                            p: 1,
-                            borderRadius: 2,
-                            bgcolor: 'rgba(255,255,255,0.04)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                        }}
-                    >
-                        <IconButton
-                            aria-label="Previous photo"
-                            onClick={() => onIndexChange(index - 1)}
-                            disabled={index <= 0}
-                            sx={{ color: '#fff' }}
+                    <Stack spacing={1} sx={{ mx: 1.5, mb: 1.5 }}>
+                        <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{
+                                alignItems: 'center',
+                                p: 1,
+                                borderRadius: 2,
+                                bgcolor: 'rgba(255,255,255,0.04)',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                            }}
                         >
-                            <ArrowBackRounded />
-                        </IconButton>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            startIcon={<CloudDownloadRounded />}
-                            disabled={!canSave || saving || stillArriving}
-                            onClick={onSave}
-                            sx={{ flex: 1 }}
-                        >
-                            {saveLabel(tile.fileSize, saving, saved)}
-                        </Button>
-                        <IconButton
-                            aria-label="Next photo"
-                            onClick={() => onIndexChange(index + 1)}
-                            disabled={index >= tiles.length - 1}
-                            sx={{ color: '#fff' }}
-                        >
-                            <ArrowForwardRounded />
-                        </IconButton>
+                            <IconButton
+                                aria-label="Previous photo"
+                                onClick={() => onIndexChange(index - 1)}
+                                disabled={index <= 0}
+                                sx={{ color: '#fff' }}
+                            >
+                                <ArrowBackRounded />
+                            </IconButton>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                startIcon={<CloudDownloadRounded />}
+                                disabled={!canSave || saving || replacing || stillArriving}
+                                onClick={onSave}
+                                sx={{ flex: 1 }}
+                            >
+                                {saveLabel(tile.fileSize, saving, saved)}
+                            </Button>
+                            <IconButton
+                                aria-label="Next photo"
+                                onClick={() => onIndexChange(index + 1)}
+                                disabled={index >= tiles.length - 1}
+                                sx={{ color: '#fff' }}
+                            >
+                                <ArrowForwardRounded />
+                            </IconButton>
+                        </Stack>
+                        {replaceMode && (
+                            <Button
+                                variant="outlined"
+                                color="primary"
+                                data-testid="replace-original"
+                                startIcon={replaceMode === 'share' ? <IosShare /> : <SaveRounded />}
+                                disabled={!canSave || replacing || saving || stillArriving}
+                                onClick={onReplace}
+                                sx={{
+                                    color: '#e8eef6',
+                                    borderColor: 'rgba(61,214,195,0.45)',
+                                    bgcolor: 'rgba(61,214,195,0.08)',
+                                }}
+                            >
+                                {replaceLabel(tile, { replacing, replaced })}
+                            </Button>
+                        )}
+                        {(replaceError || hint) && replaceMode && (
+                            <Typography
+                                variant="caption"
+                                data-testid="replace-hint"
+                                sx={{
+                                    display: 'block',
+                                    textAlign: 'center',
+                                    color: replaceError ? 'error.main' : 'rgba(232,238,246,0.72)',
+                                    px: 1,
+                                }}
+                            >
+                                {replaceError || hint}
+                            </Typography>
+                        )}
                     </Stack>
                 </Box>
 
