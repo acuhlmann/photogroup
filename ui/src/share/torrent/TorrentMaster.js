@@ -571,8 +571,14 @@ export default class TorrentMaster {
 
             } else if(event.type === 'delete') {
 
-                this.torrentDeletion.handlePhotoDeleteEvent(event.item);
-                this.serverFallback?.unwatch(typeof event.item === 'string' ? event.item : event.item?.infoHash);
+                const infoHash = typeof event.item === 'string' ? event.item : event.item?.infoHash;
+                const cached = this._cachedPhotos?.get(infoHash);
+                if (cached) {
+                    URL.revokeObjectURL(cached.img);
+                    this._cachedPhotos.delete(infoHash);
+                }
+                this.torrentDeletion.handlePhotoDeleteEvent(infoHash);
+                this.serverFallback?.unwatch(infoHash);
             } else if(event.type === 'update') {
                 // A server copy may appear after we already started (and
                 // stalled on) the P2P download - start watching it then.

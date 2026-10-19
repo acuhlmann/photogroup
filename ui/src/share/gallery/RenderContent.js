@@ -81,6 +81,13 @@ function RenderContent(props) {
     const handleDoneRef = useRef(null);
     const readMetadataRef = useRef(null);
     const [imgDecoded, setImgDecoded] = useState(false);
+    const imageDecodeRef = useRef(null);
+
+    useEffect(() => {
+        imageDecodeRef.current = {};
+        setImgDecoded(false);
+        return () => { imageDecodeRef.current = null; };
+    }, [tile.img]);
 
     // Define readMetadata first so it can be used by other callbacks
     // Use a ref to access the current tile without including it in dependencies
@@ -398,11 +405,19 @@ function RenderContent(props) {
     /** Record image dimensions, request metadata, and retire the preview after decoding settles. */
     const imgLoaded = useCallback((event) => {
         const img = event?.target;
+        if (!img) return;
+        const source = img.getAttribute('src');
+        const request = imageDecodeRef.current;
         rememberImageSize(tile, img);
         // Keep the preview behind the photo until it is decoded, otherwise a
         // large photo paints as an empty box for a few frames.
-        const decoded = img && typeof img.decode === 'function' ? img.decode() : Promise.resolve();
-        decoded.catch(() => {}).then(() => setImgDecoded(true));
+        const decoded = typeof img.decode === 'function' ? img.decode() : Promise.resolve();
+        decoded.then(() => {
+            if (request && imageDecodeRef.current === request
+                && tileRef.current.img === source && img.getAttribute('src') === source) {
+                setImgDecoded(true);
+            }
+        }, () => {});
         // For images, when the img tag loads, try to read metadata
         if(readMetadataRef.current) {
             readMetadataRef.current(tile);
