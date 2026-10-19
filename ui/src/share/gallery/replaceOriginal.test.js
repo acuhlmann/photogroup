@@ -63,7 +63,8 @@ describe('replaceOriginal', () => {
 
         expect(result).toBe('replaced');
         expect(window.showSaveFilePicker).not.toHaveBeenCalled();
-        expect(stream.write).toHaveBeenCalledWith(blob);
+        const written = stream.write.mock.calls[0][0];
+        expect(new Uint8Array(await written.arrayBuffer())).toEqual(new Uint8Array(await blob.arrayBuffer()));
         expect(stream.close).toHaveBeenCalled();
         expect(originalReady({ tileKey: 'k' })).toBe(true);
     });
@@ -126,6 +127,36 @@ describe('replaceOriginal', () => {
             startIn: 'videos',
         }));
         expect(read).toBe(true);
+    });
+
+    it('copies the photo before opening the destination, so the same file can be replaced', async () => {
+        const bytes = new Uint8Array([1, 2, 3, 4]);
+        const file = new File([bytes], 'harbor.jpg', { type: 'image/jpeg' });
+        let opened = false;
+        file.arrayBuffer = vi.fn(async () => {
+            if (opened) {
+                const err = new Error('The requested file could not be read, typically due to permission problems that have occurred after a reference to a file was acquired.');
+                err.name = 'NotReadableError';
+                throw err;
+            }
+            return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        });
+        const stream = writable();
+        const handle = {
+            kind: 'file',
+            createWritable: vi.fn(async () => {
+                opened = true;
+                return stream;
+            }),
+        };
+        window.showSaveFilePicker = vi.fn().mockResolvedValue(handle);
+
+        await replaceOriginal({ elem: file, fileName: 'harbor.jpg', fileType: 'image/jpeg', tileKey: 'same' });
+
+        expect(stream.close).toHaveBeenCalled();
+        const written = stream.write.mock.calls[0][0];
+        expect(written).not.toBe(file);
+        expect(new Uint8Array(await written.arrayBuffer())).toEqual(bytes);
     });
 
     it('stays quiet when the picker is cancelled', async () => {

@@ -157,6 +157,7 @@ export function replaceFailureMessage(err) {
     if (err.name === 'NoModificationAllowedError') return 'This file cannot be changed from the browser.';
     if (err.name === 'NotAllowedError' || err.name === 'SecurityError') return 'The browser did not allow that change.';
     if (err.name === 'NotFoundError') return 'That file is no longer there.';
+    if (err.name === 'NotReadableError') return 'Could not read the original file.';
     if (typeof err.message === 'string' && err.message) return err.message;
     return 'Could not replace the original file.';
 }
@@ -197,6 +198,19 @@ async function permissionGranted(handle) {
     return false;
 }
 
+/**
+ * Copy the photo into memory before the destination is opened. The save
+ * picker can point at the same file the upload came from, and opening it
+ * for writing makes that file unreadable.
+ */
+async function snapshot(blob) {
+    if (!blob || typeof blob.arrayBuffer !== 'function') {
+        throw new Error('This photo is not ready to save yet');
+    }
+    const bytes = await blob.arrayBuffer();
+    return new Blob([bytes], { type: blob.type || '' });
+}
+
 async function writeHandle(handle, blob) {
     let writable;
     let closed = false;
@@ -225,7 +239,7 @@ function namedFile(blob, tile) {
 }
 
 async function shareFile(tile) {
-    const blob = await fileForSave(tile);
+    const blob = await snapshot(await fileForSave(tile));
     const file = namedFile(blob, tile);
     if (navigator.canShare && !navigator.canShare({ files: [file] })) {
         throw new Error('This browser cannot put the file back in the same place.');
@@ -261,7 +275,7 @@ export async function replaceOriginal(tile) {
             throw denied;
         }
         try {
-            const blob = await fileForSave(tile);
+            const blob = await snapshot(await fileForSave(tile));
             await writeHandle(existing, blob);
             remember(tile, existing);
             return 'replaced';
@@ -283,7 +297,7 @@ export async function replaceOriginal(tile) {
             if (err && err.name === 'AbortError') throw new SaveCancelled();
             throw err;
         }
-        const blob = await fileForSave(tile);
+        const blob = await snapshot(await fileForSave(tile));
         await writeHandle(handle, blob);
         remember(tile, handle);
         return 'replaced';
