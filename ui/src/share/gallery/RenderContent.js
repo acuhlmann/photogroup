@@ -80,8 +80,14 @@ function RenderContent(props) {
     const openedWebampRef = useRef(false);
     const handleDoneRef = useRef(null);
     const readMetadataRef = useRef(null);
-    // The image source whose decode finished; a new source shows the preview again.
-    const [decodedSrc, setDecodedSrc] = useState(null);
+    // Which image load finished decoding. Each source change starts a new
+    // generation, so the preview returns at once and a late decode of an
+    // earlier load (even of the same URL) can't hide it.
+    const [decoded, setDecoded] = useState(null);
+    const imgGenRef = useRef({ src: tile.img, gen: 0 });
+    if (imgGenRef.current.src !== tile.img) {
+        imgGenRef.current = { src: tile.img, gen: imgGenRef.current.gen + 1 };
+    }
 
     // Define readMetadata first so it can be used by other callbacks
     // Use a ref to access the current tile without including it in dependencies
@@ -399,13 +405,14 @@ function RenderContent(props) {
     /** Record image dimensions, request metadata, and retire the preview after decoding settles. */
     const imgLoaded = useCallback((event) => {
         const img = event?.target;
+        if (!img) return;
         rememberImageSize(tile, img);
         // Keep the preview behind the photo until it is decoded, otherwise a
         // large photo paints as an empty box for a few frames.
-        const src = img && img.getAttribute('src');
-        const decoded = img && typeof img.decode === 'function' ? img.decode() : Promise.resolve();
+        const gen = imgGenRef.current.gen;
+        const decoding = typeof img.decode === 'function' ? img.decode() : Promise.resolve();
         // A failed decode keeps the preview rather than revealing a broken image.
-        decoded.then(() => setDecodedSrc(src), () => {});
+        decoding.then(() => setDecoded(gen), () => {});
         // For images, when the img tag loads, try to read metadata
         if(readMetadataRef.current) {
             readMetadataRef.current(tile);
@@ -502,7 +509,7 @@ function RenderContent(props) {
                    // tile doesn't collapse while the full image decodes.
                    style={{width: '100%', maxWidth: '100%', height: 'auto', display: 'block',
                        aspectRatio: imageAspectRatio(currentTile), backgroundColor: '#3a3f47',
-                       ...(decodedSrc !== currentTile.img && currentTile.previewUrl ? {
+                       ...(decoded !== imgGenRef.current.gen && currentTile.previewUrl ? {
                            backgroundImage: `url(${currentTile.previewUrl})`,
                            backgroundSize: 'cover',
                            backgroundPosition: 'center',

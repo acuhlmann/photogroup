@@ -64,7 +64,7 @@ function Gallery(props) {
     // Until the first room snapshot arrives, an empty gallery means "not
     // loaded yet", not "no photos": after a reload it looked like they were gone.
     const [roomSynced, setRoomSynced] = useState(() => !!master.roomSynced);
-    const [syncSlow, setSyncSlow] = useState(false);
+    const [roomSyncTimedOut, setRoomSyncTimedOut] = useState(false);
     const photoHandlerRef = useRef(null);
     const dragCounterRef = useRef(0);
 
@@ -374,11 +374,15 @@ function Gallery(props) {
     useEffect(() => {
         const emitter = master.emitter;
         const handlePhotos = event => {
-            if (event && event.type === 'all') setRoomSynced(true);
+            if (event?.type === 'all' && Array.isArray(event.item)) {
+                clearTimeout(fallback);
+                setRoomSyncTimedOut(false);
+                setRoomSynced(true);
+            }
         };
         // Only a room snapshot can say the room is empty; if it is slow (or
         // the join failed), keep saying so but let people add photos anyway.
-        const fallback = setTimeout(() => setSyncSlow(true), 4000);
+        const fallback = setTimeout(() => setRoomSyncTimedOut(true), 4000);
         emitter.on('photos', handlePhotos);
         return () => {
             clearTimeout(fallback);
@@ -439,12 +443,14 @@ function Gallery(props) {
             {tiles.length === 0 && !roomSynced ? (
                 <>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, py: 6 }}>
-                    <CircularProgress size={18} thickness={4} />
+                    {!roomSyncTimedOut && <CircularProgress size={18} thickness={4} />}
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        {syncSlow ? 'Still loading this room\'s photos…' : 'Loading this room\'s photos…'}
+                        {roomSyncTimedOut
+                            ? 'This room is taking longer to load. Check your connection.'
+                            : "Loading this room's photos…"}
                     </Typography>
                 </Box>
-                {syncSlow && <AddPhotosStrip narrow />}
+                {roomSyncTimedOut && <AddPhotosStrip narrow />}
                 </>
             ) : tiles.length === 0 ? (
                 <>

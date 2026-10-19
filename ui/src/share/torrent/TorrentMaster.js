@@ -581,7 +581,7 @@ export default class TorrentMaster {
 
                 const infoHash = typeof event.item === 'string' ? event.item : event.item?.infoHash;
                 this.releaseCachedPhoto(infoHash);
-                this.torrentDeletion.handlePhotoDeleteEvent(event.item);
+                this.torrentDeletion.handlePhotoDeleteEvent(infoHash);
                 this.serverFallback?.unwatch(infoHash);
             } else if(event.type === 'update') {
                 // A server copy may appear after we already started (and
