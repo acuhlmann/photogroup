@@ -30,7 +30,7 @@ describe('MediaMetadataPanel shared editing', () => {
         const summary = [{ key: 'x-Camera', value: 'Pixel 9' }];
         const { div, root } = await renderPanel({ summary, tile: { isImage: true, infoHash: 'a' }, onSaveDetails });
 
-        await act(async () => button(div, 'Add a title, description or rating').click());
+        await act(async () => button(div, 'Add a title').click());
         const [title, description] = div.querySelectorAll('input[type="text"], textarea');
         await act(async () => setInput(title, '  Harbour light '));
         await act(async () => button(div, '4 stars').click());
@@ -43,14 +43,15 @@ describe('MediaMetadataPanel shared editing', () => {
         await act(async () => root.unmount());
     });
 
-    it('opens the editor from the quiet "Not set" line and shows who edited last', async () => {
+    it('prompts for a missing description in place and shows who edited last', async () => {
         const onSaveDetails = vi.fn().mockResolvedValue({});
         const tile = { isImage: true, infoHash: 'b', details: { title: 'Pier', editedBy: { name: 'Bob' }, editedAt: Date.now() } };
         const { div, root } = await renderPanel({ summary: [{ key: 'x-Camera', value: 'Pixel 9' }], tile, onSaveDetails });
 
         expect(div.querySelector('[data-testid="details-edited-by"]').textContent).toContain('Edited by Bob');
-        const missing = div.querySelector('[data-testid="metadata-missing"]');
-        await act(async () => [...missing.querySelectorAll('button')].find(b => b.textContent === 'Description').click());
+        // Editable fields are prompted for in the hero, not listed as "Not set"
+        expect(div.querySelector('[data-testid="metadata-missing"]').textContent).not.toContain('Description');
+        await act(async () => button(div, 'Add a description').click());
         expect(document.activeElement.tagName).toBe('TEXTAREA');
         // Nothing changed means no request
         await act(async () => button(div, 'Save for everyone').click());
@@ -62,7 +63,7 @@ describe('MediaMetadataPanel shared editing', () => {
         const error = Object.assign(new Error('Photo not found'), { status: 404 });
         const onSaveDetails = vi.fn().mockRejectedValue(error);
         const { div, root } = await renderPanel({ summary: [], tile: { isImage: true, infoHash: 'c' }, onSaveDetails });
-        await act(async () => button(div, 'Add a title, description or rating').click());
+        await act(async () => button(div, 'Add a title').click());
         await act(async () => button(div, '2 stars').click());
         await act(async () => button(div, 'Save for everyone').click());
         expect(div.querySelector('[role="alert"]').textContent).toContain('still being shared');
@@ -70,9 +71,27 @@ describe('MediaMetadataPanel shared editing', () => {
         await act(async () => root.unmount());
     });
 
+    it('saves a rating with one tap and clears it with a second', async () => {
+        const onSaveDetails = vi.fn().mockResolvedValue({});
+        const tile = { isImage: true, infoHash: 'r', details: { rating: 3 } };
+        const { div, root } = await renderPanel({ summary: [], tile, onSaveDetails });
+
+        await act(async () => button(div, '5 stars').click());
+        expect(onSaveDetails).toHaveBeenLastCalledWith({ rating: 5 });
+        await act(async () => button(div, '3 stars').click());
+        expect(onSaveDetails).toHaveBeenLastCalledWith({ rating: 0 });
+
+        onSaveDetails.mockRejectedValueOnce(new Error('Offline'));
+        await act(async () => button(div, '1 star').click());
+        expect(div.querySelector('[role="alert"]').textContent).toBe('Offline');
+        await act(async () => root.unmount());
+    });
+
     it('stays read-only without a save handler', async () => {
         const { div, root } = await renderPanel({ summary: [{ key: 'Title XMP', value: 'X' }], tile: { isImage: true } });
         expect(button(div, 'Edit title, description and rating')).toBeUndefined();
+        expect(button(div, 'Add a title')).toBeUndefined();
+        expect(button(div, '3 stars')).toBeUndefined();
         await act(async () => root.unmount());
     });
 
@@ -83,6 +102,32 @@ describe('MediaMetadataPanel shared editing', () => {
         const tile = { isImage: true, infoHash: 'd', details: { title: 'T', editedBy: { peerId: 'me', platform: 'x' }, editedAt: Date.now() } };
         const { div, root } = await renderPanel({ summary: [], tile, onSaveDetails: vi.fn(), myPeerId: 'me' });
         expect(div.querySelector('[data-testid="details-edited-by"]').textContent).toContain('Edited by you');
+        await act(async () => root.unmount());
+    });
+
+    it('shows where a photo was taken with a map, the place and map links', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ address: { suburb: 'Huangpu', city: 'Shanghai', country: 'China' } }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        const summary = [{ key: 'x-Location', value: { lat: 31.2304, long: 121.4737, altitude: 12, direction: 123.4, accuracy: 5 } }];
+        const { div, root } = await renderPanel({ summary, tile: { isImage: true, infoHash: 'g' } });
+        await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+
+        const card = div.querySelector('[data-testid="location-card"]');
+        expect(card.textContent).toContain('Huangpu, Shanghai, China');
+        expect(card.textContent).toContain('31°13′49.4″N 121°28′25.3″E');
+        expect(card.textContent).toContain('Altitude 12 m');
+        expect(card.textContent).toContain('Facing 123° SE');
+        expect(card.textContent).toContain('Accuracy ±5 m');
+        const hrefs = [...card.querySelectorAll('a')].map(a => a.getAttribute('href'));
+        expect(hrefs).toContain('https://www.google.com/maps/search/?api=1&query=31.230400,121.473700');
+        expect(hrefs.some(href => href.startsWith('https://uri.amap.com/marker?position=121.473700,31.230400')
+            && href.includes('coordinate=wgs84'))).toBe(true);
+        expect(card.querySelectorAll('img[src^="https://tile.openstreetmap.org/14/"]').length).toBeGreaterThan(0);
+        expect(fetchMock.mock.calls[0][0]).toContain('nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=31.230&lon=121.474');
+        vi.unstubAllGlobals();
         await act(async () => root.unmount());
     });
 });

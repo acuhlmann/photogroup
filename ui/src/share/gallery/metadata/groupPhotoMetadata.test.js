@@ -88,7 +88,7 @@ describe('groupPhotoMetadata', () => {
         expect(more.map(item => item.key)).toEqual(['Flash']);
     });
 
-    it('adds the colour label and keywords to the hero and keeps location', () => {
+    it('adds the colour label and keywords to the hero and sets the location apart', () => {
         const summary = [
             { key: 'Rating XMP', value: 4 },
             { key: 'Label XMP', value: 'Green' },
@@ -98,12 +98,13 @@ describe('groupPhotoMetadata', () => {
             { key: 'x-Camera', value: 'Canon EOS R5' },
             { key: 'DateTimeOriginal', value: 'Oct 15 2026' },
         ];
-        const { highlights, lead } = groupMetadataForDisplay(summary, { isImage: true });
+        const { highlights, lead, location } = groupMetadataForDisplay(summary, { isImage: true });
         const rating = highlights.find(h => h.kind === 'rating');
         expect(rating.value).toBe(4);
         expect(rating.colorLabel).toBe('Green');
         expect(highlights.find(h => h.kind === 'keywords').value).toEqual(['sunset', 'lake']);
-        expect(lead.map(item => item.key)).toEqual(['DateTimeOriginal', 'x-Location', 'x-Camera', 'LensModel']);
+        expect(lead.map(item => item.key)).toEqual(['DateTimeOriginal', 'x-Camera', 'LensModel']);
+        expect(location).toEqual({ lat: 47.36, long: 8.54 });
     });
 
     it('reads video descriptions from music-metadata comment objects', () => {

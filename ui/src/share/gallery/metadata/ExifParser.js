@@ -1,3 +1,5 @@
+import { extractLocation, GPS_KEYS } from './geo';
+
 export default class ExifParser {
 
     static parse(allMetadata) {
@@ -82,33 +84,17 @@ export default class ExifParser {
         }
     }
 
+    /**
+     * Fold GPS fields (EXIF, or XMP's exif:GPS* text) into one `x-Location`
+     * {lat, long, altitude?, direction?, accuracy?, time?} and drop the raw
+     * ones. Unreadable or 0,0 coordinates leave the raw fields as they were.
+     */
     static processGeo(allMetadata) {
-        const gPSLatitude = allMetadata['GPSLatitude'];
-        const gPSLongitude = allMetadata['GPSLongitude'];
-        if(gPSLatitude && gPSLongitude) {
-            // exifr already adds signed decimal latitude/longitude; fall back to
-            // the DMS arrays plus their N/S/E/W references.
-            const lat = Number.isFinite(allMetadata.latitude) ? allMetadata.latitude
-                : ExifParser.latLongToDecimal(gPSLatitude, allMetadata['GPSLatitudeRef']);
-            const long = Number.isFinite(allMetadata.longitude) ? allMetadata.longitude
-                : ExifParser.latLongToDecimal(gPSLongitude, allMetadata['GPSLongitudeRef']);
-            if(Number.isFinite(lat) && Number.isFinite(long)) {
-                allMetadata['x-Location'] = { lat, long };
-            }
-            delete allMetadata['GPSLatitude'];
-            delete allMetadata['GPSLongitude'];
-            delete allMetadata['latitude'];
-            delete allMetadata['longitude'];
+        const location = extractLocation(allMetadata);
+        if(location) {
+            allMetadata['x-Location'] = location;
+            GPS_KEYS.forEach(key => delete allMetadata[key]);
         }
     }
 
-    //credits: http://blogs.microsoft.co.il/ranw/2015/01/07/reading-gps-data-using-exif-js/
-    static latLongToDecimal(number, reference) {
-        if(!Array.isArray(number) || number.length < 3) return NaN;
-        const [degrees, minutes, seconds] = number.map(part => (typeof part === 'number'
-            ? part
-            : Number(part.numerator) / Number(part.denominator)));
-        const decimal = degrees + minutes / 60 + seconds / 3600;
-        return reference === 'S' || reference === 'W' ? -decimal : decimal;
-    }
 }
