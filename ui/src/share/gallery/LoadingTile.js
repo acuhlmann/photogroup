@@ -60,11 +60,12 @@ function LoadingTile({tile, master, name}) {
     }, [master.emitter, tile]);
 
     const listenToPreview = useCallback(() => {
-        if(tile.loading && tile.torrentFileThumb && typeof tile.torrentFileThumb.getBlobURL === 'function') {
+        if(tile.loading && !tile.previewUrl && tile.torrentFileThumb && typeof tile.torrentFileThumb.getBlobURL === 'function') {
             tile.torrentFileThumb.getBlobURL((err, url) => {
                 if(err) {
                     Logger.error('preview ' + err);
                 } else {
+                    tile.previewUrl = url;
                     setPreviewThumbnail(url);
                 }
             });
@@ -151,13 +152,16 @@ function LoadingTile({tile, master, name}) {
         have = false;
     }
 
-    let displayPreviewThumbnail = previewThumbnail;
-    if(isRendering && tile.thumbnailFiles) {
+    // Create the preview URL once and keep it on the tile: a fresh blob URL
+    // on every render reloads the image, and the content tile shows the same
+    // preview while the full photo decodes.
+    if(isRendering && tile.thumbnailFiles && !tile.previewUrl) {
         const thumbFile = tile.thumbnailFiles.find(item => 'Thumbnail ' + tile.fileName === item.name);
         if(thumbFile) {
-            displayPreviewThumbnail = URL.createObjectURL(thumbFile);
+            tile.previewUrl = URL.createObjectURL(thumbFile);
         }
     }
+    const displayPreviewThumbnail = previewThumbnail || tile.previewUrl;
 
     return (
         <Paper

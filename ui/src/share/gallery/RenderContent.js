@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {withStyles} from '@mui/styles';
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
@@ -75,6 +75,7 @@ function RenderContent(props) {
     const openedWebampRef = useRef(false);
     const handleDoneRef = useRef(null);
     const readMetadataRef = useRef(null);
+    const [imgDecoded, setImgDecoded] = useState(false);
 
     // Define readMetadata first so it can be used by other callbacks
     // Use a ref to access the current tile without including it in dependencies
@@ -390,7 +391,12 @@ function RenderContent(props) {
     getBlobAndReadMetadataRef.current = getBlobAndReadMetadata;
 
     const imgLoaded = useCallback((event) => {
-        rememberImageSize(tile, event?.target);
+        const img = event?.target;
+        rememberImageSize(tile, img);
+        // Keep the preview behind the photo until it is decoded, otherwise a
+        // large photo paints as an empty box for a few frames.
+        const decoded = img && typeof img.decode === 'function' ? img.decode() : Promise.resolve();
+        decoded.catch(() => {}).then(() => setImgDecoded(true));
         // For images, when the img tag loads, try to read metadata
         if(readMetadataRef.current) {
             readMetadataRef.current(tile);
@@ -486,7 +492,12 @@ function RenderContent(props) {
                    // Reserve the size the loading preview measured so the
                    // tile doesn't collapse while the full image decodes.
                    style={{width: '100%', maxWidth: '100%', height: 'auto', display: 'block',
-                       aspectRatio: imageAspectRatio(currentTile), backgroundColor: '#3a3f47'}}
+                       aspectRatio: imageAspectRatio(currentTile), backgroundColor: '#3a3f47',
+                       ...(!imgDecoded && currentTile.previewUrl ? {
+                           backgroundImage: `url(${currentTile.previewUrl})`,
+                           backgroundSize: 'cover',
+                           backgroundPosition: 'center',
+                       } : null)}}
                    onLoad={imgLoaded} 
                    key={currentTile.tileKey || currentTile.infoHash} />
             : <div className={classes?.wide || ''} style={{width: '100%', maxWidth: '100%'}}>
