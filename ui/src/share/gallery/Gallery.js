@@ -27,6 +27,9 @@ import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { captureDroppedHandles } from "./replaceOriginal";
 
+/** A tile's identity across updates; an upload's infoHash changes once it is hashed. */
+const tileKeyOf = tile => tile.tileKey || tile.infoHash;
+
 /** Render the upload input's label, optionally limiting its width for a narrow gallery. */
 function AddPhotosStrip({ narrow }) {
     return (
@@ -66,7 +69,9 @@ function Gallery(props) {
     const theme = useTheme();
     const [tiles, setTiles] = useState([]);
     const [dragOver, setDragOver] = useState(false);
-    const [selectedIndex, setSelectedIndex] = useState(null);
+    // The open photo is tracked by key: sorting, filtering or an edit can move it in the list.
+    const [selectedKey, setSelectedKey] = useState(null);
+    const lastIndex = useRef(0);
     const [view, setView] = useState(DEFAULT_VIEW);
     const [mode, setMode] = useState('grid');
     // Re-arrange when a place name arrives, since places can be filtered on.
@@ -409,21 +414,37 @@ function Gallery(props) {
         };
     }, [master.emitter]);
 
-    const openAt = useCallback((index) => {
-        runViewTransition(() => setSelectedIndex(index));
-    }, []);
-
-    const showIndex = useCallback((index) => {
-        setSelectedIndex(index);
-    }, []);
-
-    const closeViewer = useCallback(() => {
-        runViewTransition(() => setSelectedIndex(null));
-    }, []);
-
     // The viewer, the grid and the map all work on the tiles the current view shows.
     const arranged = arrangeTiles(tiles, view, master);
     const visible = arranged.tiles;
+
+    // A photo an edit filters out stays open where it was until the viewer moves on.
+    let viewerTiles = visible;
+    let selectedIndex = selectedKey == null ? -1 : visible.findIndex(tile => tileKeyOf(tile) === selectedKey);
+    if (selectedIndex < 0 && selectedKey != null) {
+        const kept = tiles.find(tile => tileKeyOf(tile) === selectedKey);
+        if (kept) {
+            selectedIndex = Math.min(lastIndex.current, visible.length);
+            viewerTiles = [...visible.slice(0, selectedIndex), kept, ...visible.slice(selectedIndex)];
+        }
+    }
+    if (selectedIndex < 0) selectedIndex = null;
+    useEffect(() => {
+        if (selectedIndex != null) lastIndex.current = selectedIndex;
+    });
+
+    const openAt = useCallback((tile) => {
+        runViewTransition(() => setSelectedKey(tile ? tileKeyOf(tile) : null));
+    }, []);
+
+    const showIndex = useCallback((index) => {
+        const tile = viewerTiles[index];
+        if (tile) setSelectedKey(tileKeyOf(tile));
+    }, [viewerTiles]);
+
+    const closeViewer = useCallback(() => {
+        runViewTransition(() => setSelectedKey(null));
+    }, []);
     const located = visible.filter(tile => arranged.facts.get(tile)?.location).map(tile => {
         const facts = arranged.facts.get(tile);
         return { tile, location: facts.location, label: facts.title || tile.fileName || 'photo' };
@@ -439,12 +460,6 @@ function Gallery(props) {
         });
     }, [unnamed]);
 
-    useEffect(() => {
-        if (selectedIndex != null && selectedIndex >= visible.length) {
-            setSelectedIndex(visible.length ? visible.length - 1 : null);
-        }
-    }, [visible.length, selectedIndex]);
-
     const buildTile = useCallback((tile, index, master) => {
         tile.picSummary = StringUtil.addEmptySpaces([tile.picDateTaken, FileUtil.truncateFileName(tile.fileName)]);
         let name = StringUtil.addEmptySpaces([tile.picSummary, tile.fileSize, tile.cameraSettings]);
@@ -458,11 +473,11 @@ function Gallery(props) {
                                master={master}/>
                 : <ContentTile name={name} tile={tile}
                                master={master}
-                               selected={selectedIndex === index}
+                               selected={selectedKey != null && tileKeyOf(tile) === selectedKey}
                                hero={visible.length === 1}
-                               onOpen={() => openAt(index)} />}
+                               onOpen={() => openAt(tile)} />}
         </TileErrorBoundary>;
-    }, [openAt, selectedIndex, visible.length]);
+    }, [openAt, selectedKey, visible.length]);
 
     return (
         <Box
@@ -532,7 +547,7 @@ function Gallery(props) {
                 )}
                 {mode === 'map' && tiles.length > 1 && (
                     <RoomMap items={located} unplaced={visible.length - located.length}
-                        onOpen={tile => openAt(visible.indexOf(tile))} />
+                        onOpen={openAt} />
                 )}
                 {visible.length === 0 && (
                     <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', py: 4 }}>
@@ -580,10 +595,10 @@ function Gallery(props) {
                 </Box>
             )}
 
-            {selectedIndex != null && visible[selectedIndex] && (
+            {selectedIndex != null && (
                 <PhotoViewer
                     master={master}
-                    tiles={visible}
+                    tiles={viewerTiles}
                     index={selectedIndex}
                     onClose={closeViewer}
                     onIndexChange={showIndex}

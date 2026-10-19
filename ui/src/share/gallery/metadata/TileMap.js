@@ -11,7 +11,7 @@ const TILE = 256;
  * `onPan`, dragging moves the map under the pin and reports the new centre,
  * which is how a place is picked.
  */
-function TileMap({ lat, long, zoom, height = 168, maxWidth = 512, showPin = true, onPan, children }) {
+function TileMap({ lat, long, zoom, height = 168, maxWidth = 512, showPin = true, attributionLink = true, onPan, children }) {
     const drag = useRef(null);
     const { x, y } = tilePosition(lat, long, zoom);
     const scale = 2 ** zoom;
@@ -81,10 +81,10 @@ function TileMap({ lat, long, zoom, height = 168, maxWidth = 512, showPin = true
             />}
             {children}
             <Box
-                component="a"
-                href="https://www.openstreetmap.org/copyright"
-                target="_blank"
-                rel="noopener noreferrer"
+                // Plain text when the whole map is already a link.
+                {...(attributionLink
+                    ? { component: 'a', href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener noreferrer' }
+                    : { component: 'span' })}
                 onPointerDown={event => event.stopPropagation()}
                 sx={{
                     position: 'absolute', right: 0, bottom: 0, px: 0.6, py: 0.1, fontSize: '0.6rem',
@@ -104,6 +104,7 @@ TileMap.propTypes = {
     height: PropTypes.number,
     maxWidth: PropTypes.number,
     showPin: PropTypes.bool,
+    attributionLink: PropTypes.bool,
     onPan: PropTypes.func,
     children: PropTypes.node,
 };

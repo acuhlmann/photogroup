@@ -15,6 +15,8 @@ function fixture(name) {
     return new Blob([readFileSync(fileURLToPath(new URL('./__fixtures__/' + name, import.meta.url)))]);
 }
 
+const latin1Text = bytes => Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+
 async function bytesOf(blob) {
     return new Uint8Array(await blob.arrayBuffer());
 }
@@ -269,6 +271,20 @@ describe('embedDetails', () => {
             const location = await readLocation(tagged);
             expect(location).toEqual({ lat: 31.24, long: 121.4905 });
             expect(await readLocation(await embedDetails(fixture('phone.mov'), { location: null }))).toBeNull();
+
+            // iPhone keyed metadata, under udta and straight under moov.
+            for (const name of ['iphone.mov', 'iphone-top.mov']) {
+                expect(await readLocation(fixture(name))).toMatchObject({ lat: 47.3769, long: 8.5417 });
+                const removed = await embedDetails(fixture(name), { location: null, title: 'Lake' });
+                expect(await readLocation(removed)).toBeNull();
+                const removedText = latin1Text(await bytesOf(removed));
+                expect(removedText).not.toContain('+47.3769');
+                expect(removedText).toContain('com.apple.quicktime.make');
+                expect(removedText).toContain('Lake');
+                const moved = await bytesOf(await embedDetails(fixture(name), { location: BUND }));
+                expect(latin1Text(moved)).not.toContain('+47.3769');
+                expect(await readLocation(new Blob([moved]))).toEqual({ lat: 31.24, long: 121.4905 });
+            }
 
             const original = fixture('faststart.mp4');
             const moved = await embedDetails(original, { location: BUND });

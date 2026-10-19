@@ -1,4 +1,4 @@
-import { ascii, decodeUtf8, latin1, readBytes, readUint, ratingFraction, uint, utf8 } from './binary';
+import { ascii, concat, decodeUtf8, latin1, readBytes, readUint, ratingFraction, uint, utf8 } from './binary';
 import { box, brands, parseBoxes, scanBoxes } from './isobmff';
 import { isValidLocation, parseIso6709 } from '../geo';
 
@@ -119,6 +119,65 @@ export async function readLocation(source) {
     return null;
 }
 
+// Apple's keyed metadata (hdlr "mdta"): a keys box of names, and ilst items
+// typed by their 1-based key index. iPhones keep the location here.
+const KEYED = {
+    title: 'com.apple.quicktime.title',
+    description: 'com.apple.quicktime.description',
+    keywords: 'com.apple.quicktime.keywords',
+    location: LOCATION_KEY,
+};
+
+function keyedText(key, details) {
+    const value = details[key];
+    if (key === 'keywords') return value && value.length ? value.join(', ') : '';
+    if (key === 'location') return value ? iso6709(value) : '';
+    return value || '';
+}
+
+const handlerOf = (bytes, metaKids) => {
+    const hdlr = metaKids.find(kid => kid.type === 'hdlr');
+    return hdlr ? ascii(bytes, hdlr.start + hdlr.header + 8, 4) : null;
+};
+
+/**
+ * A keyed meta box with the shared details written over the keys it has;
+ * with `add`, keys it lacks are added too. Cleared details drop their item.
+ */
+function rewriteKeyed(bytes, meta, details, add) {
+    const quickTime = ascii(bytes, meta.start + meta.header + 4, 4) === 'hdlr';
+    const prefix = quickTime ? [] : bytes.subarray(meta.start + meta.header, meta.start + meta.header + 4);
+    const kids = metaContents(bytes, meta);
+    const keys = kids.find(kid => kid.type === 'keys');
+    const ilst = kids.find(kid => kid.type === 'ilst');
+    const entries = keys ? parseBoxes(bytes, keys.start + keys.header + 8, keys.end).map(entry => raw(bytes, entry)) : [];
+    const names = entries.map(entry => decodeUtf8(entry.subarray(8)));
+    let items = ilst ? contents(bytes, ilst).map(item => ({ index: readUint(bytes, item.start + 4, 4), bytes: raw(bytes, item) })) : [];
+
+    Object.keys(KEYED).filter(key => details[key] !== undefined).forEach(key => {
+        let index = names.indexOf(KEYED[key]) + 1;
+        const text = keyedText(key, details);
+        if (!index) {
+            if (!add || !text) return;
+            entries.push(box('mdta', utf8(KEYED[key])));
+            names.push(KEYED[key]);
+            index = names.length;
+        }
+        items = items.filter(item => item.index !== index);
+        if (text) {
+            const data = box('data', uint(1, 4), uint(0, 4), utf8(text));
+            items.push({ index, bytes: concat([uint(data.length + 8, 4), uint(index, 4), data]) });
+        }
+    });
+
+    const newKeys = box('keys', uint(0, 4), uint(entries.length, 4), ...entries);
+    const newIlst = box('ilst', ...items.map(item => item.bytes));
+    const parts = kids.map(kid => (kid === keys ? newKeys : kid === ilst ? newIlst : raw(bytes, kid)));
+    if (!keys) parts.push(newKeys);
+    if (!ilst) parts.push(newIlst);
+    return box('meta', prefix, ...parts);
+}
+
 /** udta with the shared details merged into its ilst, or null when it uses another tag scheme. */
 function rebuildUserData(bytes, udta, details) {
     const kids = udta ? contents(bytes, udta) : [];
@@ -129,8 +188,10 @@ function rebuildUserData(bytes, udta, details) {
         const quickTime = ascii(bytes, meta.start + meta.header + 4, 4) === 'hdlr';
         prefix = quickTime ? [] : bytes.subarray(meta.start + meta.header, meta.start + meta.header + 4);
         metaKids = metaContents(bytes, meta);
-        const hdlr = metaKids.find(kid => kid.type === 'hdlr');
-        if (hdlr && ascii(bytes, hdlr.start + hdlr.header + 8, 4) !== 'mdir') return null;
+        const handler = handlerOf(bytes, metaKids);
+        if (handler === 'mdta') return box('udta', ...withoutStaleLocation(bytes, kids, details)
+            .map(kid => (kid === meta ? rewriteKeyed(bytes, meta, details, true) : raw(bytes, kid))));
+        if (handler && handler !== 'mdir') return null;
     }
 
     const ilst = metaKids.find(kid => kid.type === 'ilst');
@@ -145,11 +206,15 @@ function rebuildUserData(bytes, udta, details) {
     if (!ilst) metaParts.push(newIlst);
     const newMeta = box('meta', prefix, ...metaParts);
 
-    // A location set in the room replaces the camera's own udta records of it.
-    const stale = new Set(details.location !== undefined ? ['\u00A9xyz', 'loci'] : []);
-    const parts = kids.filter(kid => !stale.has(kid.type)).map(kid => (kid === meta ? newMeta : raw(bytes, kid)));
+    const parts = withoutStaleLocation(bytes, kids, details).map(kid => (kid === meta ? newMeta : raw(bytes, kid)));
     if (!meta) parts.push(newMeta);
     return box('udta', ...parts);
+}
+
+/** udta children minus the camera's own location records, when the room set or removed one. */
+function withoutStaleLocation(bytes, kids, details) {
+    if (details.location === undefined) return kids;
+    return kids.filter(kid => kid.type !== '\u00A9xyz' && kid.type !== 'loci');
 }
 
 /** Move chunk offsets at or past `from` by `delta`; false when one no longer fits. */
@@ -198,7 +263,15 @@ export async function embed(blob, details) {
     const newUdta = rebuildUserData(bytes, udta, details);
     if (!newUdta) return null;
 
-    const parts = kids.map(kid => (kid === udta ? newUdta : raw(bytes, kid)));
+    // Keyed metadata straight under moov (iPhone) gets the same values, so
+    // readers don't find the old title or location there.
+    const parts = kids.map(kid => {
+        if (kid === udta) return newUdta;
+        if (kid.type === 'meta' && handlerOf(bytes, metaContents(bytes, kid)) === 'mdta') {
+            return rewriteKeyed(bytes, kid, details, false);
+        }
+        return raw(bytes, kid);
+    });
     if (!udta) parts.push(newUdta);
     const newMoov = box('moov', ...parts);
     if (!shiftChunkOffsets(newMoov, moov.end, newMoov.length - bytes.length)) return null;

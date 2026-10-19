@@ -59,7 +59,7 @@ function MapPreview({ lat, long, href }) {
     return (
         <Box component="a" href={href} target="_blank" rel="noopener noreferrer"
             aria-label="Open the location in Google Maps" sx={{ display: 'block' }}>
-            <TileMap lat={lat} long={long} zoom={MAP_ZOOM} />
+            <TileMap lat={lat} long={long} zoom={MAP_ZOOM} attributionLink={false} />
         </Box>
     );
 }

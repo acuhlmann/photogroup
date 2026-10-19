@@ -34,11 +34,15 @@ function decodeXmlEntities(value) {
  * Text for a raw EXIF value, or '' when there is nothing a person could
  * read: byte blocks that aren't text, NaN from 0/0 rationals, empty lists.
  */
+// Raw byte fields can be whole embedded blobs; anything this long isn't a label.
+const MAX_RAW_TEXT_BYTES = 1024;
+
 function rawValueText(value) {
     if (value == null) return '';
     if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
     if (typeof value === 'string' || value instanceof String) return /^(NaN[\s:,/]*)+$/.test(value) ? '' : String(value);
     if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+        if (value.byteLength > MAX_RAW_TEXT_BYTES) return '';
         const bytes = new Uint8Array(value.buffer || value, value.byteOffset || 0, value.byteLength);
         const text = String.fromCharCode(...bytes).replace(/\0+$/, '').trim();
         return text && /^[\x20-\x7E]+$/.test(text) ? text : '';
