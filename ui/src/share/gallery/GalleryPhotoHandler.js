@@ -24,17 +24,31 @@ export default class GalleryPhotoHandler {
             if(event.type === 'all') {
 
                 this.view.setTiles(state => {
-                    const photos = event.item;
-                    photos.forEach(item => {
+                    const photos = event.item.map(item => {
                         const existing = state.find(tile => tile.infoHash === item.infoHash);
+                        if (existing && existing !== item) {
+                            // The server only knows the shared fields: keep the
+                            // image, file and metadata this browser already has.
+                            Object.keys(existing).forEach(key => {
+                                if (item[key] === undefined) {
+                                    item[key] = existing[key];
+                                }
+                            });
+                        }
                         item.tileKey = item.tileKey || existing?.tileKey || item.infoHash;
                         // Don't override loading=false for photos already served from cache
-                        if (!item.img) {
-                            item.loading = true;
+                        if (item.loading === undefined) {
+                            item.loading = !item.img;
                         }
+                        return item;
                     });
-                    this.sortPictures(photos, formatToken);
-                    return photos;
+                    // A snapshot can predate our own upload; don't drop it.
+                    const pending = state.filter(tile => tile.seed
+                        && !photos.some(item => item.infoHash === tile.infoHash)
+                        && (!tile.sharedAt || !event.requestedAt || tile.sharedAt >= event.requestedAt));
+                    const tiles = [...pending, ...photos];
+                    this.sortPictures(tiles, formatToken);
+                    return tiles;
                 });
 
             } else if(event.type === 'add') {
@@ -78,7 +92,9 @@ export default class GalleryPhotoHandler {
                     const oldTiles = state;
                     let tiles = oldTiles;
                     event.item.forEach(photo => {
-                        const index = tiles.findIndex(item => item.infoHash === photo.infoHash);
+                        // An upload's infoHash changes once it is hashed; its tileKey doesn't.
+                        const index = tiles.findIndex(item => item.infoHash === photo.infoHash
+                            || (photo.tileKey && item.tileKey === photo.tileKey));
                         if(index > -1) {
                             const newTile = update(tiles[index], {$merge: photo});
                             tiles = update(tiles, {$splice: [[index, 1, newTile]]});

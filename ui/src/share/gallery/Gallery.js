@@ -3,7 +3,9 @@ import PropTypes from 'prop-types';
 import { useTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
 import CloudUploadIcon from '@mui/icons-material/CloudUploadRounded';
+import AddPhotoAlternateRounded from '@mui/icons-material/AddPhotoAlternateRounded';
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import {withSnackbar} from "../compatibility/withSnackbar";
@@ -21,11 +23,14 @@ import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
 import { runViewTransition } from "./viewTransition";
 
 function Gallery(props) {
-    const {master} = props;
+    const {master, showNetworkReadout = true} = props;
     const theme = useTheme();
     const [tiles, setTiles] = useState([]);
     const [dragOver, setDragOver] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(null);
+    // Until the first room snapshot arrives, an empty gallery means "not
+    // loaded yet", not "no photos": after a reload it looked like they were gone.
+    const [roomSynced, setRoomSynced] = useState(() => !!master.roomSynced);
     const photoHandlerRef = useRef(null);
     const dragCounterRef = useRef(0);
 
@@ -332,6 +337,20 @@ function Gallery(props) {
         updateGalleryState();
     }, [tiles, updateGalleryState]);
 
+    useEffect(() => {
+        const emitter = master.emitter;
+        const handlePhotos = event => {
+            if (event && event.type === 'all') setRoomSynced(true);
+        };
+        // Offline or a failed join must not leave the placeholder up forever.
+        const fallback = setTimeout(() => setRoomSynced(true), 4000);
+        emitter.on('photos', handlePhotos);
+        return () => {
+            clearTimeout(fallback);
+            emitter.removeListener('photos', handlePhotos);
+        };
+    }, [master.emitter]);
+
     const openAt = useCallback((index) => {
         runViewTransition(() => setSelectedIndex(index));
     }, []);
@@ -382,7 +401,14 @@ function Gallery(props) {
                 backgroundColor: 'background.default',
             }}
         >
-            {tiles.length === 0 ? (
+            {tiles.length === 0 && !roomSynced ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, py: 6 }}>
+                    <CircularProgress size={18} thickness={4} />
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                        Loading this room's photos…
+                    </Typography>
+                </Box>
+            ) : tiles.length === 0 ? (
                 <>
                 <Box
                     component="label"
@@ -401,11 +427,38 @@ function Gallery(props) {
                         Drop pictures here, or tap to choose some from this device.
                     </Typography>
                 </Box>
-                <Box sx={{ maxWidth: 560, mx: 'auto' }}>
-                    <NetworkReadout master={master} />
-                </Box>
+                {showNetworkReadout && (
+                    <Box sx={{ maxWidth: 560, mx: 'auto' }}>
+                        <NetworkReadout master={master} />
+                    </Box>
+                )}
                 </>
             ) : (
+                <>
+                {/* The empty-state drop zone, shrunk to one line once there are photos. */}
+                <Box
+                    component="label"
+                    htmlFor="contained-button-file"
+                    className="drop-target"
+                    data-testid="add-photos-strip"
+                    sx={{
+                        minHeight: '0 !important',
+                        flexDirection: 'row !important',
+                        gap: 1,
+                        py: '10px !important',
+                        mb: 2,
+                        maxWidth: tiles.length < 2 ? 880 : 'none',
+                        mx: tiles.length < 2 ? 'auto' : 0,
+                    }}
+                >
+                    <AddPhotoAlternateRounded sx={{ fontSize: 20, color: 'primary.main' }} />
+                    <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 600 }}>
+                        Add photos
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        drop here or tap
+                    </Typography>
+                </Box>
                 <Box
                     className="stagger-children"
                     sx={{
@@ -423,6 +476,7 @@ function Gallery(props) {
                 >
                     {tiles.map((tile, index) => buildTile(tile, index, master))}
                 </Box>
+                </>
             )}
 
             {dragOver && (
@@ -461,5 +515,6 @@ function Gallery(props) {
 
 Gallery.propTypes = {
     master: PropTypes.object.isRequired,
+    showNetworkReadout: PropTypes.bool,
 };
 export default withSnackbar(Gallery);

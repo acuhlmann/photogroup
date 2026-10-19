@@ -11,7 +11,7 @@ import platform from 'platform';
 import _ from 'lodash';
 import humanizeDuration from 'humanize-duration'
 import MetadataParser from "../gallery/metadata/MetadataParser";
-import { getTorrent, getBaseInfoHash } from './WebTorrentUtils';
+import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash } from './WebTorrentUtils';
 import { cacheGet, cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 import ServerFallback from './ServerFallback';
 import ConnectionRecovery from '../util/ConnectionRecovery';
@@ -145,6 +145,7 @@ export default class TorrentMaster {
 
     async findExistingContent(roomPromise) {
 
+        const requestedAt = Date.now();
         return roomPromise.call(this.service)
             .then(async response => {
 
@@ -161,11 +162,15 @@ export default class TorrentMaster {
                 // without waiting for WebTorrent resurrection
                 await this.serveCachedPhotos(photos);
 
+                // Show the room now: re-adding every torrent can take a while
+                // on a phone, and the gallery used to sit empty until it was done.
+                this.roomSynced = true;
+                this.emitter.emit('photos', {type: 'all', item: photos, requestedAt});
+
                 const values = await this.resurrectLocallySavedTorrents(photos);
                 Logger.info('done with resurrectAllTorrents ' + values);
 
-                this.syncUiWithServerUrls(photos);
-                this.emitter.emit('photos', {type: 'all', item: photos});
+                this.syncUiWithServerUrls(photos, requestedAt);
 
                 this.fillMissingOwners(photos);
 
@@ -179,29 +184,39 @@ export default class TorrentMaster {
      * WebTorrent peer/tracker connectivity.
      */
     async serveCachedPhotos(photos) {
-        for (const photo of photos) {
-            if (!photo.infoHash) continue;
-            if (!shouldCacheBlob(photo.fileType)) continue;
-            try {
+        await Promise.all(photos.map(photo => this.serveCachedPhoto(photo)));
+    }
+
+    async serveCachedPhoto(photo) {
+        if (!photo.infoHash) return;
+        if (!shouldCacheBlob(photo.fileType)) return;
+        try {
+            // Resume re-syncs the room each time the phone wakes; reuse the
+            // URL so the gallery doesn't reload every image.
+            this._cachedPhotos = this._cachedPhotos || new Map();
+            let cached = this._cachedPhotos.get(photo.infoHash);
+            if (!cached) {
                 const blob = await cacheGet(photo.infoHash);
-                if (blob) {
-                    const file = new File([blob], photo.fileName || 'image', {
-                        type: photo.fileType || blob.type
-                    });
-                    photo.fromCache = true;
-                    photo.cachedFile = file;
-                    photo.img = URL.createObjectURL(file);
-                    photo.elem = file;
-                    photo.loading = false;
-                    photo.fileSize = photo.fileSize || (file.size ? FileUtil.formatBytes(file.size) : '');
-                    photo.isImage = (photo.fileType || '').includes('image/');
-                    photo.isVideo = (photo.fileType || '').includes('video/');
-                    photo.isAudio = (photo.fileType || '').includes('audio/');
-                    Logger.info('serveCachedPhotos: served from cache ' + photo.fileName);
-                }
-            } catch (e) {
-                Logger.debug('serveCachedPhotos: cache miss for ' + photo.infoHash);
+                if (!blob) return;
+                const file = new File([blob], photo.fileName || 'image', {
+                    type: photo.fileType || blob.type
+                });
+                cached = { file, img: URL.createObjectURL(file) };
+                this._cachedPhotos.set(photo.infoHash, cached);
             }
+            const file = cached.file;
+            photo.fromCache = true;
+            photo.cachedFile = file;
+            photo.img = cached.img;
+            photo.elem = file;
+            photo.loading = false;
+            photo.fileSize = photo.fileSize || (file.size ? FileUtil.formatBytes(file.size) : '');
+            photo.isImage = (photo.fileType || '').includes('image/');
+            photo.isVideo = (photo.fileType || '').includes('video/');
+            photo.isAudio = (photo.fileType || '').includes('audio/');
+            Logger.info('serveCachedPhotos: served from cache ' + photo.fileName);
+        } catch (e) {
+            Logger.debug('serveCachedPhotos: cache miss for ' + photo.infoHash);
         }
     }
 
@@ -264,7 +279,11 @@ export default class TorrentMaster {
                 }
                 if(cursor) {
                     if(typeof cursor.value === 'object'){
-                        allPendingTorrents.push(self.resurrectTorrent(cursor.value, photos));
+                        // One torrent that can't come back must not hold up the rest.
+                        allPendingTorrents.push(self.resurrectTorrent(cursor.value, photos).catch(err => {
+                            Logger.warn('resurrectTorrent failed: ' + err);
+                            return false;
+                        }));
                     }
                     cursor.continue()
                 } else {
@@ -297,12 +316,18 @@ export default class TorrentMaster {
                 } else {
 
                     if(photos) {
-                        const photo = photos.find(item => item.infoHash === metadata.infoHash);
-                        if(photo) {
-                            photo.rendering = true;
-                            photo.fromCache = true;
+                        // Photos of a multi-file upload are listed as "<infoHash>-<path>".
+                        const matching = photos.filter(item => getBaseInfoHash(item.infoHash) === metadata.infoHash);
+                        if(matching.length > 0) {
+                            matching.forEach(photo => {
+                                photo.rendering = true;
+                                photo.fromCache = true;
+                            });
+                            const paths = matching.length > 1
+                                ? matching.map(photo => getFilePathFromInfoHash(photo.infoHash))
+                                : undefined;
 
-                            self.torrentAddition.add(metadata, photo, true).then(torrent => {
+                            self.torrentAddition._add(metadata, matching, true, paths).then(torrent => {
 
                                 if(!torrent) {
                                     Logger.error('resurrectTorrent.add no torrent');
@@ -312,14 +337,15 @@ export default class TorrentMaster {
                                 resolve(torrent);
 
                             }, error => {
-                                const msg = 'error, failed to resurrect ' + JSON.stringify(arguments);
+                                const msg = 'error, failed to resurrect ' + metadata.infoHash + ': ' + error;
                                 Logger.error(msg);
                                 reject(msg);
                             });
 
                         } else {
                             //delete any local photos not found on server.
-                            self.torrentDeletion.deleteTorrent(metadata);
+                            self.torrentDeletion.deleteTorrent(metadata).catch(err => Logger.warn('deleteTorrent: ' + err));
+                            resolve(false);
                         }
                     }
                 }
@@ -534,16 +560,21 @@ export default class TorrentMaster {
         });
     }
 
-    syncUiWithServerUrls(photos) {
+    syncUiWithServerUrls(photos, requestedAt) {
         const self = this;
         Logger.debug('syncUiWithServerUrls photos.length: '+photos.length);
 
         this.client.torrents.forEach(torrent => {
+            // Still hashing (no infoHash yet) or an upload the server hasn't
+            // confirmed: the snapshot just predates it.
+            if(!torrent.infoHash || this.torrentAddition?.isUnconfirmedLocalShare?.(torrent, requestedAt)) {
+                return;
+            }
             const urlItem = this.findUrl(photos, torrent.infoHash);
             if(!urlItem) {
                 self.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
                     Logger.info('deleteTorrent done ' + infoHash);
-                });
+                }).catch(err => Logger.warn('deleteTorrent: ' + err));
             }
         });
 
@@ -569,7 +600,9 @@ export default class TorrentMaster {
     }
 
     findUrl(photos, infoHash) {
-        const index = photos.findIndex(item => item.infoHash === infoHash);
+        // Photos of a multi-file torrent are listed as "<infoHash>-<path>".
+        const index = photos.findIndex(item => item.infoHash === infoHash
+            || getBaseInfoHash(item.infoHash) === infoHash);
         let foundItem = null;
         if(index >= 0) {
             foundItem = photos[index];

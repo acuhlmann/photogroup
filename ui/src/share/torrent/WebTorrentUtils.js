@@ -15,8 +15,16 @@
  */
 export function getTorrent(client, infoHash) {
     if (!client || !infoHash) return null;
-    
-    const torrent = client.get(infoHash);
+
+    // client.get() is async in WebTorrent 3 and resolves a Promise, which
+    // never has an infoHash, so this always returned null. Scan the live list.
+    if (Array.isArray(client.torrents)) {
+        const wanted = String(infoHash).toLowerCase();
+        const found = client.torrents.find(t => t && t.infoHash && t.infoHash.toLowerCase() === wanted);
+        if (found) return found;
+    }
+
+    const torrent = typeof client.get === 'function' ? client.get(infoHash) : null;
     
     // WebTorrent bug: client.get() returns empty object {} instead of null
     // for non-existent torrents. Check for the presence of infoHash property

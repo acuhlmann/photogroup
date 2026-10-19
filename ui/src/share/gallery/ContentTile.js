@@ -108,7 +108,7 @@ function ContentTile(props) {
     const handleDelete = useCallback(async (tile) => {
         setThere(false);
         const infoHash = await master.torrentDeletion.deleteItem(tile);
-        Logger.info('handleDelete ' + tile.torrent.name + ' ' + infoHash + ' ' + tile.torrent.infoHash);
+        Logger.info('handleDelete ' + (tile.torrent?.name || tile.fileName) + ' ' + infoHash);
     }, [master.torrentDeletion]);
 
     const snack = useCallback((payload, type = 'info', persist = false, vertical = 'bottom') => {

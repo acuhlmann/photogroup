@@ -197,7 +197,7 @@ export default class MetadataParser {
             'Artist', 'Byline', 'CreatorTool', 'ObjectName', 'Headline', 'XPTitle', 'Caption', 'XPComment', 'xmp']
             .forEach(key => delete allMetadata[key]);
 
-        allMetadata['x-file name'] = tile.torrent.name;
+        allMetadata['x-file name'] = tile.torrent?.name || tile.fileName;
         const picDesc = MetadataParser.findBestDesc(allMetadata);
         if(picDesc) {
             allMetadata['x-Description'] = picDesc;
