@@ -105,6 +105,16 @@ describe('MediaMetadataPanel shared editing', () => {
         await act(async () => root.unmount());
     });
 
+    it('explains a location that was removed before upload', async () => {
+        const { div, root } = await renderPanel({ summary: [{ key: 'x-Location status', value: 'blank' }], tile: { isImage: true, infoHash: 'n' } });
+        const note = div.querySelector('[data-testid="location-blank"]');
+        expect(note.textContent).toContain('Location removed before upload');
+        expect(note.textContent).toContain('Android');
+        expect(div.querySelector('[data-testid="location-card"]')).toBeNull();
+        expect(div.querySelector('[data-testid="metadata-missing"]').textContent).not.toContain('Location');
+        await act(async () => root.unmount());
+    });
+
     it('shows where a photo was taken with a map, the place and map links', async () => {
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,

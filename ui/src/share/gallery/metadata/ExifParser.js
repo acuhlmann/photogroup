@@ -1,4 +1,4 @@
-import { extractLocation, GPS_KEYS } from './geo';
+import { extractLocation, isGpsKey } from './geo';
 
 export default class ExifParser {
 
@@ -87,14 +87,20 @@ export default class ExifParser {
     /**
      * Fold GPS fields (EXIF, or XMP's exif:GPS* text) into one `x-Location`
      * {lat, long, altitude?, direction?, accuracy?, time?} and drop the raw
-     * ones. Unreadable or 0,0 coordinates leave the raw fields as they were.
+     * ones. GPS fields without a usable position (zeroed out, as Android does
+     * when it withholds a photo's location, or 0,0) set `x-Location status`
+     * to 'blank' instead, so the panel can say so rather than show NaN rows.
      */
     static processGeo(allMetadata) {
+        const gpsKeys = Object.keys(allMetadata).filter(isGpsKey);
+        if(!gpsKeys.length) return;
         const location = extractLocation(allMetadata);
         if(location) {
             allMetadata['x-Location'] = location;
-            GPS_KEYS.forEach(key => delete allMetadata[key]);
+        } else {
+            allMetadata['x-Location status'] = 'blank';
         }
+        gpsKeys.forEach(key => delete allMetadata[key]);
     }
 
 }

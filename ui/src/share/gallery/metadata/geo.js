@@ -75,12 +75,10 @@ function gpsTime(date, time) {
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-/** Raw GPS fields folded into the location, so they don't show up again as rows. */
-export const GPS_KEYS = [
-    'GPSLatitude', 'GPSLatitudeRef', 'GPSLongitude', 'GPSLongitudeRef', 'latitude', 'longitude',
-    'GPSAltitude', 'GPSAltitudeRef', 'GPSImgDirection', 'GPSImgDirectionRef', 'GPSHPositioningError',
-    'GPSDateStamp', 'GPSTimeStamp', 'GPSSpeed', 'GPSSpeedRef', 'GPSVersionID', 'GPSMapDatum',
-];
+/** Raw GPS fields (and exifr's derived latitude/longitude), folded into the location instead of shown as rows. */
+export function isGpsKey(key) {
+    return key.startsWith('GPS') || key === 'latitude' || key === 'longitude';
+}
 
 /**
  * The location in exifr output (EXIF GPS or XMP exif:GPS*), as

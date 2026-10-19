@@ -9,6 +9,7 @@ import Tooltip from '@mui/material/Tooltip';
 import PlaceRounded from '@mui/icons-material/PlaceRounded';
 import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
 import ContentCopyRounded from '@mui/icons-material/ContentCopyRounded';
+import LocationOffRounded from '@mui/icons-material/LocationOffRounded';
 import { format } from 'date-fns';
 import {
     formatDecimal, formatDirection, formatDms, isValidLocation, mapLinks, reverseGeocode, tilePosition,
@@ -233,5 +234,38 @@ export function LocationLine({ location }) {
 LocationLine.propTypes = {
     location: PropTypes.object.isRequired,
 };
+
+export const LOCATION_BLANK_HELP = 'This photo has GPS fields, but they are blank. Android blanks them when '
+    + 'a browser or app picks a photo without location access, and some apps remove location when sharing. '
+    + 'To keep it, upload the original file from a computer.';
+
+/** Says a photo's GPS fields were blanked before it reached the app, so "no location" isn't a mystery. */
+export function LocationBlankNote() {
+    return (
+        <Stack direction="row" spacing={1.25} data-testid="location-blank" sx={{
+            alignItems: 'flex-start', p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'action.hover',
+        }}>
+            <LocationOffRounded aria-hidden="true" sx={{ fontSize: 22, color: 'text.secondary', mt: '1px' }} />
+            <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Location removed before upload</Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.5 }}>
+                    {LOCATION_BLANK_HELP}
+                </Typography>
+            </Box>
+        </Stack>
+    );
+}
+
+/** The tile's version: one quiet line, with the explanation on hover. */
+export function LocationBlankLine() {
+    return (
+        <Tooltip title={LOCATION_BLANK_HELP}>
+            <Stack direction="row" spacing={0.5} data-testid="location-blank-line" sx={{ alignItems: 'center', mt: 0.5, width: 'fit-content' }}>
+                <LocationOffRounded aria-hidden="true" sx={{ fontSize: 16, color: 'text.disabled' }} />
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>Location removed before upload</Typography>
+            </Stack>
+        </Tooltip>
+    );
+}
 
 export default LocationCard;

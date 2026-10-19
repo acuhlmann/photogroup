@@ -268,7 +268,8 @@ export function groupMetadataForDisplay(summary, tile) {
     const shared = (tile && tile.details) || {};
     const hasShared = SHARED_FIELDS.some(key => shared[key] !== undefined);
     if (flat.length === 0 && !hasShared) {
-        return { highlights: [], lead: [], more: [], missing: [], values: {}, location: null, editedBy: null, editedAt: null };
+        return { highlights: [], lead: [], more: [], missing: [], values: {}, location: null, locationBlank: false,
+            editedBy: null, editedAt: null };
     }
     /** Prefer an explicitly shared value, including a cleared field, over embedded metadata. */
     const pick = (key, embedded) => (shared[key] !== undefined ? shared[key] : embedded);
@@ -299,15 +300,17 @@ export function groupMetadataForDisplay(summary, tile) {
     const hidden = new Set(Object.entries(SHOWN_BY)
         .filter(([derived]) => shown.has(derived))
         .flatMap(([, raw]) => raw));
-    // The location gets its own card with a map, not a row.
+    // The location gets its own card with a map, not a row; GPS fields
+    // that were blanked get a note there instead.
     const location = firstValue(flat, ['x-Location']);
+    const locationBlank = !location && flat.some(item => item.key === 'x-Location status');
     const rest = flat.filter(item => !HIGHLIGHT_SOURCE_KEYS.has(item.key) && !hidden.has(item.key)
-        && item.key !== 'x-Location');
+        && item.key !== 'x-Location' && item.key !== 'x-Location status');
     const { lead, more } = groupPhotoMetadata(rest);
 
     const kinds = new Set(highlights.filter(item => item.kind !== 'rating' || item.value != null).map(item => item.kind));
     const missing = IMPORTANT_MISSING[mediaKind(tile)]
-        .filter(([key]) => !kinds.has(key) && !shown.has(key))
+        .filter(([key]) => !kinds.has(key) && !shown.has(key) && !(key === 'x-Location' && locationBlank))
         .map(([, label]) => label);
 
     const values = {
@@ -315,7 +318,7 @@ export function groupMetadataForDisplay(summary, tile) {
         description: description ? String(description).trim() : '',
         rating: Number.isFinite(rating) ? rating : 0,
     };
-    return { highlights, lead, more, missing, values, location,
+    return { highlights, lead, more, missing, values, location, locationBlank,
         editedBy: shared.editedBy || null, editedAt: shared.editedAt || null };
 }
 

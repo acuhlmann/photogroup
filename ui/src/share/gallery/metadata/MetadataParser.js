@@ -30,6 +30,26 @@ function decodeXmlEntities(value) {
     });
 }
 
+/**
+ * Text for a raw EXIF value, or '' when there is nothing a person could
+ * read: byte blocks that aren't text, NaN from 0/0 rationals, empty lists.
+ */
+function rawValueText(value) {
+    if (value == null) return '';
+    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
+    if (typeof value === 'string' || value instanceof String) return /^(NaN[\s:,/]*)+$/.test(value) ? '' : String(value);
+    if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+        const bytes = new Uint8Array(value.buffer || value, value.byteOffset || 0, value.byteLength);
+        const text = String.fromCharCode(...bytes).replace(/\0+$/, '').trim();
+        return text && /^[\x20-\x7E]+$/.test(text) ? text : '';
+    }
+    if (Array.isArray(value)) {
+        const parts = value.map(rawValueText).filter(Boolean);
+        return parts.length === value.length ? parts.join(',') : '';
+    }
+    return JSON.stringify(value);
+}
+
 export default class MetadataParser {
 
     constructor(master) {
@@ -363,12 +383,8 @@ export default class MetadataParser {
                         newValueObj = isNaN(taken) ? String(valueObj) : format(taken, 'EEE, MMM d, yyyy · HH:mm');
                     } else if(valueObj instanceof Date) {
                         newValueObj = isNaN(valueObj) ? '' : format(valueObj, 'MMM d, yyyy HH:mm');
-                    } else if(Array.isArray(valueObj)) {
-                        newValueObj = valueObj.toString();
-                    } else if(typeof valueObj === 'string' || valueObj instanceof String) {
-                        newValueObj = valueObj;
                     } else {
-                        newValueObj = JSON.stringify(valueObj);
+                        newValueObj = rawValueText(valueObj);
                     }
                 } else if(tile.isAudio || tile.isVideo) {
                     if(((key === 'format' || key === 'common') && valueObj) || key.substring(0, 2) === 'x-') {

@@ -29,7 +29,7 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
 import FileUtil from '../../util/FileUtil';
 import { groupMetadataForDisplay, humanizeMetadataValue, labelForMetadataKey } from './groupPhotoMetadata';
-import LocationCard from './LocationCard';
+import LocationCard, { LocationBlankNote } from './LocationCard';
 
 const monoLabelSx = {
     fontFamily: 'var(--font-mono)',
@@ -574,7 +574,7 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
     const showFileNameEditor = tile && onFileNameChange;
     const leadItems = grouped.lead.filter(item => item.key !== 'x-file name');
     const hasAnything = grouped.highlights.length > 0 || leadItems.length > 0 || grouped.more.length > 0
-        || !!grouped.location;
+        || !!grouped.location || grouped.locationBlank;
     // With editing, missing title/description/rating are prompted for in the hero instead.
     const missing = canEdit ? grouped.missing.filter(label => !EDITABLE_MISSING[label]) : grouped.missing;
 
@@ -599,10 +599,10 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
                 </>
             )}
 
-            {grouped.location && (
+            {(grouped.location || grouped.locationBlank) && (
                 <Box sx={{ mt: 2.5 }}>
                     <SectionHeading>Location</SectionHeading>
-                    <LocationCard location={grouped.location} />
+                    {grouped.location ? <LocationCard location={grouped.location} /> : <LocationBlankNote />}
                 </Box>
             )}
 

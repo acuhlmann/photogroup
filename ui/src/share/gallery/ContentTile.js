@@ -20,7 +20,7 @@ import { photoTransitionName } from "./viewTransition";
 import { groupMetadataForDisplay } from "./metadata/groupPhotoMetadata";
 import { RatingStars, ColorLabel, StarPicker } from "./metadata/MediaMetadataPanel";
 import InlineTitle from "./metadata/InlineTitle";
-import { LocationLine } from "./metadata/LocationCard";
+import { LocationBlankLine, LocationLine } from "./metadata/LocationCard";
 import { canSaveDetails, saveDetails } from "./metadata/saveDetails";
 
 /** Display loaded media and metadata highlights, with save, delete, and decryption controls. */
@@ -341,6 +341,7 @@ function ContentTile(props) {
                     </Typography>
                 )}
                 {grouped.location && <LocationLine location={grouped.location} />}
+                {!grouped.location && grouped.locationBlank && <LocationBlankLine />}
                 <Typography
                     variant={title ? 'caption' : 'body2'}
                     sx={{

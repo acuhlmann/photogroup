@@ -59,7 +59,7 @@ All routes are registered in `Rooms.js`. Pattern: `POST /api/rooms/` (create), `
 
 Shared photo details (title, description, rating anyone in the room can edit) go through `PUT /api/rooms/:id/photos/details`, validated in `server/PhotoDetails.js` and gated on the caller's session token; the generic `PUT /api/rooms/:id/photos/` ignores `details`. In the UI they live on `tile.details` and override the file's embedded XMP (`groupPhotoMetadata.js`). Saving a photo writes them into the file's own metadata (`gallery/metadata/embed/`: XMP for JPEG/PNG/WebP/HEIC/AVIF, iTunes tags for MP4/MOV/M4A, ID3 for MP3, Vorbis comments for FLAC); other formats download unchanged. Missing fields are prompted for in the detail panel, and gallery tiles edit the title and rating in place (`metadata/InlineTitle.js`, `StarPicker`).
 
-Location comes from EXIF/XMP GPS, HEIC Exif items and video `udta`/`meta` boxes (`metadata/geo.js`, `embed/heif.js`, `embed/mp4.js`) and shows as a map card (`metadata/LocationCard.js`) using OpenStreetMap tiles and Nominatim reverse geocoding (cached, one lookup per second), with Google Maps, Amap and OSM links.
+Location comes from EXIF/XMP GPS, HEIC Exif items and video `udta`/`meta` boxes (`metadata/geo.js`, `embed/heif.js`, `embed/mp4.js`) and shows as a map card (`metadata/LocationCard.js`) using OpenStreetMap tiles and Nominatim reverse geocoding (cached, one lookup per second), with Google Maps, Amap and OSM links. GPS fields present but blank (Android zeroes them when a browser picks a photo without location access) become `x-Location status: 'blank'` and show a "Location removed before upload" note instead of NaN rows.
 
 ### Important: No persistence
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import MetadataParser from './MetadataParser';
+import { groupMetadataForDisplay } from './groupPhotoMetadata';
 
 describe('MetadataParser media metadata', () => {
     beforeEach(() => {
@@ -107,6 +108,37 @@ describe('MetadataParser reading where things were taken', () => {
         expect(md['x-Location'].lat).toBeCloseTo(-33.86783, 4);
         expect(md['x-Location'].long).toBeCloseTo(151.20733, 4);
         expect(md['x-Location'].altitude).toBe(58);
+    });
+
+    it('says the location was removed when GPS fields are blank, instead of showing NaN rows', async () => {
+        // Android zeroes a photo's GPS fields when a browser picks it without location access.
+        const tile = { isImage: true, fileName: 'blank-gps.jpg' };
+        const parser = new MetadataParser({});
+        const md = parser.extractAndProcess(await MetadataParser.parseImage(fixture('blank-gps.jpg')), tile);
+        const summary = parser.createMetadataSummary(md, tile);
+        const grouped = groupMetadataForDisplay(summary, tile);
+
+        expect(grouped.location).toBeNull();
+        expect(grouped.locationBlank).toBe(true);
+        expect(summary.filter(item => /^GPS|^latitude|^longitude/.test(item.key))).toEqual([]);
+        expect(summary.some(item => /NaN/.test(String(item.value)))).toBe(false);
+        expect(grouped.missing).not.toContain('Location');
+        expect(grouped.lead.map(item => item.key)).toContain('x-Camera');
+    });
+
+    it('hides raw values nobody can read', () => {
+        const tile = { isImage: true, fileName: 'a.jpg' };
+        const summary = new MetadataParser({}).createMetadataSummary({
+            Blank: new Uint8Array(15),
+            Text: new Uint8Array([65, 83, 67, 73, 73, 0, 0]),
+            Fractions: [NaN, NaN, NaN],
+            Clock: 'NaN:NaN:NaN',
+            Count: NaN,
+            Version: [2, 3, 0, 0],
+            Note: 'NaNa beach',
+        }, tile);
+        expect(Object.fromEntries(summary.map(item => [item.key, item.value])))
+            .toEqual({ Text: 'ASCII', Version: '2,3,0,0', Note: 'NaNa beach' });
     });
 
     it('reads XMP from a HEIC', async () => {
