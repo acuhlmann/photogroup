@@ -11,13 +11,32 @@ import { cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 
 export default class TorrentAddition {
 
+    /** Initialize torrent services and upload confirmation tracking, and subscribe to rendered photos. */
     constructor(service, torrentsDb, emitter, master) {
         this.service = service;
         this.torrentsDb = torrentsDb;
         this.emitter = emitter;
         this.master = master;
+        // Torrents we are seeding that the server hasn't confirmed yet (they
+        // have no infoHash while hashing), then infoHash -> confirmation time.
+        this.pendingSeeds = new Set();
+        this.shareStates = new Map();
 
         emitter.on('photoRendered', this.updatePhotoThatRendered, this);
+    }
+
+    /**
+     * A room snapshot requested at `requestedAt` may not list an upload we
+     * shared after (or are still sharing): don't treat that as a deletion.
+     * Return true while seeding is pending or confirmation is at/after the
+     * snapshot request. `requestedAt` is epoch milliseconds; omitting it
+     * protects any upload with a tracked confirmation.
+     */
+    isUnconfirmedLocalShare(torrent, requestedAt) {
+        if(this.pendingSeeds.has(torrent)) return true;
+        const sharedAt = torrent.infoHash && this.shareStates.get(torrent.infoHash);
+        if(sharedAt === undefined) return false;
+        return sharedAt === 0 || !requestedAt || sharedAt >= requestedAt;
     }
 
     async updatePhotoThatRendered(photo) {
@@ -209,6 +228,17 @@ export default class TorrentAddition {
         this.emitter.emit('torrentReady', photos);
     }
 
+    /**
+     * Start seeding local files and publish upload tiles before generating previews.
+     * `files` accepts a File or iterable of Files. For secure uploads, supply
+     * encrypted Files and matching original Files in `origFiles` for display metadata.
+     * Thumbnail failures fall back to sharing without previews. Validation and
+     * seeding failures are reported through the callback or photo/error events;
+     * errors preparing file metadata before seeding reject the returned promise.
+     * The callback receives a ready torrent or `(null, error)` for reported failures.
+     * The promise resolves to the started torrent, or null/undefined on handled
+     * failure, without waiting for room sharing, storage, or server-copy uploads.
+     */
     async seed(files, secure = false, origFiles = [], callback) {
 
         const self = this;
@@ -264,6 +294,33 @@ export default class TorrentAddition {
             origFilesArr = [];
         }
         
+        // Show the upload right away: generating thumbnails decodes every
+        // photo first, which takes seconds on a phone.
+        if(!filesArr.some(item => item instanceof File)) {
+            const error = new Error('No valid files to seed');
+            Logger.error(error.message);
+            if(callback) {
+                callback(null, error);
+            }
+            return;
+        }
+
+        const formatToken = 'H:m MMM d y';
+        const photos = filesArr.map((file, index) => {
+            const origFile = secure ? origFilesArr[index] : file;
+            return {
+                infoHash: shortid.generate(),
+                isFake: true,
+                seed: true, rendering: true,
+                peerId: this.master.client.peerId, owners: [],
+                file: origFile, origFile: secure ? file : file, secure: secure,
+                picDateTaken: secure ? format(origFile.lastModified, formatToken) : format(file.lastModified, formatToken),
+                fileType: origFile.type, fileName: origFile.name, thumbnailFiles: []
+            };
+        });
+
+        this.master.emitter.emit('photos', {type: 'add', item: photos});
+
         let thumbnailFiles = [];
 
         if(!secure && filesArr
@@ -271,10 +328,16 @@ export default class TorrentAddition {
             .every(item => (item.type.includes('image/') || item.type.includes('audio/')))
         ) {
 
-            if(filesArr.every(item => item.type.includes('image/'))) {
-                thumbnailFiles = await getPreviewFromImage(filesArr);
-            } else if(filesArr.every(item => item.type.includes('audio/'))) {
-                thumbnailFiles = await getPreviewFromAudio(filesArr);
+            try {
+                if(filesArr.every(item => item.type.includes('image/'))) {
+                    thumbnailFiles = await getPreviewFromImage(filesArr);
+                } else if(filesArr.every(item => item.type.includes('audio/'))) {
+                    thumbnailFiles = await getPreviewFromAudio(filesArr);
+                }
+            } catch(err) {
+                // The tile is already showing; share without a preview.
+                Logger.warn('thumbnail generation failed: ' + (err.message || err));
+                thumbnailFiles = [];
             }
 
             if(thumbnailFiles.length > 0) {
@@ -300,10 +363,23 @@ export default class TorrentAddition {
             files = filesArr.filter(item => item instanceof File);
         }
 
+        if(thumbnailFiles.length > 0) {
+            photos.forEach(photo => {
+                photo.thumbnailFiles = thumbnailFiles;
+            });
+            self.emitter.emit('photos', {type: 'update', item: photos});
+        }
+
         // Final validation: ensure all files are valid File objects
         if(!files || files.length === 0) {
             const error = new Error('No valid files to seed');
             Logger.error(error.message);
+            photos.forEach(photo => {
+                photo.uploadError = error.message;
+                photo.rendering = false;
+                photo.loading = false;
+            });
+            self.emitter.emit('photos', {type: 'update', item: photos});
             if(callback) {
                 callback(null, error);
             }
@@ -311,22 +387,6 @@ export default class TorrentAddition {
         }
 
         Logger.info('seed ' + files.map(item => item.name).join(', '));
-
-        const formatToken = 'H:m MMM d y';
-        const photos = filesArr.map((file, index) => {
-            const origFile = secure ? origFilesArr[index] : file;
-            return {
-                infoHash: shortid.generate(),
-                isFake: true,
-                seed: true, rendering: true,
-                peerId: this.master.client.peerId, owners: [],
-                file: origFile, origFile: secure ? file : file, secure: secure,
-                picDateTaken: secure ? format(origFile.lastModified, formatToken) : format(file.lastModified, formatToken),
-                fileType: origFile.type, fileName: origFile.name, thumbnailFiles: thumbnailFiles
-            };
-        });
-
-        this.master.emitter.emit('photos', {type: 'add', item: photos});
 
         /*const thumbnails = await Promise.all(filesArr.map(item => exifr.thumbnail(item)));
         const thumbnailBlobs = thumbnails.map((item, index) => new Blob(item, {
@@ -353,7 +413,7 @@ export default class TorrentAddition {
                 return;
             }
             
-            // Define helper function to process torrent when ready
+            /** Publish seeded photos and track room confirmation, waiting for metadata if needed. */
             const processTorrentReady = (torrent) => {
                 if(!torrent || !torrent.infoHash) {
                     Logger.error('processTorrentReady called with invalid torrent');
@@ -403,6 +463,13 @@ export default class TorrentAddition {
                 Logger.info('seed.infoHash photo sharing');
                 this.service.share(toBeShared).then(result => {
                     Logger.info('photo shared ' + result);
+                    const sharedAt = Date.now();
+                    this.pendingSeeds.delete(torrent);
+                    this.shareStates.set(torrent.infoHash, sharedAt);
+                    photos.forEach(photo => {
+                        photo.sharedAt = sharedAt;
+                    });
+                    self.emitter.emit('photos', {type: 'update', item: photos});
                     // Insurance for the common in-person failure: P2P never
                     // connects (CGNAT / isolated Wi-Fi) or this phone locks.
                     // Leave a temporary server copy receivers can fall back
@@ -513,6 +580,9 @@ export default class TorrentAddition {
 
                 processTorrentReady(torrent);
             });
+            if(torrent) {
+                this.pendingSeeds.add(torrent);
+            }
 
             // Only attach event listeners if torrent was successfully created
             if(!torrent) {
@@ -620,6 +690,7 @@ export default class TorrentAddition {
         return torrent;
     }
 
+    /** Return shallow photo copies with local media, render state, and snapshot bookkeeping removed. */
     stripClientOnlyPhotoFields(photos) {
         const toBeShared = photos.map(photo => {
             const serverPhoto = {...photo};
@@ -640,6 +711,8 @@ export default class TorrentAddition {
             delete serverPhoto.hasMetadata;
             delete serverPhoto.elem;
             delete serverPhoto.img;
+            delete serverPhoto.previewUrl;
+            delete serverPhoto.sharedAt;
             delete serverPhoto.tileKey;
             return serverPhoto;
         });

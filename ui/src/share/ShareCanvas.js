@@ -18,6 +18,7 @@ import FrontView from "./FrontView";
 import NetworkPanel from "./NetworkPanel";
 import WebTorrent from 'webtorrent';
 
+/** Show the landing page or room gallery with a responsive connection panel. */
 function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
     const deferredPromptRef = useRef(null);
     const theme = useTheme();
@@ -193,7 +194,8 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
                     pt: { xs: 1.5, sm: 2 },
                     pb: isMobile ? 10 : 2,
                 }}>
-                    <Gallery master={master} />
+                    {/* The Link panel shows the readout too; don't repeat it beside itself. */}
+                    <Gallery master={master} showNetworkReadout={isMobile || !peopleOpen} />
                 </Box>
 
                 {!isMobile && peopleOpen && (

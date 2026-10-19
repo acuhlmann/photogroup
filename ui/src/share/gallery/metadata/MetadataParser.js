@@ -174,6 +174,12 @@ export default class MetadataParser {
             });
     }
 
+    /**
+     * Normalize image EXIF/XMP in place and return the same metadata object.
+     * Update the tile's date, captions, and camera summary; use its file name
+     * when no torrent name exists. XMP XML parse errors are ignored; other
+     * normalization and date-formatting errors propagate.
+     */
     extractAndProcess(allMetadata, tile) {
 
         XmpParser.parse(allMetadata, allMetadata.xmp);
@@ -197,7 +203,7 @@ export default class MetadataParser {
             'Artist', 'Byline', 'CreatorTool', 'ObjectName', 'Headline', 'XPTitle', 'Caption', 'XPComment', 'xmp']
             .forEach(key => delete allMetadata[key]);
 
-        allMetadata['x-file name'] = tile.torrent.name;
+        allMetadata['x-file name'] = tile.torrent?.name || tile.fileName;
         const picDesc = MetadataParser.findBestDesc(allMetadata);
         if(picDesc) {
             allMetadata['x-Description'] = picDesc;
@@ -270,6 +276,12 @@ export default class MetadataParser {
         return format(date, "H:m MMM d y");
     }
 
+    /**
+     * Build ordered key/value rows for the tile's media type, excluding thumbnails
+     * and falsy display values. Image dates use local time; unparseable capture
+     * dates retain their text. Audio/video `common` and `format` objects stay nested.
+     * Return undefined for falsy metadata; serialization errors propagate.
+     */
     createMetadataSummary(rawMetadata, tile) {
 
         if(!rawMetadata) return;
@@ -286,7 +298,8 @@ export default class MetadataParser {
                     if(key.substring(0, 2) === 'x-') {
                         newValueObj = valueObj;
                     } else if(key === 'DateTimeOriginal') {
-                        newValueObj = MetadataParser.formatDate(valueObj);
+                        const taken = valueObj instanceof Date ? valueObj : new Date(valueObj);
+                        newValueObj = isNaN(taken) ? String(valueObj) : format(taken, 'EEE, MMM d, yyyy · HH:mm');
                     } else if(valueObj instanceof Date) {
                         newValueObj = isNaN(valueObj) ? '' : format(valueObj, 'MMM d, yyyy HH:mm');
                     } else if(Array.isArray(valueObj)) {

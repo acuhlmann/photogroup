@@ -184,6 +184,13 @@ export default class Peers {
         return true;
     }
 
+    /** Return the session's peer for a matching token, or null if either lookup fails. */
+    peerForSession(sessionId, token) {
+        if(typeof sessionId !== 'string' || !sessionId) return null;
+        if(!token || this.sessionTokens.get(sessionId) !== token) return null;
+        return this.peers.find(peer => peer.sessionId === sessionId) || null;
+    }
+
     connect(sessionId) {
         //this.peerIdBySessionId.set(sessionId, sessionId);
     }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import Box from "@mui/material/Box";
@@ -17,7 +17,10 @@ import WebCrypto from "../security/WebCrypto";
 import RenderContent from "./RenderContent";
 import { saveLabel, savePhoto } from "./savePhoto";
 import { photoTransitionName } from "./viewTransition";
+import { groupMetadataForDisplay } from "./metadata/groupPhotoMetadata";
+import { RatingStars, ColorLabel } from "./metadata/MediaMetadataPanel";
 
+/** Display loaded media and metadata highlights, with save, delete, and decryption controls. */
 function ContentTile(props) {
     const {master, tile, enqueueSnackbar, closeSnackbar, onOpen, selected, hero} = props;
 
@@ -105,10 +108,11 @@ function ContentTile(props) {
             });
     }, []);
 
+    /** Hide the tile immediately; deletion failures reject without restoring it. */
     const handleDelete = useCallback(async (tile) => {
         setThere(false);
         const infoHash = await master.torrentDeletion.deleteItem(tile);
-        Logger.info('handleDelete ' + tile.torrent.name + ' ' + infoHash + ' ' + tile.torrent.infoHash);
+        Logger.info('handleDelete ' + (tile.torrent?.name || tile.fileName) + ' ' + infoHash);
     }, [master.torrentDeletion]);
 
     const snack = useCallback((payload, type = 'info', persist = false, vertical = 'bottom') => {
@@ -150,6 +154,15 @@ function ContentTile(props) {
 
         setIsDecrypted(true);
     }, [snack]);
+
+    const highlights = useMemo(() => {
+        // Shared details show even before this browser has read the file.
+        const summary = tile.metadata && master.metadata
+            ? master.metadata.createMetadataSummary(tile.metadata, tile) : null;
+        return groupMetadataForDisplay(summary, tile).highlights;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tile.metadata, tile.details, master.metadata]);
+    const { title, rating, description } = Object.fromEntries(highlights.map(item => [item.kind, item]));
 
     const isLoading = tile.torrentFile && !tile.torrentFile.done;
     let progressPercentage, downloaded;
@@ -270,14 +283,52 @@ function ContentTile(props) {
             )}
 
             <Box sx={{ px: 1.5, py: 1.25 }}>
+                {/* Title, rating and description lead when the file has them; the file name is context. */}
+                {title && (
+                    <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600, lineHeight: 1.3, wordBreak: 'break-word' }}>
+                        {title.value}
+                    </Typography>
+                )}
+                {rating && (
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.5 }}>
+                        {rating.value === -1
+                            ? <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 600 }}>Rejected</Typography>
+                            : rating.value != null && <RatingStars value={rating.value} size={16} />}
+                        <ColorLabel value={rating.colorLabel} />
+                    </Stack>
+                )}
+                {description && (
+                    <Typography
+                        variant="body2"
+                        sx={{
+                            mt: 0.5,
+                            color: 'text.secondary',
+                            lineHeight: 1.45,
+                            wordBreak: 'break-word',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                        }}
+                    >
+                        {description.value}
+                    </Typography>
+                )}
                 <Typography
-                    variant="body2"
-                    sx={{ wordBreak: 'break-word', lineHeight: 1.3 }}
+                    variant={title ? 'caption' : 'body2'}
+                    sx={{
+                        display: 'block',
+                        wordBreak: 'break-word',
+                        lineHeight: 1.3,
+                        mt: title || rating || description ? 0.75 : 0,
+                        ...(title ? { color: 'text.secondary', fontFamily: 'var(--font-mono)' } : {}),
+                    }}
                     title={tile.fileName}
                 >
                     {tile.fileName}
+                    {title && tile.fileSize ? ` · ${tile.fileSize}` : ''}
                 </Typography>
-                {tile.fileSize && (
+                {!title && tile.fileSize && (
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.35, fontFamily: 'var(--font-mono)' }}>
                         {tile.fileSize}
                     </Typography>

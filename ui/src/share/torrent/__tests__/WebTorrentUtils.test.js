@@ -46,6 +46,17 @@ describe('WebTorrentUtils', () => {
             expect(getTorrent(mockClient, 'abc123')).toBe(mockTorrent);
         });
 
+        it('finds a live torrent although client.get is async (WebTorrent 3)', () => {
+            const torrent = { infoHash: 'abc123' };
+            const mockClient = { torrents: [torrent], get: vi.fn().mockResolvedValue(torrent) };
+            expect(getTorrent(mockClient, 'ABC123')).toBe(torrent);
+        });
+
+        it('returns null rather than a Promise for an unknown torrent', () => {
+            const mockClient = { torrents: [], get: vi.fn().mockResolvedValue(null) };
+            expect(getTorrent(mockClient, 'abc123')).toBeNull();
+        });
+
         it('should return null when client.get returns null', () => {
             const mockClient = { get: vi.fn().mockReturnValue(null) };
             expect(getTorrent(mockClient, 'abc123')).toBeNull();

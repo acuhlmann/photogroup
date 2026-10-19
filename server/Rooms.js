@@ -5,6 +5,7 @@ import Topology from './Topology.js';
 import Peers from './Peers.js';
 import MyDht from './MyDht.js';
 import PhotoRelay, { MAX_PHOTO_BYTES, PhotoTooLargeError } from './PhotoRelay.js';
+import { parseDetails, applyDetails, PhotoDetailsError } from './PhotoDetails.js';
 import express from 'express';
 import _ from 'lodash';
 
@@ -55,6 +56,7 @@ export default class Rooms {
         this.rooms.clear();
     }
 
+    /** Register room and photo routes, including authenticated shared-detail updates. */
     registerRoomRoutes(app) {
         const rooms = this.rooms;
 
@@ -226,12 +228,56 @@ export default class Rooms {
                     const infoHash = update.infoHash;
                     const existing = this.findPhoto(room, infoHash);
                     if (!existing) return null;
+                    // Shared title/description/rating only change through the
+                    // validated, attributed details route below.
+                    delete update.details;
                     _.merge(existing, update);
                     return existing;
                 }).filter(item => item !== null);
                 this.sendPhotos(room, this.allRoomClients(room),'update', updated);
                 response.send(updated);
             }
+        });
+
+        // Anyone in the room can title, describe and rate a photo; everyone
+        // sees the change live and who made it.
+        app.put('/api/rooms/:id/photos/details', (request, response) => {
+
+            const room = rooms.get(request.params.id);
+            if(!room) {
+                return response.status(404).send('Room not found');
+            }
+            const body = request.body || {};
+            if(typeof body.infoHash !== 'string' || !body.infoHash) {
+                return response.status(400).send('Expected infoHash');
+            }
+            const editor = room.peers.peerForSession(body.sessionId, body.sessionToken);
+            if(!editor) {
+                return response.status(403).send('Join the room to edit photo details');
+            }
+            const photo = this.findPhoto(room, body.infoHash);
+            if(!photo) {
+                return response.status(404).send('Photo not found');
+            }
+
+            let changes;
+            try {
+                changes = parseDetails(body);
+            } catch(err) {
+                if(err instanceof PhotoDetailsError) {
+                    return response.status(400).send(err.message);
+                }
+                throw err;
+            }
+
+            const details = applyDetails(photo, changes, {
+                peerId: editor.peerId,
+                name: editor.name || '',
+                platform: editor.originPlatform || '',
+            });
+            const item = { infoHash: photo.infoHash, details };
+            this.sendPhotos(room, this.allRoomClients(room), 'update', [item]);
+            response.send(item);
         });
 
         app.delete('/api/rooms/:id/photos/', (request, response) => {

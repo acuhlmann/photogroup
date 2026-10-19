@@ -19,6 +19,7 @@ import TransferConsole from "../torrent/TransferConsole";
 import { isTransferStalled, P2P_STALL_MS } from "../torrent/ServerFallback";
 import { rememberImageSize } from './imageSize';
 
+/** Show transfer status and recovery controls, retaining a preview URL on the tile. */
 function LoadingTile({tile, master, name}) {
     const [progress, setProgress] = useState(null);
     const [timeRemaining, setTimeRemaining] = useState('');
@@ -59,12 +60,14 @@ function LoadingTile({tile, master, name}) {
         setStalled(false);
     }, [master.emitter, tile]);
 
+    /** Load a missing preview for a loading tile; thumbnail errors leave it unset. */
     const listenToPreview = useCallback(() => {
-        if(tile.loading && tile.torrentFileThumb && typeof tile.torrentFileThumb.getBlobURL === 'function') {
+        if(tile.loading && !tile.previewUrl && tile.torrentFileThumb && typeof tile.torrentFileThumb.getBlobURL === 'function') {
             tile.torrentFileThumb.getBlobURL((err, url) => {
                 if(err) {
                     Logger.error('preview ' + err);
                 } else {
+                    tile.previewUrl = url;
                     setPreviewThumbnail(url);
                 }
             });
@@ -151,13 +154,16 @@ function LoadingTile({tile, master, name}) {
         have = false;
     }
 
-    let displayPreviewThumbnail = previewThumbnail;
-    if(isRendering && tile.thumbnailFiles) {
+    // Create the preview URL once and keep it on the tile: a fresh blob URL
+    // on every render reloads the image, and the content tile shows the same
+    // preview while the full photo decodes.
+    if(isRendering && tile.thumbnailFiles && !tile.previewUrl) {
         const thumbFile = tile.thumbnailFiles.find(item => 'Thumbnail ' + tile.fileName === item.name);
         if(thumbFile) {
-            displayPreviewThumbnail = URL.createObjectURL(thumbFile);
+            tile.previewUrl = URL.createObjectURL(thumbFile);
         }
     }
+    const displayPreviewThumbnail = previewThumbnail || tile.previewUrl;
 
     return (
         <Paper
@@ -364,6 +370,13 @@ function LoadingTile({tile, master, name}) {
                 {/* Live P2P telemetry while we wait */}
                 {!have && !hasError && !isRendering && tile.infoHash && master.client && (
                     <TransferConsole master={master} tile={tile} />
+                )}
+
+                {/* A title someone in the room gave it, while the file is still on its way */}
+                {tile.details && tile.details.title && (
+                    <Typography variant="body2" sx={{ display: 'block', mt: 1, fontWeight: 600, wordBreak: 'break-word' }}>
+                        {tile.details.title}
+                    </Typography>
                 )}
 
                 {/* File name */}

@@ -8,15 +8,26 @@
 /**
  * Get a torrent from the WebTorrent client, handling the bug where
  * client.get() returns an empty object {} instead of null for non-existent torrents.
+ * Match the live torrent list case-insensitively before falling back to client.get().
+ * This lookup is synchronous: a Promise from client.get() is not awaited.
+ * Exceptions thrown by client.get() propagate to the caller.
  * 
  * @param {WebTorrent} client - The WebTorrent client instance
  * @param {string} infoHash - The torrent info hash to look up
- * @returns {Torrent|null} The torrent object or null if not found
+ * @returns {Torrent|null} The torrent object, or null for missing input or no synchronous match
  */
 export function getTorrent(client, infoHash) {
     if (!client || !infoHash) return null;
-    
-    const torrent = client.get(infoHash);
+
+    // client.get() is async in WebTorrent 3 and resolves a Promise, which
+    // never has an infoHash, so this always returned null. Scan the live list.
+    if (Array.isArray(client.torrents)) {
+        const wanted = String(infoHash).toLowerCase();
+        const found = client.torrents.find(t => t && t.infoHash && t.infoHash.toLowerCase() === wanted);
+        if (found) return found;
+    }
+
+    const torrent = typeof client.get === 'function' ? client.get(infoHash) : null;
     
     // WebTorrent bug: client.get() returns empty object {} instead of null
     // for non-existent torrents. Check for the presence of infoHash property

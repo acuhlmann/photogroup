@@ -21,6 +21,7 @@ import RenderContent from './RenderContent';
 import { saveLabel, savePhoto } from './savePhoto';
 import { photoTransitionName, supportsViewTransition } from './viewTransition';
 
+/** Display the selected media in a dialog with navigation, saving, and shared metadata editing. */
 function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     const theme = useTheme();
     const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
@@ -40,6 +41,13 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
             }]);
         }, 1000, { leading: true, trailing: true })
     ).current;
+
+    /** Save changed shared fields and publish the returned photo locally; save errors propagate. */
+    const handleSaveDetails = useCallback(async (fields) => {
+        const saved = await master.service.updateDetails(tile.infoHash, fields);
+        // The room hears it over SSE too; show it here without waiting.
+        master.emitter.emit('photos', { type: 'update', item: [saved] });
+    }, [master, tile?.infoHash]);
 
     const handleFileNameChange = useCallback((value) => {
         setFileName(value);
@@ -247,6 +255,9 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                         tile={tile}
                         fileName={fileName}
                         onFileNameChange={handleFileNameChange}
+                        onSaveDetails={master.service && typeof master.service.updateDetails === 'function'
+                            ? handleSaveDetails : undefined}
+                        myPeerId={master.client && master.client.peerId}
                     />
 
                     {Array.isArray(tile.owners) && master.peers && master.client

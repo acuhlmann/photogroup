@@ -13,6 +13,7 @@ import RouterRounded from '@mui/icons-material/RouterRounded';
 import DnsRounded from '@mui/icons-material/DnsRounded';
 
 import StringUtil from './util/StringUtil';
+import NetworkReadout from './topology/NetworkReadout';
 
 const monoFont = 'var(--font-mono)';
 
@@ -80,6 +81,7 @@ function readDevice(master) {
     };
 }
 
+/** Show this device's network details and link forecast, and allow nickname edits. */
 function MeView({ master }) {
     const [showMe, setShowMe] = useState(false);
     const [galleryHasImages, setGalleryHasImages] = useState(false);
@@ -235,6 +237,8 @@ function MeView({ master }) {
                     </>
                 )}
             </Box>
+
+            <NetworkReadout master={master} sx={{ mt: 0, mb: 0 }} />
         </Box>
     );
 }

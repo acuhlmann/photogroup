@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {withStyles} from '@mui/styles';
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
@@ -63,6 +63,11 @@ export function renderMedia(tile, file, node, opts, callback) {
         .catch(err => callback(err));
 }
 
+/**
+ * Render images or media players and request metadata as content becomes available.
+ * Image previews remain until decoding succeeds; a decode failure keeps the preview.
+ * `playbackActive` defaults to true; false skips attaching inline audio/video players.
+ */
 function RenderContent(props) {
     const {master, tile, classes, enqueueSnackbar, closeSnackbar, playbackActive = true} = props;
     const emitter = master.emitter;
@@ -75,6 +80,14 @@ function RenderContent(props) {
     const openedWebampRef = useRef(false);
     const handleDoneRef = useRef(null);
     const readMetadataRef = useRef(null);
+    // Which image load finished decoding. Each source change starts a new
+    // generation, so the preview returns at once and a late decode of an
+    // earlier load (even of the same URL) can't hide it.
+    const [decoded, setDecoded] = useState(null);
+    const imgGenRef = useRef({ src: tile.img, gen: 0 });
+    if (imgGenRef.current.src !== tile.img) {
+        imgGenRef.current = { src: tile.img, gen: imgGenRef.current.gen + 1 };
+    }
 
     // Define readMetadata first so it can be used by other callbacks
     // Use a ref to access the current tile without including it in dependencies
@@ -389,8 +402,17 @@ function RenderContent(props) {
     const getBlobAndReadMetadataRef = useRef(null);
     getBlobAndReadMetadataRef.current = getBlobAndReadMetadata;
 
+    /** Record image dimensions, request metadata, and retire the preview after decoding succeeds. */
     const imgLoaded = useCallback((event) => {
-        rememberImageSize(tile, event?.target);
+        const img = event?.target;
+        if (!img) return;
+        rememberImageSize(tile, img);
+        // Keep the preview behind the photo until it is decoded, otherwise a
+        // large photo paints as an empty box for a few frames.
+        const gen = imgGenRef.current.gen;
+        const decoding = typeof img.decode === 'function' ? img.decode() : Promise.resolve();
+        // A failed decode keeps the preview rather than revealing a broken image.
+        decoding.then(() => setDecoded(gen), () => {});
         // For images, when the img tag loads, try to read metadata
         if(readMetadataRef.current) {
             readMetadataRef.current(tile);
@@ -474,6 +496,7 @@ function RenderContent(props) {
         };
     }, [tile.infoHash]); // Only depend on infoHash - when it changes, it's a new tile
 
+    /** Render the current image with its preview during decoding, or an audio/video container. */
     const renderMediaDom = () => {
         const currentTile = tileRef.current;
         // Ensure img is set if we have elem but no img (defensive check)
@@ -486,7 +509,12 @@ function RenderContent(props) {
                    // Reserve the size the loading preview measured so the
                    // tile doesn't collapse while the full image decodes.
                    style={{width: '100%', maxWidth: '100%', height: 'auto', display: 'block',
-                       aspectRatio: imageAspectRatio(currentTile), backgroundColor: '#3a3f47'}}
+                       aspectRatio: imageAspectRatio(currentTile), backgroundColor: '#3a3f47',
+                       ...(decoded !== imgGenRef.current.gen && currentTile.previewUrl ? {
+                           backgroundImage: `url(${currentTile.previewUrl})`,
+                           backgroundSize: 'cover',
+                           backgroundPosition: 'center',
+                       } : null)}}
                    onLoad={imgLoaded} 
                    key={currentTile.tileKey || currentTile.infoHash} />
             : <div className={classes?.wide || ''} style={{width: '100%', maxWidth: '100%'}}>

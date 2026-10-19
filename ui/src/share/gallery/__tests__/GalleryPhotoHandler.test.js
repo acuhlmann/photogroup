@@ -98,5 +98,38 @@ describe('GalleryPhotoHandler', () => {
             g.emit({ type: 'all', item: [photo('torrenthash-big0.jpg')] });
             expect(g.tiles()[0].tileKey).toBe('temp-id');
         });
+
+        it('keeps what this browser loaded when the room re-syncs', () => {
+            const g = setup();
+            g.emit({ type: 'add', item: [photo('a')] });
+            g.emit({ type: 'update', item: [{ infoHash: 'a', loading: false, img: 'blob:a', metadata: { Make: 'Google' } }] });
+            g.emit({ type: 'all', item: [photo('a')] });
+            expect(g.tiles()[0]).toMatchObject({ loading: false, img: 'blob:a', metadata: { Make: 'Google' } });
+        });
+
+        it('keeps an upload the room snapshot does not know about yet', () => {
+            const g = setup();
+            g.emit({ type: 'add', item: [photo('mine', { seed: true })] });
+            g.emit({ type: 'all', item: [photo('theirs')], requestedAt: 1000 });
+            expect(g.tiles().map(t => t.infoHash).sort()).toEqual(['mine', 'theirs']);
+        });
+
+        it('drops a confirmed upload the server no longer lists', () => {
+            const g = setup();
+            g.emit({ type: 'add', item: [photo('mine', { seed: true, sharedAt: 500 })] });
+            g.emit({ type: 'all', item: [], requestedAt: 1000 });
+            expect(g.tiles()).toEqual([]);
+        });
+
+        it('applies an update by tile key after the upload got its infoHash', () => {
+            const g = setup();
+            const seeded = photo('temp-id', { seed: true });
+            g.emit({ type: 'add', item: [seeded] });
+            g.emit({ type: 'update', item: [{ ...seeded, thumbnailFiles: [] }] });
+            seeded.infoHash = 'torrenthash';
+            g.emit({ type: 'update', item: [{ ...seeded, loading: false }] });
+            expect(g.tiles()).toHaveLength(1);
+            expect(g.tiles()[0]).toMatchObject({ infoHash: 'torrenthash', loading: false });
+        });
     });
 });

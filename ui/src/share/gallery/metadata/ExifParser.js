@@ -19,23 +19,66 @@ export default class ExifParser {
         delete allMetadata['undefined'];
     }
 
+    /**
+     * When both dimensions exist, replace them in place with `x-Pixel Size` in pixels.
+     * Use ImageWidth/Height with ExifImageWidth/Height as fallbacks.
+     */
     static processImageSize(allMetadata) {
-        const ImageWidth = allMetadata['ImageWidth'];
-        const ImageHeight = allMetadata['ImageHeight'];
-        if(ImageWidth && ImageHeight) {
-            allMetadata['x-Pixel Size'] = ImageWidth + ' x ' + ImageHeight;
-            delete allMetadata['ImageWidth'];
-            delete allMetadata['ImageHeight'];
+        // exifr reports the EXIF dimensions as ExifImageWidth/Height.
+        const width = allMetadata['ImageWidth'] || allMetadata['ExifImageWidth'];
+        const height = allMetadata['ImageHeight'] || allMetadata['ExifImageHeight'];
+        if(width && height) {
+            allMetadata['x-Pixel Size'] = width + ' x ' + height;
+            ['ImageWidth', 'ImageHeight', 'ExifImageWidth', 'ExifImageHeight']
+                .forEach(key => delete allMetadata[key]);
         }
     }
 
-    static processCamSettings(data) {
-        if(data['ISOSpeedRatings'] && data['FocalLength'] && data['FNumber'] && data['ExposureTime']) {
+    /** Coerce a scalar or EXIF numerator/denominator pair to a number, possibly NaN or Infinity. */
+    static toNumber(value) {
+        if(value && typeof value === 'object' && 'numerator' in value) {
+            return Number(value.numerator) / Number(value.denominator);
+        }
+        return Number(value);
+    }
 
-            const exposure = Number(data['ExposureTime'].denominator) / Number(data['ExposureTime'].numerator);
-            data['x-Settings'] = 'ISO-'+data['ISOSpeedRatings']
-                + ', ' + data['FocalLength'] + 'mm, f/'
-                + data['FNumber'] + ', 1/' + Math.round(exposure) + 's';
+    /**
+     * "1/125 s" for fast shutters, "0.5 s" / "2 s" for long ones.
+     * Return an empty string for nonfinite or nonpositive seconds; use decimal
+     * seconds rounded to tenths at 0.3 s or above and a rounded reciprocal below.
+     */
+    static formatShutter(seconds) {
+        if(!Number.isFinite(seconds) || seconds <= 0) return '';
+        if(seconds >= 0.3) return (Math.round(seconds * 10) / 10) + ' s';
+        return '1/' + Math.round(1 / seconds) + ' s';
+    }
+
+    /**
+     * Set `x-Settings` in place when at least two exposure settings are available.
+     * Accept numeric or rational EXIF values and either ISO key, preferring the
+     * 35 mm equivalent focal length when positive. Leave the raw fields intact.
+     */
+    static processCamSettings(data) {
+        // exifr names ISO "ISO" and gives plain numbers; older parsers used
+        // ISOSpeedRatings and {numerator, denominator} fractions.
+        const iso = data['ISO'] ?? data['ISOSpeedRatings'];
+        const fNumber = ExifParser.toNumber(data['FNumber']);
+        const shutter = ExifParser.toNumber(data['ExposureTime']);
+        const focal = ExifParser.toNumber(data['FocalLength']);
+        const focal35 = ExifParser.toNumber(data['FocalLengthIn35mmFormat']);
+
+        const parts = [];
+        if(Number.isFinite(fNumber) && fNumber > 0) parts.push('ƒ/' + (Math.round(fNumber * 10) / 10));
+        const shutterText = ExifParser.formatShutter(shutter);
+        if(shutterText) parts.push(shutterText);
+        if(iso) parts.push('ISO ' + (Array.isArray(iso) ? iso[0] : iso));
+        if(Number.isFinite(focal35) && focal35 > 0) {
+            parts.push(Math.round(focal35) + ' mm');
+        } else if(Number.isFinite(focal) && focal > 0) {
+            parts.push((Math.round(focal * 10) / 10) + ' mm');
+        }
+        if(parts.length >= 2) {
+            data['x-Settings'] = parts.join(' · ');
         }
     }
 

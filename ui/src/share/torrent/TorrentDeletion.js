@@ -12,6 +12,12 @@ export default class TorrentDeletion {
         this.master = master;
     }
 
+    /**
+     * Request deletion from the room and remove the cached image without waiting.
+     * Tiles without a torrent are marked deleted and removed from the UI immediately.
+     * Resolve with the photo's infoHash; reject with 'Invalid tile: missing infoHash'
+     * for invalid input, or propagate service failures. Cache failures are ignored.
+     */
     deleteItem(tile) {
         // Validate tile has infoHash
         if(!tile || !tile.infoHash) {
@@ -29,18 +35,15 @@ export default class TorrentDeletion {
                     return tile.infoHash;
                 });
         } else {
-            return new Promise((resolve) => {
-                tile.deleted = true;
-                this.master.emitter.emit('photos', {
-                    type: 'delete', item: tile.infoHash
-                });
-                return this.service.delete(tile.infoHash)
-                    .then(() => {
-                        Logger.info('deleted ' + tile.infoHash);
-                        return tile.infoHash;
-                    });
-                //resolve(tile.infoHash);
+            tile.deleted = true;
+            this.master.emitter.emit('photos', {
+                type: 'delete', item: tile.infoHash
             });
+            return this.service.delete(tile.infoHash)
+                .then(() => {
+                    Logger.info('deleted ' + tile.infoHash);
+                    return tile.infoHash;
+                });
         }
     }
 
