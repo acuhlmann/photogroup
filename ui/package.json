@@ -15,6 +15,7 @@
     "buffer": "^6.0.3",
     "butterchurn": "^2.6.7",
     "butterchurn-presets": "^2.4.7",
+    "client-zip": "^2.5.1",
     "clipboard-copy": "^4.0.1",
     "core-js": "^3.50.0",
     "create-torrent": "^6.1.3",

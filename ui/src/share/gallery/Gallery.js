@@ -23,6 +23,7 @@ import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
 import { runViewTransition } from "./viewTransition";
 import GalleryToolbar from "./GalleryToolbar";
 import RoomMap from "./RoomMap";
+import DownloadRoomButton from "./DownloadRoomButton";
 import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { captureDroppedHandles } from "./replaceOriginal";
@@ -543,6 +544,7 @@ function Gallery(props) {
                         unplaced={arranged.unplaced}
                         shown={visible.length}
                         total={arranged.total}
+                        actions={<DownloadRoomButton tiles={tiles} roomId={master.service && master.service.id} />}
                     />
                 )}
                 {mode === 'map' && tiles.length > 1 && (

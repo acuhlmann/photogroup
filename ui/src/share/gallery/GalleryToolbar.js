@@ -21,8 +21,8 @@ const RATINGS = [
 
 const selectSx = { minWidth: 150, '& .MuiInputBase-input': { py: 0.75, fontSize: '0.85rem' } };
 
-/** Grid or map, sort, and filters for the gallery. */
-function GalleryToolbar({ view, onChange, mode, onModeChange, places, unplaced, shown, total }) {
+/** Grid or map, sort, and filters for the gallery, then any `actions` at the end of the row. */
+function GalleryToolbar({ view, onChange, mode, onModeChange, places, unplaced, shown, total, actions }) {
     const set = changes => onChange({ ...view, ...changes });
     return (
         <Box component="section" aria-label="Sort and filter photos" sx={{ mb: 2 }}>
@@ -59,6 +59,7 @@ function GalleryToolbar({ view, onChange, mode, onModeChange, places, unplaced, 
                         input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment> },
                     }}
                     sx={{ flex: '1 1 200px', minWidth: 180, '& .MuiInputBase-input': { py: 0.75, fontSize: '0.85rem' } }} />
+                {actions}
             </Stack>
             {isFiltered(view) && (
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 1 }}>
@@ -83,6 +84,7 @@ GalleryToolbar.propTypes = {
     unplaced: PropTypes.number.isRequired,
     shown: PropTypes.number.isRequired,
     total: PropTypes.number.isRequired,
+    actions: PropTypes.node,
 };
 
 export default GalleryToolbar;
