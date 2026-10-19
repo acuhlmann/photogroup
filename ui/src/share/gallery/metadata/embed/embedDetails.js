@@ -8,6 +8,10 @@ import * as heif from './heif';
 import * as mp4 from './mp4';
 import * as id3 from './id3';
 import * as flac from './flac';
+import * as gif from './gif';
+import * as wav from './wav';
+import * as ogg from './ogg';
+import * as mkv from './mkv';
 
 // Write the room's shared details (title, description, rating) into a saved
 // file's own metadata, so the edits travel with it instead of only living
@@ -15,7 +19,7 @@ import * as flac from './flac';
 // no writer understands are returned unchanged.
 
 // HEIF before MP4: both start with an ftyp box, told apart by brand.
-const WRITERS = [jpeg, png, webp, heif, mp4, id3, flac];
+const WRITERS = [jpeg, png, webp, gif, heif, mp4, mkv, id3, flac, wav, ogg];
 
 /** The shared fields someone actually set, or null when there are none. */
 function sharedChanges(details) {

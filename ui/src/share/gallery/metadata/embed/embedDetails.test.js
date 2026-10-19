@@ -287,5 +287,77 @@ describe('embedDetails', () => {
         const metadata = await mm.parseBuffer(await bytesOf(await embedDetails(fixture('faststart.mp4'), { keywords: ['pier', 'dusk'] })));
         expect(metadata.common.keywords).toEqual(['pier, dusk']);
     });
+
+    describe('more formats', () => {
+        const text = async blob => new TextDecoder().decode(await bytesOf(blob));
+        const audio = async blob => {
+            const metadata = await mm.parseBuffer(await bytesOf(blob));
+            const rating = metadata.common.rating?.[0]?.rating;
+            return {
+                title: metadata.common.title,
+                comments: (metadata.common.comment || []).map(comment => comment.text),
+                stars: rating == null ? null : mm.ratingToStars(rating),
+                duration: metadata.format.duration,
+            };
+        };
+
+        it('puts XMP in a GIF application extension, once', async () => {
+            const once = await embedDetails(fixture('anim.gif'), DETAILS);
+            const twice = await embedDetails(once, { title: 'Again' });
+            expect((await text(twice)).slice(0, 6)).toBe('GIF89a');
+            const packets = await xmpPackets(twice);
+            expect(packets).toHaveLength(1);
+            expect(packets[0]).toMatchObject({ titles: ['Again'], descriptions: [DETAILS.description], rating: 4 });
+            // Still ends with the trailer, frames untouched after the extension
+            const bytes = await bytesOf(twice);
+            expect(bytes[bytes.length - 1]).toBe(0x3B);
+        });
+
+        it('tags a WAV in its INFO list and an id3 chunk, keeping the audio', async () => {
+            const original = await audio(fixture('tone.wav'));
+            const result = await audio(await embedDetails(fixture('tone.wav'), DETAILS));
+            expect(result).toMatchObject({ title: DETAILS.title, stars: 4, duration: original.duration });
+            expect(result.comments).toContain(DETAILS.description);
+            expect(result.comments).not.toContain('Old text');
+        });
+
+        it.each(['tone.ogg', 'tone.opus'])('rewrites the Vorbis comments of %s', async name => {
+            const original = await audio(fixture(name));
+            expect(await audio(await embedDetails(fixture(name), DETAILS)))
+                .toMatchObject({ title: DETAILS.title, comments: [DETAILS.description], stars: 4, duration: original.duration });
+        });
+
+        it.each(['tone.ogg', 'tone.opus'])('pages %s again when the comments outgrow a page, and back', async name => {
+            const original = await audio(fixture(name));
+            const long = await embedDetails(fixture(name), { description: 'x'.repeat(70000) });
+            expect((await audio(long)).comments[0]).toHaveLength(70000);
+            expect((await audio(long)).duration).toBe(original.duration);
+            const short = await embedDetails(long, { description: 'short' });
+            expect(await audio(short)).toMatchObject({ comments: ['short'], duration: original.duration });
+        });
+
+        it.each([
+            ['clip.webm', 'appends the tags'],
+            ['recorded.webm', 'appends the tags to a live recording of unknown size'],
+            ['clip.mkv', 'appends the tags to an MKV with checksums'],
+        ])('tags %s: %s', async name => {
+            const original = await audio(fixture(name));
+            const result = await embedDetails(fixture(name), { ...DETAILS, keywords: ['pier', 'dusk'] });
+            expect(await audio(result)).toMatchObject({ title: DETAILS.title, duration: original.duration });
+            const content = await text(result);
+            expect(content).toContain('DESCRIPTION');
+            expect(content).toContain(DETAILS.description);
+            expect(content).toContain('pier, dusk');
+            expect(content).not.toContain('keepme');
+        });
+
+        it('rewrites the head of a WebM in place when there is room', async () => {
+            const original = fixture('roomy.webm');
+            const result = await embedDetails(original, DETAILS);
+            expect(result.size).toBe(original.size);
+            expect(await audio(result)).toMatchObject({ title: DETAILS.title, duration: (await audio(original)).duration });
+            expect(await text(result)).toContain(DETAILS.description);
+        });
+    });
 });
 
