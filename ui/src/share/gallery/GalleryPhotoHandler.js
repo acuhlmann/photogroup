@@ -24,7 +24,7 @@ export default class GalleryPhotoHandler {
      * infoHash or stable tileKey. Incoming photo objects may be mutated.
      */
     sync() {
-        this.emitter.on('photos', event => {
+        const onPhotos = event => {
 
             const formatToken = 'H:m MMM d y';
             if(event.type === 'all') {
@@ -33,6 +33,14 @@ export default class GalleryPhotoHandler {
                     const photos = event.item.map(item => {
                         const existing = state.find(tile => tile.infoHash === item.infoHash);
                         if (existing && existing !== item) {
+                            // Resuming re-syncs the room and may hand us a fresh
+                            // blob URL for a photo already on screen; swapping
+                            // the src re-decodes the image and flashes the tile.
+                            if (existing.img && item.img !== existing.img) {
+                                item.img = existing.img;
+                                item.elem = existing.elem || item.elem;
+                                item.loading = false;
+                            }
                             // The server only knows the shared fields: keep the
                             // image, file and metadata this browser already has.
                             Object.keys(existing).forEach(key => {
@@ -167,6 +175,8 @@ export default class GalleryPhotoHandler {
                     return tiles;
                 });
             }
-        });
+        };
+        this.emitter.on('photos', onPhotos);
+        return () => this.emitter.removeListener('photos', onPhotos);
     }
 }

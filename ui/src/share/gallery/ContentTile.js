@@ -181,7 +181,8 @@ function ContentTile(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [master, tile.infoHash]);
 
-    const isLoading = tile.torrentFile && !tile.torrentFile.done;
+    // A photo restored from cache is complete even while its torrent re-verifies.
+    const isLoading = tile.torrentFile && !tile.torrentFile.done && !tile.elem;
     let progressPercentage, downloaded;
     if(isLoading && tile.torrentFile) {
         progressPercentage = Math.round(tile.torrentFile.progress * 100);
