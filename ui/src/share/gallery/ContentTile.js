@@ -18,7 +18,10 @@ import RenderContent from "./RenderContent";
 import { saveLabel, savePhoto } from "./savePhoto";
 import { photoTransitionName } from "./viewTransition";
 import { groupMetadataForDisplay } from "./metadata/groupPhotoMetadata";
-import { RatingStars, ColorLabel } from "./metadata/MediaMetadataPanel";
+import { RatingStars, ColorLabel, StarPicker } from "./metadata/MediaMetadataPanel";
+import InlineTitle from "./metadata/InlineTitle";
+import { LocationLine } from "./metadata/LocationCard";
+import { canSaveDetails, saveDetails } from "./metadata/saveDetails";
 
 /** Display loaded media and metadata highlights, with save, delete, and decryption controls. */
 function ContentTile(props) {
@@ -155,14 +158,28 @@ function ContentTile(props) {
         setIsDecrypted(true);
     }, [snack]);
 
-    const highlights = useMemo(() => {
+    const grouped = useMemo(() => {
         // Shared details show even before this browser has read the file.
         const summary = tile.metadata && master.metadata
             ? master.metadata.createMetadataSummary(tile.metadata, tile) : null;
-        return groupMetadataForDisplay(summary, tile).highlights;
+        return groupMetadataForDisplay(summary, tile);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tile.metadata, tile.details, master.metadata]);
-    const { title, rating, description } = Object.fromEntries(highlights.map(item => [item.kind, item]));
+    const { title, rating, description } = Object.fromEntries(grouped.highlights.map(item => [item.kind, item]));
+
+    const canEdit = canSaveDetails(master);
+    /** Save one shared field from the tile, telling the person when it fails. */
+    const saveField = useCallback(async (fields) => {
+        try {
+            await saveDetails(master, tile.infoHash, fields);
+        } catch (err) {
+            snack(err && err.status === 404
+                ? 'This photo is still being shared. Try again in a moment.'
+                : (err && err.message) || 'Could not save. Try again.', 'error');
+            throw err;
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [master, tile.infoHash]);
 
     const isLoading = tile.torrentFile && !tile.torrentFile.done;
     let progressPercentage, downloaded;
@@ -284,12 +301,21 @@ function ContentTile(props) {
 
             <Box sx={{ px: 1.5, py: 1.25 }}>
                 {/* Title, rating and description lead when the file has them; the file name is context. */}
-                {title && (
-                    <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600, lineHeight: 1.3, wordBreak: 'break-word' }}>
-                        {title.value}
-                    </Typography>
-                )}
-                {rating && (
+                <InlineTitle
+                    value={title ? title.value : ''}
+                    onSave={canEdit ? (value => saveField({ title: value })) : undefined}
+                />
+                {canEdit ? (
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.25, ml: -0.25 }}>
+                        <StarPicker
+                            value={grouped.values.rating}
+                            size={18}
+                            showLabel={grouped.values.rating === -1}
+                            onChange={stars => saveField({ rating: stars }).catch(() => {})}
+                        />
+                        {rating && <ColorLabel value={rating.colorLabel} />}
+                    </Stack>
+                ) : rating && (
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.5 }}>
                         {rating.value === -1
                             ? <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 600 }}>Rejected</Typography>
@@ -314,6 +340,7 @@ function ContentTile(props) {
                         {description.value}
                     </Typography>
                 )}
+                {grouped.location && <LocationLine location={grouped.location} />}
                 <Typography
                     variant={title ? 'caption' : 'body2'}
                     sx={{

@@ -29,6 +29,7 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
 import FileUtil from '../../util/FileUtil';
 import { groupMetadataForDisplay, humanizeMetadataValue, labelForMetadataKey } from './groupPhotoMetadata';
+import LocationCard from './LocationCard';
 
 const monoLabelSx = {
     fontFamily: 'var(--font-mono)',
@@ -120,11 +121,37 @@ export function KeywordChips({ words, sx }) {
     );
 }
 
-/** Only what is set: a missing title or rating is listed quietly at the end instead. */
-function MetadataHero({ highlights, onEdit }) {
-    if (!highlights.length) return null;
+const placeholderSx = {
+    p: 0, border: 0, background: 'none', font: 'inherit', textAlign: 'left', cursor: 'pointer',
+    color: 'text.secondary', textDecoration: 'underline dotted', textUnderlineOffset: '4px',
+    '&:hover': { color: 'primary.main' },
+};
+
+const editableSx = {
+    p: 0, border: 0, background: 'none', font: 'inherit', color: 'inherit', textAlign: 'left',
+    cursor: 'text', borderRadius: 1, '&:hover': { bgcolor: 'action.hover' },
+};
+
+/**
+ * Title, rating, description and keywords. When editing is allowed, missing
+ * fields show as "Add a …" prompts, text opens the editor on that field,
+ * and stars save the rating with one tap.
+ */
+function MetadataHero({ highlights, values, onEdit, onRate }) {
+    const [ratingError, setRatingError] = useState('');
+    const canEdit = typeof onEdit === 'function';
+    if (!highlights.length && !canEdit) return null;
     const byKind = Object.fromEntries(highlights.map(item => [item.kind, item]));
     const { title, rating, description, keywords } = byKind;
+
+    const rate = async (stars) => {
+        setRatingError('');
+        try {
+            await onRate(stars);
+        } catch (err) {
+            setRatingError((err && err.message) || 'Could not save the rating.');
+        }
+    };
 
     return (
         <Box
@@ -154,25 +181,51 @@ function MetadataHero({ highlights, onEdit }) {
                 },
             }}
         >
-            {onEdit && (
+            {canEdit && (
                 <IconButton
                     size="small"
                     aria-label="Edit title, description and rating"
-                    onClick={() => onEdit()}
+                    onClick={() => onEdit('title')}
                     sx={{ position: 'absolute', top: 6, right: 6, color: 'text.secondary' }}
                 >
                     <EditRounded fontSize="small" />
                 </IconButton>
             )}
             {title && (
-                <Typography variant="h5" component="h2" sx={{ lineHeight: 1.25, wordBreak: 'break-word', pr: onEdit ? 4 : 0 }}>
-                    {title.value}
+                <Typography variant="h5" component="h2" sx={{ lineHeight: 1.25, wordBreak: 'break-word', pr: canEdit ? 4 : 0 }}>
+                    {canEdit ? (
+                        <Box component="button" type="button" aria-label="Edit title" onClick={() => onEdit('title')} sx={editableSx}>
+                            {title.value}
+                        </Box>
+                    ) : title.value}
                 </Typography>
             )}
-            {rating && <RatingRow value={rating.value} colorLabel={rating.colorLabel} />}
+            {!title && canEdit && (
+                <Typography variant="h6" component="h2" sx={{ lineHeight: 1.25, pr: 4 }}>
+                    <Box component="button" type="button" onClick={() => onEdit('title')} sx={placeholderSx}>Add a title</Box>
+                </Typography>
+            )}
+            {canEdit ? (
+                <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
+                    <StarPicker value={values.rating} onChange={rate} />
+                    {rating && <ColorLabel value={rating.colorLabel} />}
+                </Stack>
+            ) : rating && <RatingRow value={rating.value} colorLabel={rating.colorLabel} />}
+            {ratingError && (
+                <Typography variant="body2" role="alert" sx={{ color: 'error.main' }}>{ratingError}</Typography>
+            )}
             {description && (
                 <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.5, wordBreak: 'break-word' }}>
-                    {description.value}
+                    {canEdit ? (
+                        <Box component="button" type="button" aria-label="Edit description" onClick={() => onEdit('description')} sx={editableSx}>
+                            {description.value}
+                        </Box>
+                    ) : description.value}
+                </Typography>
+            )}
+            {!description && canEdit && (
+                <Typography variant="body2">
+                    <Box component="button" type="button" onClick={() => onEdit('description')} sx={placeholderSx}>Add a description</Box>
                 </Typography>
             )}
             {keywords && <KeywordChips words={keywords.value} sx={{ mt: 0.5 }} />}
@@ -183,9 +236,16 @@ function MetadataHero({ highlights, onEdit }) {
 const TITLE_MAX = 200;
 const DESCRIPTION_MAX = 4000;
 
-/** Tap a star to rate; tap the current rating again to clear it. */
-function StarPicker({ value, onChange }) {
+/**
+ * Tap a star to rate; tap the current rating again to clear it. A rating of
+ * -1 (rejected in Lightroom) shows as such until a star is picked.
+ */
+export function StarPicker({ value, onChange, size = 28, showLabel = true }) {
+    const rejected = Number(value) === -1;
     const rating = Math.max(0, Math.min(5, Math.round(Number(value) || 0)));
+    let label = 'Not rated';
+    if (rejected) label = 'Rejected';
+    else if (rating) label = `${rating}/5`;
     return (
         <Stack direction="row" spacing={0.25} role="group" aria-label="Rating" sx={{ alignItems: 'center' }}>
             {[1, 2, 3, 4, 5].map(stars => (
@@ -194,15 +254,23 @@ function StarPicker({ value, onChange }) {
                     size="small"
                     aria-label={`${stars} star${stars > 1 ? 's' : ''}`}
                     aria-pressed={rating === stars}
-                    onClick={() => onChange(rating === stars ? 0 : stars)}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onChange(rating === stars ? 0 : stars);
+                    }}
                     sx={{ p: 0.25, color: stars <= rating ? 'primary.main' : 'text.disabled' }}
                 >
-                    {stars <= rating ? <StarRounded sx={{ fontSize: 28 }} /> : <StarOutlineRounded sx={{ fontSize: 28 }} />}
+                    {stars <= rating ? <StarRounded sx={{ fontSize: size }} /> : <StarOutlineRounded sx={{ fontSize: size }} />}
                 </IconButton>
             ))}
-            <Box component="span" sx={{ ...monoLabelSx, ml: 1, color: rating ? 'text.primary' : 'text.disabled' }}>
-                {rating ? `${rating}/5` : 'Not rated'}
-            </Box>
+            {showLabel && (
+                <Box component="span" sx={{
+                    ...monoLabelSx, ml: 1,
+                    color: rejected ? 'error.main' : (rating ? 'text.primary' : 'text.disabled'),
+                }}>
+                    {label}
+                </Box>
+            )}
         </Stack>
     );
 }
@@ -357,30 +425,9 @@ const chipSx = {
     fontVariantNumeric: 'tabular-nums',
 };
 
-/**
- * Render a value as text, exposure chips, or a map link for decimal coordinates.
- * Optional altitude is in meters and is appended only to a location value.
- */
-function MetadataValue({ item, altitude }) {
+/** Render a value as text or, for exposure settings, a row of chips. */
+function MetadataValue({ item }) {
     const { key, value } = item;
-
-    if (value && typeof value === 'object' && value.lat != null && value.long != null) {
-        const lat = Number(value.lat);
-        const long = Number(value.long);
-        const text = `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(long).toFixed(4)}° ${long >= 0 ? 'E' : 'W'}`;
-        return (
-            <>
-                <a href={`https://www.google.com/maps?q=${lat.toFixed(5)},${long.toFixed(5)}`} target="_blank" rel="noopener noreferrer">
-                    {text}
-                </a>
-                {altitude != null && (
-                    <Box component="span" sx={{ color: 'text.secondary' }}>
-                        {' · '}{humanizeMetadataValue('GPSAltitude', altitude)}
-                    </Box>
-                )}
-            </>
-        );
-    }
 
     // "ƒ/1.8 · 1/125 s · ISO 100 · 26 mm" reads best as a row of chips.
     if (key === 'x-Settings') {
@@ -403,13 +450,10 @@ function MetadataValue({ item, altitude }) {
 /** The fields people look for, each with an icon so the list scans at a glance. */
 function DetailRows({ items }) {
     if (!items.length) return null;
-    const altitude = items.find(item => item.key === 'GPSAltitude')?.value;
-    const hasLocation = items.some(item => item.key === 'x-Location');
-    const rows = hasLocation ? items.filter(item => item.key !== 'GPSAltitude') : items;
 
     return (
         <Box component="dl" sx={{ m: 0, display: 'flex', flexDirection: 'column' }}>
-            {rows.map(item => {
+            {items.map(item => {
                 const Icon = DETAIL_ICONS[item.key] || InfoOutlined;
                 return (
                     <Box key={item.key} sx={{
@@ -427,7 +471,7 @@ function DetailRows({ items }) {
                                 {labelForMetadataKey(item.key)}
                             </Box>
                             <Typography component="dd" variant="body2" sx={{ m: 0, mt: 0.25, lineHeight: 1.45, wordBreak: 'break-word' }}>
-                                <MetadataValue item={item} altitude={hasLocation ? altitude : undefined} />
+                                <MetadataValue item={item} />
                             </Typography>
                         </Box>
                     </Box>
@@ -529,8 +573,10 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
     const canEdit = typeof onSaveDetails === 'function';
     const showFileNameEditor = tile && onFileNameChange;
     const leadItems = grouped.lead.filter(item => item.key !== 'x-file name');
-    const hasAnything = grouped.highlights.length > 0 || leadItems.length > 0 || grouped.more.length > 0;
-    const hasCatalog = grouped.highlights.length > 0;
+    const hasAnything = grouped.highlights.length > 0 || leadItems.length > 0 || grouped.more.length > 0
+        || !!grouped.location;
+    // With editing, missing title/description/rating are prompted for in the hero instead.
+    const missing = canEdit ? grouped.missing.filter(label => !EDITABLE_MISSING[label]) : grouped.missing;
 
     return (
         <Box sx={{ mt: 1 }}>
@@ -543,20 +589,21 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
                 />
             ) : (
                 <>
-                    <MetadataHero highlights={grouped.highlights} onEdit={canEdit ? () => setEditing('title') : null} />
-                    {canEdit && !hasCatalog && (
-                        <Button
-                            size="small"
-                            startIcon={<EditRounded fontSize="small" />}
-                            onClick={() => setEditing('title')}
-                            sx={{ mt: 1.5, borderStyle: 'dashed', borderWidth: 1, borderColor: 'divider', color: 'text.secondary', px: 1.5 }}
-                            variant="outlined"
-                        >
-                            Add a title, description or rating
-                        </Button>
-                    )}
+                    <MetadataHero
+                        highlights={grouped.highlights}
+                        values={grouped.values || {}}
+                        onEdit={canEdit ? setEditing : null}
+                        onRate={canEdit ? (rating => onSaveDetails({ rating })) : null}
+                    />
                     <EditedBy editedBy={grouped.editedBy} editedAt={grouped.editedAt} myPeerId={myPeerId} />
                 </>
+            )}
+
+            {grouped.location && (
+                <Box sx={{ mt: 2.5 }}>
+                    <SectionHeading>Location</SectionHeading>
+                    <LocationCard location={grouped.location} />
+                </Box>
             )}
 
             {!hasAnything && !canEdit && (
@@ -595,32 +642,14 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
                 </Box>
             )}
 
-            {summary && grouped.missing.length > 0 && (
+            {summary && missing.length > 0 && (
                 <Typography
                     variant="caption"
                     data-testid="metadata-missing"
                     sx={{ display: 'block', mt: 2.5, color: 'text.disabled', lineHeight: 1.5 }}
                 >
                     <Box component="span" sx={{ ...monoLabelSx, color: 'text.disabled', mr: 0.75 }}>Not set</Box>
-                    {grouped.missing.map((label, index) => (
-                        <React.Fragment key={label}>
-                            {index > 0 && ' · '}
-                            {canEdit && EDITABLE_MISSING[label] && !editing ? (
-                                <Box
-                                    component="button"
-                                    type="button"
-                                    onClick={() => setEditing(EDITABLE_MISSING[label])}
-                                    sx={{
-                                        p: 0, border: 0, background: 'none', font: 'inherit', color: 'inherit',
-                                        cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: '3px',
-                                        '&:hover': { color: 'primary.main' },
-                                    }}
-                                >
-                                    {label}
-                                </Box>
-                            ) : label}
-                        </React.Fragment>
-                    ))}
+                    {missing.join(' · ')}
                 </Typography>
             )}
         </Box>

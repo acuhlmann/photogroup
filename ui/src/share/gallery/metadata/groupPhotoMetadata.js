@@ -216,6 +216,10 @@ export function flattenMetadataSummary(summary, tile) {
         }
 
         if (item.key === 'native') return;
+        if (isLocation(item.value)) {
+            flat.push({ key: item.key, value: item.value });
+            return;
+        }
 
         if (typeof item.value === 'object') {
             flat.push({ key: item.key, value: formatPrimitive(item.value) });
@@ -264,7 +268,7 @@ export function groupMetadataForDisplay(summary, tile) {
     const shared = (tile && tile.details) || {};
     const hasShared = SHARED_FIELDS.some(key => shared[key] !== undefined);
     if (flat.length === 0 && !hasShared) {
-        return { highlights: [], lead: [], more: [], missing: [], values: {}, editedBy: null, editedAt: null };
+        return { highlights: [], lead: [], more: [], missing: [], values: {}, location: null, editedBy: null, editedAt: null };
     }
     /** Prefer an explicitly shared value, including a cleared field, over embedded metadata. */
     const pick = (key, embedded) => (shared[key] !== undefined ? shared[key] : embedded);
@@ -295,7 +299,10 @@ export function groupMetadataForDisplay(summary, tile) {
     const hidden = new Set(Object.entries(SHOWN_BY)
         .filter(([derived]) => shown.has(derived))
         .flatMap(([, raw]) => raw));
-    const rest = flat.filter(item => !HIGHLIGHT_SOURCE_KEYS.has(item.key) && !hidden.has(item.key));
+    // The location gets its own card with a map, not a row.
+    const location = firstValue(flat, ['x-Location']);
+    const rest = flat.filter(item => !HIGHLIGHT_SOURCE_KEYS.has(item.key) && !hidden.has(item.key)
+        && item.key !== 'x-Location');
     const { lead, more } = groupPhotoMetadata(rest);
 
     const kinds = new Set(highlights.filter(item => item.kind !== 'rating' || item.value != null).map(item => item.kind));
@@ -308,7 +315,7 @@ export function groupMetadataForDisplay(summary, tile) {
         description: description ? String(description).trim() : '',
         rating: Number.isFinite(rating) ? rating : 0,
     };
-    return { highlights, lead, more, missing, values,
+    return { highlights, lead, more, missing, values, location,
         editedBy: shared.editedBy || null, editedAt: shared.editedAt || null };
 }
 

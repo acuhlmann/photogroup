@@ -8,6 +8,9 @@ import * as mm from 'music-metadata';
 import StringUtil from "../../util/StringUtil";
 import _ from 'lodash';
 import humanizeDuration from 'humanize-duration';
+import { concat, readBytes } from './embed/binary';
+import * as heif from './embed/heif';
+import { readLocation as readVideoLocation } from './embed/mp4';
 
 /** One torrent/file metadata parse per item — avoids competing read streams with playback. */
 const mediaMetadataInflight = new Map();
@@ -38,8 +41,7 @@ export default class MetadataParser {
         if(tile.isImage) {
 
             const self = this;
-            //{xmp: true, userComment: true, makerNote: true, ifd1: true}
-            exifr.parse(tile.elem, true)
+            MetadataParser.parseImage(tile.elem)
                 .then(output => {
                     if(output) {
                         Logger.info('Camera:', output.Make, output.Model);
@@ -72,6 +74,11 @@ export default class MetadataParser {
             let pending = mediaMetadataInflight.get(key);
             if (!pending) {
                 pending = this.parseMediaMetadata(tile)
+                    .then(async metadata => {
+                        const location = metadata && tile.isVideo ? await MetadataParser.readVideoLocation(tile) : null;
+                        if (location) metadata['x-Location'] = location;
+                        return metadata;
+                    })
                     .finally(() => mediaMetadataInflight.delete(key));
                 mediaMetadataInflight.set(key, pending);
             }
@@ -83,6 +90,47 @@ export default class MetadataParser {
                     Logger.error('error parsing media metadata ' + e);
                     callback(tile, {});
                 });
+        }
+    }
+
+    /**
+     * exifr output for an image. HEIC/AVIF Exif and XMP are pulled out
+     * directly, since exifr 7 fails on many current HEIF files.
+     */
+    static async parseImage(file) {
+        if (file && typeof file.slice === 'function' && heif.matches(await readBytes(file, 0, 64))) {
+            const { exif, xmp } = await heif.readMetadataItems(file);
+            const output = (exif && await exifr.parse(exif, true)) || {};
+            if (xmp) output.xmp = xmp;
+            return Object.keys(output).length ? output : undefined;
+        }
+        return exifr.parse(file, true);
+    }
+
+    /** Where a video was shot, from its local file or the torrent still arriving. */
+    static async readVideoLocation(tile) {
+        const local = tile.file || tile.elem;
+        let source = local && typeof local.slice === 'function' ? local : null;
+        const torrentFile = tile.torrentFile;
+        if (!source && torrentFile && typeof torrentFile.createReadStream === 'function') {
+            source = {
+                size: torrentFile.length,
+                read: (start, end) => new Promise((resolve, reject) => {
+                    if (end <= start) return resolve(new Uint8Array(0));
+                    const chunks = [];
+                    const stream = torrentFile.createReadStream({ start, end: end - 1 });
+                    stream.on('data', chunk => chunks.push(chunk));
+                    stream.on('end', () => resolve(concat(chunks)));
+                    stream.on('error', reject);
+                }),
+            };
+        }
+        if (!source) return null;
+        try {
+            return await readVideoLocation(source);
+        } catch (e) {
+            Logger.warn('could not read video location ' + e.message);
+            return null;
         }
     }
 
@@ -323,7 +371,7 @@ export default class MetadataParser {
                         newValueObj = JSON.stringify(valueObj);
                     }
                 } else if(tile.isAudio || tile.isVideo) {
-                    if((key === 'format' || key === 'common') && valueObj) {
+                    if(((key === 'format' || key === 'common') && valueObj) || key.substring(0, 2) === 'x-') {
                         newValueObj = valueObj;
                     } else if(key === 'native') {
                         newValueObj = Object.entries(valueObj)
@@ -345,7 +393,7 @@ export default class MetadataParser {
         if(tile.isImage) {
             ['x-file name', 'Title XMP', 'Rating XMP', 'x-Description', 'Label XMP', 'Keywords XMP',
                 'DateTimeOriginal', 'Creator XMP', 'x-Location', 'x-Camera', 'LensModel', 'x-Settings',
-                'x-Pixel Size', 'GPSAltitude',
+                'x-Pixel Size',
                 'DigitalZoomRation', 'Flash', 'WhiteBalance', 'MeteringMode',
                 'Software', 'x-Last Save with', 'x-Last Save at']
                 .reverse()

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import MetadataParser from './MetadataParser';
 
 describe('MetadataParser media metadata', () => {
@@ -93,3 +95,61 @@ describe('ExifParser GPS', () => {
         expect(broken['x-Location']).toBeUndefined();
     });
 });
+
+describe('MetadataParser reading where things were taken', () => {
+    const fixture = name => new File([readFileSync(fileURLToPath(new URL('./embed/__fixtures__/' + name, import.meta.url)))], name);
+
+    it('reads Exif GPS from a HEIC, which exifr cannot parse on its own', async () => {
+        const output = await MetadataParser.parseImage(fixture('gps.heic'));
+        expect(output.Make).toBe('Apple');
+        const tile = { isImage: true, fileName: 'gps.heic' };
+        const md = new MetadataParser({}).extractAndProcess(output, tile);
+        expect(md['x-Location'].lat).toBeCloseTo(-33.86783, 4);
+        expect(md['x-Location'].long).toBeCloseTo(151.20733, 4);
+        expect(md['x-Location'].altitude).toBe(58);
+    });
+
+    it('reads XMP from a HEIC', async () => {
+        const output = await MetadataParser.parseImage(fixture('photo.heic'));
+        const md = new MetadataParser({}).extractAndProcess(output, { isImage: true, fileName: 'photo.heic' });
+        expect(md['Title XMP']).toBe('Old');
+    });
+
+    const near = (location, lat, long) => {
+        expect(location.lat).toBeCloseTo(lat, 4);
+        expect(location.long).toBeCloseTo(long, 4);
+    };
+
+    it('reads the 3GPP location ffmpeg writes into an MP4', async () => {
+        near(await MetadataParser.readVideoLocation({ file: fixture('android.mp4') }), 31.2304, 121.4737);
+    });
+
+    it('reads the QuickTime location Android phones write', async () => {
+        expect(await MetadataParser.readVideoLocation({ file: fixture('phone.mov') }))
+            .toEqual({ lat: -33.8678, long: 151.2073 });
+    });
+
+    it("reads the location an iPhone writes into Apple's keyed metadata", async () => {
+        expect(await MetadataParser.readVideoLocation({ elem: fixture('iphone.mov') }))
+            .toEqual({ lat: 47.3769, long: 8.5417, altitude: 408 });
+    });
+
+    it('reads a video location from a torrent file still arriving', async () => {
+        const bytes = new Uint8Array(await fixture('android.mp4').arrayBuffer());
+        const torrentFile = {
+            length: bytes.length,
+            createReadStream: ({ start, end }) => {
+                const handlers = {};
+                const stream = { on: (event, handler) => { handlers[event] = handler; return stream; } };
+                setTimeout(() => {
+                    handlers.data(bytes.subarray(start, end + 1));
+                    handlers.end();
+                }, 0);
+                return stream;
+            },
+        };
+        near(await MetadataParser.readVideoLocation({ torrentFile }), 31.2304, 121.4737);
+        expect(await MetadataParser.readVideoLocation({ file: fixture('faststart.mp4') })).toBeNull();
+    });
+});
+

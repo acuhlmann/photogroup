@@ -2,10 +2,11 @@ import { ascii, concat, decodeUtf8, latin1, readBytes, readUint, uint, utf8 } fr
 import { box, brands, parseBoxes, scanBoxes } from './isobmff';
 import { applyDetailsToXmp } from './xmpPacket';
 
-// HEIC/AVIF keep XMP as an item of type "mime" in the top-level meta box.
-// The new packet is appended at the end of the file in its own mdat, and
-// the item location (iloc) table is rewritten so the image data it points
-// at still lines up after the meta box grows.
+// HEIC/AVIF keep Exif and XMP as items in the top-level meta box, XMP as
+// an item of type "mime". When writing, the new packet is appended at the
+// end of the file in its own mdat, and the item location (iloc) table is
+// rewritten so the image data it points at still lines up after the meta
+// box grows.
 
 const HEIF_BRANDS = new Set(['mif1', 'msf1', 'miaf', 'heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'avif', 'avis', 'avci']);
 const XMP_TYPE = 'application/rdf+xml';
@@ -93,8 +94,8 @@ function writeLocations(table, offsetSize) {
     return box('iloc', ...parts);
 }
 
-/** Bytes of an item stored in this file or in the meta box's idat. */
-async function readItem(blob, bytes, kids, location) {
+/** An item stored in this file or in the meta box's idat, as text or raw bytes. */
+async function readItem(blob, bytes, kids, location, raw = false) {
     if (!location || location.dataRef !== 0) return null;
     let source;
     if (location.method === 0) {
@@ -109,7 +110,40 @@ async function readItem(blob, bytes, kids, location) {
     }
     const parts = await Promise.all(location.extents.map(extent =>
         source(location.base + extent.offset, location.base + extent.offset + extent.length)));
-    return decodeUtf8(concat(parts));
+    const data = concat(parts);
+    return raw ? data : decodeUtf8(data);
+}
+
+/**
+ * The Exif (as a TIFF block) and XMP items of a HEIF/AVIF file, read
+ * directly because exifr 7 cannot parse many current HEIC files.
+ */
+export async function readMetadataItems(blob) {
+    const top = await scanBoxes(blob);
+    const meta = top.find(item => item.type === 'meta');
+    if (!meta) return {};
+    const bytes = await readBytes(blob, meta.start, meta.end);
+    const kids = parseBoxes(bytes, meta.header + 4);
+    const iinf = kids.find(kid => kid.type === 'iinf');
+    const iloc = kids.find(kid => kid.type === 'iloc');
+    if (!iinf || !iloc) return {};
+    const infos = parseItemInfo(bytes, iinf);
+    const table = parseLocations(bytes, iloc);
+    const locate = info => table.items.find(item => item.id === info.id);
+
+    const result = {};
+    const exif = infos.find(info => info.type === 'Exif');
+    if (exif) {
+        const data = await readItem(blob, bytes, kids, locate(exif), true);
+        // A 4-byte offset to the TIFF header comes first, usually past "Exif\0\0".
+        if (data && data.length > 8) {
+            const start = 4 + readUint(data, 0, 4);
+            if (start < data.length) result.exif = data.subarray(start);
+        }
+    }
+    const xmp = infos.find(info => info.type === 'mime' && info.contentType === XMP_TYPE);
+    if (xmp) result.xmp = await readItem(blob, bytes, kids, locate(xmp));
+    return result;
 }
 
 export function matches(head) {

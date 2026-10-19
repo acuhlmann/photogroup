@@ -1,7 +1,11 @@
 // Byte helpers shared by the per-format metadata writers.
 
-/** Read [start, end) of a blob without loading the rest of it. */
+/**
+ * Read [start, end) of a blob without loading the rest of it. Anything with
+ * `size` and `read(start, end)` works too, such as a file still arriving.
+ */
 export async function readBytes(blob, start, end) {
+    if (typeof blob.read === 'function') return blob.read(start, end);
     return new Uint8Array(await blob.slice(start, end).arrayBuffer());
 }
 

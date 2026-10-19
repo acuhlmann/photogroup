@@ -20,6 +20,7 @@ import MediaMetadataPanel from './metadata/MediaMetadataPanel';
 import RenderContent from './RenderContent';
 import { saveLabel, savePhoto } from './savePhoto';
 import { photoTransitionName, supportsViewTransition } from './viewTransition';
+import { canSaveDetails, saveDetails } from './metadata/saveDetails';
 
 /** Display the selected media in a dialog with navigation, saving, and shared metadata editing. */
 function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
@@ -42,12 +43,9 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
         }, 1000, { leading: true, trailing: true })
     ).current;
 
-    /** Save changed shared fields and publish the returned photo locally; save errors propagate. */
-    const handleSaveDetails = useCallback(async (fields) => {
-        const saved = await master.service.updateDetails(tile.infoHash, fields);
-        // The room hears it over SSE too; show it here without waiting.
-        master.emitter.emit('photos', { type: 'update', item: [saved] });
-    }, [master, tile?.infoHash]);
+    const handleSaveDetails = useCallback(
+        (fields) => saveDetails(master, tile.infoHash, fields),
+        [master, tile?.infoHash]);
 
     const handleFileNameChange = useCallback((value) => {
         setFileName(value);
@@ -255,8 +253,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                         tile={tile}
                         fileName={fileName}
                         onFileNameChange={handleFileNameChange}
-                        onSaveDetails={master.service && typeof master.service.updateDetails === 'function'
-                            ? handleSaveDetails : undefined}
+                        onSaveDetails={canSaveDetails(master) ? handleSaveDetails : undefined}
                         myPeerId={master.client && master.client.peerId}
                     />
 
