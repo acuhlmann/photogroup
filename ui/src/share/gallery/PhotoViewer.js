@@ -227,14 +227,14 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                     p: 2.5,
                     minHeight: 0,
                 }}>
-                    <Typography id="photo-viewer-title" variant="h6" sx={{ wordBreak: 'break-word' }}>
-                        {tile.fileName}
+                    {/* The catalog title/rating/description lead; the file is context. */}
+                    <Typography
+                        id="photo-viewer-title"
+                        variant="body2"
+                        sx={{ color: 'text.secondary', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', wordBreak: 'break-word' }}
+                    >
+                        {tile.fileName}{tile.fileSize ? ` · ${tile.fileSize}` : ''}
                     </Typography>
-                    {tile.fileSize && (
-                        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
-                            {tile.fileSize}
-                        </Typography>
-                    )}
 
                     {(tile.isVideo || tile.isAudio) && !tile.hasMetadata && !summary && (
                         <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>

@@ -5,7 +5,7 @@ import CloseRounded from '@mui/icons-material/CloseRounded';
 import ExitToAppOutlined from '@mui/icons-material/ExitToAppOutlined';
 import IconButton from '@mui/material/IconButton';
 import IosShareRounded from '@mui/icons-material/IosShareRounded';
-import Badge from '@mui/material/Badge';
+import ButtonBase from '@mui/material/ButtonBase';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
@@ -22,6 +22,7 @@ import Logger from 'js-logger';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import Fade from '@mui/material/Fade';
+import { headerButtonSx, headerLabelSx } from './headerButtonSx';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Fade ref={ref} {...props} />;
@@ -216,12 +217,29 @@ function AddPeersView({ master }) {
 
     return (
         visible || hasRoomValue ? <div>
-            <IconButton
-                onClick={() => show(true)}>
-                <Badge badgeContent={numPeers} color="primary" >
-                    <IosShareRounded />
-                </Badge>
-            </IconButton>
+            <ButtonBase
+                aria-label={`Invite peers (${numPeers} in room)`}
+                onClick={() => show(true)}
+                sx={headerButtonSx}>
+                <IosShareRounded />
+                <Box component="span" sx={{ ...headerLabelSx, display: { xs: 'none', sm: 'inline' } }}>
+                    Invite
+                </Box>
+                {numPeers > 0 && (
+                    <Box component="span" sx={{
+                        ...headerLabelSx,
+                        minWidth: 18,
+                        px: 0.6,
+                        py: 0.35,
+                        borderRadius: '4px',
+                        color: 'primary.main',
+                        backgroundColor: 'var(--accent-soft)',
+                        fontVariantNumeric: 'tabular-nums',
+                    }}>
+                        {numPeers}
+                    </Box>
+                )}
+            </ButtonBase>
 
             <Dialog
                 open={open}

@@ -640,6 +640,7 @@ export default class TorrentAddition {
             delete serverPhoto.hasMetadata;
             delete serverPhoto.elem;
             delete serverPhoto.img;
+            delete serverPhoto.tileKey;
             return serverPhoto;
         });
         return toBeShared;

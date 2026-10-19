@@ -1,4 +1,5 @@
 import IpTranslator from './IpTranslator.js';
+import { randomUUID } from 'node:crypto';
 import _ from 'lodash';
 
 // Phones drop their update stream on every screen lock, tab switch or network
@@ -18,6 +19,10 @@ export default class Peers {
         this.webPeers = new Map();
         this.clientsBySessionId = new Map();
         this.leaveTimers = new Map();
+        // sessionId -> secret proving a request comes from that session's tab.
+        // sessionIds are broadcast with every peer, so they can't authorize
+        // evicting or removing a peer on their own.
+        this.sessionTokens = new Map();
 
         emitter.on('iceEvent', event => {
 
@@ -30,13 +35,27 @@ export default class Peers {
         this.clientsBySessionId.clear();
         this.leaveTimers.forEach(timer => clearTimeout(timer));
         this.leaveTimers.clear();
+        this.sessionTokens.clear();
     }
 
     get peers() {
         return [...this.webPeers.values()];
     }
 
-    create(peer) {
+    // Returns the session's token when the caller owns the session (a first
+    // join, or a reload presenting the token it was given), otherwise null.
+    claimSession(sessionId, token) {
+        if(typeof sessionId !== 'string' || !sessionId) return null;
+        const known = this.sessionTokens.get(sessionId);
+        if(!known) {
+            const issued = randomUUID();
+            this.sessionTokens.set(sessionId, issued);
+            return issued;
+        }
+        return token === known ? known : null;
+    }
+
+    create(peer, ownsSession = false) {
 
         if(!peer.networkChain) {
             peer.networkChain = [];
@@ -49,6 +68,9 @@ export default class Peers {
                 item.network = IpTranslator.createEmptyIpObj(item.ip);
             }
         });
+        if(ownsSession) {
+            this.replaceSession(peer);
+        }
         this.webPeers.set(peer.peerId, peer);
         this.sendWebPeers('add', peer);
         // Enrich asynchronously and send update when complete
@@ -134,6 +156,34 @@ export default class Peers {
         return this.peers;
     }
 
+    // A reloaded tab keeps its sessionId but WebTorrent hands it a fresh
+    // peerId. Behind the wake proxy the old page's stream close can take ages
+    // to reach us, so drop the old peer as soon as its replacement joins, and
+    // cancel the old stream's pending leave so it can't remove the new peer.
+    replaceSession(peer) {
+        clearTimeout(this.leaveTimers.get(peer.sessionId));
+        this.leaveTimers.delete(peer.sessionId);
+        this.peers
+            .filter(item => item.sessionId === peer.sessionId && item.peerId !== peer.peerId)
+            .forEach(item => this.removePeer(item));
+    }
+
+    removePeer(peer) {
+        this.emitter.emit('removeOwner', peer.peerId);
+        this.webPeers.delete(peer.peerId);
+        this.sendWebPeers('delete', peer.peerId);
+    }
+
+    // Sent by a closing tab (sendBeacon on pagehide). Keyed by peerId so a
+    // late beacon from a reloaded page can't remove the page that replaced it.
+    leaveNow(sessionId, peerId, token) {
+        const peer = this.webPeers.get(peerId);
+        if(!peer || peer.sessionId !== sessionId) return false;
+        if(!token || this.sessionTokens.get(sessionId) !== token) return false;
+        this.removePeer(peer);
+        return true;
+    }
+
     connect(sessionId) {
         //this.peerIdBySessionId.set(sessionId, sessionId);
     }
@@ -154,16 +204,11 @@ export default class Peers {
     leave(sessionId) {
         this.leaveTimers.delete(sessionId);
         if(this.clientsBySessionId.has(sessionId)) return; // came back in time
+        this.sessionTokens.delete(sessionId);
 
         const peer = [...this.webPeers.values()].find(item => item.sessionId === sessionId);
         if(peer) {
-
-            this.emitter.emit('removeOwner', peer.peerId);
-
-            //this.emitter.emit('event', 'warning', 'peerDisconnect',
-            //    Peers.peerToAppPeer(this.webPeers.get(peerId)));
-            this.webPeers.delete(peer.peerId);
-            this.sendWebPeers('delete', peer.peerId);
+            this.removePeer(peer);
         }
 
         this.emitter.emit('disconnectPeer', sessionId);

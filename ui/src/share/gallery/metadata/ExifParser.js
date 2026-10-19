@@ -4,7 +4,10 @@ export default class ExifParser {
         delete allMetadata['MakerNote'];
 
         if(allMetadata['Make'] && allMetadata['Model']) {
-            allMetadata['x-Camera'] = allMetadata['Make'] + ' ' + allMetadata['Model'];
+            // Many models already carry the brand ("Canon EOS R5")
+            const make = String(allMetadata['Make']).trim();
+            const model = String(allMetadata['Model']).trim();
+            allMetadata['x-Camera'] = model.toLowerCase().startsWith(make.toLowerCase()) ? model : make + ' ' + model;
             //delete allMetadata['Make'];
             delete allMetadata['Model'];
         }
@@ -40,18 +43,29 @@ export default class ExifParser {
         const gPSLatitude = allMetadata['GPSLatitude'];
         const gPSLongitude = allMetadata['GPSLongitude'];
         if(gPSLatitude && gPSLongitude) {
-            allMetadata['x-Location'] = {
-                lat: ExifParser.latLongToDecimal(gPSLatitude),
-                long: ExifParser.latLongToDecimal(gPSLongitude)
-            };
+            // exifr already adds signed decimal latitude/longitude; fall back to
+            // the DMS arrays plus their N/S/E/W references.
+            const lat = Number.isFinite(allMetadata.latitude) ? allMetadata.latitude
+                : ExifParser.latLongToDecimal(gPSLatitude, allMetadata['GPSLatitudeRef']);
+            const long = Number.isFinite(allMetadata.longitude) ? allMetadata.longitude
+                : ExifParser.latLongToDecimal(gPSLongitude, allMetadata['GPSLongitudeRef']);
+            if(Number.isFinite(lat) && Number.isFinite(long)) {
+                allMetadata['x-Location'] = { lat, long };
+            }
             delete allMetadata['GPSLatitude'];
             delete allMetadata['GPSLongitude'];
+            delete allMetadata['latitude'];
+            delete allMetadata['longitude'];
         }
     }
 
     //credits: http://blogs.microsoft.co.il/ranw/2015/01/07/reading-gps-data-using-exif-js/
-    static latLongToDecimal(number) {
-        return number[0].numerator + number[1].numerator /
-            (60 * number[1].denominator) + number[2].numerator / (3600 * number[2].denominator);
+    static latLongToDecimal(number, reference) {
+        if(!Array.isArray(number) || number.length < 3) return NaN;
+        const [degrees, minutes, seconds] = number.map(part => (typeof part === 'number'
+            ? part
+            : Number(part.numerator) / Number(part.denominator)));
+        const decimal = degrees + minutes / 60 + seconds / 3600;
+        return reference === 'S' || reference === 'W' ? -decimal : decimal;
     }
 }

@@ -11,6 +11,7 @@ import { withSnackbar } from '../compatibility/withSnackbar';
 import PropTypes from "prop-types";
 import AudioMotionAnalyzer from 'audiomotion-analyzer';
 import FileUtil from "../util/FileUtil";
+import { imageAspectRatio, rememberImageSize } from "./imageSize";
 
 const styles = theme => ({
     horizontal: {
@@ -32,6 +33,35 @@ const styles = theme => ({
         textAlign: 'center'
     }
 });
+
+// WebTorrent 2+ dropped File#appendTo. Play the local copy when we have one
+// (the uploader always does), otherwise wait for the download and play its blob.
+export function renderMedia(tile, file, node, opts, callback) {
+    if (typeof file.appendTo === 'function') {
+        try {
+            file.appendTo(node, opts, callback);
+        } catch (err) {
+            callback(err);
+        }
+        return;
+    }
+    const local = tile.elem || tile.file;
+    Promise.resolve(local || file.blob())
+        .then(blob => {
+            if (!node.isConnected) return;
+            const elem = document.createElement(tile.isAudio ? 'audio' : 'video');
+            elem.dataset.objectUrl = URL.createObjectURL(blob);
+            elem.src = elem.dataset.objectUrl;
+            elem.autoplay = opts.autoplay;
+            elem.controls = true;
+            elem.muted = opts.muted;
+            elem.loop = opts.loop;
+            elem.playsInline = true;
+            node.appendChild(elem);
+            callback(null, elem);
+        })
+        .catch(err => callback(err));
+}
 
 function RenderContent(props) {
     const {master, tile, classes, enqueueSnackbar, closeSnackbar, playbackActive = true} = props;
@@ -159,6 +189,9 @@ function RenderContent(props) {
 
     const removeFile = useCallback((node) => {
         while (node.firstChild) {
+            if (node.firstChild.dataset?.objectUrl) {
+                URL.revokeObjectURL(node.firstChild.dataset.objectUrl);
+            }
             node.removeChild(node.firstChild);
         }
     }, []);
@@ -176,20 +209,21 @@ function RenderContent(props) {
             const msg = 'File is ' + FileUtil.formatBytes(tile.torrentFile.length) + ' and too large to render inline, just download instead.';
             Logger.warn(msg);
         } else {
-            file.appendTo(node, opts, (err, elem) => {
+            renderMedia(tile, file, node, opts, (err, elem) => {
                 if (err) {
                     const msgNode = document.createElement("div");
                     const msgNodeText = document.createTextNode(err.message);
                     msgNode.appendChild(msgNodeText);
                     node.appendChild(msgNode);
 
-                    Logger.error('webtorrent.appendTo ' + err.message);
+                    Logger.error('renderMedia ' + err.message);
                     enqueueSnackbar(err.message, {
                         variant: 'error',
                         persist: false,
                         autoHideDuration: 4000,
                         action: (key) => (<Button className={classes.white} onClick={ () => closeSnackbar(key) } size="small">x</Button>),
                     });
+                    return;
                 }
 
                 Logger.info('New DOM node with the content', elem);
@@ -355,7 +389,8 @@ function RenderContent(props) {
     const getBlobAndReadMetadataRef = useRef(null);
     getBlobAndReadMetadataRef.current = getBlobAndReadMetadata;
 
-    const imgLoaded = useCallback(() => {
+    const imgLoaded = useCallback((event) => {
+        rememberImageSize(tile, event?.target);
         // For images, when the img tag loads, try to read metadata
         if(readMetadataRef.current) {
             readMetadataRef.current(tile);
@@ -448,9 +483,12 @@ function RenderContent(props) {
         return currentTile.isImage && currentTile.img
             ? <img src={currentTile.img} alt={currentTile.fileName}
                    className={classes?.wide || ''}
-                   style={{width: '100%', maxWidth: '100%', height: 'auto', display: 'block'}}
+                   // Reserve the size the loading preview measured so the
+                   // tile doesn't collapse while the full image decodes.
+                   style={{width: '100%', maxWidth: '100%', height: 'auto', display: 'block',
+                       aspectRatio: imageAspectRatio(currentTile), backgroundColor: '#3a3f47'}}
                    onLoad={imgLoaded} 
-                   key={currentTile.infoHash} />
+                   key={currentTile.tileKey || currentTile.infoHash} />
             : <div className={classes?.wide || ''} style={{width: '100%', maxWidth: '100%'}}>
                 <div className={classes?.horizontal || ''}>
                 {currentTile.isAudio ? <div className={classes?.horizontal || ''}>

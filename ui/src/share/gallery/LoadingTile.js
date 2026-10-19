@@ -17,6 +17,7 @@ import Button from "@mui/material/Button";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
 import TransferConsole from "../torrent/TransferConsole";
 import { isTransferStalled, P2P_STALL_MS } from "../torrent/ServerFallback";
+import { rememberImageSize } from './imageSize';
 
 function LoadingTile({tile, master, name}) {
     const [progress, setProgress] = useState(null);
@@ -178,6 +179,7 @@ function LoadingTile({tile, master, name}) {
                     <img
                         src={displayPreviewThumbnail}
                         alt={'Preview ' + tile.fileName}
+                        onLoad={event => rememberImageSize(tile, event.target)}
                         style={{
                             width: '100%',
                             display: 'block',

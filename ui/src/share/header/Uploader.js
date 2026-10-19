@@ -7,6 +7,9 @@ import { withStyles } from '@mui/styles';
 import LoaderView from './LoaderView';
 
 import IconButton from "@mui/material/IconButton";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
+import { headerLabelSx } from "./headerButtonSx";
 import CloudUploadRounded from '@mui/icons-material/CloudUploadRounded';
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
@@ -32,7 +35,6 @@ function Uploader({classes, model, emitter}) {
     const [visible, setVisible] = useState(false);
     const [open, setOpen] = useState(false);
     const [disabled, setDisabled] = useState(true);
-    const [loadedAnything, setLoadedAnything] = useState(false);
     const [password, setPassword] = useState('');
     const [files, setFiles] = useState(null);
     const [secure, setSecure] = useState(false);
@@ -44,21 +46,16 @@ function Uploader({classes, model, emitter}) {
             setDisabled(false);
         };
 
-        const handleLoadedAnything = () => {
-            setLoadedAnything(true);
-        };
 
         const handleEncrypt = (value) => {
             setSecure(value);
         };
 
         model.emitter.on('readyToUpload', handleReadyToUpload);
-        model.emitter.on('loadedAnything', handleLoadedAnything);
         model.emitter.on('encrypt', handleEncrypt);
 
         return () => {
             model.emitter.removeListener('readyToUpload', handleReadyToUpload);
-            model.emitter.removeListener('loadedAnything', handleLoadedAnything);
             model.emitter.removeListener('encrypt', handleEncrypt);
         };
     }, [model.emitter]);
@@ -107,21 +104,12 @@ function Uploader({classes, model, emitter}) {
     }
 
     return (
-        <div>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
             <LoaderView emitter={emitter}/>
             <input
                 accept="image/*,video/*,audio/*"
                 multiple
-                style={{
-                    position: 'absolute',
-                    top: loadedAnything ? '-15px' : '0px',
-                    width: 0,
-                    height: 0,
-                    opacity: 0,
-                    overflow: 'hidden',
-                    zIndex: -1,
-                }}
-                className={classes.input}
+                style={{ position: 'absolute', width: 0, height: 0, opacity: 0, overflow: 'hidden', zIndex: -1 }}
                 id="contained-button-file" 
                 disabled={disabled}
                 type="file" 
@@ -129,19 +117,26 @@ function Uploader({classes, model, emitter}) {
                 ref={uploaderDomRef}
             />
             <label htmlFor="contained-button-file" style={{cursor: disabled ? 'not-allowed' : 'pointer'}}>
-                <IconButton
+                <Button
                     aria-haspopup="true"
-                    color="inherit" 
+                    aria-label="Share photos"
                     variant="contained"
                     component="span"
-                    style={{
-                        position: 'relative',
-                        top: loadedAnything ? '-15px' : '0px',
-                    }}
                     disabled={disabled}
+                    sx={{
+                        height: 34,
+                        minWidth: 34,
+                        px: { xs: 1, sm: 1.5 },
+                        gap: 0.75,
+                        borderRadius: '8px',
+                        '& .MuiSvgIcon-root': { fontSize: 18 },
+                    }}
                 >
                     <CloudUploadRounded />
-                </IconButton>
+                    <Box component="span" sx={{ ...headerLabelSx, display: { xs: 'none', sm: 'inline' } }}>
+                        Share
+                    </Box>
+                </Button>
             </label>
 
             <Dialog
@@ -163,7 +158,7 @@ function Uploader({classes, model, emitter}) {
                     </IconButton>
                 </DialogActions>
             </Dialog>
-        </div>
+        </Stack>
     );
 }
 

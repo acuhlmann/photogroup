@@ -1,26 +1,29 @@
-/** Prominent XMP / catalog fields — rendered in the hero block, not duplicated below. */
+/** Catalog fields shown in the hero block, so they are not repeated below. */
 export const HIGHLIGHT_SOURCE_KEYS = new Set([
     'Title XMP',
     'Description XMP',
     'x-Description',
     'Rating XMP',
+    'Label XMP',
+    'Keywords XMP',
+    'XPKeywords',
     'media.title',
     'media.description',
     'media.comment',
     'media.rating',
 ]);
 
-/** Fields shown in the details list (after highlights). */
+/** Details list, most relevant first (after the hero block). */
 export const LEAD_KEYS = [
     'x-file name',
     'DateTimeOriginal',
+    'Creator XMP',
+    'x-Location',
     'x-Camera',
+    'LensModel',
     'x-Settings',
     'x-Pixel Size',
-    'x-Location',
     'GPSAltitude',
-    'Keywords XMP',
-    'XPKeywords',
     'media.artist',
     'media.album',
     'media.genre',
@@ -31,6 +34,10 @@ export const LEAD_KEYS = [
     'format.container',
     'format.bitrate',
     'format.sampleRate',
+    'x-CreatorTool',
+    'Software',
+    'x-Last Save with',
+    'x-Last Save at',
 ];
 
 const LEAD_LABELS = {
@@ -39,14 +46,20 @@ const LEAD_LABELS = {
     'Description XMP': 'Description',
     'x-Description': 'Description',
     'DateTimeOriginal': 'Taken',
+    'Creator XMP': 'Creator',
     'x-Camera': 'Camera',
-    'x-Settings': 'Settings',
+    'LensModel': 'Lens',
+    'x-Settings': 'Exposure',
     'x-Pixel Size': 'Pixel size',
     'x-Location': 'Location',
     'GPSAltitude': 'Altitude',
     'Keywords XMP': 'Keywords',
     'XPKeywords': 'Keywords',
     'Rating XMP': 'Rating',
+    'Label XMP': 'Label',
+    'x-CreatorTool': 'Software',
+    'x-Last Save with': 'Edited with',
+    'x-Last Save at': 'Edited at',
     'media.title': 'Title',
     'media.artist': 'Artist',
     'media.album': 'Album',
@@ -71,6 +84,7 @@ const MEDIA_COMMON_KEYS = [
     ['track', 'media.track'],
     ['comment', 'media.comment'],
     ['description', 'media.description'],
+    ['longDescription', 'media.description'],
 ];
 
 const MEDIA_FORMAT_KEYS = [
@@ -85,9 +99,18 @@ function isPresent(value) {
     return value != null && value !== '';
 }
 
+function isLocation(value) {
+    return value && typeof value === 'object'
+        && Number.isFinite(Number(value.lat)) && Number.isFinite(Number(value.long));
+}
+
 function formatPrimitive(value) {
     if (Array.isArray(value)) {
-        return value.map(item => (typeof item === 'object' ? JSON.stringify(item) : String(item))).join(', ');
+        // music-metadata comments are {descriptor, text} objects
+        return value
+            .map(item => (item && typeof item === 'object' ? (item.text ?? JSON.stringify(item)) : String(item)))
+            .filter(Boolean)
+            .join(', ');
     }
     if (typeof value === 'object') {
         return JSON.stringify(value);
@@ -96,7 +119,8 @@ function formatPrimitive(value) {
 }
 
 export function labelForMetadataKey(key) {
-    return LEAD_LABELS[key] || key;
+    // Raw EXIF tags are CamelCase ("ExposureBiasValue"); space them for reading.
+    return LEAD_LABELS[key] || String(key).replace(/([a-z0-9])([A-Z])/g, '$1 $2');
 }
 
 /**
@@ -108,7 +132,8 @@ export function flattenMetadataSummary(summary, tile) {
     }
 
     if (tile?.isImage) {
-        return summary.filter(item => item && isPresent(item.value) && typeof item.value !== 'object');
+        return summary.filter(item => item && isPresent(item.value)
+            && (typeof item.value !== 'object' || isLocation(item.value)));
     }
 
     const flat = [];
@@ -119,14 +144,13 @@ export function flattenMetadataSummary(summary, tile) {
         if (item.key === 'common' && typeof item.value === 'object') {
             const common = item.value;
             MEDIA_COMMON_KEYS.forEach(([src, dest]) => {
-                if (isPresent(common[src])) {
-                    flat.push({ key: dest, value: formatPrimitive(common[src]) });
+                if (isPresent(common[src]) && !flat.some(entry => entry.key === dest)) {
+                    const value = formatPrimitive(common[src]);
+                    if (value) flat.push({ key: dest, value });
                 }
             });
             if (isPresent(common.starRating)) {
                 flat.push({ key: 'Rating XMP', value: common.starRating });
-            } else if (isPresent(common.rating)) {
-                flat.push({ key: 'Rating XMP', value: common.rating });
             }
             return;
         }
@@ -157,18 +181,26 @@ export function flattenMetadataSummary(summary, tile) {
     return flat;
 }
 
-function firstMatching(flat, keys) {
+function firstValue(flat, keys) {
     for (const key of keys) {
         const item = flat.find(entry => entry.key === key);
         if (item && isPresent(item.value)) {
-            return item;
+            return item.value;
         }
     }
     return null;
 }
 
+function splitKeywords(value) {
+    if (!isPresent(value)) return [];
+    return [...new Set(String(value).split(/[,;]/).map(word => word.trim()).filter(Boolean))];
+}
+
 /**
- * Build highlight + lead + more sections for the metadata panel.
+ * Build the hero (title, rating, description, label, keywords), the details
+ * list in relevance order and the remaining metadata for the panel.
+ * Title, rating and description are always present so a missing value reads
+ * as "not set" instead of silently disappearing.
  */
 export function groupMetadataForDisplay(summary, tile) {
     const flat = flattenMetadataSummary(summary, tile);
@@ -176,26 +208,20 @@ export function groupMetadataForDisplay(summary, tile) {
         return { highlights: [], lead: [], more: [] };
     }
 
-    const highlights = [];
+    const rating = Number(firstValue(flat, ['Rating XMP', 'media.rating']));
+    const highlights = [
+        { id: 'highlight-title', kind: 'title', label: 'Title',
+            value: firstValue(flat, ['Title XMP', 'media.title']) },
+        { id: 'highlight-rating', kind: 'rating', label: 'Rating',
+            value: Number.isFinite(rating) && rating !== 0 ? rating : null,
+            colorLabel: firstValue(flat, ['Label XMP']) },
+        { id: 'highlight-description', kind: 'description', label: 'Description',
+            value: firstValue(flat, ['x-Description', 'Description XMP', 'media.description', 'media.comment']) },
+    ];
 
-    const title = firstMatching(flat, ['Title XMP', 'media.title']);
-    if (title) {
-        highlights.push({ id: 'highlight-title', label: 'Title', value: title.value, kind: 'title' });
-    }
-
-    const description = firstMatching(flat, ['x-Description', 'Description XMP', 'media.description', 'media.comment']);
-    if (description) {
-        highlights.push({
-            id: 'highlight-description',
-            label: 'Description',
-            value: description.value,
-            kind: 'description',
-        });
-    }
-
-    const rating = firstMatching(flat, ['Rating XMP', 'media.rating']);
-    if (rating) {
-        highlights.push({ id: 'highlight-rating', label: 'Rating', value: rating.value, kind: 'rating' });
+    const keywords = splitKeywords(firstValue(flat, ['Keywords XMP', 'XPKeywords']));
+    if (keywords.length) {
+        highlights.push({ id: 'highlight-keywords', kind: 'keywords', label: 'Keywords', value: keywords });
     }
 
     const rest = flat.filter(item => !HIGHLIGHT_SOURCE_KEYS.has(item.key));
@@ -205,7 +231,8 @@ export function groupMetadataForDisplay(summary, tile) {
 }
 
 /**
- * Split flat metadata into lead fields and the remaining EXIF / technical entries.
+ * Split flat metadata into lead fields (relevance order) and the remaining
+ * EXIF / technical entries (alphabetical, for scanning).
  */
 export function groupPhotoMetadata(summary) {
     if (!Array.isArray(summary) || summary.length === 0) {
@@ -222,5 +249,6 @@ export function groupPhotoMetadata(summary) {
         }
     });
 
+    rest.sort((a, b) => labelForMetadataKey(a.key).localeCompare(labelForMetadataKey(b.key)));
     return { lead, more: rest };
 }
