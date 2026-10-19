@@ -17,6 +17,13 @@ export default class TileErrorBoundary extends React.Component {
         return { error };
     }
 
+    componentDidUpdate(prevProps) {
+        // A tile that failed while loading gets a fresh try once it's done.
+        if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+            this.setState({ error: null });
+        }
+    }
+
     componentDidCatch(error) {
         Logger.error('tile render failed for ' + this.props.fileName + ': ' + error.message);
     }

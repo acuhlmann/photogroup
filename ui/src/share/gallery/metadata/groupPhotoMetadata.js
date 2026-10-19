@@ -100,7 +100,8 @@ function isPresent(value) {
 }
 
 function isLocation(value) {
-    return value && typeof value === 'object' && value.lat != null && value.long != null;
+    return value && typeof value === 'object'
+        && Number.isFinite(Number(value.lat)) && Number.isFinite(Number(value.long));
 }
 
 function formatPrimitive(value) {

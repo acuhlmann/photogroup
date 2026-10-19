@@ -357,7 +357,7 @@ function Gallery(props) {
         // tile mounted instead of reloading its image each time.
         const key = tile.tileKey || tile.infoHash || index;
 
-        return <TileErrorBoundary key={key} fileName={tile.fileName}>
+        return <TileErrorBoundary key={key} fileName={tile.fileName} resetKey={!!tile.loading}>
             {tile.loading
                 ? <LoadingTile name={name} tile={tile}
                                master={master}/>

@@ -64,11 +64,14 @@ export default class Rooms {
         });
 
         function joinRoom(room, request, response) {
-            const peers = room.peers.create(request.body.peer);
+            const peer = request.body.peer;
+            const sessionToken = room.peers.claimSession(peer?.sessionId, request.body.sessionToken);
+            const peers = room.peers.create(peer, !!sessionToken);
             response.send({
                 photos: room.photos,
                 peers: peers,
-                connections: room.topology.connections
+                connections: room.topology.connections,
+                sessionToken: sessionToken || undefined
             });
         }
 
@@ -566,8 +569,8 @@ export default class Rooms {
             }
         });
 
-        // sendBeacon from a closing tab; sessionId rides in the query because
-        // beacons arrive as text/plain.
+        // sendBeacon from a closing tab; sessionId and token ride in the query
+        // because beacons arrive as text/plain.
         app.post('/api/rooms/:id/peers/:peerId/leave', (request, response) => {
 
             const room = this.rooms.get(request.params.id);
@@ -578,7 +581,7 @@ export default class Rooms {
             if(typeof sessionId !== 'string' || !sessionId) {
                 return response.status(400).send('Expected sessionId');
             }
-            response.send(room.peers.leaveNow(sessionId, request.params.peerId));
+            response.send(room.peers.leaveNow(sessionId, request.params.peerId, request.query.token));
         });
     }
 

@@ -58,3 +58,24 @@ describe('MetadataParser image catalog fields', () => {
     });
 });
 
+
+describe('ExifParser GPS', () => {
+    it('keeps southern and western coordinates negative', async () => {
+        const { default: ExifParser } = await import('./ExifParser');
+        const fromDms = { GPSLatitude: [33, 52, 4.2], GPSLatitudeRef: 'S', GPSLongitude: [151, 12, 26.4], GPSLongitudeRef: 'E' };
+        ExifParser.parse(fromDms);
+        expect(fromDms['x-Location'].lat).toBeCloseTo(-33.86783, 4);
+        expect(fromDms['x-Location'].long).toBeCloseTo(151.20733, 4);
+
+        const fromExifr = { GPSLatitude: [1, 2, 3], GPSLongitude: [1, 2, 3], latitude: 40.7, longitude: -74.0 };
+        ExifParser.parse(fromExifr);
+        expect(fromExifr['x-Location']).toEqual({ lat: 40.7, long: -74.0 });
+    });
+
+    it('drops a location it cannot convert instead of showing NaN', async () => {
+        const { default: ExifParser } = await import('./ExifParser');
+        const broken = { GPSLatitude: 'junk', GPSLongitude: [1, 2] };
+        ExifParser.parse(broken);
+        expect(broken['x-Location']).toBeUndefined();
+    });
+});

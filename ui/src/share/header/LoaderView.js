@@ -50,8 +50,9 @@ function LoaderView({emitter}) {
 
     const percent = Math.floor(transfer.progress);
     return (
-        <Tooltip title={`↓ ${transfer.down} · ${transfer.downSpeed}   ↑ ${transfer.up} · ${transfer.upSpeed}`}>
+        <Tooltip describeChild title={`↓ ${transfer.down} · ${transfer.downSpeed}   ↑ ${transfer.up} · ${transfer.upSpeed}`}>
             <Box
+                tabIndex={0}
                 role="progressbar"
                 aria-label="Transfer progress"
                 aria-valuenow={percent}

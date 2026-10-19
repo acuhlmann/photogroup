@@ -5,16 +5,17 @@ import { backoffDelay } from './util/ConnectionRecovery';
 
 const SESSION_KEY = 'pgSessionId';
 
-// Reloads keep the sessionId so the server swaps out our old peer instead of
-// listing it next to the new one. It is only written while the page unloads,
-// so a duplicated tab (which copies sessionStorage) still gets its own id.
-function restoreSessionId() {
+// Reloads keep the sessionId (and the server-issued token proving we own it)
+// so the server swaps out our old peer instead of listing it next to the new
+// one. It is only written while the page unloads, so a duplicated tab (which
+// copies sessionStorage) still gets its own id.
+function restoreSession() {
     try {
-        const saved = sessionStorage.getItem(SESSION_KEY);
+        const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
         sessionStorage.removeItem(SESSION_KEY);
-        if (saved) return saved;
-    } catch { /* storage blocked */ }
-    return shortid.generate();
+        if (saved && saved.sessionId) return saved;
+    } catch { /* storage blocked or unreadable */ }
+    return { sessionId: shortid.generate() };
 }
 
 /**
@@ -30,7 +31,7 @@ export default class RoomsService {
 
         this.url = '/api/rooms';
 
-        this.sessionId = restoreSessionId();
+        ({ sessionId: this.sessionId, sessionToken: this.sessionToken } = restoreSession());
         window.addEventListener('pagehide', event => this.handlePageHide(event));
         window.addEventListener('pageshow', () => {
             try { sessionStorage.removeItem(SESSION_KEY); } catch { /* storage blocked */ }
@@ -75,13 +76,16 @@ export default class RoomsService {
     }
 
     handlePageHide(event) {
-        try { sessionStorage.setItem(SESSION_KEY, this.sessionId); } catch { /* storage blocked */ }
+        try {
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify({ sessionId: this.sessionId, sessionToken: this.sessionToken }));
+        } catch { /* storage blocked */ }
         // A page frozen in the back/forward cache may come back; keep its peer.
         if (event.persisted || !this.hasRoom) return;
         const peerId = this.master?.client?.peerId;
-        if (!peerId || !navigator.sendBeacon) return;
+        if (!peerId || !this.sessionToken || !navigator.sendBeacon) return;
         navigator.sendBeacon(this.url + '/' + this.id + '/peers/' + encodeURIComponent(peerId)
-            + '/leave?sessionId=' + encodeURIComponent(this.sessionId));
+            + '/leave?sessionId=' + encodeURIComponent(this.sessionId)
+            + '&token=' + encodeURIComponent(this.sessionToken));
     }
 
     changeUrl(name, value) {
@@ -284,7 +288,8 @@ export default class RoomsService {
         this.hasRoom = true;
         const data = {
             id: this.id,
-            peer: this.peerData
+            peer: this.peerData,
+            sessionToken: this.sessionToken
         };
 
         try {
@@ -315,6 +320,7 @@ export default class RoomsService {
             }
 
             const room = await response.json();
+            if (room.sessionToken) this.sessionToken = room.sessionToken;
             this.listenToUrlChanges();
             return room;
 
@@ -328,7 +334,8 @@ export default class RoomsService {
 
         this.hasRoom = true;
         const data = {
-            peer: this.peerData
+            peer: this.peerData,
+            sessionToken: this.sessionToken
         };
 
         //await this.master.torrentsDb.clear();
@@ -353,6 +360,7 @@ export default class RoomsService {
             }
             Logger.info('joined room');
             const room = await response.json();
+            if (room.sessionToken) this.sessionToken = room.sessionToken;
             this.listenToUrlChanges();
             return room;
 
