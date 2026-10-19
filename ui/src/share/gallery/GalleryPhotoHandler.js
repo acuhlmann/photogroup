@@ -23,9 +23,11 @@ export default class GalleryPhotoHandler {
             const formatToken = 'H:m MMM d y';
             if(event.type === 'all') {
 
-                this.view.setTiles(() => {
+                this.view.setTiles(state => {
                     const photos = event.item;
                     photos.forEach(item => {
+                        const existing = state.find(tile => tile.infoHash === item.infoHash);
+                        item.tileKey = item.tileKey || existing?.tileKey || item.infoHash;
                         // Don't override loading=false for photos already served from cache
                         if (!item.img) {
                             item.loading = true;
@@ -41,15 +43,16 @@ export default class GalleryPhotoHandler {
                     const oldTiles = state;
                     let tiles = oldTiles;
                     event.item.forEach(photo => {
-                        const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
+                        const index = tiles.findIndex(item => item.infoHash === photo.infoHash);
                         if(index < 0) {
 
                             const tile = photo;
+                            tile.tileKey = tile.tileKey || tile.infoHash;
                             tile.loading = true;
                             if(!tile.picDateTaken && tile.file && tile.file.lastModified) {
                                 tile.picDateTaken = format(tile.file.lastModified, formatToken);
                             }
-                            tiles = update(oldTiles, {$unshift: [tile]});
+                            tiles = update(tiles, {$unshift: [tile]});
                         }
                     });
                     this.sortPictures(tiles, formatToken);
@@ -75,10 +78,10 @@ export default class GalleryPhotoHandler {
                     const oldTiles = state;
                     let tiles = oldTiles;
                     event.item.forEach(photo => {
-                        const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
+                        const index = tiles.findIndex(item => item.infoHash === photo.infoHash);
                         if(index > -1) {
-                            const newTile = update(oldTiles[index], {$merge: photo});
-                            tiles = update(oldTiles, {$splice: [[index, 1, newTile]]});
+                            const newTile = update(tiles[index], {$merge: photo});
+                            tiles = update(tiles, {$splice: [[index, 1, newTile]]});
                         }
                     });
                     return tiles;
@@ -90,15 +93,15 @@ export default class GalleryPhotoHandler {
                     const oldTiles = state;
                     let tiles = oldTiles;
                     event.item.forEach(photo => {
-                        const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
+                        const index = tiles.findIndex(item => item.infoHash === photo.infoHash);
                         if(index > -1) {
-                            const oldOwners = oldTiles[index].owners;
+                            const oldOwners = tiles[index].owners;
                             const ownersIndex = oldOwners.findIndex(item => item.peerId === photo.peerId);
                             if(ownersIndex < 0) {
                                 delete photo.infoHash;
                                 const owners = update(oldOwners, {$push: [photo]});
-                                const tile = update(oldTiles[index], {owners: {$set: owners}});
-                                tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
+                                const tile = update(tiles[index], {owners: {$set: owners}});
+                                tiles = update(tiles, {$splice: [[index, 1, tile]]});
                             }
                         }
                     });
@@ -114,8 +117,8 @@ export default class GalleryPhotoHandler {
                         const ownerIndex = oldTile.owners.findIndex(owner => owner.peerId === event.item);
                         if(ownerIndex > -1) {
                             const owners = update(oldTile.owners, {$splice: [[ownerIndex, 1]]});
-                            const tile = update(oldTiles[tileIndex], {owners: {$set: owners}});
-                            tiles = update(oldTiles, {$splice: [[tileIndex, 1, tile]]});
+                            const tile = update(tiles[tileIndex], {owners: {$set: owners}});
+                            tiles = update(tiles, {$splice: [[tileIndex, 1, tile]]});
                         }
                     });
                     return tiles;
@@ -127,15 +130,15 @@ export default class GalleryPhotoHandler {
                     const oldTiles = state;
                     let tiles = oldTiles;
                     event.item.forEach(photo => {
-                        const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
+                        const index = tiles.findIndex(item => item.infoHash === photo.infoHash);
                         if(index > -1) {
-                            const oldOwners = oldTiles[index].owners;
+                            const oldOwners = tiles[index].owners;
                             const ownersIndex = oldOwners.findIndex(item => item.peerId === photo.peerId);
                             if(ownersIndex > -1) {
                                 delete photo.infoHash;
                                 const owners = update(oldOwners, {$splice: [[ownersIndex, 1, photo]]});
-                                const tile = update(oldTiles[index], {owners: {$set: owners}});
-                                tiles = update(oldTiles, {$splice: [[index, 1, tile]]});
+                                const tile = update(tiles[index], {owners: {$set: owners}});
+                                tiles = update(tiles, {$splice: [[index, 1, tile]]});
                             }
                         }
                     });

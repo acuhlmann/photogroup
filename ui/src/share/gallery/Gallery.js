@@ -12,6 +12,7 @@ import _ from "lodash";
 import LoadingTile from "./LoadingTile";
 import StringUtil from "../util/StringUtil";
 import ContentTile from "./ContentTile";
+import TileErrorBoundary from "./TileErrorBoundary";
 import GalleryPhotoHandler from "./GalleryPhotoHandler";
 import PhotoViewer from "./PhotoViewer";
 import NetworkReadout from "../topology/NetworkReadout";
@@ -352,18 +353,20 @@ function Gallery(props) {
     const buildTile = useCallback((tile, index, master) => {
         tile.picSummary = StringUtil.addEmptySpaces([tile.picDateTaken, FileUtil.truncateFileName(tile.fileName)]);
         let name = StringUtil.addEmptySpaces([tile.picSummary, tile.fileSize, tile.cameraSettings]);
-        const key = tile.infoHash || index;
+        // infoHash changes while an upload is seeded; a stable key keeps the
+        // tile mounted instead of reloading its image each time.
+        const key = tile.tileKey || tile.infoHash || index;
 
-        if(tile.loading) {
-            return <LoadingTile key={key} name={name} tile={tile}
-                                master={master}/>
-        } else {
-            return <ContentTile key={key} name={name} tile={tile}
-                                master={master}
-                                selected={selectedIndex === index}
-                                hero={tiles.length === 1}
-                                onOpen={() => openAt(index)} />
-        }
+        return <TileErrorBoundary key={key} fileName={tile.fileName}>
+            {tile.loading
+                ? <LoadingTile name={name} tile={tile}
+                               master={master}/>
+                : <ContentTile name={name} tile={tile}
+                               master={master}
+                               selected={selectedIndex === index}
+                               hero={tiles.length === 1}
+                               onOpen={() => openAt(index)} />}
+        </TileErrorBoundary>;
     }, [openAt, selectedIndex, tiles.length]);
 
     return (
