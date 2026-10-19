@@ -17,6 +17,12 @@ export default class GalleryPhotoHandler {
         });
     }
 
+    /**
+     * Subscribe to photo and owner changes and update the view's tiles.
+     * Snapshots retain local fields absent from server items and seeded uploads
+     * not confirmed before `requestedAt` (epoch milliseconds). Updates match by
+     * infoHash or stable tileKey. Incoming photo objects may be mutated.
+     */
     sync() {
         this.emitter.on('photos', event => {
 

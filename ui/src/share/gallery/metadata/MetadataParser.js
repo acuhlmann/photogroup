@@ -174,6 +174,12 @@ export default class MetadataParser {
             });
     }
 
+    /**
+     * Normalize image EXIF/XMP in place and return the same metadata object.
+     * Update the tile's date, captions, and camera summary; use its file name
+     * when no torrent name exists. XMP XML parse errors are ignored; other
+     * normalization and date-formatting errors propagate.
+     */
     extractAndProcess(allMetadata, tile) {
 
         XmpParser.parse(allMetadata, allMetadata.xmp);
@@ -270,6 +276,12 @@ export default class MetadataParser {
         return format(date, "H:m MMM d y");
     }
 
+    /**
+     * Build ordered key/value rows for the tile's media type, excluding thumbnails
+     * and falsy display values. Image dates use local time; unparseable capture
+     * dates retain their text. Audio/video `common` and `format` objects stay nested.
+     * Return undefined for falsy metadata; serialization errors propagate.
+     */
     createMetadataSummary(rawMetadata, tile) {
 
         if(!rawMetadata) return;

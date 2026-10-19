@@ -44,6 +44,7 @@ const LABEL_COLORS = {
     purple: '#9b6cf6',
 };
 
+/** Render five stars with the rating rounded and clamped to 0–5; size is in pixels. */
 export function RatingStars({ value, size = 22 }) {
     const rating = Math.max(0, Math.min(5, Math.round(Number(value) || 0)));
     return (
@@ -55,6 +56,7 @@ export function RatingStars({ value, size = 22 }) {
     );
 }
 
+/** Show a label and swatch, using a neutral swatch for unknown labels; omit falsy values. */
 export function ColorLabel({ value }) {
     if (!value) return null;
     const swatch = LABEL_COLORS[String(value).toLowerCase()];
@@ -66,6 +68,7 @@ export function ColorLabel({ value }) {
     );
 }
 
+/** Show a rating (-1 means rejected) and optional color label; omit a nullish rating. */
 function RatingRow({ value, colorLabel }) {
     return (
         <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
@@ -84,6 +87,7 @@ function RatingRow({ value, colorLabel }) {
     );
 }
 
+/** Display keywords as chips, with optional container style overrides. */
 export function KeywordChips({ words, sx }) {
     return (
         <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, ...sx }} aria-label="Keywords">
@@ -200,6 +204,10 @@ const chipSx = {
     fontVariantNumeric: 'tabular-nums',
 };
 
+/**
+ * Render a value as text, exposure chips, or a map link for decimal coordinates.
+ * Optional altitude is in meters and is appended only to a location value.
+ */
 function MetadataValue({ item, altitude }) {
     const { key, value } = item;
 
@@ -276,6 +284,7 @@ function DetailRows({ items }) {
     );
 }
 
+/** Show a heading, optional count, and a chevron when used in a collapsible section. */
 function SectionHeading({ children, count, collapsible }) {
     return (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
@@ -344,6 +353,11 @@ function FileNameEditor({ tile, fileName, onFileNameChange }) {
     );
 }
 
+/**
+ * Display metadata highlights, details, collapsed extra fields, and missing-field labels.
+ * A falsy summary means details are still loading; an empty array means none were found.
+ * Providing `onFileNameChange` enables editing the file name without its suffix.
+ */
 function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange }) {
     const grouped = useMemo(
         () => groupMetadataForDisplay(summary, tile),

@@ -18,6 +18,7 @@ import FrontView from "./FrontView";
 import NetworkPanel from "./NetworkPanel";
 import WebTorrent from 'webtorrent';
 
+/** Show the landing page or room gallery with a responsive connection panel. */
 function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
     const deferredPromptRef = useRef(null);
     const theme = useTheme();

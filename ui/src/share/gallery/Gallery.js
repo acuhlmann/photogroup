@@ -22,6 +22,11 @@ import { getBlobAndEmit } from "../torrent/BlobUtils";
 import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
 import { runViewTransition } from "./viewTransition";
 
+/**
+ * Display room tiles, accept dropped uploads, and open the media viewer.
+ * An unsynced empty gallery waits for a snapshot or four seconds before showing the upload prompt.
+ * `showNetworkReadout` controls the readout in the empty state and defaults to true.
+ */
 function Gallery(props) {
     const {master, showNetworkReadout = true} = props;
     const theme = useTheme();

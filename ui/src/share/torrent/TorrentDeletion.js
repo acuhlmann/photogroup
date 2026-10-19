@@ -12,6 +12,12 @@ export default class TorrentDeletion {
         this.master = master;
     }
 
+    /**
+     * Request deletion from the room and remove the cached image without waiting.
+     * Tiles without a torrent are marked deleted and removed from the UI immediately.
+     * Resolve with the photo's infoHash; reject with 'Invalid tile: missing infoHash'
+     * for invalid input, or propagate service failures. Cache failures are ignored.
+     */
     deleteItem(tile) {
         // Validate tile has infoHash
         if(!tile || !tile.infoHash) {

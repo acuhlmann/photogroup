@@ -27,6 +27,9 @@ export default class TorrentAddition {
     /**
      * A room snapshot requested at `requestedAt` may not list an upload we
      * shared after (or are still sharing): don't treat that as a deletion.
+     * Return true while seeding is pending or confirmation is at/after the
+     * snapshot request. `requestedAt` is epoch milliseconds; omitting it
+     * protects any upload with a tracked confirmation.
      */
     isUnconfirmedLocalShare(torrent, requestedAt) {
         if(this.pendingSeeds.has(torrent)) return true;
@@ -224,6 +227,17 @@ export default class TorrentAddition {
         this.emitter.emit('torrentReady', photos);
     }
 
+    /**
+     * Start seeding local files and publish upload tiles before generating previews.
+     * `files` accepts a File or iterable of Files. For secure uploads, supply
+     * encrypted Files and matching original Files in `origFiles` for display metadata.
+     * Thumbnail failures fall back to sharing without previews. Validation and
+     * seeding failures are reported through the callback or photo/error events;
+     * errors preparing file metadata before seeding reject the returned promise.
+     * The callback receives a ready torrent or `(null, error)` for reported failures.
+     * The promise resolves to the started torrent, or null/undefined on handled
+     * failure, without waiting for room sharing, storage, or server-copy uploads.
+     */
     async seed(files, secure = false, origFiles = [], callback) {
 
         const self = this;
@@ -675,6 +689,7 @@ export default class TorrentAddition {
         return torrent;
     }
 
+    /** Return shallow photo copies with local media, render state, and snapshot bookkeeping removed. */
     stripClientOnlyPhotoFields(photos) {
         const toBeShared = photos.map(photo => {
             const serverPhoto = {...photo};

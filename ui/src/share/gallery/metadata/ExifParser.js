@@ -19,6 +19,10 @@ export default class ExifParser {
         delete allMetadata['undefined'];
     }
 
+    /**
+     * When both dimensions exist, replace them in place with `x-Pixel Size` in pixels.
+     * Use ImageWidth/Height with ExifImageWidth/Height as fallbacks.
+     */
     static processImageSize(allMetadata) {
         // exifr reports the EXIF dimensions as ExifImageWidth/Height.
         const width = allMetadata['ImageWidth'] || allMetadata['ExifImageWidth'];
@@ -30,6 +34,7 @@ export default class ExifParser {
         }
     }
 
+    /** Coerce a scalar or EXIF numerator/denominator pair to a number, possibly NaN or Infinity. */
     static toNumber(value) {
         if(value && typeof value === 'object' && 'numerator' in value) {
             return Number(value.numerator) / Number(value.denominator);
@@ -37,13 +42,22 @@ export default class ExifParser {
         return Number(value);
     }
 
-    /** "1/125 s" for fast shutters, "0.5 s" / "2 s" for long ones. */
+    /**
+     * "1/125 s" for fast shutters, "0.5 s" / "2 s" for long ones.
+     * Return an empty string for nonfinite or nonpositive seconds; use decimal
+     * seconds rounded to tenths at 0.3 s or above and a rounded reciprocal below.
+     */
     static formatShutter(seconds) {
         if(!Number.isFinite(seconds) || seconds <= 0) return '';
         if(seconds >= 0.3) return (Math.round(seconds * 10) / 10) + ' s';
         return '1/' + Math.round(1 / seconds) + ' s';
     }
 
+    /**
+     * Set `x-Settings` in place when at least two exposure settings are available.
+     * Accept numeric or rational EXIF values and either ISO key, preferring the
+     * 35 mm equivalent focal length when positive. Leave the raw fields intact.
+     */
     static processCamSettings(data) {
         // exifr names ISO "ISO" and gives plain numbers; older parsers used
         // ISOSpeedRatings and {numerator, denominator} fractions.

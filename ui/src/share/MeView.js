@@ -81,6 +81,7 @@ function readDevice(master) {
     };
 }
 
+/** Show this device's network details and link forecast, and allow nickname edits. */
 function MeView({ master }) {
     const [showMe, setShowMe] = useState(false);
     const [galleryHasImages, setGalleryHasImages] = useState(false);

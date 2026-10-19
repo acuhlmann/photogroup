@@ -128,6 +128,7 @@ const IMPORTANT_MISSING = {
 
 const EMPTY_TEXT = new Set(['undefined', 'null', 'nan', '[]', '{}', 'unknown', '0000:00:00 00:00:00']);
 
+/** Reject nullish, nonfinite, blank, and placeholder values; arrays need a present member. */
 function isPresent(value) {
     if (value == null) return false;
     if (typeof value === 'number') return Number.isFinite(value);
@@ -165,6 +166,8 @@ export function labelForMetadataKey(key) {
 
 /**
  * Expand nested music-metadata `common` / `format` objects into flat rows.
+ * For images, filter empty and bookkeeping fields and keep only scalar or
+ * location values. Missing or empty summaries yield an empty array.
  */
 export function flattenMetadataSummary(summary, tile) {
     if (!Array.isArray(summary) || summary.length === 0) {
@@ -236,6 +239,7 @@ function splitKeywords(value) {
     return [...new Set(String(value).split(/[,;]/).map(word => word.trim()).filter(Boolean))];
 }
 
+/** Select the media type for missing-field labels, defaulting to image. */
 function mediaKind(tile) {
     if (tile?.isAudio) return 'audio';
     if (tile?.isVideo) return 'video';
@@ -247,6 +251,8 @@ function mediaKind(tile) {
  * fields that are actually set, the details list in relevance order, the
  * remaining metadata, and the important fields that are missing so the
  * panel can mention them quietly at the end.
+ * Suppress raw fields covered by derived rows. An empty filtered summary
+ * returns empty arrays for all four groups, including missing-field labels.
  */
 export function groupMetadataForDisplay(summary, tile) {
     const flat = flattenMetadataSummary(summary, tile);
@@ -313,11 +319,13 @@ export function groupPhotoMetadata(summary) {
     return { lead, more: rest };
 }
 
+/** Round to the requested decimal places and return text without trailing zeros. */
 function trimNumber(value, digits = 1) {
     const factor = 10 ** digits;
     return String(Math.round(value * factor) / factor);
 }
 
+/** Format bits per second using decimal bps, kbps, or Mbps units. */
 function formatBitrate(bps) {
     if (bps >= 1e6) return trimNumber(bps / 1e6) + ' Mbps';
     if (bps >= 1e3) return Math.round(bps / 1e3) + ' kbps';
@@ -326,7 +334,10 @@ function formatBitrate(bps) {
 
 /**
  * A metadata value as a person would say it: "1/125 s", "ƒ/1.8", "±0 EV",
- * "1200 × 900 · 1.1 MP", "44.1 kHz". Unknown keys pass through unchanged.
+ * "1200 × 900 · 1.1 MP", "44.1 kHz". Nullish values become empty text;
+ * unknown keys are converted to strings.
+ * Numeric exposure is in seconds, altitude in meters, focal length in
+ * millimeters, sample rate in Hz, and bitrate in bits per second.
  */
 export function humanizeMetadataValue(key, value) {
     if (value == null) return '';

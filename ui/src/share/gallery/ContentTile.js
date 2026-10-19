@@ -20,6 +20,7 @@ import { photoTransitionName } from "./viewTransition";
 import { groupMetadataForDisplay } from "./metadata/groupPhotoMetadata";
 import { RatingStars, ColorLabel } from "./metadata/MediaMetadataPanel";
 
+/** Display loaded media and metadata highlights, with save, delete, and decryption controls. */
 function ContentTile(props) {
     const {master, tile, enqueueSnackbar, closeSnackbar, onOpen, selected, hero} = props;
 
@@ -107,6 +108,7 @@ function ContentTile(props) {
             });
     }, []);
 
+    /** Hide the tile immediately; deletion failures reject without restoring it. */
     const handleDelete = useCallback(async (tile) => {
         setThere(false);
         const infoHash = await master.torrentDeletion.deleteItem(tile);

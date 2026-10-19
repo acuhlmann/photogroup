@@ -19,6 +19,7 @@ import TransferConsole from "../torrent/TransferConsole";
 import { isTransferStalled, P2P_STALL_MS } from "../torrent/ServerFallback";
 import { rememberImageSize } from './imageSize';
 
+/** Show transfer status and recovery controls, retaining a preview URL on the tile. */
 function LoadingTile({tile, master, name}) {
     const [progress, setProgress] = useState(null);
     const [timeRemaining, setTimeRemaining] = useState('');
@@ -59,6 +60,7 @@ function LoadingTile({tile, master, name}) {
         setStalled(false);
     }, [master.emitter, tile]);
 
+    /** Load a missing preview for a loading tile; thumbnail errors leave it unset. */
     const listenToPreview = useCallback(() => {
         if(tile.loading && !tile.previewUrl && tile.torrentFileThumb && typeof tile.torrentFileThumb.getBlobURL === 'function') {
             tile.torrentFileThumb.getBlobURL((err, url) => {

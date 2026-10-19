@@ -143,6 +143,13 @@ export default class TorrentMaster {
         }
     }
 
+    /**
+     * Fetch a room, publish its peers and cached photos, then restore local torrents
+     * and start reconciling downloads and ownership. `roomPromise` is a function
+     * invoked with the room service as `this`, not an already-created promise.
+     * Resolve with the room's photos, or undefined for a falsy response. Room-request
+     * and torrent-store iteration failures reject; photo publication can precede failure.
+     */
     async findExistingContent(roomPromise) {
 
         const requestedAt = Date.now();
@@ -187,6 +194,12 @@ export default class TorrentMaster {
         await Promise.all(photos.map(photo => this.serveCachedPhoto(photo)));
     }
 
+    /**
+     * Populate an image photo in place from its cached blob and mark it loaded.
+     * Reuse the retained File and blob URL on later lookups of the same infoHash.
+     * Missing hashes, non-image types, and cache misses are skipped; cache and blob
+     * preparation errors are swallowed. Resolves without a value.
+     */
     async serveCachedPhoto(photo) {
         if (!photo.infoHash) return;
         if (!shouldCacheBlob(photo.fileType)) return;
@@ -262,6 +275,11 @@ export default class TorrentMaster {
     }
 
     //more on the approach: https://github.com/SilentBot1/webtorrent-examples/blob/master/resurrection/index.js
+    /**
+     * Scan saved metadata and start restoring torrents against the room photos.
+     * Return a promise for the scan; individual restoration rejections are caught,
+     * while database iteration errors reject.
+     */
     resurrectLocallySavedTorrents(photos) {
         //Iterates through all metadata from metadata store and attempts to resurrect them!
         const self = this;
@@ -300,6 +318,15 @@ export default class TorrentMaster {
         });
     }
 
+    /**
+     * Restore saved metadata for photos matching its base infoHash, including
+     * compound file IDs. Mark matching photos as rendering from cache.
+     * Resolve with the supplied metadata if already active, the added torrent,
+     * or false after starting deletion when no room photo matches. Deletion errors
+     * are caught; addition promise rejections reject with descriptive strings.
+     * Non-object or null metadata rejects with false. If photos are omitted for an
+     * inactive torrent, the promise stays pending.
+     */
     resurrectTorrent(metadata, photos){
         const self = this;
 
@@ -560,6 +587,13 @@ export default class TorrentMaster {
         });
     }
 
+    /**
+     * Start adding missing room torrents and deleting local torrents absent from
+     * the snapshot, matching compound photo IDs by base hash. Protect uploads still
+     * hashing or unconfirmed as of `requestedAt` (epoch milliseconds); omitting it
+     * also protects uploads with tracked confirmations. Return without waiting;
+     * asynchronous add/delete rejections are caught.
+     */
     syncUiWithServerUrls(photos, requestedAt) {
         const self = this;
         Logger.debug('syncUiWithServerUrls photos.length: '+photos.length);
@@ -599,6 +633,7 @@ export default class TorrentMaster {
         });
     }
 
+    /** Return the first photo matching an exact ID or base torrent hash, or null. */
     findUrl(photos, infoHash) {
         // Photos of a multi-file torrent are listed as "<infoHash>-<path>".
         const index = photos.findIndex(item => item.infoHash === infoHash

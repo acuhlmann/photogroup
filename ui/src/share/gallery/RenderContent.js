@@ -63,6 +63,11 @@ export function renderMedia(tile, file, node, opts, callback) {
         .catch(err => callback(err));
 }
 
+/**
+ * Render images or media players and request metadata as content becomes available.
+ * Image previews remain until decoding settles, including a decode failure.
+ * `playbackActive` defaults to true; false skips attaching inline audio/video players.
+ */
 function RenderContent(props) {
     const {master, tile, classes, enqueueSnackbar, closeSnackbar, playbackActive = true} = props;
     const emitter = master.emitter;
@@ -390,6 +395,7 @@ function RenderContent(props) {
     const getBlobAndReadMetadataRef = useRef(null);
     getBlobAndReadMetadataRef.current = getBlobAndReadMetadata;
 
+    /** Record image dimensions, request metadata, and retire the preview after decoding settles. */
     const imgLoaded = useCallback((event) => {
         const img = event?.target;
         rememberImageSize(tile, img);
