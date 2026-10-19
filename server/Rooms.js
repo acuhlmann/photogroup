@@ -565,6 +565,21 @@ export default class Rooms {
                 room.peers.update(request, response, room);
             }
         });
+
+        // sendBeacon from a closing tab; sessionId rides in the query because
+        // beacons arrive as text/plain.
+        app.post('/api/rooms/:id/peers/:peerId/leave', (request, response) => {
+
+            const room = this.rooms.get(request.params.id);
+            if(!room) {
+                return response.status(404).send('Room not found');
+            }
+            const sessionId = request.query.sessionId;
+            if(typeof sessionId !== 'string' || !sessionId) {
+                return response.status(400).send('Expected sessionId');
+            }
+            response.send(room.peers.leaveNow(sessionId, request.params.peerId));
+        });
     }
 
     setupSSE() {

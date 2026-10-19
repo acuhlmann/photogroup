@@ -72,4 +72,47 @@ describe('Peers', () => {
             assert.deepStrictEqual(removedOwners, ['phone']);
         });
     });
+
+    describe('reload', () => {
+        it('replaces the old peer when a reloaded tab rejoins with a new peerId', () => {
+            peers.create({ peerId: 'phone-reloaded', sessionId: 's1', originPlatform: 'Pixel 7' });
+
+            assert.deepStrictEqual(peers.peers.map(p => p.peerId), ['phone-reloaded']);
+            assert.deepStrictEqual(removedOwners, ['phone']);
+            assert.deepStrictEqual(sent.map(m => m.type), ['delete', 'add']);
+        });
+
+        it('keeps other sessions and a rejoin with the same peerId', () => {
+            peers.create({ peerId: 'laptop', sessionId: 's2', originPlatform: 'Firefox' });
+            peers.create({ peerId: 'phone', sessionId: 's1', originPlatform: 'Pixel 7' });
+
+            assert.deepStrictEqual(peers.peers.map(p => p.peerId).sort(), ['laptop', 'phone']);
+            assert.deepStrictEqual(removedOwners, []);
+        });
+    });
+
+    describe('leaveNow', () => {
+        it('removes the peer right away', () => {
+            assert.strictEqual(peers.leaveNow('s1', 'phone'), true);
+
+            assert.ok(!peers.webPeers.has('phone'));
+            assert.deepStrictEqual(sent, [{ type: 'delete', item: 'phone' }]);
+            assert.deepStrictEqual(removedOwners, ['phone']);
+        });
+
+        it('ignores a late beacon from a page that was already replaced', () => {
+            peers.create({ peerId: 'phone-reloaded', sessionId: 's1', originPlatform: 'Pixel 7' });
+            sent = [];
+            removedOwners = [];
+
+            assert.strictEqual(peers.leaveNow('s1', 'phone'), false);
+            assert.ok(peers.webPeers.has('phone-reloaded'));
+            assert.deepStrictEqual(sent, []);
+        });
+
+        it('ignores a sessionId that does not own the peer', () => {
+            assert.strictEqual(peers.leaveNow('other', 'phone'), false);
+            assert.ok(peers.webPeers.has('phone'));
+        });
+    });
 });
