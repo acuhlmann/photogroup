@@ -20,7 +20,6 @@ import PhotoViewer from "./PhotoViewer";
 import NetworkReadout from "../topology/NetworkReadout";
 import { getBlobAndEmit } from "../torrent/BlobUtils";
 import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
-import { runViewTransition } from "./viewTransition";
 import GalleryToolbar from "./GalleryToolbar";
 import RoomMap from "./RoomMap";
 import DownloadRoomButton from "./DownloadRoomButton";
@@ -435,7 +434,7 @@ function Gallery(props) {
     });
 
     const openAt = useCallback((tile) => {
-        runViewTransition(() => setSelectedKey(tile ? tileKeyOf(tile) : null));
+        setSelectedKey(tile ? tileKeyOf(tile) : null);
     }, []);
 
     const showIndex = useCallback((index) => {
@@ -444,7 +443,7 @@ function Gallery(props) {
     }, [viewerTiles]);
 
     const closeViewer = useCallback(() => {
-        runViewTransition(() => setSelectedKey(null));
+        setSelectedKey(null);
     }, []);
     const located = visible.filter(tile => arranged.facts.get(tile)?.location).map(tile => {
         const facts = arranged.facts.get(tile);

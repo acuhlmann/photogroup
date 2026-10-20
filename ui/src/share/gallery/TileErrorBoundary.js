@@ -4,8 +4,13 @@ import Typography from '@mui/material/Typography';
 
 // One broken tile (e.g. a media API WebTorrent no longer has) must not
 // unmount the whole app and leave a blank screen. The wrapper div also stays
-// mounted when a tile swaps from loading to content, so the gallery's
-// fade-in doesn't replay and blank every tile at once.
+// mounted when a tile swaps from loading to content, so the gallery does not
+// rebuild that tile's DOM every time its state changes.
+//
+// The wrapper carries no entrance animation on purpose. The browser restarts
+// the animation of any node it re-inserts, so an entrance that begins at
+// opacity 0 blanks the tiles it moves: every re-order of the gallery hid the
+// photos already on screen. See the note in App.css.
 export default class TileErrorBoundary extends React.Component {
 
     constructor(props) {

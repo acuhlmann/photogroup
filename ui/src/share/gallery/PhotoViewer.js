@@ -22,7 +22,6 @@ import MediaMetadataPanel from './metadata/MediaMetadataPanel';
 import RenderContent from './RenderContent';
 import { saveLabel, savePhoto } from './savePhoto';
 import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
-import { photoTransitionName, supportsViewTransition } from './viewTransition';
 import { canSaveDetails, saveDetails } from './metadata/saveDetails';
 
 /** Display the selected media in a dialog with navigation, saving, and shared metadata editing. */
@@ -118,7 +117,6 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     if (!tile) return null;
 
     const isImage = !!tile.isImage;
-    const transitionName = photoTransitionName(tile.infoHash);
     const canSave = !!(tile.elem || (tile.torrentFile && typeof tile.torrentFile.getBlob === 'function'));
     const stillArriving = !!(tile.torrentFile && !tile.torrentFile.done);
     const replaceMode = replaceKind();
@@ -149,7 +147,6 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                 width: '100%',
                 height: '100%',
                 objectFit: 'contain',
-                viewTransitionName: transitionName,
             }}
         />
     ) : (
@@ -166,7 +163,6 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
             maxWidth="lg"
             fullWidth
             aria-labelledby="photo-viewer-title"
-            transitionDuration={supportsViewTransition() ? 0 : undefined}
             slotProps={{
                 paper: {
                     sx: {

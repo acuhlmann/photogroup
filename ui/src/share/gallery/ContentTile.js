@@ -20,7 +20,6 @@ import WebCrypto from "../security/WebCrypto";
 import RenderContent from "./RenderContent";
 import { saveLabel, savePhoto } from "./savePhoto";
 import { primePhotoCopy, replaceFailureMessage, replaceKind, replaceLabel, replaceOriginal } from "./replaceOriginal";
-import { photoTransitionName } from "./viewTransition";
 import { groupMetadataForDisplay } from "./metadata/groupPhotoMetadata";
 import { RatingStars, ColorLabel, StarPicker } from "./metadata/MediaMetadataPanel";
 import InlineText from "./metadata/InlineText";
@@ -222,7 +221,6 @@ function ContentTile(props) {
     const downloadedFile = localDownloaded.includes(tile.infoHash);
     const canSave = !isLoading && (tile.elem || (tile.torrentFile && typeof tile.torrentFile.getBlob === 'function'));
     const replaceMode = replaceKind();
-    const transitionName = selected ? undefined : photoTransitionName(tile.infoHash);
 
     if (!there) {
         return null;
@@ -291,7 +289,6 @@ function ContentTile(props) {
                     background: 'none',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    viewTransitionName: transitionName,
                     '& img': hero ? {
                         width: '100%',
                         height: 'auto',
