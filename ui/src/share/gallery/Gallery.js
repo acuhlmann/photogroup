@@ -23,6 +23,7 @@ import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
 import { runViewTransition } from "./viewTransition";
 import GalleryToolbar from "./GalleryToolbar";
 import RoomMap from "./RoomMap";
+import DownloadRoomButton from "./DownloadRoomButton";
 import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { captureDroppedHandles } from "./replaceOriginal";
@@ -447,7 +448,7 @@ function Gallery(props) {
     }, []);
     const located = visible.filter(tile => arranged.facts.get(tile)?.location).map(tile => {
         const facts = arranged.facts.get(tile);
-        return { tile, location: facts.location, label: facts.title || tile.fileName || 'photo' };
+        return { tile, location: facts.location, label: facts.title || tile.fileName || 'photo', takenAt: facts.takenAt };
     });
 
     // Look up place names for located photos, so "Place" can offer them even before tiles do.
@@ -543,6 +544,7 @@ function Gallery(props) {
                         unplaced={arranged.unplaced}
                         shown={visible.length}
                         total={arranged.total}
+                        actions={<DownloadRoomButton tiles={tiles} roomId={master.service && master.service.id} />}
                     />
                 )}
                 {mode === 'map' && tiles.length > 1 && (
