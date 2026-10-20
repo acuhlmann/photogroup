@@ -8,6 +8,8 @@ import React from "react";
 import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isDuplicateTorrentError, extractDuplicateTorrentId } from './WebTorrentUtils';
 import { getPreviewFromImage, getPreviewFromAudio } from './ThumbnailExtractor';
 import { cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
+import { fingerprintFile } from '../gallery/fingerprint';
+import { rememberHave } from '../gallery/alreadyHave';
 
 /** Read a torrent file into a Blob with either WebTorrent API; null when neither exists. */
 export function readFileBlob(file) {
@@ -332,6 +334,12 @@ export default class TorrentAddition {
 
         this.master.emitter.emit('photos', {type: 'add', item: photos});
 
+        // Fingerprints let others see they already have a photo. Encrypted
+        // shares get none, so the room learns nothing about their contents.
+        const fingerprinting = secure
+            ? Promise.resolve([])
+            : Promise.all(filesArr.map(file => fingerprintFile(file)));
+
         let thumbnailFiles = [];
 
         if(!secure && filesArr
@@ -380,6 +388,14 @@ export default class TorrentAddition {
             });
             self.emitter.emit('photos', {type: 'update', item: photos});
         }
+
+        const fingerprints = await fingerprinting;
+        photos.forEach((photo, index) => {
+            if(fingerprints[index]) {
+                photo.fingerprint = fingerprints[index];
+            }
+        });
+        rememberHave(fingerprints, 'shared');
 
         // Final validation: ensure all files are valid File objects
         if(!files || files.length === 0) {

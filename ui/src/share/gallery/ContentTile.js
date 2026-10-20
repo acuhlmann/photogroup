@@ -5,6 +5,7 @@ import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import IconButton from "@mui/material/IconButton";
 import CloudDownloadRounded from "@mui/icons-material/CloudDownloadRounded";
+import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
 import SaveRounded from "@mui/icons-material/SaveRounded";
 import IosShare from "@mui/icons-material/IosShare";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
@@ -26,6 +27,7 @@ import InlineText from "./metadata/InlineText";
 import KeywordEditor from "./metadata/KeywordEditor";
 import { LocationBlankLine, LocationLine } from "./metadata/LocationCard";
 import { canSaveDetails, saveDetails } from "./metadata/saveDetails";
+import { alreadyHave, HAVE_LABELS, useHaveChanges } from "./alreadyHave";
 
 /** Display loaded media and metadata highlights, with save, delete, and decryption controls. */
 function ContentTile(props) {
@@ -207,6 +209,8 @@ function ContentTile(props) {
     }, [master, tile.infoHash]);
 
     // A photo restored from cache is complete even while its torrent re-verifies.
+    useHaveChanges();
+    const have = alreadyHave(tile);
     const isLoading = tile.torrentFile && !tile.torrentFile.done && !tile.elem;
     let progressPercentage, downloaded;
     if(isLoading && tile.torrentFile) {
@@ -381,6 +385,13 @@ function ContentTile(props) {
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.35, fontFamily: 'var(--font-mono)' }}>
                         {tile.fileSize}
                     </Typography>
+                )}
+
+                {have && (
+                    <Stack direction="row" spacing={0.5} data-testid="already-have" sx={{ alignItems: 'center', mt: 0.5 }}>
+                        <CheckCircleRounded aria-hidden="true" sx={{ fontSize: 15, color: 'success.main' }} />
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>{HAVE_LABELS[have]}</Typography>
+                    </Stack>
                 )}
 
                 {arrival && (

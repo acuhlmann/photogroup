@@ -270,6 +270,20 @@ describe('replaceOriginal', () => {
         expect(replaceLabel(tile, { replaced: 'shared' })).toBe('Saved');
     });
 
+    it('remembers a photo once it is written back, not when the picker is cancelled', async () => {
+        const { alreadyHave, clearHave } = await import('./alreadyHave');
+        clearHave();
+        const written = { elem: blob, fileName: 'a.jpg', tileKey: 'w', fingerprint: '3:' + 'a'.repeat(64) };
+        const cancelled = { elem: blob, fileName: 'b.jpg', tileKey: 'x', fingerprint: '3:' + 'b'.repeat(64) };
+        window.showSaveFilePicker = vi.fn()
+            .mockResolvedValueOnce(handleWith())
+            .mockRejectedValueOnce(Object.assign(new Error('nope'), { name: 'AbortError' }));
+        await replaceOriginal(written);
+        await replaceOriginal(cancelled).catch(() => {});
+        expect(alreadyHave(written)).toBe('saved');
+        expect(alreadyHave(cancelled)).toBeNull();
+    });
+
     it('reports a browser that cannot share files either', async () => {
         navigator.share = vi.fn();
         navigator.canShare = vi.fn().mockReturnValue(false);

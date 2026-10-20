@@ -17,6 +17,7 @@ if (!('stream' in Blob.prototype)) {
     });
 }
 const { isReadyToSave, saveRoom, zipEntryNames, zipName } = await import('./saveRoom');
+const { alreadyHave, clearHave } = await import('./alreadyHave');
 
 const photo = () => new Blob([readFileSync(join(__dirname, 'metadata/embed/__fixtures__/photo.jpg'))]);
 const text = bytes => new TextDecoder().decode(bytes);
@@ -66,15 +67,17 @@ describe('saveRoom', () => {
     it('zips the room with each photo’s details written into it', async () => {
         const save = vi.fn();
         const progress = vi.fn();
+        clearHave();
+        const fp = letter => '3:' + letter.repeat(64);
         const fromPeer = {
-            fileName: 'pier.jpg', details: { title: 'At the pier' },
+            fileName: 'pier.jpg', details: { title: 'At the pier' }, fingerprint: fp('b'),
             torrentFile: { done: true, getBlob: callback => callback(null, photo()) },
         };
         const tiles = [
-            { elem: photo(), fileName: 'pier.jpg', details: { title: 'Sunset swim', keywords: ['sea'] }, picDateTakenDate: new Date(2026, 9, 12, 18, 30) },
+            { elem: photo(), fileName: 'pier.jpg', details: { title: 'Sunset swim', keywords: ['sea'] }, picDateTakenDate: new Date(2026, 9, 12, 18, 30), fingerprint: fp('a') },
             fromPeer,
-            { fileName: 'arriving.jpg', torrentFile: { done: false, getBlob() {} } },
-            { fileName: 'broken.jpg', torrentFile: { done: true, getBlob: callback => callback(new Error('gone')) } },
+            { fileName: 'arriving.jpg', torrentFile: { done: false, getBlob() {} }, fingerprint: fp('c') },
+            { fileName: 'broken.jpg', torrentFile: { done: true, getBlob: callback => callback(new Error('gone')) }, fingerprint: fp('d') },
         ];
 
         const result = await saveRoom(tiles, { roomId: 'r1', onProgress: progress, save });
@@ -88,6 +91,8 @@ describe('saveRoom', () => {
         expect(text(entries[0].bytes)).toContain('Sunset swim');
         expect(text(entries[1].bytes)).toContain('At the pier');
         expect(entries[0].date).toEqual([2026, 10, 12]);
+        // Only the photos that went into the zip count as saved.
+        expect(tiles.map(tile => alreadyHave(tile))).toEqual(['saved', 'saved', null, null]);
     });
 
     it('says so when nothing is ready yet', async () => {

@@ -2,6 +2,7 @@ import download from 'downloadjs';
 import Logger from 'js-logger';
 import { downloadZip } from 'client-zip';
 import { fileForSave } from './savePhoto';
+import { rememberHave } from './alreadyHave';
 
 /** Whether a tile's whole file is on this device, so it can be saved. */
 export function isReadyToSave(tile) {
@@ -50,6 +51,7 @@ export async function saveRoom(tiles, { roomId, onProgress = () => {}, save = do
     const names = zipEntryNames(ready);
     let saved = 0;
     let failed = 0;
+    const fingerprints = [];
 
     // One photo at a time, so a big room doesn't hold every file in memory twice.
     async function* entries() {
@@ -58,6 +60,7 @@ export async function saveRoom(tiles, { roomId, onProgress = () => {}, save = do
             try {
                 const input = await fileForSave(tile);
                 saved += 1;
+                fingerprints.push(tile.fingerprint);
                 yield { name: names[index], input, lastModified: takenDate(tile) };
             } catch (err) {
                 failed += 1;
@@ -70,5 +73,6 @@ export async function saveRoom(tiles, { roomId, onProgress = () => {}, save = do
     const zip = await downloadZip(entries()).blob();
     if (!saved) throw new Error('None of the photos could be read');
     save(zip, zipName(roomId), 'application/zip');
+    rememberHave(fingerprints, 'saved');
     return { saved, skipped: tiles.length - ready.length + failed };
 }

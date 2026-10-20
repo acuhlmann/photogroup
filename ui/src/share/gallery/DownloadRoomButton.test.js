@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 
@@ -7,12 +7,15 @@ vi.mock('./saveRoom', async original => ({ ...(await original()), saveRoom: vi.f
 
 const { saveRoom } = await import('./saveRoom');
 const { default: DownloadRoomButton } = await import('./DownloadRoomButton');
+const { clearHave } = await import('./alreadyHave');
+const { fingerprintFile } = await import('./fingerprint');
 
 const ready = { elem: new Blob([]), fileName: 'a.jpg' };
 const arriving = { fileName: 'b.jpg', torrentFile: { done: false, getBlob() {} } };
 
 async function render(tiles) {
     const div = document.createElement('div');
+    document.body.appendChild(div);
     const root = createRoot(div);
     await act(async () => root.render(<DownloadRoomButton tiles={tiles} roomId="r1" />));
     return { div, root, button: div.querySelector('button') };
@@ -41,5 +44,66 @@ describe('DownloadRoomButton', () => {
         const { root, button } = await render([arriving]);
         expect(button.disabled).toBe(true);
         await act(async () => root.unmount());
+    });
+
+    describe('photos you already have', () => {
+        beforeEach(() => clearHave());
+
+        const menuItem = text => Array.from(document.body.querySelectorAll('[role="menuitem"]'))
+            .find(item => item.textContent.startsWith(text));
+        const openMenu = div => act(async () => div.querySelector('button[aria-label="More download options"]').click());
+
+        it('leaves out photos you shared, and says so', async () => {
+            saveRoom.mockResolvedValueOnce({ saved: 1, skipped: 0 });
+            const mine = { elem: new Blob([]), fileName: 'mine.jpg', seed: true };
+            const { div, root, button } = await render([mine, ready]);
+            expect(button.textContent).toBe('Download 1 new');
+            await act(async () => button.click());
+            expect(saveRoom).toHaveBeenLastCalledWith([ready], expect.anything());
+            expect(div.querySelector('[role="status"]').textContent).toBe('Saved 1 photo · 1 you have, left out');
+            await act(async () => root.unmount());
+        });
+
+        it('can still download everything', async () => {
+            saveRoom.mockResolvedValueOnce({ saved: 1, skipped: 0 });
+            const mine = { elem: new Blob([]), fileName: 'mine.jpg', seed: true };
+            const { div, root, button } = await render([mine]);
+            expect(button.textContent).toBe('You have them all');
+            expect(button.disabled).toBe(true);
+            await openMenu(div);
+            await act(async () => menuItem('Download all 1').click());
+            expect(saveRoom).toHaveBeenLastCalledWith([mine], expect.anything());
+            await act(async () => root.unmount());
+        });
+
+        it('finds photos in a folder you pick and stops offering them', async () => {
+            const original = new File(['the original bytes'], 'IMG_0042.JPG');
+            const photo = { elem: original, fileName: 'IMG_0042.JPG', fingerprint: await fingerprintFile(original) };
+            window.showDirectoryPicker = vi.fn().mockResolvedValue({
+                kind: 'directory',
+                name: 'Camera',
+                async *values() {
+                    yield { kind: 'file', name: 'renamed.jpg', getFile: async () => new File(['the original bytes'], 'renamed.jpg') };
+                },
+            });
+            const { div, root, button } = await render([photo, ready]);
+            expect(button.textContent).toBe('Download room');
+
+            await openMenu(div);
+            await act(async () => menuItem('Find the ones on this device').click());
+
+            await vi.waitFor(() => expect(div.querySelector('[role="status"]').textContent)
+                .toBe('Found 1 photo already on this device'));
+            expect(button.textContent).toBe('Download 1 new');
+            delete window.showDirectoryPicker;
+            await act(async () => root.unmount());
+        });
+
+        it("can't look for photos shared before fingerprints existed", async () => {
+            const { div, root } = await render([ready]);
+            await openMenu(div);
+            expect(menuItem('Find the ones on this device').getAttribute('aria-disabled')).toBe('true');
+            await act(async () => root.unmount());
+        });
     });
 });

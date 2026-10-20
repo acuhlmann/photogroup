@@ -1,6 +1,7 @@
 import download from 'downloadjs';
 import Logger from 'js-logger';
 import { embedDetails } from './metadata/embed/embedDetails';
+import { rememberHave } from './alreadyHave';
 
 function blobForSave(tile) {
     return new Promise((resolve, reject) => {
@@ -51,6 +52,7 @@ export function savePhoto(tile) {
             Logger.error(err && err.message ? err.message : String(err));
             throw err;
         }
+        rememberHave(tile.fingerprint, 'saved');
     });
 }
 
