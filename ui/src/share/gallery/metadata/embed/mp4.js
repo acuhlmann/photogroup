@@ -119,6 +119,27 @@ export async function readLocation(source) {
     return null;
 }
 
+/**
+ * True when a video's location was blanked before it got here. Android
+ * withholds it from apps by zeroing the type and contents of the ©xyz,
+ * loci and gps boxes while keeping their size, which leaves a box no
+ * writer would make: a stated size but no type.
+ */
+export async function locationBlanked(source) {
+    const top = await scanBoxes(source);
+    const moov = top.find(item => item.type === 'moov');
+    if (!moov || moov.end - moov.start > MAX_MOOV) return false;
+    const bytes = await readBytes(source, moov.start, moov.end);
+    const kids = contents(bytes, { ...moov, start: 0, end: bytes.length });
+    const udta = kids.find(kid => kid.type === 'udta');
+    const userData = udta ? contents(bytes, udta) : [];
+    const items = [...userData, ...kids].filter(kid => kid.type === 'meta').flatMap(meta => {
+        const ilst = metaContents(bytes, meta).find(kid => kid.type === 'ilst');
+        return ilst ? contents(bytes, ilst) : [];
+    });
+    return [...userData, ...items].some(item => item.type === '\0\0\0\0' && readUint(bytes, item.start, 4) >= 8);
+}
+
 // Apple's keyed metadata (hdlr "mdta"): a keys box of names, and ilst items
 // typed by their 1-based key index. iPhones keep the location here.
 const KEYED = {

@@ -1,6 +1,7 @@
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import { fileForSave } from './savePhoto';
+import { rememberHave } from './alreadyHave';
 
 const HANDLE = Symbol('originalHandle');
 const handles = new Map();
@@ -303,6 +304,12 @@ async function shareFile(tile) {
  * Resolves to `'replaced'` or `'shared'`.
  */
 export async function replaceOriginal(tile) {
+    const kind = await writeOriginal(tile);
+    rememberHave(tile.fingerprint, 'saved');
+    return kind;
+}
+
+async function writeOriginal(tile) {
     const existing = handleFor(tile);
     if (existing) {
         const allowed = await permissionGranted(existing);
