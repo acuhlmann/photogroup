@@ -194,7 +194,8 @@ LocationLine.propTypes = {
 
 export const LOCATION_BLANK_HELP = 'This photo has GPS fields, but they are blank. Android blanks them when '
     + 'a browser or app picks a photo without location access, and some apps remove location when sharing. '
-    + 'To keep it, upload the original file from a computer.';
+    + 'To keep it, share the photo again and pick it in Files under internal storage, DCIM › Camera, '
+    + 'or upload the original from a computer.';
 
 /** Says a photo's GPS fields were blanked before it reached the app, so "no location" isn't a mystery. */
 export function LocationBlankNote({ onAdd }) {

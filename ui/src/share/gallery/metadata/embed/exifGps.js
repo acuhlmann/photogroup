@@ -23,21 +23,16 @@ function rationals(value) {
 }
 
 /**
- * A copy of `tiff` with its GPS latitude/longitude set to `location`
- * ({lat, long}), or blanked when `location` is null. Returns null when the
- * block has no GPS fields of the expected shape to rewrite.
+ * The latitude/longitude entries of a TIFF block's GPS directory, with a
+ * reader for its byte order, or null when they are missing or malformed.
  */
-export function patchGps(tiff, location) {
-    const bytes = tiff.slice();
+function gpsFields(bytes) {
     const little = bytes[0] === 0x49 && bytes[1] === 0x49;
     if (!little && !(bytes[0] === 0x4D && bytes[1] === 0x4D)) return null;
     const u16 = at => (little ? bytes[at] | (bytes[at + 1] << 8) : (bytes[at] << 8) | bytes[at + 1]);
     const u32 = at => (little
         ? (bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24)) >>> 0
         : ((bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3]) >>> 0);
-    const put32 = (at, value) => {
-        for (let i = 0; i < 4; i++) bytes[at + (little ? i : 3 - i)] = (value >>> (8 * i)) & 0xFF;
-    };
     const entries = ifd => {
         if (ifd + 2 > bytes.length) return [];
         const list = [];
@@ -57,6 +52,22 @@ export function patchGps(tiff, location) {
     const refOk = entry => entry && entry.type === ASCII && entry.count >= 1 && entry.count <= 4;
     const coordOk = entry => entry && entry.type === RATIONAL && entry.count === 3 && u32(entry.at + 8) + 24 <= bytes.length;
     if (![LAT_REF, LONG_REF].every(tag => refOk(gps[tag])) || ![LAT, LONG].every(tag => coordOk(gps[tag]))) return null;
+    return { little, u32, gps };
+}
+
+/**
+ * A copy of `tiff` with its GPS latitude/longitude set to `location`
+ * ({lat, long}), or blanked when `location` is null. Returns null when the
+ * block has no GPS fields of the expected shape to rewrite.
+ */
+export function patchGps(tiff, location) {
+    const bytes = tiff.slice();
+    const fields = gpsFields(bytes);
+    if (!fields) return null;
+    const { little, u32, gps } = fields;
+    const put32 = (at, value) => {
+        for (let i = 0; i < 4; i++) bytes[at + (little ? i : 3 - i)] = (value >>> (8 * i)) & 0xFF;
+    };
 
     const writeRef = (entry, letter) => {
         bytes.fill(0, entry.at + 8, entry.at + 12);
@@ -74,4 +85,21 @@ export function patchGps(tiff, location) {
     writeCoord(gps[LAT], location ? location.lat : null);
     writeCoord(gps[LONG], location ? location.long : null);
     return bytes;
+}
+
+/**
+ * True when the latitude and longitude fields exist but every byte of their
+ * values is zero, denominators included. That is what Android leaves when
+ * it withholds a photo's location from an app; a real position, even 0,0,
+ * has nonzero denominators.
+ */
+export function gpsBlanked(tiff) {
+    const fields = gpsFields(tiff);
+    if (!fields) return false;
+    const { u32, gps } = fields;
+    const zero = (start, end) => tiff.subarray(start, end).every(byte => byte === 0);
+    return [LAT, LONG].every(tag => {
+        const offset = u32(gps[tag].at + 8);
+        return zero(offset, offset + 24);
+    }) && [LAT_REF, LONG_REF].every(tag => zero(gps[tag].at + 8, gps[tag].at + 12));
 }

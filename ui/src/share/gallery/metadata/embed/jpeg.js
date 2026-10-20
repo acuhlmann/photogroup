@@ -14,7 +14,8 @@ export function matches(head) {
     return head[0] === 0xFF && head[1] === 0xD8;
 }
 
-export async function embed(blob, details) {
+/** The segments before the image data, with the first XMP and Exif APP1 segments read. */
+async function readSegments(blob) {
     const segments = [];
     let existing = null;
     let exif = null;
@@ -37,7 +38,17 @@ export async function embed(blob, details) {
         segments.push(segment);
         offset = segment.end;
     }
+    return { segments, existing, exif };
+}
 
+/** The photo's EXIF as a TIFF block, or null when it has none. */
+export async function readExif(blob) {
+    const { exif } = await readSegments(blob);
+    return exif ? exif.payload.subarray(EXIF_HEADER.length) : null;
+}
+
+export async function embed(blob, details) {
+    const { segments, existing, exif } = await readSegments(blob);
     const payload = utf8(XMP_HEADER + applyDetailsToXmp(existing && existing.xml, details));
     const length = payload.length + 2;
     if (length > MAX_SEGMENT_LENGTH) {
