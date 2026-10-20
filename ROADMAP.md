@@ -9,18 +9,24 @@ the code, and when it's done.
 
 ---
 
-## 1. Ship the Android picker and "already have" downloads
+## 1. Ship Android uploads with locations and "already have" downloads
 
-**Status:** built, uncommitted on branch `keep-android-locations`.
+**Status:** open as PR #129, branch `keep-android-locations`.
 
-Two features, to go in as separate commits:
+- **Android uploads that keep locations** — Android blanks the location on
+  every browser pick. Tested on a phone: its own Files app, picked from
+  DCIM › Camera, blanks it too. Two routes get originals through:
+  - **Material Files**, picked as an app from ☰ in the picker. It has
+    all-files access, so it reads the originals.
+  - **A zip**, made by a file manager. Android never blanks a zip, and the
+    app unpacks it in the browser (`header/unzipMedia.js`).
 
-- **Android Files picker** — Share on Android opens the system Files picker
-  (`showOpenFilePicker`) instead of the file input's app chooser, whose
-  gallery apps and photo picker hand over copies with the location blanked.
-  Picked files that still show Android's blanking are held back with
-  directions. Files: `ui/src/share/header/pickFiles.js`, `Uploader.js`,
-  `gallery/metadata/strippedLocation.js`.
+  Zips are accepted on Android only. A dismissible note in the gallery
+  explains both routes (`gallery/AndroidLocationNote.js`). Photos that still
+  arrive blanked are held back with the same steps
+  (`gallery/metadata/strippedLocation.js`, `header/Uploader.js`).
+  An earlier attempt opened `showOpenFilePicker` instead. It kept nothing
+  and hid Material Files, since Android's picker lists no apps in that mode.
 - **Only download what you don't have** — uploads carry a fingerprint;
   Download room leaves out photos shared or saved from this browser, or
   found in a folder the person picks. Files: `gallery/fingerprint.js`,
@@ -28,18 +34,13 @@ Two features, to go in as separate commits:
 
 **Still to check on a real Android phone** (can't be automated):
 
-- [ ] Share → pick a geotagged photo from *Recent* in Files: does the map card show its location?
-- [ ] Same, picked from *internal storage › DCIM › Camera*.
+- [x] Pick from internal storage › DCIM › Camera in Files: location still removed.
+- [ ] Share → ☰ → Material Files → DCIM › Camera: does the map card show the location?
+- [ ] Zip a few photos and a video in a file manager, share the zip: do the photos arrive with their location?
 - [ ] Download room ⋮ → *Find the ones on this device…* → pick DCIM › Camera: are your own photos found?
 
-The claim that Files keeps location comes from Android's source
-(MediaProvider only blanks for the photo picker and for apps reading
-MediaStore without `ACCESS_MEDIA_LOCATION`; Files' storage providers are
-exempt) and from third-party reports, not from a device test. If a Files
-section still blanks on some phone, the hold-back dialog catches it.
-
-**Done when:** committed, PR merged, phone checks above pass (or findings
-are written back here).
+**Done when:** PR merged and the phone checks above pass, or the findings
+are written back here.
 
 ---
 
@@ -186,7 +187,8 @@ in one or two taps.
 straight to seeding and skip the Android blanking check that Share runs.
 It only matters for split-screen drag on Android.
 
-**Change:** route drops through the same check as `Uploader.receive`.
+**Change:** route drops through the same steps as `Uploader.receive`
+(unpack zips, then the blanking check).
 
-**Done when:** a blanked file dropped on Android is held back like one picked
-through Share.
+**Done when:** a blanked file or a zip dropped on Android is handled like one
+picked through Share.

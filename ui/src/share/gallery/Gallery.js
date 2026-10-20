@@ -23,6 +23,7 @@ import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
 import GalleryToolbar from "./GalleryToolbar";
 import RoomMap from "./RoomMap";
 import DownloadRoomButton from "./DownloadRoomButton";
+import AndroidLocationNote from "./AndroidLocationNote";
 import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { captureDroppedHandles } from "./replaceOriginal";
@@ -523,6 +524,7 @@ function Gallery(props) {
                         Drop pictures here, or tap to choose some from this device.
                     </Typography>
                 </Box>
+                <AndroidLocationNote narrow />
                 {showNetworkReadout && (
                     <Box sx={{ maxWidth: 560, mx: 'auto' }}>
                         <NetworkReadout master={master} />
@@ -533,6 +535,7 @@ function Gallery(props) {
                 <>
                 {/* The empty-state drop zone, shrunk to one line once there are photos. */}
                 <AddPhotosStrip narrow={tiles.length < 2} />
+                <AndroidLocationNote narrow={tiles.length < 2} />
                 {tiles.length > 1 && (
                     <GalleryToolbar
                         view={view}

@@ -81,99 +81,100 @@ describe('Uploader on Android', () => {
   const { act } = require('react');
   const EventEmitter = require('events');
 
+  // jsdom's Blob has no stream(), which browsers have and the unzip reads entries with.
+  if (!('stream' in Blob.prototype)) {
+    Object.defineProperty(Blob.prototype, 'stream', {
+      value() {
+        const blob = this;
+        return new ReadableStream({
+          async start(controller) {
+            controller.enqueue(new Uint8Array(await blob.arrayBuffer()));
+            controller.close();
+          },
+        });
+      },
+    });
+  }
+
   const ANDROID = 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36';
+  const DESKTOP = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
   const fixture = name => readFileSync(path.join(__dirname, '../gallery/metadata/embed/__fixtures__', name));
   const original = () => new File([fixture('photo.jpg')], 'PXL_original.jpg', { type: 'image/jpeg' });
   const stripped = () => new File([fixture('blank-gps.jpg')], 'PXL_stripped.jpg', { type: 'image/jpeg' });
-  const picked = files => files.map(file => ({ getFile: () => Promise.resolve(file) }));
+  const photosZip = () => new File([readFileSync(path.join(__dirname, '__fixtures__/photos.zip'))], 'photos.zip', { type: 'application/zip' });
 
   let userAgent;
   let model;
   let div;
   let root;
 
-  beforeEach(async () => {
-    delete window.location;
-    window.location = { search: '?room=test123' };
-    userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(ANDROID);
-    window.showOpenFilePicker = vi.fn();
-    model = { emitter: new EventEmitter(), seed: vi.fn() };
+  async function mount(agent) {
+    userAgent.mockReturnValue(agent);
     div = document.createElement('div');
     document.body.appendChild(div);
     root = createRoot(div);
     await act(async () => root.render(<Uploader model={model} emitter={model.emitter} classes={{}} />));
     await act(async () => model.emitter.emit('readyToUpload'));
+  }
+
+  beforeEach(async () => {
+    delete window.location;
+    window.location = { search: '?room=test123' };
+    userAgent = vi.spyOn(window.navigator, 'userAgent', 'get');
+    model = { emitter: new EventEmitter(), seed: vi.fn() };
+    await mount(ANDROID);
   });
 
   afterEach(async () => {
     await act(async () => root.unmount());
     div.remove();
     userAgent.mockRestore();
-    delete window.showOpenFilePicker;
-    watchers.forEach(listener => document.removeEventListener('click', listener));
-    watchers = [];
   });
 
   const input = () => div.querySelector('input[type="file"]');
-  // React handles clicks at its root, so whether the native picker was
-  // cancelled is only settled once the click reaches the document.
-  let watchers = [];
-  const watchInputClicks = () => {
-    const native = vi.fn();
-    const listener = event => { if (event.target === input()) native(event.defaultPrevented); };
-    document.addEventListener('click', listener);
-    watchers.push(listener);
-    return native;
-  };
-  const clickShare = () => act(async () => div.querySelector('label[for="contained-button-file"]').click());
+  const choose = files => act(async () => {
+    Object.defineProperty(input(), 'files', { value: files, configurable: true });
+    input().dispatchEvent(new Event('change', { bubbles: true }));
+  });
   const dialogButton = label => Array.from(document.body.querySelectorAll('button')).find(item => item.textContent === label);
+  const heldList = () => document.body.querySelector('[data-testid="location-held"]');
 
-  it('opens the Files picker instead of the file input, and shares what was picked', async () => {
+  it('uses the regular file input, where Material Files is offered, and accepts zips', async () => {
+    expect(input().getAttribute('accept')).toBe('image/*,video/*,audio/*,.zip,application/zip');
     const photo = original();
-    window.showOpenFilePicker.mockResolvedValue(picked([photo]));
-    const native = watchInputClicks();
-
-    await clickShare();
-
-    expect(window.showOpenFilePicker).toHaveBeenCalledTimes(1);
-    expect(native).toHaveBeenCalledWith(true);
+    await choose([photo]);
     await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
     expect(model.seed.mock.calls[0][0]).toEqual([photo]);
   });
 
-  it('holds back files whose location Android removed, and shares the rest', async () => {
+  it('holds back files whose location Android removed, shares the rest, and says how to keep it', async () => {
     const good = original();
-    const bad = stripped();
-    window.showOpenFilePicker.mockResolvedValue(picked([good, bad]));
+    await choose([good, stripped()]);
 
-    await clickShare();
-
-    await vi.waitFor(() => expect(document.body.querySelector('[data-testid="location-held"]')).not.toBeNull());
+    await vi.waitFor(() => expect(heldList()).not.toBeNull());
     expect(model.seed).toHaveBeenCalledTimes(1);
     expect(model.seed.mock.calls[0][0]).toEqual([good]);
-    expect(document.body.querySelector('[data-testid="location-held"]').textContent).toContain('PXL_stripped.jpg');
-    expect(document.body.textContent).toContain('Pick it again in Files');
+    expect(heldList().textContent).toContain('PXL_stripped.jpg');
+    expect(document.body.textContent).toContain('choose Material Files');
+    expect(document.body.textContent).toContain('share the zip');
   });
 
-  it('opens the Files picker again from the dialog', async () => {
-    window.showOpenFilePicker.mockResolvedValueOnce(picked([stripped()]));
-    await clickShare();
+  it('opens the file input again from the dialog', async () => {
+    await choose([stripped()]);
     await vi.waitFor(() => expect(dialogButton('Pick again')).toBeTruthy());
-    expect(model.seed).not.toHaveBeenCalled();
+    const click = vi.fn();
+    input().addEventListener('click', click);
 
-    const photo = original();
-    window.showOpenFilePicker.mockResolvedValueOnce(picked([photo]));
     await act(async () => dialogButton('Pick again').click());
 
-    expect(window.showOpenFilePicker).toHaveBeenCalledTimes(2);
-    await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
-    expect(model.seed.mock.calls[0][0]).toEqual([photo]);
+    expect(click).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(heldList()).toBeNull());
+    expect(model.seed).not.toHaveBeenCalled();
   });
 
   it('shares held files without location when asked to', async () => {
     const bad = stripped();
-    window.showOpenFilePicker.mockResolvedValue(picked([bad]));
-    await clickShare();
+    await choose([bad]);
     await vi.waitFor(() => expect(dialogButton('Share without location')).toBeTruthy());
 
     await act(async () => dialogButton('Share without location').click());
@@ -182,28 +183,26 @@ describe('Uploader on Android', () => {
     expect(model.seed.mock.calls[0][0]).toEqual([bad]);
   });
 
-  it('shares nothing when the picker is closed', async () => {
-    window.showOpenFilePicker.mockRejectedValue(Object.assign(new Error('closed'), { name: 'AbortError' }));
-    await clickShare();
-    await act(async () => {});
-    expect(model.seed).not.toHaveBeenCalled();
+  it('shares the photos inside a zip, holding back any that were blanked before zipping', async () => {
+    await choose([photosZip()]);
+
+    await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
+    const shared = model.seed.mock.calls[0][0];
+    expect(shared.map(file => file.name)).toEqual(['PXL_photo.jpg', 'PXL_gps.heic', 'PXL_clip.mp4']);
+    expect(new Uint8Array(await shared[0].arrayBuffer())).toEqual(new Uint8Array(fixture('photo.jpg')));
+    await vi.waitFor(() => expect(heldList()).not.toBeNull());
+    expect(heldList().textContent).toBe('Strand ü.jpg');
   });
 
-  it('offers the file input on a fresh tap when the Files picker fails', async () => {
-    window.showOpenFilePicker.mockRejectedValue(Object.assign(new Error('blocked'), { name: 'SecurityError' }));
-    const native = watchInputClicks();
+  it('says when a zip has nothing to share', async () => {
+    const errors = vi.fn();
+    model.emitter.on('showError', errors);
+    const broken = new File([new Uint8Array([1, 2, 3])], 'broken.zip', { type: 'application/zip' });
+    await choose([broken, original()]);
 
-    await clickShare();
-    await vi.waitFor(() => expect(dialogButton('Choose files')).toBeTruthy());
-    // The failed picker used up the tap, so nothing opens the input behind the person's back.
-    expect(native.mock.calls.map(([prevented]) => prevented)).toEqual([true]);
-
-    await act(async () => dialogButton('Choose files').click());
-    expect(native.mock.calls.map(([prevented]) => prevented)).toEqual([true, false]);
-
-    await clickShare();
-    expect(window.showOpenFilePicker).toHaveBeenCalledTimes(1);
-    expect(native.mock.calls.at(-1)[0]).toBe(false);
+    await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
+    expect(errors).toHaveBeenCalledWith('Couldn’t open broken.zip: it isn’t a zip file.');
+    expect(model.seed.mock.calls[0][0].map(file => file.name)).toEqual(['PXL_original.jpg']);
   });
 
   describe('with encryption on', () => {
@@ -219,8 +218,7 @@ describe('Uploader on Android', () => {
     it('asks for the password once, for the files that were fine and the ones shared without location', async () => {
       const good = original();
       const bad = stripped();
-      window.showOpenFilePicker.mockResolvedValue(picked([good, bad]));
-      await clickShare();
+      await choose([good, bad]);
       await vi.waitFor(() => expect(dialogButton('Share without location')).toBeTruthy());
 
       await act(async () => dialogButton('Share without location').click());
@@ -234,8 +232,7 @@ describe('Uploader on Android', () => {
 
     it('lets the files that were fine go ahead when the dialog is closed', async () => {
       const good = original();
-      window.showOpenFilePicker.mockResolvedValue(picked([good, stripped()]));
-      await clickShare();
+      await choose([good, stripped()]);
       await vi.waitFor(() => expect(dialogButton('Pick again')).toBeTruthy());
 
       const held = document.body.querySelector('[aria-labelledby="location-held-title"]');
@@ -245,32 +242,31 @@ describe('Uploader on Android', () => {
       await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
       expect(encryptFile.mock.calls[0][0]).toEqual([good]);
     });
+
+    it('lets them go ahead when the picker is closed after Pick again', async () => {
+      const good = original();
+      await choose([good, stripped()]);
+      await vi.waitFor(() => expect(dialogButton('Pick again')).toBeTruthy());
+      await act(async () => dialogButton('Pick again').click());
+
+      await act(async () => input().dispatchEvent(new Event('cancel')));
+      await act(async () => dialogButton('Encrypt').click());
+
+      await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
+      expect(encryptFile.mock.calls[0][0]).toEqual([good]);
+    });
   });
 
-  it('checks files from the file input too, where there is no Files picker', async () => {
-    delete window.showOpenFilePicker;
+  it('leaves other platforms alone: no zips, no checks', async () => {
+    await act(async () => root.unmount());
+    div.remove();
+    await mount(DESKTOP);
+    expect(input().getAttribute('accept')).toBe('image/*,video/*,audio/*');
+
     const bad = stripped();
-    await act(async () => {
-      Object.defineProperty(input(), 'files', { value: [bad], configurable: true });
-      input().dispatchEvent(new Event('change', { bubbles: true }));
-    });
-
-    await vi.waitFor(() => expect(document.body.querySelector('[data-testid="location-held"]')).not.toBeNull());
-    expect(model.seed).not.toHaveBeenCalled();
-    expect(document.body.textContent).toContain('choose Files, not Photos or Gallery');
-  });
-
-  it('leaves other platforms on the file input, unchecked', async () => {
-    userAgent.mockReturnValue('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36');
-    const bad = stripped();
-    await clickShare();
-    expect(window.showOpenFilePicker).not.toHaveBeenCalled();
-
-    await act(async () => {
-      Object.defineProperty(input(), 'files', { value: [bad], configurable: true });
-      input().dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    const zip = photosZip();
+    await choose([bad, zip]);
     expect(model.seed).toHaveBeenCalledTimes(1);
-    expect(model.seed.mock.calls[0][0]).toEqual([bad]);
+    expect(model.seed.mock.calls[0][0]).toEqual([bad, zip]);
   });
 });

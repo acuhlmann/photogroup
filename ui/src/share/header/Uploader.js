@@ -18,21 +18,15 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Typography from "@mui/material/Typography";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 
 import PasswordInput from "../security/PasswordInput";
 import WebCrypto from "../security/WebCrypto";
 import { partitionStripped } from "../gallery/metadata/strippedLocation";
-import { onAndroid, pickWithFilesPicker, usesFilesPicker } from "./pickFiles";
+import { ACCEPT, ANDROID_ACCEPT, KEEP_LOCATION_STEPS, onAndroid } from "./androidUpload";
+import { isZip, unpackZips } from "./unzipMedia";
 
 const SHOWN_HELD = 5;
-
-/** How to get the originals, depending on whether Share already opens the Files picker. */
-function pickAgainHelp(count) {
-    const where = 'open the ☰ menu, choose your phone\'s internal storage, then DCIM › Camera.';
-    return usesFilesPicker()
-        ? `Pick ${count === 1 ? 'it' : 'them'} again in Files: ${where}`
-        : `Tap Pick again and choose Files, not Photos or Gallery. In Files, ${where}`;
-}
 
 
 const styles = theme => ({
@@ -53,9 +47,8 @@ function Uploader({classes, model, emitter}) {
     const [files, setFiles] = useState(null);
     const [secure, setSecure] = useState(false);
     const [held, setHeld] = useState([]);
-    const [pickerFailed, setPickerFailed] = useState(false);
+    const [unpacking, setUnpacking] = useState(false);
     const uploaderDomRef = useRef(null);
-    const filesPickerFailed = useRef(false);
     // With encryption on, files that were fine wait here while the held ones
     // are settled, so the password dialog opens once, for all of them.
     const waitingRef = useRef([]);
@@ -107,14 +100,24 @@ function Uploader({classes, model, emitter}) {
         }
     }, [secure, share]);
 
-    /** Share what was picked, holding back files Android removed the location from. */
+    /**
+     * Share what was picked. On Android, zips are unpacked into the photos in
+     * them, and files Android removed the location from are held back.
+     */
     const receive = useCallback(async (picked) => {
-        const chosen = Array.from(picked || []);
+        let chosen = Array.from(picked || []);
         if(!onAndroid()) {
             if(chosen.length) {
                 proceed(chosen);
             }
             return;
+        }
+        if(chosen.some(isZip)) {
+            setUnpacking(true);
+            const { files, problems } = await unpackZips(chosen);
+            setUnpacking(false);
+            problems.forEach(message => emitter.emit('showError', message));
+            chosen = files;
         }
         const { intact, stripped } = await partitionStripped(chosen);
         if(stripped.length) {
@@ -128,39 +131,28 @@ function Uploader({classes, model, emitter}) {
                 return;
             }
         }
-        // An empty pick (Pick again closed) still lets waiting files go ahead.
+        // An empty pick (the picker closed after Pick again) still lets waiting files go ahead.
         const ready = [...waitingRef.current, ...intact];
         waitingRef.current = [];
         if(ready.length) {
             proceed(ready);
         }
-    }, [proceed, secure]);
+    }, [emitter, proceed, secure]);
 
     const handleUpload = useCallback((event) => {
         uploaderDomRef.current = event.target || event.srcElement;
         receive(event.target.files);
     }, [receive]);
 
-    // Every "add photos" label clicks this input; on Android, open Files instead.
-    const handleInputClick = useCallback((event) => {
-        if(filesPickerFailed.current || !usesFilesPicker()) {
-            return;
+    useEffect(() => {
+        const input = uploaderDomRef.current;
+        if(!input) {
+            return undefined;
         }
-        event.preventDefault();
-        pickWithFilesPicker().then(receive, err => {
-            Logger.warn('Files picker failed, using the file input: ' + (err && err.message ? err.message : err));
-            filesPickerFailed.current = true;
-            // The failed picker used up this tap, so the file input needs a new one.
-            setPickerFailed(true);
-        });
-    }, [receive]);
-
-    const chooseWithInput = useCallback(() => {
-        setPickerFailed(false);
-        if(uploaderDomRef.current) {
-            uploaderDomRef.current.click();
-        }
-    }, []);
+        const handleCancel = () => receive([]);
+        input.addEventListener('cancel', handleCancel);
+        return () => input.removeEventListener('cancel', handleCancel);
+    }, [receive, visible]);
 
     const pickAgain = useCallback(() => {
         setHeld([]);
@@ -194,20 +186,21 @@ function Uploader({classes, model, emitter}) {
     if (!visible && !hasRoom()) {
         return null;
     }
+    const android = onAndroid();
 
     return (
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
             <LoaderView emitter={emitter}/>
-            {/* Leave audio in: image/video alone makes Chrome on Android use the photo picker, which blanks locations. */}
+            {/* Leave audio in: image/video alone makes Chrome on Android use the photo picker, which blanks
+                locations and can't reach Material Files. Zips are only offered on Android, where they keep locations. */}
             <input
-                accept="image/*,video/*,audio/*"
+                accept={android ? ANDROID_ACCEPT : ACCEPT}
                 multiple
                 style={{ position: 'absolute', width: 0, height: 0, opacity: 0, overflow: 'hidden', zIndex: -1 }}
                 id="contained-button-file" 
                 disabled={disabled}
                 type="file" 
                 onChange={handleUpload}
-                onClick={handleInputClick}
                 ref={uploaderDomRef}
             />
             <label htmlFor="contained-button-file" style={{cursor: disabled ? 'not-allowed' : 'pointer'}}>
@@ -216,7 +209,8 @@ function Uploader({classes, model, emitter}) {
                     aria-label="Share photos"
                     variant="contained"
                     component="span"
-                    disabled={disabled}
+                    disabled={disabled || unpacking}
+                    aria-busy={unpacking}
                     sx={{
                         height: 34,
                         minWidth: 34,
@@ -226,9 +220,9 @@ function Uploader({classes, model, emitter}) {
                         '& .MuiSvgIcon-root': { fontSize: 18 },
                     }}
                 >
-                    <CloudUploadRounded />
+                    {unpacking ? <CircularProgress size={16} color="inherit" /> : <CloudUploadRounded />}
                     <Box component="span" sx={{ ...headerLabelSx, display: { xs: 'none', sm: 'inline' } }}>
-                        Share
+                        {unpacking ? 'Unpacking…' : 'Share'}
                     </Box>
                 </Button>
             </label>
@@ -280,7 +274,7 @@ function Uploader({classes, model, emitter}) {
                         )}
                     </Box>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        {pickAgainHelp(held.length)}
+                        To keep the location, tap Pick again. {KEEP_LOCATION_STEPS}
                     </Typography>
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -293,29 +287,6 @@ function Uploader({classes, model, emitter}) {
                 </DialogActions>
             </Dialog>
 
-            <Dialog
-                open={pickerFailed}
-                onClose={() => setPickerFailed(false)}
-                maxWidth="xs"
-                fullWidth
-                aria-labelledby="picker-failed-title"
-            >
-                <DialogTitle id="picker-failed-title">Files didn't open</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body2">
-                        Choose with your browser's picker instead. If it offers apps, pick Files rather than
-                        Photos or Gallery, so photos keep their location.
-                    </Typography>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={() => setPickerFailed(false)} sx={{ textTransform: 'none' }}>
-                        Cancel
-                    </Button>
-                    <Button onClick={chooseWithInput} variant="contained" sx={{ textTransform: 'none' }}>
-                        Choose files
-                    </Button>
-                </DialogActions>
-            </Dialog>
         </Stack>
     );
 }
