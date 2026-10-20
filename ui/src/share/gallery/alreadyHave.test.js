@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { alreadyHave, clearHave, onHaveChange, rememberHave } from './alreadyHave';
 
 const fp = n => `${n}:${String(n).padStart(64, '0')}`;
+const KEY = 'photogroup.alreadyHave';
 
 /** A working localStorage; the shared test setup stubs one that stores nothing. */
 function memoryStorage() {
@@ -55,6 +56,33 @@ describe('alreadyHave', () => {
         stop();
         rememberHave(fp(2), 'saved');
         expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it("doesn't write over photos another tab remembered", () => {
+        rememberHave(fp(1), 'saved');
+        // Another tab, with its own copy of the set, adds a photo.
+        const stored = JSON.parse(localStorage.getItem(KEY));
+        localStorage.setItem(KEY, JSON.stringify([...stored, [fp(2), 'device']]));
+
+        rememberHave(fp(3), 'shared');
+
+        expect(JSON.parse(localStorage.getItem(KEY))).toEqual([[fp(1), 'saved'], [fp(2), 'device'], [fp(3), 'shared']]);
+        expect(alreadyHave({ fingerprint: fp(2) })).toBe('device');
+    });
+
+    it("picks up another tab's changes and updates this one", () => {
+        rememberHave(fp(1), 'saved');
+        localStorage.setItem(KEY, JSON.stringify([[fp(1), 'saved'], [fp(4), 'shared']]));
+        const listener = vi.fn();
+        const stop = onHaveChange(listener);
+
+        window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated' }));
+        expect(listener).not.toHaveBeenCalled();
+        window.dispatchEvent(new StorageEvent('storage', { key: KEY }));
+
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(alreadyHave({ fingerprint: fp(4) })).toBe('shared');
+        stop();
     });
 
     it('survives a reload', async () => {

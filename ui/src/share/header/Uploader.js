@@ -53,8 +53,12 @@ function Uploader({classes, model, emitter}) {
     const [files, setFiles] = useState(null);
     const [secure, setSecure] = useState(false);
     const [held, setHeld] = useState([]);
+    const [pickerFailed, setPickerFailed] = useState(false);
     const uploaderDomRef = useRef(null);
     const filesPickerFailed = useRef(false);
+    // With encryption on, files that were fine wait here while the held ones
+    // are settled, so the password dialog opens once, for all of them.
+    const waitingRef = useRef([]);
 
     useEffect(() => {
         const handleReadyToUpload = () => {
@@ -106,11 +110,10 @@ function Uploader({classes, model, emitter}) {
     /** Share what was picked, holding back files Android removed the location from. */
     const receive = useCallback(async (picked) => {
         const chosen = Array.from(picked || []);
-        if(!chosen.length) {
-            return;
-        }
         if(!onAndroid()) {
-            proceed(chosen);
+            if(chosen.length) {
+                proceed(chosen);
+            }
             return;
         }
         const { intact, stripped } = await partitionStripped(chosen);
@@ -120,11 +123,18 @@ function Uploader({classes, model, emitter}) {
             if(!intact.length && uploaderDomRef.current) {
                 uploaderDomRef.current.value = '';
             }
+            if(secure) {
+                waitingRef.current = [...waitingRef.current, ...intact];
+                return;
+            }
         }
-        if(intact.length) {
-            proceed(intact);
+        // An empty pick (Pick again closed) still lets waiting files go ahead.
+        const ready = [...waitingRef.current, ...intact];
+        waitingRef.current = [];
+        if(ready.length) {
+            proceed(ready);
         }
-    }, [proceed]);
+    }, [proceed, secure]);
 
     const handleUpload = useCallback((event) => {
         uploaderDomRef.current = event.target || event.srcElement;
@@ -140,11 +150,17 @@ function Uploader({classes, model, emitter}) {
         pickWithFilesPicker().then(receive, err => {
             Logger.warn('Files picker failed, using the file input: ' + (err && err.message ? err.message : err));
             filesPickerFailed.current = true;
-            if(uploaderDomRef.current) {
-                uploaderDomRef.current.click();
-            }
+            // The failed picker used up this tap, so the file input needs a new one.
+            setPickerFailed(true);
         });
     }, [receive]);
+
+    const chooseWithInput = useCallback(() => {
+        setPickerFailed(false);
+        if(uploaderDomRef.current) {
+            uploaderDomRef.current.click();
+        }
+    }, []);
 
     const pickAgain = useCallback(() => {
         setHeld([]);
@@ -154,10 +170,21 @@ function Uploader({classes, model, emitter}) {
     }, []);
 
     const shareWithoutLocation = useCallback(() => {
-        const files = held;
+        const files = [...waitingRef.current, ...held];
+        waitingRef.current = [];
         setHeld([]);
         proceed(files);
     }, [held, proceed]);
+
+    // Closing leaves the held files out; anything waiting goes ahead.
+    const closeHeld = useCallback(() => {
+        const files = waitingRef.current;
+        waitingRef.current = [];
+        setHeld([]);
+        if(files.length) {
+            proceed(files);
+        }
+    }, [proceed]);
 
     const hasRoom = () => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -228,7 +255,7 @@ function Uploader({classes, model, emitter}) {
 
             <Dialog
                 open={held.length > 0}
-                onClose={() => setHeld([])}
+                onClose={closeHeld}
                 maxWidth="xs"
                 fullWidth
                 aria-labelledby="location-held-title"
@@ -262,6 +289,30 @@ function Uploader({classes, model, emitter}) {
                     </Button>
                     <Button onClick={pickAgain} variant="contained" sx={{ textTransform: 'none' }}>
                         Pick again
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={pickerFailed}
+                onClose={() => setPickerFailed(false)}
+                maxWidth="xs"
+                fullWidth
+                aria-labelledby="picker-failed-title"
+            >
+                <DialogTitle id="picker-failed-title">Files didn't open</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2">
+                        Choose with your browser's picker instead. If it offers apps, pick Files rather than
+                        Photos or Gallery, so photos keep their location.
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={() => setPickerFailed(false)} sx={{ textTransform: 'none' }}>
+                        Cancel
+                    </Button>
+                    <Button onClick={chooseWithInput} variant="contained" sx={{ textTransform: 'none' }}>
+                        Choose files
                     </Button>
                 </DialogActions>
             </Dialog>

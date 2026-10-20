@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createTheme } from '@mui/material/styles';
 import { vi } from 'vitest';
 import Uploader from './Uploader';
+import WebCrypto from '../security/WebCrypto';
 
 // Mock dependencies
 const mockModel = {
@@ -188,16 +189,62 @@ describe('Uploader on Android', () => {
     expect(model.seed).not.toHaveBeenCalled();
   });
 
-  it('falls back to the file input when the Files picker fails', async () => {
+  it('offers the file input on a fresh tap when the Files picker fails', async () => {
     window.showOpenFilePicker.mockRejectedValue(Object.assign(new Error('blocked'), { name: 'SecurityError' }));
     const native = watchInputClicks();
 
     await clickShare();
-    await vi.waitFor(() => expect(native).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(dialogButton('Choose files')).toBeTruthy());
+    // The failed picker used up the tap, so nothing opens the input behind the person's back.
+    expect(native.mock.calls.map(([prevented]) => prevented)).toEqual([true]);
 
+    await act(async () => dialogButton('Choose files').click());
     expect(native.mock.calls.map(([prevented]) => prevented)).toEqual([true, false]);
+
     await clickShare();
     expect(window.showOpenFilePicker).toHaveBeenCalledTimes(1);
+    expect(native.mock.calls.at(-1)[0]).toBe(false);
+  });
+
+  describe('with encryption on', () => {
+    let encryptFile;
+
+    beforeEach(async () => {
+      encryptFile = vi.spyOn(WebCrypto.prototype, 'encryptFile').mockResolvedValue({ blob: new Blob(['ciphertext']) });
+      await act(async () => model.emitter.emit('encrypt', true));
+    });
+
+    afterEach(() => encryptFile.mockRestore());
+
+    it('asks for the password once, for the files that were fine and the ones shared without location', async () => {
+      const good = original();
+      const bad = stripped();
+      window.showOpenFilePicker.mockResolvedValue(picked([good, bad]));
+      await clickShare();
+      await vi.waitFor(() => expect(dialogButton('Share without location')).toBeTruthy());
+
+      await act(async () => dialogButton('Share without location').click());
+      await act(async () => dialogButton('Encrypt').click());
+
+      await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
+      expect(encryptFile.mock.calls[0][0]).toEqual([good, bad]);
+      expect(model.seed.mock.calls[0][1]).toBe(true);
+      expect(model.seed.mock.calls[0][2]).toEqual([good, bad]);
+    });
+
+    it('lets the files that were fine go ahead when the dialog is closed', async () => {
+      const good = original();
+      window.showOpenFilePicker.mockResolvedValue(picked([good, stripped()]));
+      await clickShare();
+      await vi.waitFor(() => expect(dialogButton('Pick again')).toBeTruthy());
+
+      const held = document.body.querySelector('[aria-labelledby="location-held-title"]');
+      await act(async () => held.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+      await act(async () => dialogButton('Encrypt').click());
+
+      await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
+      expect(encryptFile.mock.calls[0][0]).toEqual([good]);
+    });
   });
 
   it('checks files from the file input too, where there is no Files picker', async () => {
