@@ -48,6 +48,13 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             });
         };
 
+        const handleShowInfo = (message) => {
+            enqueueSnackbar(message, {
+                variant: 'info',
+                autoHideDuration: 8000
+            });
+        };
+
         const handleReadyToUpload = () => {
             setHasRoom(true);
         };
@@ -57,6 +64,7 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
         };
 
         master.emitter.on('showError', handleShowError);
+        master.emitter.on('showInfo', handleShowInfo);
         master.emitter.on('readyToUpload', handleReadyToUpload);
         master.emitter.on('wire', handleWire);
 
@@ -85,6 +93,7 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
 
         return () => {
             master.emitter.removeListener('showError', handleShowError);
+            master.emitter.removeListener('showInfo', handleShowInfo);
             master.emitter.removeListener('readyToUpload', handleReadyToUpload);
             master.emitter.removeListener('wire', handleWire);
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);

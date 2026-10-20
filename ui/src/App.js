@@ -25,70 +25,7 @@ import Uploader from "./share/header/Uploader";
 import { SnackbarProvider } from 'notistack';
 import Visibility from "visibilityjs";
 import AddPeersView from "./share/header/AddPeersView";
-
-// Helper function to open IndexedDB for share target files
-function openShareTargetDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open('photogroup-share-target', 1);
-
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-            if (!db.objectStoreNames.contains('shared-files')) {
-                db.createObjectStore('shared-files', { keyPath: 'id' });
-            }
-        };
-    });
-}
-
-// Helper function to get all shared files from IndexedDB
-async function getSharedFiles() {
-    try {
-        const db = await openShareTargetDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction('shared-files', 'readonly');
-            const store = tx.objectStore('shared-files');
-            const request = store.getAll();
-
-            request.onsuccess = () => {
-                db.close();
-                resolve(request.result || []);
-            };
-            request.onerror = () => {
-                db.close();
-                reject(request.error);
-            };
-        });
-    } catch (error) {
-        Logger.error('Failed to get shared files:', error);
-        return [];
-    }
-}
-
-// Helper function to clear shared files from IndexedDB
-async function clearSharedFiles() {
-    try {
-        const db = await openShareTargetDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction('shared-files', 'readwrite');
-            const store = tx.objectStore('shared-files');
-            const request = store.clear();
-
-            request.onsuccess = () => {
-                db.close();
-                resolve();
-            };
-            request.onerror = () => {
-                db.close();
-                reject(request.error);
-            };
-        });
-    } catch (error) {
-        Logger.error('Failed to clear shared files:', error);
-    }
-}
+import { clearShareFlag, rememberRoom, SHARE_ERRORS, SHARE_WAITING, takeSharedFiles } from "./share/shareTarget";
 
 function App({theme: propsTheme, prefersDarkMode}) {
     //Logger.useDefaults();
@@ -96,7 +33,6 @@ function App({theme: propsTheme, prefersDarkMode}) {
 
     const emitterRef = useRef(null);
     const masterRef = useRef(null);
-    const sharedFilesProcessedRef = useRef(false);
 
     if (!emitterRef.current) {
         emitterRef.current = new EventEmitter();
@@ -111,43 +47,27 @@ function App({theme: propsTheme, prefersDarkMode}) {
     );
     const [networkStatus, setNetworkStatus] = useState({ peers: 0, downSpeed: '', upSpeed: '' });
 
-    // Handle shared files from Web Share Target API
-    const processSharedFiles = useCallback(async () => {
-        if (sharedFilesProcessedRef.current) return;
-
-        const urlParams = new URLSearchParams(window.location.search);
-        if (!urlParams.has('shared')) return;
-
-        sharedFilesProcessedRef.current = true;
-        Logger.info('Processing shared files from Share Target API');
-
+    // Photos shared from other apps go into the room once it is ready, the
+    // same way as a pick from Share (see share/shareTarget.js).
+    const deliverSharedFiles = useCallback(async () => {
+        const emitter = emitterRef.current;
+        rememberRoom(masterRef.current.service.id);
+        const shared = new URLSearchParams(window.location.search).get('shared');
+        if (!shared) return;
+        clearShareFlag();
+        if (SHARE_ERRORS[shared]) {
+            emitter.emit('showError', SHARE_ERRORS[shared]);
+            return;
+        }
         try {
-            const sharedFiles = await getSharedFiles();
-
-            if (sharedFiles.length > 0) {
-                Logger.info('Found ' + sharedFiles.length + ' shared files');
-
-                // Convert ArrayBuffer data back to File objects
-                const files = sharedFiles.map(item => {
-                    const blob = new Blob([item.data], { type: item.type });
-                    return new File([blob], item.name, { type: item.type });
-                });
-
-                // Emit event with the files so they can be uploaded
-                emitterRef.current.emit('sharedFilesReceived', files);
-
-                // Clear the shared files from IndexedDB
-                await clearSharedFiles();
-
-                Logger.info('Shared files processed and cleared');
+            const files = await takeSharedFiles();
+            if (files.length) {
+                Logger.info('Adding ' + files.length + ' files shared from another app');
+                emitter.emit('filesSelected', files);
             }
-
-            // Clean up the URL (remove ?shared=true)
-            const newUrl = window.location.pathname;
-            window.history.replaceState({}, document.title, newUrl);
-
         } catch (error) {
-            Logger.error('Failed to process shared files:', error);
+            Logger.error('Failed to read shared files: ' + (error && error.message ? error.message : error));
+            emitter.emit('showError', SHARE_ERRORS.error);
         }
     }, []);
 
@@ -168,26 +88,10 @@ function App({theme: propsTheme, prefersDarkMode}) {
     useEffect(() => {
         const handleAddPeerDone = () => {
             reactToTouchInOut();
-            // Process shared files after the app is ready
-            processSharedFiles();
         };
 
         const handleDarkMode = (isDark) => {
             setTheme(createAppTheme(isDark ? 'dark' : 'light'));
-        };
-
-        // Handle shared files received event
-        const handleSharedFilesReceived = (files) => {
-            Logger.info('Received ' + files.length + ' files from Share Target');
-            // The Uploader component or TorrentMaster should handle adding these files
-            if (masterRef.current && masterRef.current.torrentAddition) {
-                files.forEach(file => {
-                    // Create a mock event-like object for the uploader
-                    const dataTransfer = new DataTransfer();
-                    dataTransfer.items.add(file);
-                    emitterRef.current.emit('filesSelected', dataTransfer.files);
-                });
-            }
         };
 
         const handleNumPeersChange = (numPeers) => {
@@ -204,25 +108,26 @@ function App({theme: propsTheme, prefersDarkMode}) {
 
         emitterRef.current.on('addPeerDone', handleAddPeerDone);
         emitterRef.current.on('darkMode', handleDarkMode);
-        emitterRef.current.on('sharedFilesReceived', handleSharedFilesReceived);
+        emitterRef.current.on('readyToUpload', deliverSharedFiles);
         emitterRef.current.on('numPeersChange', handleNumPeersChange);
         emitterRef.current.on('downloadProgress', handleDownloadProgress);
         emitterRef.current.on('uploadProgress', handleUploadProgress);
 
-        // Also try to process shared files on initial load (in case addPeerDone already fired)
-        setTimeout(() => {
-            processSharedFiles();
-        }, 1000);
+        // A share that arrived before any room was opened waits for one.
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('shared') === '1' && !params.has('room')) {
+            emitterRef.current.emit('showInfo', SHARE_WAITING);
+        }
 
         return () => {
             emitterRef.current.removeListener('addPeerDone', handleAddPeerDone);
             emitterRef.current.removeListener('darkMode', handleDarkMode);
-            emitterRef.current.removeListener('sharedFilesReceived', handleSharedFilesReceived);
+            emitterRef.current.removeListener('readyToUpload', deliverSharedFiles);
             emitterRef.current.removeListener('numPeersChange', handleNumPeersChange);
             emitterRef.current.removeListener('downloadProgress', handleDownloadProgress);
             emitterRef.current.removeListener('uploadProgress', handleUploadProgress);
         };
-    }, [processSharedFiles]);
+    }, [deliverSharedFiles]);
 
     const reactToTouchInOut = () => {
         if(Visibility.isSupported()) {

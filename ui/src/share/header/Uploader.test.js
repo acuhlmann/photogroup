@@ -194,6 +194,15 @@ describe('Uploader on Android', () => {
     expect(heldList().textContent).toBe('Strand ü.jpg');
   });
 
+  it('takes files dropped on the gallery or shared from other apps the same way', async () => {
+    await act(async () => model.emitter.emit('filesSelected', [photosZip()]));
+
+    await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
+    expect(model.seed.mock.calls[0][0].map(file => file.name)).toEqual(['PXL_photo.jpg', 'PXL_gps.heic', 'PXL_clip.mp4']);
+    await vi.waitFor(() => expect(heldList()).not.toBeNull());
+    expect(heldList().textContent).toBe('Strand ü.jpg');
+  });
+
   it('says when a zip has nothing to share', async () => {
     const errors = vi.fn();
     model.emitter.on('showError', errors);
@@ -268,5 +277,10 @@ describe('Uploader on Android', () => {
     await choose([bad, zip]);
     expect(model.seed).toHaveBeenCalledTimes(1);
     expect(model.seed.mock.calls[0][0]).toEqual([bad, zip]);
+
+    const dropped = original();
+    await act(async () => model.emitter.emit('filesSelected', [dropped]));
+    expect(model.seed).toHaveBeenCalledTimes(2);
+    expect(model.seed.mock.calls[1][0]).toEqual([dropped]);
   });
 });

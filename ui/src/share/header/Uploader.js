@@ -144,6 +144,12 @@ function Uploader({classes, model, emitter}) {
         receive(event.target.files);
     }, [receive]);
 
+    // Drops on the gallery and photos shared from other apps come in this way too.
+    useEffect(() => {
+        emitter.on('filesSelected', receive);
+        return () => emitter.removeListener('filesSelected', receive);
+    }, [emitter, receive]);
+
     useEffect(() => {
         const input = uploaderDomRef.current;
         if(!input) {

@@ -1,50 +1,20 @@
 # Roadmap
 
-Next slices, most valuable first. The goal behind all of them: get people
-the **original** photos and videos they don't already have, without
-losing anything (location, metadata) on the way.
+The goal behind every slice: get people the **original** photos and videos
+they don't already have, without losing anything (location, metadata) on
+the way. Each slice says why it matters, what we already know, where to
+start in the code, and when it's done.
 
-Each slice says why it matters, what we already know, where to start in
-the code, and when it's done.
-
----
-
-## 1. Ship Android uploads with locations and "already have" downloads
-
-**Status:** open as PR #129, branch `keep-android-locations`.
-
-- **Android uploads that keep locations** — Android blanks the location on
-  every browser pick. Tested on a phone: its own Files app, picked from
-  DCIM › Camera, blanks it too. Two routes get originals through:
-  - **Material Files**, picked as an app from ☰ in the picker. It has
-    all-files access, so it reads the originals.
-  - **A zip**, made by a file manager. Android never blanks a zip, and the
-    app unpacks it in the browser (`header/unzipMedia.js`).
-
-  Zips are accepted on Android only. A dismissible note in the gallery
-  explains both routes (`gallery/AndroidLocationNote.js`). Photos that still
-  arrive blanked are held back with the same steps
-  (`gallery/metadata/strippedLocation.js`, `header/Uploader.js`).
-  An earlier attempt opened `showOpenFilePicker` instead. It kept nothing
-  and hid Material Files, since Android's picker lists no apps in that mode.
-- **Only download what you don't have** — uploads carry a fingerprint;
-  Download room leaves out photos shared or saved from this browser, or
-  found in a folder the person picks. Files: `gallery/fingerprint.js`,
-  `alreadyHave.js`, `findOnDevice.js`, `DownloadRoomButton.js`.
-
-**Still to check on a real Android phone** (can't be automated):
-
-- [x] Pick from internal storage › DCIM › Camera in Files: location still removed.
-- [ ] Share → ☰ → Material Files → DCIM › Camera: does the map card show the location?
-- [ ] Zip a few photos and a video in a file manager, share the zip: do the photos arrive with their location?
-- [ ] Download room ⋮ → *Find the ones on this device…* → pick DCIM › Camera: are your own photos found?
-
-**Done when:** PR merged and the phone checks above pass, or the findings
-are written back here.
+- **Up next** (tomorrow): fix the XMP wipe on save, then make Replace
+  original safe or remove it.
+- **Later:** iPhone originals, skipping the transfer of photos people
+  have, recognising saved copies, and helpers for adding a location back.
 
 ---
 
-## 2. Stop saving from wiping a photo's XMP
+# Up next
+
+## Stop saving from wiping a photo's XMP
 
 **Why:** a data-loss bug on every Save, not just Replace. When Android
 blanks a GPS value written as an XML *element* in a photo's XMP (ExifTool
@@ -66,7 +36,30 @@ keeps its other fields after `applyDetailsToXmp`.
 
 ---
 
-## 3. Make iPhone uploads originals
+## Make Replace original safe, or remove it
+
+**Why:** writing an edited photo back over the original on the device is
+hard to do safely. It can overwrite a file whose location was blanked
+before upload, or one that has metadata the room never saw.
+
+**Options:**
+
+- Remove Replace original and keep plain Save, or
+- Allow it only when the file is unchanged apart from the room's details and
+  nothing was blanked. `strippedLocation.js` already detects blanking for
+  JPEG, HEIC and MP4.
+
+**Also known:** `showSaveFilePicker` empties the chosen file as soon as the
+dialog is confirmed (see `replaceOriginal.js`), and Chrome writes through a `.crswap` swap
+file, which can drop file-system extras such as macOS tags and creation dates.
+
+**Done when:** the decision is made and the code matches it.
+
+---
+
+# Later
+
+## Make iPhone uploads originals
 
 **Why:** the iPhone counterpart of the Android fix. Depending on the iOS
 version and the `accept` attribute, Safari may convert library HEIC photos
@@ -85,7 +78,7 @@ purpose.
 
 1. Test on an iPhone which pick routes (Photos vs. Files) and which `accept`
    values deliver the original bytes, HEIC and video untouched, location kept.
-2. Steer Share towards that route on iOS, the way `pickFiles.js` does on Android.
+2. Steer Share towards that route on iOS, the way the Android note and zip route do.
 3. Detect converted or stripped files after picking (a JPEG where the name
    says `.HEIC`, missing GPS on a camera photo) and hold them back like
    `strippedLocation.js` does.
@@ -95,7 +88,7 @@ one in its Photos library, or the app explains why it couldn't.
 
 ---
 
-## 4. Don't transfer photos people already have
+## Don't transfer photos people already have
 
 **Why:** today, photos someone already has still download over P2P so the
 gallery can show them; only saving skips them. On mobile data or with big
@@ -122,7 +115,7 @@ transfers only its thumbnail, and Download anyway still gets the original.
 
 ---
 
-## 5. Recognise PhotoGroup-saved copies in a folder check
+## Recognise PhotoGroup-saved copies in a folder check
 
 **Why:** Save writes the room's details into the file, so its bytes (and
 fingerprint) no longer match the original. A later *Find the ones on this
@@ -142,28 +135,7 @@ folder check in another.
 
 ---
 
-## 6. Decide on Replace original
-
-**Why:** writing an edited photo back over the original on the device is
-hard to do safely. It can overwrite a file whose location was blanked
-before upload, or one that has metadata the room never saw.
-
-**Options:**
-
-- Remove Replace original and keep plain Save, or
-- Allow it only when the file is unchanged apart from the room's details and
-  nothing was blanked. `strippedLocation.js` already detects blanking for
-  JPEG, HEIC and MP4.
-
-**Also known:** `showSaveFilePicker` empties the chosen file as soon as the
-dialog is confirmed (see `replaceOriginal.js`), and Chrome writes through a `.crswap` swap
-file, which can drop file-system extras such as macOS tags and creation dates.
-
-**Done when:** the decision is made and the code matches it.
-
----
-
-## 7. Helpers for adding a location back
+## Helpers for adding a location back
 
 For photos whose location was removed before they reached the app:
 
@@ -179,16 +151,64 @@ For photos whose location was removed before they reached the app:
 **Done when:** each of the three paths sets a location on a blanked photo
 in one or two taps.
 
+**Not now:** parked until the slices above are done.
+
 ---
 
-## 8. Close the drag-and-drop gap on Android
+# Done
 
-**Why:** files dropped into the gallery (`Gallery.js` `handleDrop`) go
-straight to seeding and skip the Android blanking check that Share runs.
-It only matters for split-screen drag on Android.
+## Android uploads that keep locations
 
-**Change:** route drops through the same steps as `Uploader.receive`
-(unpack zips, then the blanking check).
+**Shipped:** PR #129, then straight to `master`.
 
-**Done when:** a blanked file or a zip dropped on Android is handled like one
-picked through Share.
+Android blanks the location on every browser pick. Tested on a phone: its
+own Files app, picked from DCIM › Camera, blanks it too. Two routes get
+originals through:
+
+- **Material Files**, picked as an app from ☰ in the picker. It has
+  all-files access, so it reads the originals.
+- **A zip**, made by a file manager. Android never blanks a zip, and the
+  app unpacks it in the browser (`header/unzipMedia.js`).
+
+Zips are accepted on Android only. A dismissible note in the gallery
+explains both routes (`gallery/AndroidLocationNote.js`). Photos that still
+arrive blanked are held back with the same steps
+(`gallery/metadata/strippedLocation.js`, `header/Uploader.js`). An earlier
+attempt opened `showOpenFilePicker` instead. It kept nothing and hid
+Material Files, since Android's picker lists no apps in that mode.
+
+## Only download what you don't have
+
+Uploads carry a fingerprint. Download room leaves out photos shared or saved
+from this browser, or found in a folder the person picks. Files:
+`gallery/fingerprint.js`, `alreadyHave.js`, `findOnDevice.js`,
+`DownloadRoomButton.js`.
+
+## Share into PhotoGroup from other apps, and drops
+
+The share target used to drop every file. Its service worker was never
+built or registered, nothing listened for the files, and the room was lost
+on the way. Now:
+
+- **Receiving:** `public/share-target-sw.js` catches the share and keeps the
+  files as blobs in IndexedDB. It is the only service worker, and it caches
+  nothing.
+- **Landing in a room:** the app opens the room used last
+  (`share/shareTarget.js`), or waits until one is opened.
+- **Adding:** files go in through `filesSelected`, the same entry point
+  Share and gallery drops now use (`header/Uploader.js`). On Android that
+  means zips are unpacked and blanked photos held back. With encryption on,
+  drops are encrypted now too.
+- **Before the worker runs:** a share that reaches the server instead is
+  redirected with a message to share again.
+
+The manifest now also accepts audio and zips. An installed app can take a
+while to pick up the new share types; reinstalling picks them up at once.
+
+**Still to check on a real Android phone** (can't be automated):
+
+- [x] Pick from internal storage › DCIM › Camera in Files: location still removed.
+- [ ] Share → ☰ → Material Files → DCIM › Camera: does the map card show the location?
+- [ ] Zip a few photos and a video in a file manager, share the zip: do the photos arrive with their location?
+- [ ] With PhotoGroup installed: in Material Files, select photos → Share → PhotoGroup. Do they land in the last room with their location?
+- [ ] Download room ⋮ → *Find the ones on this device…* → pick DCIM › Camera: are your own photos found?

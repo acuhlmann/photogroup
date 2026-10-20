@@ -9,7 +9,7 @@ window.Buffer = Buffer;
 global.Buffer = Buffer;
 globalThis.Buffer = Buffer;
 
-import * as serviceWorker from './serviceWorker';
+import { prepareShareLaunch, registerShareTarget } from './share/shareTarget';
 
 import 'core-js';
 import React from 'react';
@@ -22,11 +22,12 @@ const EventSource = NativeEventSource || EventSourcePolyfill;
 // OR: may also need to set as global property
 window.EventSource =  global.EventSource =  NativeEventSource || EventSourcePolyfill;
 
+// Photos shared from other apps open "/?shared=1"; send them to the last room before it is read.
+prepareShareLaunch();
+
 const container = document.getElementById('root');
 const root = createRoot(container);
 root.render(<AppWrapper />);
 
-// If you want your app to work offline and load faster, you can change
-// unregister() to register() below. Note this comes with some pitfalls.
-// Learn more about service workers: https://bit.ly/CRA-PWA
-serviceWorker.unregister();
+// The only service worker receives photos shared from other apps; it caches nothing.
+registerShareTarget();

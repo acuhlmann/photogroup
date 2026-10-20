@@ -56,6 +56,12 @@ export default class ServerSetup {
         app.use(express.static(path.join(__dirname, 'ui'), {
             etag: false
         }));
+
+        // The service worker answers shares from other apps (share_target in the
+        // manifest). This only runs when it isn't installed yet: say so instead of a 404.
+        app.post('/share-target', (request, response) => {
+            response.redirect(303, '/?shared=missed');
+        });
         app.use(express.json());
 
         const addRequestId = (expressRequestId.default || expressRequestId)();

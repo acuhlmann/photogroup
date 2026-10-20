@@ -113,10 +113,12 @@ function Gallery(props) {
         e.stopPropagation();
         setDragOver(false);
         dragCounterRef.current = 0;
-        const files = e.dataTransfer && e.dataTransfer.files;
-        if (files && files.length > 0 && master.torrentAddition) {
+        const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+        if (files.length > 0) {
+            // Through the uploader, so drops get what a pick from Share gets:
+            // encryption when it's on, and on Android zips unpacked and blanked locations held back.
             captureDroppedHandles(e.dataTransfer).then(() => {
-                master.torrentAddition.seed(files);
+                master.emitter.emit('filesSelected', files);
             });
         }
     }, [master]);
