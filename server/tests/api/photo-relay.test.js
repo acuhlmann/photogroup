@@ -141,6 +141,13 @@ describe('Photo relay (server copies, pinned when needed)', () => {
         assert.strictEqual(photo.serverCopyRequestedAt, undefined);
     });
 
+    it('forgets a request once everyone has the photo', async () => {
+        await auth(request(app).post(blobUrl().replace('/blob?', '/blob/request?')), receiver).expect(200);
+        await request(app).post(`/api/rooms/${roomId}/photos/owners/`)
+            .send([{ infoHash, peerId: receiver.peerId, loading: false }]).expect(200);
+        assert.strictEqual((await photoState()).serverCopyRequestedAt, undefined);
+    });
+
     it('drops the copy once everyone in the room has the photo', async () => {
         await putChunk(sharer).expect(200);
         await download(receiver).expect(200);

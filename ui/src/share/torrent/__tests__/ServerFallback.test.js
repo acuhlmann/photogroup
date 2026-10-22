@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import ServerFallback, { shouldUseServerFallback, isTransferStalled, P2P_STALL_MS } from '../ServerFallback';
+import ServerFallback, { shouldUseServerFallback, isTransferStalled, holdersAllAway, P2P_STALL_MS } from '../ServerFallback';
 
 describe('shouldUseServerFallback', () => {
     const base = { hasServerCopy: true, done: false, progress: 0.2, startedAt: 0, now: P2P_STALL_MS };
@@ -18,6 +18,15 @@ describe('shouldUseServerFallback', () => {
         expect(shouldUseServerFallback({ ...base, startedAt: 0, lastProgressAt: 0, now: P2P_STALL_MS })).toBe(true);
         expect(isTransferStalled({ progress: 0.5, lastProgressAt: 0, now: P2P_STALL_MS })).toBe(true);
         expect(isTransferStalled({ progress: 0.5, lastProgressAt: P2P_STALL_MS, now: P2P_STALL_MS })).toBe(false);
+    });
+});
+
+describe('holdersAllAway', () => {
+    it('only counts when someone has the photo and none of them is in front', () => {
+        expect(holdersAllAway({ holders: 2, activeHolders: 0 })).toBe(true);
+        expect(holdersAllAway({ holders: 2, activeHolders: 1 })).toBe(false);
+        expect(holdersAllAway({ holders: 0, activeHolders: 0 })).toBe(false);
+        expect(holdersAllAway({})).toBe(false);
     });
 });
 
@@ -61,6 +70,83 @@ describe('ServerFallback', () => {
         expect(emitter.emit).toHaveBeenCalledWith('torrentReady', [photo]);
         await expect(fallback.fetchNow('unknown')).resolves.toBe(false);
         fallback.stopAll();
+    });
+
+    it('asks for a copy when stalled without one, again only after a while', async () => {
+        let clock = 0;
+        const requestCopy = vi.fn().mockResolvedValue({});
+        const fetchCopy = vi.fn();
+        const fallback = new ServerFallback({ fetchCopy, requestCopy, cachePut: vi.fn(), emitter: { emit: vi.fn() },
+            stallMs: 100, pollMs: 60000, rerequestMs: 1000, now: () => clock });
+        fallback.watch({ infoHash: 'h5' }, () => ({ progress: 0, done: false, hasServerCopy: false }));
+
+        clock = 50;
+        await fallback._check('h5');
+        expect(requestCopy).not.toHaveBeenCalled(); // P2P still has time
+        clock = 100;
+        await fallback._check('h5');
+        expect(requestCopy).toHaveBeenCalledWith('h5');
+        clock = 500;
+        await fallback._check('h5');
+        expect(requestCopy).toHaveBeenCalledTimes(1);
+        clock = 1100;
+        await fallback._check('h5');
+        expect(requestCopy).toHaveBeenCalledTimes(2);
+        expect(fetchCopy).not.toHaveBeenCalled();
+        fallback.stopAll();
+    });
+
+    it('fetches an existing copy at once when everyone who has the photo is away', async () => {
+        const fetchCopy = vi.fn().mockResolvedValue(new Blob(['jpg'], { type: 'image/jpeg' }));
+        const fallback = new ServerFallback({ fetchCopy, cachePut: vi.fn(), emitter: { emit: vi.fn() }, stallMs: 60000, pollMs: 60000, now: () => 0 });
+        let state = { progress: 0, done: false, hasServerCopy: true, holders: 1, activeHolders: 1 };
+        fallback.watch({ infoHash: 'h6', fileName: 'c.jpg' }, () => state);
+        await fallback._check('h6');
+        expect(fetchCopy).not.toHaveBeenCalled(); // someone is in front: let P2P try
+        state = { ...state, activeHolders: 0 };
+        await fallback._check('h6');
+        expect(fetchCopy).toHaveBeenCalledWith('h6');
+    });
+
+    it("trusts the room's view of the copy over the photo it started with", async () => {
+        const fetchCopy = vi.fn().mockResolvedValue(null);
+        const requestCopy = vi.fn().mockResolvedValue({});
+        const fallback = new ServerFallback({ fetchCopy, requestCopy, cachePut: vi.fn(), emitter: { emit: vi.fn() }, stallMs: 0, pollMs: 60000, now: () => 1 });
+        fallback.watch({ infoHash: 'h7', hasServerCopy: true }, () => ({ progress: 0, hasServerCopy: false }));
+        await fallback._check('h7');
+        expect(fetchCopy).not.toHaveBeenCalled();
+        expect(requestCopy).toHaveBeenCalled();
+    });
+
+    it('asks again after waking up, and asks right away when tapped', async () => {
+        let clock = 0;
+        const requestCopy = vi.fn().mockResolvedValue({});
+        const fallback = new ServerFallback({ fetchCopy: vi.fn(), requestCopy, cachePut: vi.fn(), emitter: { emit: vi.fn() },
+            stallMs: 100, pollMs: 60000, rerequestMs: 60000, now: () => clock });
+        fallback.watch({ infoHash: 'h8' }, () => ({ progress: 0, hasServerCopy: false }));
+        await expect(fallback.fetchNow('h8')).resolves.toBe(true);
+        expect(requestCopy).toHaveBeenCalledTimes(1);
+
+        clock = 5000;
+        fallback.resetClocks();
+        await fallback._check('h8');
+        expect(requestCopy).toHaveBeenCalledTimes(1); // fresh stall window first
+        clock = 5100;
+        await fallback._check('h8');
+        expect(requestCopy).toHaveBeenCalledTimes(2);
+        fallback.stopAll();
+    });
+
+    it('delivers onto the photo object it was given, with later news merged', async () => {
+        const emitter = { emit: vi.fn() };
+        const fallback = new ServerFallback({ fetchCopy: vi.fn().mockResolvedValue(new Blob(['x'])), cachePut: vi.fn(), emitter, stallMs: 0, pollMs: 60000, now: () => 1 });
+        const photo = { infoHash: 'h9', fileName: 'd.jpg', fileType: 'image/jpeg' };
+        fallback.watch(photo, () => ({ progress: 0 }));
+        expect(fallback.update({ infoHash: 'h9', hasServerCopy: true })).toBe(true);
+        await fallback._check('h9');
+        expect(emitter.emit).toHaveBeenCalledWith('torrentReady', [photo]);
+        expect(photo.hasServerCopy).toBe(true);
+        expect(photo.file.name).toBe('d.jpg');
     });
 
     it('does nothing while P2P is progressing to completion', async () => {

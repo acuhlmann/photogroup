@@ -35,8 +35,8 @@ graph TD
     A[Attempt Direct P2P] -->|WebRTC succeeds| B[Direct Transfer]
     A -->|Blocked by NAT| C[Try TURN Relay]
     C -->|Twilio STUN/TURN| D[Relayed Transfer]
-    C -->|No relay available| E[Upload to Server]
-    E --> F[Central Download]
+    C -->|No relay available| E[Someone who has it leaves a server copy]
+    E --> F[Download over HTTPS]
 
     style B fill:#2d6a4f,color:#fff
     style D fill:#e9c46a,color:#000
@@ -47,7 +47,17 @@ graph TD
 |------|-------|---------|------|
 | **Direct P2P** | Fastest | Photos never touch server | Open NATs, same network |
 | **TURN Relay** | Good | Encrypted relay via Twilio | Symmetric NAT |
-| **Server Upload** | Varies | Server stores temporarily | All else fails |
+| **Server Copy** | Varies | Kept on the server only while needed, 24 h at most | A transfer stalls, or the phone that has it goes to the background |
+
+The server copy is a last resort, not the default. It is uploaded only
+when someone is stuck waiting for a photo, or when a phone that has it
+switches to another app while someone still lacks it. It is deleted once
+everyone in the room has the photo. Turning on **Keep Copies for
+Latecomers** in Settings keeps every photo for 24 hours instead, for
+people who join after everyone else has left. A phone that switches apps
+counts as *away*, not gone, for 10 minutes. When it comes back it
+reconnects to the trackers at once instead of after the tracker
+library's back-off.
 
 ---
 

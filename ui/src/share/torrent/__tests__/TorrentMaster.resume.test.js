@@ -41,10 +41,20 @@ describe('TorrentMaster resume', () => {
         expect(master.findExistingContent).toHaveBeenCalled();
     });
 
-    it('tells the room it is only away when the page goes to the background', () => {
+    it('on a phone going to the background, says it is only away and leaves copies others wait for', () => {
         const master = fakeMaster();
-        master.handleHide();
+        master.serverPinning = { onHide: vi.fn() };
+        master.handleHide({ freezes: true });
         expect(master.service.markAway).toHaveBeenCalled();
+        expect(master.serverPinning.onHide).toHaveBeenCalled();
+    });
+
+    it('leaves a hidden desktop tab alone: it keeps running', () => {
+        const master = fakeMaster();
+        master.serverPinning = { onHide: vi.fn() };
+        master.handleHide({ freezes: false });
+        expect(master.service.markAway).not.toHaveBeenCalled();
+        expect(master.serverPinning.onHide).not.toHaveBeenCalled();
     });
 
     it('restarts every tracker socket on request', () => {

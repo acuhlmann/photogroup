@@ -19,6 +19,18 @@
  */
 import Logger from 'js-logger';
 
+/**
+ * Phones and tablets freeze a page soon after it goes to the background;
+ * desktop browsers keep a hidden tab (and its WebRTC peers) running.
+ */
+export function freezesWhenHidden(navigatorObj = typeof navigator !== 'undefined' ? navigator : null) {
+    if (navigatorObj?.userAgentData?.mobile) return true;
+    const ua = navigatorObj?.userAgent || '';
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
+    // iPadOS asks for desktop sites with a Mac user agent.
+    return /Macintosh/.test(ua) && (navigatorObj?.maxTouchPoints || 0) > 1;
+}
+
 export function backoffDelay(attempt, { baseMs = 1000, maxMs = 30000 } = {}) {
     const n = Math.max(0, Number.isFinite(attempt) ? attempt : 0);
     return Math.min(maxMs, baseMs * 2 ** n);

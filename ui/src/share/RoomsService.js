@@ -2,6 +2,7 @@ import Logger from 'js-logger';
 import shortid  from 'shortid';
 import cryptoRandomString from "crypto-random-string";
 import { backoffDelay } from './util/ConnectionRecovery';
+import { CHUNK_BYTES, FIRST_CHUNK_BYTES } from './torrent/ServerCopyLimits';
 
 const SESSION_KEY = 'pgSessionId';
 
@@ -215,6 +216,11 @@ export default class RoomsService {
             scope.emitter.emit('peers', data);
         }, false);
 
+        source.addEventListener('room', event => {
+            const data = JSON.parse(event.data);
+            if (data?.settings) scope.emitter.emit('roomSettings', data.settings);
+        }, false);
+
         source.addEventListener('peerConnections', event => {
 
             const data = JSON.parse(event.data);
@@ -235,24 +241,93 @@ export default class RoomsService {
         }, false);
     }
 
-    /** Leave a temporary server copy of a photo as P2P insurance. */
-    async uploadServerCopy(infoHash, blob) {
+    /** Proof that a request comes from this tab's session in the room. */
+    sessionHeaders() {
+        return { 'X-Session-Id': this.sessionId, 'X-Session-Token': this.sessionToken || '' };
+    }
+
+    blobUrl(infoHash, path = '') {
+        return this.url + '/' + this.id + '/photos/blob' + path + '?infoHash=' + encodeURIComponent(infoHash);
+    }
+
+    /**
+     * Leave a temporary server copy of a photo, in chunks the server lets us
+     * resume: it answers a wrong offset with where it got to, so a page
+     * frozen midway carries on from there. Resolves to a `status`:
+     * stored, exists, busy (someone else is uploading it), interrupted
+     * (network gone or session lost; try again on resume) or refused.
+     */
+    async uploadServerCopy(infoHash, blob, { onProgress, retries = 3, wait = backoffDelay } = {}) {
         if (!infoHash || !blob) throw new Error('uploadServerCopy needs infoHash and blob');
-        const response = await fetch(this.url + '/' + this.id + '/photos/blob?infoHash=' + encodeURIComponent(infoHash)
-            + '&peerId=' + encodeURIComponent(this.master.client.peerId), {
-            method: 'POST',
-            headers: { 'Content-Type': blob.type || 'application/octet-stream' },
-            body: blob
-        });
-        if (!response.ok) throw new Error('Server copy upload failed (' + response.status + ')');
-        return response.json();
+        const size = blob.size;
+        let offset = 0;
+        let failures = 0;
+        const pause = async () => {
+            if (++failures > retries) return false;
+            await new Promise(resolve => setTimeout(resolve, typeof wait === 'function' ? wait(failures - 1) : wait));
+            return true;
+        };
+        while (offset < size) {
+            const end = Math.min(size, offset + (offset === 0 ? FIRST_CHUNK_BYTES : CHUNK_BYTES));
+            let response;
+            try {
+                response = await fetch(this.blobUrl(infoHash) + '&offset=' + offset + '&size=' + size, {
+                    method: 'PUT',
+                    headers: { ...this.sessionHeaders(), 'Content-Type': blob.type || 'application/octet-stream' },
+                    body: blob.slice(offset, end)
+                });
+            } catch (err) {
+                Logger.warn('server copy chunk failed: ' + (err?.message || err));
+                if (await pause()) continue;
+                return { status: 'interrupted', received: offset };
+            }
+            const body = await response.json().catch(() => ({}));
+            if (response.ok) {
+                failures = 0;
+                offset = body.received;
+                onProgress?.(offset, size);
+                if (body.complete) return { status: 'stored', size };
+            } else if (response.status === 409 && body.code === 'OFFSET' && Number.isFinite(body.received)) {
+                offset = body.received;
+            } else if (response.status === 409 && body.exists) {
+                return { status: 'exists' };
+            } else if (response.status === 409 && body.uploading) {
+                return { status: 'busy' };
+            } else if (response.status === 403) {
+                // Dropped from the room while away; rejoining on resume fixes it.
+                return { status: 'interrupted', received: offset };
+            } else if (response.status >= 500 && await pause()) {
+                continue;
+            } else {
+                return { status: 'refused', code: response.status, message: body.error };
+            }
+        }
+        return { status: 'stored', size };
     }
 
     /** Download the server copy of a photo when P2P has stalled. */
     async fetchServerCopy(infoHash) {
-        const response = await fetch(this.url + '/' + this.id + '/photos/blob?infoHash=' + encodeURIComponent(infoHash));
+        const response = await fetch(this.blobUrl(infoHash), { headers: this.sessionHeaders() });
         if (!response.ok) return null;
         return response.blob();
+    }
+
+    /** Ask whoever has the photo to leave a server copy. */
+    async requestServerCopy(infoHash) {
+        const response = await fetch(this.blobUrl(infoHash, '/request'), { method: 'POST', headers: this.sessionHeaders() });
+        if (!response.ok) throw new Error('Asking for a server copy failed (' + response.status + ')');
+        return response.json();
+    }
+
+    /** Room-wide settings, e.g. keepCopies for people who join later. */
+    async updateRoomSettings(settings) {
+        const response = await fetch(this.url + '/' + this.id + '/settings', {
+            method: 'PUT',
+            headers: { ...this.sessionHeaders(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+        if (!response.ok) throw new Error('Could not change the room (' + response.status + ')');
+        return response.json();
     }
 
     getRtcConfig() {

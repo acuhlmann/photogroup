@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import ConnectionRecovery, { backoffDelay } from '../ConnectionRecovery';
+import ConnectionRecovery, { backoffDelay, freezesWhenHidden } from '../ConnectionRecovery';
 
 describe('backoffDelay', () => {
     it('grows exponentially and caps', () => {
@@ -8,6 +8,18 @@ describe('backoffDelay', () => {
         expect(backoffDelay(3)).toBe(8000);
         expect(backoffDelay(99)).toBe(30000);
         expect(backoffDelay(-1)).toBe(1000);
+    });
+});
+
+describe('freezesWhenHidden', () => {
+    it('tells phones and tablets from desktops', () => {
+        expect(freezesWhenHidden({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) Mobile Safari/537.36' })).toBe(true);
+        expect(freezesWhenHidden({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' })).toBe(true);
+        expect(freezesWhenHidden({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', maxTouchPoints: 5 })).toBe(true);
+        expect(freezesWhenHidden({ userAgent: 'x', userAgentData: { mobile: true } })).toBe(true);
+        expect(freezesWhenHidden({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', maxTouchPoints: 0 })).toBe(false);
+        expect(freezesWhenHidden({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/140' })).toBe(false);
+        expect(freezesWhenHidden(null)).toBe(false);
     });
 });
 

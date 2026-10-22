@@ -385,13 +385,17 @@ export default class Rooms {
      * keeps its copies until they expire; someone may come back for them.
      */
     releaseCopiesEveryoneHas(room) {
-        if (room.settings?.keepCopies) return [];
         const peers = room.peers.peers;
         if (peers.length === 0) return [];
-        const released = room.photos.filter(photo => this.relay.has(room.id, photo.infoHash)
-            && peers.every(peer => Rooms.holds(photo, peer.peerId)));
+        const everyoneHas = photo => peers.every(peer => Rooms.holds(photo, peer.peerId));
+        // A request nobody needs answered any more: don't let a holder who
+        // comes back later upload for it.
+        const answered = room.photos.filter(photo => photo.serverCopyRequestedAt && everyoneHas(photo));
+        answered.forEach(photo => delete photo.serverCopyRequestedAt);
+        const released = room.settings?.keepCopies ? []
+            : room.photos.filter(photo => this.relay.has(room.id, photo.infoHash) && everyoneHas(photo));
         released.forEach(photo => this.dropCopy(room, photo));
-        this.sendCopyState(room, released);
+        this.sendCopyState(room, [...new Set([...answered, ...released])]);
         return released;
     }
 

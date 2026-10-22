@@ -117,11 +117,12 @@ export default class TorrentAddition {
             Logger.info('_add done ' + torrent.name);
         });
 
-        // If P2P stalls and a server copy exists, ServerFallback delivers it.
+        // If P2P stalls, ServerFallback asks for a server copy and delivers it.
         if (torrent && this.master.serverFallback) {
             photos.forEach(photo => {
                 this.master.serverFallback.watch(photo, () => ({
-                    progress: torrent.progress, done: torrent.done, hasServerCopy: photo.hasServerCopy
+                    progress: torrent.progress, done: torrent.done,
+                    ...this.master.copyState?.(photo.infoHash)
                 }));
             });
         }
@@ -481,10 +482,11 @@ export default class TorrentAddition {
                 });
 
                 const toBeShared = this.stripClientOnlyPhotoFields(addedInfoHash);
-                const serverCopies = photos.map((photo, index) => ({
+                // What the torrent carries (`origFile` is the seeded file:
+                // the ciphertext of an encrypted share), for a server copy.
+                const seeded = photos.map((photo, index) => ({
                     infoHash: toBeShared[index].infoHash,
-                    blob: photo.file || photo.origFile,
-                    fileName: photo.fileName
+                    blob: photo.origFile || photo.file
                 }));
 
                 Logger.info('seed.infoHash photo sharing');
@@ -497,19 +499,9 @@ export default class TorrentAddition {
                         photo.sharedAt = sharedAt;
                     });
                     self.emitter.emit('photos', {type: 'update', item: photos});
-                    // Insurance for the common in-person failure: P2P never
-                    // connects (CGNAT / isolated Wi-Fi) or this phone locks.
-                    // Leave a temporary server copy receivers can fall back
-                    // to. Fire-and-forget - never block sharing on it.
-                    if (typeof this.service.uploadServerCopy === 'function') {
-                        serverCopies.forEach(({ infoHash, blob, fileName }) => {
-                            if (blob && infoHash) {
-                                this.service.uploadServerCopy(infoHash, blob)
-                                    .then(() => Logger.info('server copy stored for ' + fileName))
-                                    .catch(err => Logger.warn('server copy failed for ' + fileName + ': ' + err.message));
-                            }
-                        });
-                    }
+                    // A server copy is left only when someone needs one (or
+                    // the room keeps copies): ServerPinning decides.
+                    this.master.serverPinning?.shared(seeded);
                 }).catch(err => {
                     Logger.error('Failed to share photo: ' + err);
                     self.emitter.emit('showError', 'Failed to share photo: ' + (err.message || err));
