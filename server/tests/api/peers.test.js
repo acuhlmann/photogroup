@@ -86,21 +86,41 @@ describe('Peers API', () => {
                 .expect(404, done);
         });
     });
-    describe('POST /api/rooms/:id/peers/:peerId/away', () => {
-        it('marks the caller away only with its session token', async () => {
-            const roomId = 'test-room-away-' + Date.now();
-            const peer = { peerId: 'away-peer-' + Date.now(), sessionId: 'away-session-' + Date.now(), originPlatform: 'Pixel 7' };
+    describe('beacons: POST /api/rooms/:id/peers/:peerId/away and /leave', () => {
+        async function joinRoom(name) {
+            const roomId = 'test-room-' + name + '-' + Date.now();
+            const peer = { peerId: name + '-peer-' + Date.now(), sessionId: name + '-session-' + Date.now(), originPlatform: 'Pixel 7' };
             const joined = await request(app).post('/api/rooms/').send({ id: roomId, peer }).expect(200);
+            return { roomId, peer, token: joined.body.sessionToken };
+        }
+        // As sendBeacon sends it: the token is the body, never in the URL.
+        const beacon = (url, token) => request(app).post(url).set('Content-Type', 'text/plain').send(token);
+
+        it('marks the caller away only with its session token, sent as the body', async () => {
+            const { roomId, peer, token } = await joinRoom('away');
             const url = `/api/rooms/${roomId}/peers/${peer.peerId}/away?sessionId=${peer.sessionId}`;
 
-            const denied = await request(app).post(url + '&token=guess').expect(200);
-            assert.strictEqual(denied.body, false);
+            assert.strictEqual((await beacon(url, 'guess').expect(200)).body, false);
             await request(app).post(`/api/rooms/${roomId}/peers/${peer.peerId}/away`).expect(400);
 
-            const ok = await request(app).post(url + '&token=' + joined.body.sessionToken).expect(200);
-            assert.strictEqual(ok.body, true);
+            assert.strictEqual((await beacon(url, token).expect(200)).body, true);
             const room = await request(app).get(`/api/rooms/${roomId}`).expect(200);
             assert.ok(room.body.peers.find(item => item.peerId === peer.peerId).away > 0);
+        });
+
+        it('still takes the token in the query from pages loaded before the change', async () => {
+            const { roomId, peer, token } = await joinRoom('away-old');
+            const url = `/api/rooms/${roomId}/peers/${peer.peerId}/away?sessionId=${peer.sessionId}&token=${token}`;
+            assert.strictEqual((await request(app).post(url).expect(200)).body, true);
+        });
+
+        it('lets a closing tab leave with its token as the body', async () => {
+            const { roomId, peer, token } = await joinRoom('leave');
+            const url = `/api/rooms/${roomId}/peers/${peer.peerId}/leave?sessionId=${peer.sessionId}`;
+            assert.strictEqual((await beacon(url, 'guess').expect(200)).body, false);
+            assert.strictEqual((await beacon(url, token).expect(200)).body, true);
+            const room = await request(app).get(`/api/rooms/${roomId}`).expect(200);
+            assert.ok(!room.body.peers.some(item => item.peerId === peer.peerId));
         });
     });
 });

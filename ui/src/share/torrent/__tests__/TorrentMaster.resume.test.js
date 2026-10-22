@@ -81,12 +81,31 @@ describe('TorrentCreator.refreshIceServers', () => {
         expect(config.iceServers).toBe(fresh);
     });
 
-    it('keeps the old servers when the server sends none', async () => {
-        const service = { getRtcConfig: vi.fn().mockResolvedValue(undefined) };
+    it('keeps the old servers when the server sends none, and tries again next time', async () => {
+        const fresh = [{ urls: 'turn:turn.test' }];
+        const service = { getRtcConfig: vi.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce({ iceServers: fresh }) };
         const creator = new TorrentCreator(service, null, null, null);
         const old = [{ urls: 'stun:stun.test' }];
         creator.iceServers = { iceServers: old };
-        await expect(creator.refreshIceServers({ maxAgeMs: 0, now: 1 })).resolves.toBe(false);
+        creator.iceServersFetchedAt = 0;
+        await expect(creator.refreshIceServers({ maxAgeMs: 1000, now: 5000 })).resolves.toBe(false);
         expect(creator.iceServers.iceServers).toBe(old);
+        expect(creator.iceServersFetchedAt).toBe(0);
+
+        await expect(creator.refreshIceServers({ maxAgeMs: 1000, now: 5001 })).resolves.toBe(true);
+        expect(creator.iceServers.iceServers).toBe(fresh);
+        expect(creator.iceServersFetchedAt).toBe(5001);
+    });
+
+    it('shares one fetch between resume events that arrive together', async () => {
+        let answer;
+        const service = { getRtcConfig: vi.fn(() => new Promise(resolve => { answer = resolve; })) };
+        const creator = new TorrentCreator(service, null, null, null);
+        creator.iceServers = { iceServers: [] };
+        const first = creator.refreshIceServers({ maxAgeMs: 0, now: 1 });
+        const second = creator.refreshIceServers({ maxAgeMs: 0, now: 1 });
+        answer({ iceServers: [{ urls: 'turn:turn.test' }] });
+        await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+        expect(service.getRtcConfig).toHaveBeenCalledTimes(1);
     });
 });

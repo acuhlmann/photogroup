@@ -85,8 +85,15 @@ export default class RoomsService {
         const peerId = this.master?.client?.peerId;
         if (!peerId || !this.sessionToken || !navigator.sendBeacon) return;
         navigator.sendBeacon(this.url + '/' + this.id + '/peers/' + encodeURIComponent(peerId)
-            + '/leave?sessionId=' + encodeURIComponent(this.sessionId)
-            + '&token=' + encodeURIComponent(this.sessionToken));
+            + '/leave?sessionId=' + encodeURIComponent(this.sessionId), this.tokenBody());
+    }
+
+    /**
+     * The session token as a beacon body: in the URL it would land in the
+     * proxies' access logs.
+     */
+    tokenBody() {
+        return new Blob([this.sessionToken], { type: 'text/plain' });
     }
 
     /**
@@ -98,8 +105,7 @@ export default class RoomsService {
         const peerId = this.master?.client?.peerId;
         if (!peerId || !this.sessionToken || !navigator.sendBeacon) return false;
         return navigator.sendBeacon(this.url + '/' + this.id + '/peers/' + encodeURIComponent(peerId)
-            + '/away?sessionId=' + encodeURIComponent(this.sessionId)
-            + '&token=' + encodeURIComponent(this.sessionToken));
+            + '/away?sessionId=' + encodeURIComponent(this.sessionId), this.tokenBody());
     }
 
     changeUrl(name, value) {
@@ -241,7 +247,10 @@ export default class RoomsService {
         }, false);
     }
 
-    /** Proof that a request comes from this tab's session in the room. */
+    /**
+     * Proof that a request comes from this tab's session in the room. Owner
+     * records need it too: they decide who may leave a server copy.
+     */
     sessionHeaders() {
         return { 'X-Session-Id': this.sessionId, 'X-Session-Token': this.sessionToken || '' };
     }
@@ -702,6 +711,7 @@ export default class RoomsService {
             return fetch(this.url + '/' + this.id + '/photos/owners/', {
                 method: 'POST',
                 headers: {
+                    ...this.sessionHeaders(),
                     'Accept': 'application/json',
                     'Content-Type': 'application/json'
                 },
@@ -717,6 +727,7 @@ export default class RoomsService {
         return fetch(this.url + '/' + this.id + '/photos/owners/' + peerId, {
             method: 'DELETE',
             headers: {
+                ...this.sessionHeaders(),
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
@@ -734,6 +745,7 @@ export default class RoomsService {
             return fetch(this.url + '/' + this.id + '/photos/owners/', {
                 method: 'PUT',
                 headers: {
+                    ...this.sessionHeaders(),
                     'Accept': 'application/json',
                     'Content-Type': 'application/json'
                 },

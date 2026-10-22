@@ -74,14 +74,21 @@ export default class TorrentCreator {
      * ones and swap them into the very object WebTorrent was given: every
      * tracker client passes it to each new RTCPeerConnection.
      */
-    async refreshIceServers({ maxAgeMs = ICE_SERVERS_MAX_AGE_MS, now = Date.now() } = {}) {
-        if (!this.iceServers || now - (this.iceServersFetchedAt || 0) < maxAgeMs) return false;
-        this.iceServersFetchedAt = now;
-        const fresh = await this.service.getRtcConfig();
-        if (!Array.isArray(fresh?.iceServers) || fresh.iceServers.length === 0) return false;
-        this.iceServers.iceServers = fresh.iceServers;
-        Logger.info('refreshed ICE servers (' + fresh.iceServers.length + ')');
-        return true;
+    refreshIceServers({ maxAgeMs = ICE_SERVERS_MAX_AGE_MS, now = Date.now() } = {}) {
+        if (!this.iceServers || now - (this.iceServersFetchedAt || 0) < maxAgeMs) return Promise.resolve(false);
+        // Resume fires several events at once: share one fetch. A failed one
+        // leaves the age alone, so the next resume tries again.
+        if (!this._iceRefresh) {
+            this._iceRefresh = (async () => {
+                const fresh = await this.service.getRtcConfig();
+                if (!Array.isArray(fresh?.iceServers) || fresh.iceServers.length === 0) return false;
+                this.iceServers.iceServers = fresh.iceServers;
+                this.iceServersFetchedAt = now;
+                Logger.info('refreshed ICE servers (' + fresh.iceServers.length + ')');
+                return true;
+            })().finally(() => { this._iceRefresh = null; });
+        }
+        return this._iceRefresh;
     }
 
     buildTopology() {

@@ -4,9 +4,9 @@ import RoomPhotos from '../RoomPhotos';
 import ServerPinning, { HELPER_DELAY_MS } from '../ServerPinning';
 import { MAX_PHOTO_BYTES } from '../ServerCopyLimits';
 
-function setup({ peers = [{ peerId: 'me' }, { peerId: 'friend' }], me = 'me', bytes = {} } = {}) {
+function setup({ peers = [{ peerId: 'me' }, { peerId: 'friend' }], me = 'me', bytes = {}, now = () => 0 } = {}) {
     const emitter = new EventEmitter();
-    const roomPhotos = new RoomPhotos(emitter);
+    const roomPhotos = new RoomPhotos(emitter, { now });
     const service = { uploadServerCopy: vi.fn().mockResolvedValue({ status: 'stored' }) };
     const timers = [];
     const pinning = new ServerPinning({
@@ -76,6 +76,38 @@ describe('ServerPinning', () => {
         timers[0].fn();
         await settle();
         expect(service.uploadServerCopy).not.toHaveBeenCalled();
+    });
+
+    it('takes over from an uploader whose phone froze mid-upload', async () => {
+        let clock = 0;
+        const { service, emit, timers, settle } = setup({
+            bytes: { a: blob }, now: () => clock,
+            peers: [{ peerId: 'me' }, { peerId: 'friend' }, { peerId: 'asker' }]
+        });
+        emit({ type: 'all', item: [photo('a', 'friend', [{ peerId: 'me', loading: false }])] });
+        emit({ type: 'update', item: [{ infoHash: 'a', serverCopyUploader: 'friend', serverCopyReceived: 10 }] });
+        emit({ type: 'update', item: [{ infoHash: 'a', serverCopyRequestedAt: 1 }] });
+        timers[0].fn();
+        await settle();
+        expect(service.uploadServerCopy).not.toHaveBeenCalled(); // friend is still sending
+
+        clock = 61000; // nothing from friend for longer than the lease
+        emit({ type: 'update', item: [{ infoHash: 'a', serverCopyRequestedAt: 2 }] }); // asked again
+        timers[1].fn();
+        await settle();
+        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob);
+    });
+
+    it('on the way into the background, takes over a stalled upload too', async () => {
+        let clock = 0;
+        const { pinning, service, emit, settle } = setup({ bytes: { a: blob }, now: () => clock });
+        emit({ type: 'all', item: [photo('a', 'me')] });
+        emit({ type: 'update', item: [{ infoHash: 'a', serverCopyUploader: 'other', serverCopyReceived: 10 }] });
+        expect(pinning.onHide()).toBe(0);
+        clock = 61000;
+        expect(pinning.onHide()).toBe(1);
+        await settle();
+        expect(service.uploadServerCopy).toHaveBeenCalledTimes(1);
     });
 
     it('ignores an old request once everyone has the photo', async () => {

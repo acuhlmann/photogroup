@@ -135,7 +135,8 @@ function LoadingTile({tile, master, name}) {
     const progressPercentage = currentProgress ? Math.round(currentProgress) : null;
     let have = tile.owners?.find(owner => owner.peerId === master.client.peerId && !owner.loading);
     const isLoading = !!currentProgress;
-    const copyStatus = have ? null : serverCopyStatus(tile, master.peers?.items, master.client.peerId);
+    const copyStatus = have ? null : serverCopyStatus(tile, master.peers?.items, master.client.peerId,
+        infoHash => !!master.roomPhotos?.uploadStalled(infoHash));
     let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
     if (stalled && !have) loadingText = 'Connection stalled';
     else if (!have && tile.fromServerCopy) loadingText = 'Received via server (P2P unavailable)';
@@ -368,7 +369,7 @@ function LoadingTile({tile, master, name}) {
                                 <Button size="small" variant="contained" onClick={handleUseServerCopy}>
                                     Use server copy
                                 </Button>
-                            ) : !tile.serverCopyUploader && (
+                            ) : (!tile.serverCopyUploader || copyStatus?.canAsk) && (
                                 <Button size="small" variant="contained" onClick={handleUseServerCopy}>
                                     Ask for a server copy
                                 </Button>

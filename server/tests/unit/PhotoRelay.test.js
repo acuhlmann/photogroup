@@ -1,6 +1,7 @@
 import '../test-setup.js';
 import assert from 'assert';
 import fs from 'fs';
+import fsp from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import PhotoRelay, { RelayError } from '../../PhotoRelay.js';
@@ -107,6 +108,27 @@ describe('PhotoRelay', () => {
         assert.strictEqual(store.totalBytes, 0);
         await new Promise(resolve => setTimeout(resolve, 20));
         assert.strictEqual(fs.existsSync(file), false);
+    });
+
+    it('leaves no file behind when the copy is deleted while a chunk is written', async () => {
+        const store = relay();
+        // The delete's file removal finishes before the chunk's file is created.
+        const open = fsp.open;
+        let release;
+        const held = new Promise(resolve => { release = resolve; });
+        fsp.open = async (...args) => { await held; return open(...args); };
+        try {
+            const writing = store.append('r', 'h1', { offset: 0, size: 6, buffer: Buffer.from('abc'), uploader: 'p' });
+            store.delete('r', 'h1');
+            await new Promise(resolve => setTimeout(resolve, 20));
+            release();
+            await rejects(writing, 'INVALID');
+        } finally {
+            fsp.open = open;
+        }
+        await new Promise(resolve => setTimeout(resolve, 20));
+        assert.deepStrictEqual(fs.readdirSync(dir), []);
+        assert.strictEqual(store.totalBytes, 0);
     });
 
     it('drops every copy of a room', async () => {

@@ -23,6 +23,11 @@ describe('serverCopyStatus', () => {
         expect(serverCopyStatus(tile({ serverCopyRequestedAt: 1 }), peers, 'me').text).toBe('Asked for a server copy · Alex is away');
     });
 
+    it('says when an upload went quiet, and offers to ask again', () => {
+        const status = serverCopyStatus(tile({ serverCopyUploader: 'alex', serverCopySize: 200, serverCopyReceived: 50 }), peers, 'me', () => true);
+        expect(status).toMatchObject({ text: "Alex's server copy stopped at 25%", canAsk: true });
+    });
+
     it('shows a copy on its way, then ready', () => {
         expect(serverCopyStatus(tile({ serverCopyUploader: 'alex', serverCopySize: 200, serverCopyReceived: 50 }), peers, 'me').text)
             .toBe('Alex is leaving a server copy · 25%');

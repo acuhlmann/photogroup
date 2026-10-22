@@ -145,6 +145,7 @@ export default class PhotoRelay {
         }
 
         entry.writing = true;
+        let failure = null;
         try {
             const handle = await fsp.open(entry.file, offset === 0 ? 'w' : 'r+');
             try {
@@ -152,11 +153,18 @@ export default class PhotoRelay {
             } finally {
                 await handle.close();
             }
+        } catch (err) {
+            failure = err;
         } finally {
             entry.writing = false;
         }
-        // Deleted (photo removed, room reset) while writing.
-        if (this.copies.get(key) !== entry) throw new RelayError('INVALID', 'Photo was removed');
+        // Deleted (photo removed, room reset) while writing: its file may
+        // have been removed before this chunk recreated it.
+        if (this.copies.get(key) !== entry) {
+            fs.rm(entry.file, { force: true }, () => {});
+            throw new RelayError('INVALID', 'Photo was removed');
+        }
+        if (failure) throw failure;
 
         entry.received = offset + buffer.length;
         entry.lastChunkAt = this.now();

@@ -250,8 +250,10 @@ export default class Rooms {
                     // Shared title/description/rating only change through the
                     // validated, attributed details route below.
                     delete update.details;
-                    // Nor can anyone take over a photo by rewriting its owner.
+                    // Nor can anyone take over a photo by rewriting its owner,
+                    // or its fingerprint, which receivers check copies against.
                     delete update.peerId;
+                    delete update.fingerprint;
                     SERVER_MANAGED_FIELDS.forEach(field => delete update[field]);
                     _.merge(existing, update);
                     return existing;
@@ -570,6 +572,25 @@ export default class Rooms {
         }
     }
 
+    /**
+     * Ownership says who has a photo, which lets them leave its server copy
+     * and lets the room drop a copy once everyone has it. So only a session
+     * may record its own: `peerIds` must all be the caller's. Answers and
+     * returns null when not.
+     */
+    ownerCaller(room, request, response, peerIds) {
+        const peer = this.sessionPeer(room, request);
+        if (!peer) {
+            response.status(403).send('Join the room first');
+            return null;
+        }
+        if (peerIds.some(peerId => peerId !== peer.peerId)) {
+            response.status(403).send('Only your own ownership can change');
+            return null;
+        }
+        return peer;
+    }
+
     registerOwnerRoutes(app) {
         app.post('/api/rooms/:id/photos/owners/', (request, response) => {
 
@@ -581,6 +602,8 @@ export default class Rooms {
 
             } else {
 
+                if(!Array.isArray(request.body)) return response.status(400).send('Expected a list');
+                if(!this.ownerCaller(room, request, response, request.body.map(item => item?.peerId))) return;
                 request.body.forEach(item => {
                     if(item.infoHash) {
                         item.infoHash = decodeURIComponent(item.infoHash);
@@ -599,6 +622,7 @@ export default class Rooms {
 
             } else {
 
+                if(!this.ownerCaller(room, request, response, [request.params.peerId])) return;
                 response.send(this.removeOwner(room, request.params.peerId));
             }
         });
@@ -613,6 +637,8 @@ export default class Rooms {
 
             } else {
 
+                if(!Array.isArray(request.body)) return response.status(400).send('Expected a list');
+                if(!this.ownerCaller(room, request, response, request.body.map(item => item?.peerId))) return;
                 request.body.forEach(item => {
                     if(item.infoHash) {
                         item.infoHash = decodeURIComponent(item.infoHash);
@@ -782,9 +808,14 @@ export default class Rooms {
             }
         });
 
-        // sendBeacon from a closing tab; sessionId and token ride in the query
-        // because beacons arrive as text/plain.
-        app.post('/api/rooms/:id/peers/:peerId/leave', (request, response) => {
+        // Beacons carry the session token as their text/plain body, out of
+        // the access logs. Tabs still running an older page send it in the query.
+        const beaconToken = express.text({ type: 'text/plain', limit: '1kb' });
+        const tokenOf = request => (typeof request.body === 'string' && request.body)
+            ? request.body : request.query.token;
+
+        // sendBeacon from a closing tab.
+        app.post('/api/rooms/:id/peers/:peerId/leave', beaconToken, (request, response) => {
 
             const room = this.rooms.get(request.params.id);
             if(!room) {
@@ -794,11 +825,11 @@ export default class Rooms {
             if(typeof sessionId !== 'string' || !sessionId) {
                 return response.status(400).send('Expected sessionId');
             }
-            response.send(room.peers.leaveNow(sessionId, request.params.peerId, request.query.token));
+            response.send(room.peers.leaveNow(sessionId, request.params.peerId, tokenOf(request)));
         });
 
         // sendBeacon from a tab going to the background: only away, not gone.
-        app.post('/api/rooms/:id/peers/:peerId/away', (request, response) => {
+        app.post('/api/rooms/:id/peers/:peerId/away', beaconToken, (request, response) => {
 
             const room = this.rooms.get(request.params.id);
             if(!room) {
@@ -808,7 +839,7 @@ export default class Rooms {
             if(typeof sessionId !== 'string' || !sessionId) {
                 return response.status(400).send('Expected sessionId');
             }
-            response.send(room.peers.markAway(sessionId, request.params.peerId, request.query.token));
+            response.send(room.peers.markAway(sessionId, request.params.peerId, tokenOf(request)));
         });
     }
 

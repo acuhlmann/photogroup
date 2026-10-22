@@ -13,7 +13,7 @@ import humanizeDuration from 'humanize-duration'
 import MetadataParser from "../gallery/metadata/MetadataParser";
 import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isCompoundInfoHash } from './WebTorrentUtils';
 import { cacheGet, cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
-import ServerFallback from './ServerFallback';
+import ServerFallback, { isSharedPhoto } from './ServerFallback';
 import ServerPinning from './ServerPinning';
 import RoomPhotos from './RoomPhotos';
 import TrackerKick from './TrackerKick';
@@ -93,6 +93,7 @@ export default class TorrentMaster {
                 return state;
             },
             cachePut,
+            verify: isSharedPhoto,
             emitter: this.emitter
         });
         // ...and leave one when someone needs a photo we have.

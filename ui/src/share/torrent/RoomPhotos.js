@@ -7,6 +7,8 @@
  * Local tiles flow through the same events with client-only fields and
  * placeholder hashes; only the fields below are kept.
  */
+import { UPLOAD_LEASE_MS } from './ServerCopyLimits';
+
 const TRACKED_FIELDS = ['peerId', 'fileName', 'fileType', 'secure', 'hasServerCopy', 'serverCopySize',
     'serverCopyReceived', 'serverCopyRequestedAt', 'serverCopyUploader'];
 
@@ -21,9 +23,27 @@ function pick(item) {
 const asList = item => (Array.isArray(item) ? item : [item]).filter(Boolean);
 
 export default class RoomPhotos {
-    constructor(emitter) {
+    constructor(emitter, { now = () => Date.now() } = {}) {
         this.photos = new Map();
+        this.now = now;
         emitter?.on?.('photos', event => this.apply(event));
+    }
+
+    /**
+     * Someone is uploading a copy and was heard from within the lease. Each
+     * chunk is announced, so this goes by when we last heard, on our own
+     * clock, not by the server's.
+     */
+    uploadActive(infoHash) {
+        const photo = this.get(infoHash);
+        return !!(photo?.serverCopyUploader && !photo.hasServerCopy
+            && this.now() - (photo.serverCopyProgressAt || 0) < UPLOAD_LEASE_MS);
+    }
+
+    /** An upload was started but has gone quiet: someone else may take over. */
+    uploadStalled(infoHash) {
+        const photo = this.get(infoHash);
+        return !!(photo?.serverCopyUploader && !photo.hasServerCopy && !this.uploadActive(infoHash));
     }
 
     get(infoHash) {
@@ -36,6 +56,8 @@ export default class RoomPhotos {
 
     _insert(item) {
         const photo = { ...pick(item), owners: (item.owners || []).map(owner => ({ ...owner })) };
+        // Learned of an upload just now: give it a full lease.
+        if (photo.serverCopyUploader) photo.serverCopyProgressAt = this.now();
         this.photos.set(item.infoHash, photo);
         return photo;
     }
@@ -55,6 +77,7 @@ export default class RoomPhotos {
                         TRACKED_FIELDS.forEach(field => {
                             if (inserted[field] === undefined && known[field] !== undefined) inserted[field] = known[field];
                         });
+                        if (known.serverCopyProgressAt !== undefined) inserted.serverCopyProgressAt = known.serverCopyProgressAt;
                     }
                 });
                 break;
@@ -68,7 +91,12 @@ export default class RoomPhotos {
                     if (!update.infoHash || update.isFake) return;
                     const known = this.photos.get(update.infoHash);
                     if (known) {
+                        // A new chunk (or a new uploader), not a tile re-sent
+                        // with the copy state it already had.
+                        const progressed = ('serverCopyReceived' in update && update.serverCopyReceived !== known.serverCopyReceived)
+                            || ('serverCopyUploader' in update && update.serverCopyUploader !== known.serverCopyUploader);
                         Object.assign(known, pick(update));
+                        if (progressed) known.serverCopyProgressAt = this.now();
                     } else if (update.peerId && update.url) {
                         // Our own share, confirmed by the server: others hear it
                         // as 'add', the sharer only as a local update.

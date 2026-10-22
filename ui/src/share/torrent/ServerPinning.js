@@ -101,7 +101,8 @@ export default class ServerPinning {
         this.waiting.set(infoHash, this.setTimer(() => {
             this.waiting.delete(infoHash);
             const now = this.roomPhotos.get(infoHash);
-            if (now && !now.hasServerCopy && !now.serverCopyUploader) this.enqueue(infoHash, 'asked');
+            // Nobody began, or whoever did went quiet (a phone frozen mid-upload).
+            if (now && !now.hasServerCopy && !this.roomPhotos.uploadActive(infoHash)) this.enqueue(infoHash, 'asked');
         }, delay));
     }
 
@@ -113,7 +114,7 @@ export default class ServerPinning {
         const me = this.myPeerId;
         let count = 0;
         this.roomPhotos.all().forEach(photo => {
-            if (photo.hasServerCopy || photo.serverCopyUploader || !holds(photo, me)) return;
+            if (photo.hasServerCopy || this.roomPhotos.uploadActive(photo.infoHash) || !holds(photo, me)) return;
             if (!this.someoneLacks(photo)) return;
             if (this.enqueue(photo.infoHash, 'going to background')) count++;
         });

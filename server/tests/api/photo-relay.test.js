@@ -103,16 +103,16 @@ describe('Photo relay (server copies, pinned when needed)', () => {
         await putChunk({ ...sharer, token: 'guess' }).expect(403);
         await putChunk(receiver).expect(403);
 
-        await request(app).post(`/api/rooms/${roomId}/photos/owners/`)
+        await auth(request(app).post(`/api/rooms/${roomId}/photos/owners/`), receiver)
             .send([{ infoHash, peerId: receiver.peerId, loading: true }]).expect(200);
         await putChunk(receiver).expect(403);
-        await request(app).put(`/api/rooms/${roomId}/photos/owners/`)
+        await auth(request(app).put(`/api/rooms/${roomId}/photos/owners/`), receiver)
             .send([{ infoHash, peerId: receiver.peerId, loading: false }]).expect(200);
         await putChunk(receiver).expect(200);
     });
 
     it('lets one holder upload at a time, and keeps a finished copy', async () => {
-        await request(app).post(`/api/rooms/${roomId}/photos/owners/`)
+        await auth(request(app).post(`/api/rooms/${roomId}/photos/owners/`), receiver)
             .send([{ infoHash, peerId: receiver.peerId, loading: false }]).expect(200);
         await putChunk(sharer, { body: bytes.subarray(0, 5) }).expect(200);
         const busy = await putChunk(receiver, { offset: 5, body: bytes.subarray(5) }).expect(409);
@@ -143,7 +143,7 @@ describe('Photo relay (server copies, pinned when needed)', () => {
 
     it('forgets a request once everyone has the photo', async () => {
         await auth(request(app).post(blobUrl().replace('/blob?', '/blob/request?')), receiver).expect(200);
-        await request(app).post(`/api/rooms/${roomId}/photos/owners/`)
+        await auth(request(app).post(`/api/rooms/${roomId}/photos/owners/`), receiver)
             .send([{ infoHash, peerId: receiver.peerId, loading: false }]).expect(200);
         assert.strictEqual((await photoState()).serverCopyRequestedAt, undefined);
     });
@@ -151,7 +151,7 @@ describe('Photo relay (server copies, pinned when needed)', () => {
     it('drops the copy once everyone in the room has the photo', async () => {
         await putChunk(sharer).expect(200);
         await download(receiver).expect(200);
-        await request(app).post(`/api/rooms/${roomId}/photos/owners/`)
+        await auth(request(app).post(`/api/rooms/${roomId}/photos/owners/`), receiver)
             .send([{ infoHash, peerId: receiver.peerId, loading: false }]).expect(200);
 
         assert.strictEqual((await photoState()).hasServerCopy, false);
@@ -168,7 +168,7 @@ describe('Photo relay (server copies, pinned when needed)', () => {
         assert.strictEqual(room.body.settings.keepCopies, true);
 
         await putChunk(sharer).expect(200);
-        await request(app).post(`/api/rooms/${roomId}/photos/owners/`)
+        await auth(request(app).post(`/api/rooms/${roomId}/photos/owners/`), receiver)
             .send([{ infoHash, peerId: receiver.peerId, loading: false }]).expect(200);
         assert.strictEqual((await photoState()).hasServerCopy, true);
 
@@ -177,13 +177,31 @@ describe('Photo relay (server copies, pinned when needed)', () => {
         assert.strictEqual((await photoState()).hasServerCopy, false);
     });
 
-    it("doesn't let a photo update fake a copy or change hands", async () => {
+    it("doesn't let a photo update fake a copy, change hands or swap the fingerprint copies are checked against", async () => {
+        await request(app).post(`/api/rooms/${roomId}/photos/`).send({
+            sessionId: sharer.sessionId,
+            photos: [{ infoHash: 'fp-hash', peerId: sharer.peerId, fileName: 'b.jpg', fingerprint: '3:abc' }]
+        }).expect(200);
         await request(app).put(`/api/rooms/${roomId}/photos/`)
-            .send([{ infoHash, hasServerCopy: true, serverCopySize: 3, peerId: receiver.peerId, owners: [] }]).expect(200);
+            .send([{ infoHash, hasServerCopy: true, serverCopySize: 3, peerId: receiver.peerId, owners: [] },
+                { infoHash: 'fp-hash', fingerprint: '3:evil' }]).expect(200);
         const photo = await photoState();
         assert.strictEqual(photo.hasServerCopy, undefined);
         assert.strictEqual(photo.peerId, sharer.peerId);
         assert.strictEqual(photo.owners.length, 1);
+        assert.strictEqual((await photoState('fp-hash')).fingerprint, '3:abc');
+        await putChunk(receiver).expect(403);
+    });
+
+    it("doesn't let anyone claim someone else has the photo to upload or drop its copy", async () => {
+        await putChunk(sharer).expect(200);
+        // The receiver can't record the copy as had by everyone...
+        await auth(request(app).post(`/api/rooms/${roomId}/photos/owners/`), sharer)
+            .send([{ infoHash, peerId: receiver.peerId, loading: false }]).expect(403);
+        assert.strictEqual((await photoState()).hasServerCopy, true);
+        // ...nor can a stranger without a session claim it for themselves.
+        await request(app).post(`/api/rooms/${roomId}/photos/owners/`)
+            .send([{ infoHash, peerId: receiver.peerId, loading: false }]).expect(403);
         await putChunk(receiver).expect(403);
     });
 

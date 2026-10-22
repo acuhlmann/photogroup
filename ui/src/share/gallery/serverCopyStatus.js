@@ -10,10 +10,12 @@ function names(peers) {
 }
 
 /**
+ * @param {(infoHash: string) => boolean} [uploadStalled] whether an upload
+ *   started but went quiet (RoomPhotos.uploadStalled)
  * @returns {{text: string, canFetch: boolean, canAsk: boolean, holdersAway: boolean}|null}
  *   canFetch: a copy is there to download; canAsk: worth asking for one.
  */
-export function serverCopyStatus(tile, peers, myPeerId) {
+export function serverCopyStatus(tile, peers, myPeerId, uploadStalled = () => false) {
     // Our own photo: nothing to wait for.
     if (!tile || tile.fromServerCopy || tile.seed || tile.peerId === myPeerId) return null;
     const items = Array.isArray(peers) ? peers : [];
@@ -26,6 +28,10 @@ export function serverCopyStatus(tile, peers, myPeerId) {
     if (tile.serverCopyUploader) {
         const uploader = items.find(peer => peer.peerId === tile.serverCopyUploader);
         const percent = tile.serverCopySize ? Math.floor(100 * (tile.serverCopyReceived || 0) / tile.serverCopySize) : 0;
+        if (uploadStalled(tile.infoHash)) {
+            // Their phone likely froze: asking again lets someone else carry on.
+            return { text: `${peerLabel(uploader)}'s server copy stopped at ${percent}%`, canFetch: false, canAsk: true, holdersAway };
+        }
         return { text: `${peerLabel(uploader)} is leaving a server copy · ${percent}%`, canFetch: false, canAsk: false, holdersAway };
     }
     if (tile.serverCopyRequestedAt) {

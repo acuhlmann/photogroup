@@ -31,6 +31,37 @@ describe('RoomPhotos', () => {
         expect(photos.get('b')).toBeNull();
     });
 
+    it('counts an upload as active while chunks keep arriving, then as stalled', () => {
+        const emitter = new EventEmitter();
+        let clock = 0;
+        const photos = new RoomPhotos(emitter, { now: () => clock });
+        const emit = event => emitter.emit('photos', event);
+        emit({ type: 'all', item: [{ infoHash: 'a', peerId: 'sam', owners: [] }] });
+        expect(photos.uploadActive('a')).toBe(false);
+
+        emit({ type: 'update', item: [{ infoHash: 'a', serverCopyUploader: 'sam', serverCopyReceived: 10 }] });
+        clock = 59000;
+        expect(photos.uploadActive('a')).toBe(true);
+        emit({ type: 'update', item: [{ infoHash: 'a', serverCopyUploader: 'sam', serverCopyReceived: 20 }] });
+        clock = 118000;
+        expect(photos.uploadActive('a')).toBe(true);
+        clock = 119000;
+        expect(photos.uploadActive('a')).toBe(false);
+        expect(photos.uploadStalled('a')).toBe(true);
+
+        // The gallery re-sending its tile, copy state unchanged, is no sign of life.
+        emit({ type: 'update', item: [{ infoHash: 'a', peerId: 'sam', fileName: 'a.jpg', serverCopyUploader: 'sam', serverCopyReceived: 20 }] });
+        expect(photos.uploadStalled('a')).toBe(true);
+
+        // A snapshot on rejoining keeps when we last heard from it.
+        emit({ type: 'all', item: [{ infoHash: 'a', peerId: 'sam', serverCopyUploader: 'sam', owners: [] }] });
+        expect(photos.uploadStalled('a')).toBe(true);
+
+        emit({ type: 'update', item: [{ infoHash: 'a', hasServerCopy: true, serverCopyReceived: 30 }] });
+        expect(photos.uploadActive('a')).toBe(false);
+        expect(photos.uploadStalled('a')).toBe(false);
+    });
+
     it('keeps news a late snapshot predates', () => {
         const { photos, emit } = setup();
         emit({ type: 'all', item: [{ infoHash: 'a', peerId: 'sam', owners: [] }] });

@@ -11,6 +11,7 @@
  * exists, it doesn't wait for the stall. P2P keeps running either way.
  */
 import Logger from 'js-logger';
+import { fingerprintFile } from '../gallery/fingerprint';
 
 export const P2P_STALL_MS = 10000;
 export const FALLBACK_POLL_MS = 2000;
@@ -41,18 +42,33 @@ export function holdersAllAway({ holders, activeHolders }) {
     return Number.isFinite(holders) && holders > 0 && activeHolders === 0;
 }
 
+/**
+ * Anyone who has a photo may leave its server copy: check it is the one its
+ * sharer fingerprinted. Encrypted shares have no fingerprint (wrong bytes
+ * just won't decrypt), and without WebCrypto (plain http) nothing can be
+ * checked.
+ */
+export async function isSharedPhoto(photo, blob) {
+    if (!photo?.fingerprint) return true;
+    const fingerprint = await fingerprintFile(blob);
+    return fingerprint === null || fingerprint === photo.fingerprint;
+}
+
 export default class ServerFallback {
     /**
      * @param {object} deps
      * @param {(infoHash:string)=>Promise<Blob|null>} deps.fetchCopy
      * @param {(infoHash:string)=>Promise<any>} deps.requestCopy ask the room for a copy
      * @param {(infoHash:string, blob:Blob)=>Promise<void>} deps.cachePut
+     * @param {(photo:object, blob:Blob)=>Promise<boolean>} [deps.verify] whether
+     *   the copy is the photo that was shared; anyone who has it may upload one
      * @param {object} deps.emitter emits 'torrentReady' with [photo] on success
      */
-    constructor({ fetchCopy, requestCopy, cachePut, emitter, stallMs = P2P_STALL_MS, pollMs = FALLBACK_POLL_MS,
+    constructor({ fetchCopy, requestCopy, cachePut, verify, emitter, stallMs = P2P_STALL_MS, pollMs = FALLBACK_POLL_MS,
         rerequestMs = REREQUEST_MS, now = () => Date.now() } = {}) {
         this.fetchCopy = fetchCopy;
         this.requestCopy = requestCopy;
+        this.verify = verify;
         this.cachePut = cachePut;
         this.emitter = emitter;
         this.stallMs = stallMs;
@@ -143,7 +159,9 @@ export default class ServerFallback {
             now, stallMs: this.stallMs,
         });
         const hasCopy = this._hasCopy(entry, state);
-        if (hasCopy && (stalled || holdersAllAway(state))) return this._deliver(entry);
+        // A copy that wasn't the photo: don't fetch it again every poll.
+        const rejectedLately = entry.rejectedAt !== undefined && now - entry.rejectedAt < this.rerequestMs;
+        if (hasCopy && !rejectedLately && (stalled || holdersAllAway(state))) return this._deliver(entry);
         if (!hasCopy && stalled && (entry.requestedAt === null || now - entry.requestedAt >= this.rerequestMs)) {
             return this._request(entry);
         }
@@ -168,6 +186,11 @@ export default class ServerFallback {
         try {
             const blob = await this.fetchCopy(infoHash);
             if (!blob) return false;
+            if (this.verify && !(await this.verify(entry.photo, blob))) {
+                entry.rejectedAt = this.now();
+                Logger.warn('ServerFallback: server copy of ' + (entry.photo.fileName || infoHash) + " isn't the shared photo; ignored");
+                return false;
+            }
             // The gallery's photo object, so the tile it renders is updated.
             const photo = Object.assign(entry.original, entry.photo);
             const file = typeof File !== 'undefined'

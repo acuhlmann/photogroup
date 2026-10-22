@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import ServerFallback, { shouldUseServerFallback, isTransferStalled, holdersAllAway, P2P_STALL_MS } from '../ServerFallback';
+import ServerFallback, { shouldUseServerFallback, isTransferStalled, holdersAllAway, isSharedPhoto, P2P_STALL_MS } from '../ServerFallback';
+import { fingerprintFile } from '../../gallery/fingerprint';
 
 describe('shouldUseServerFallback', () => {
     const base = { hasServerCopy: true, done: false, progress: 0.2, startedAt: 0, now: P2P_STALL_MS };
@@ -27,6 +28,17 @@ describe('holdersAllAway', () => {
         expect(holdersAllAway({ holders: 2, activeHolders: 1 })).toBe(false);
         expect(holdersAllAway({ holders: 0, activeHolders: 0 })).toBe(false);
         expect(holdersAllAway({})).toBe(false);
+    });
+});
+
+describe('isSharedPhoto', () => {
+    it("checks a server copy against the sharer's fingerprint", async () => {
+        const shared = new File(['the photo'], 'a.jpg');
+        const photo = { fingerprint: await fingerprintFile(shared) };
+        await expect(isSharedPhoto(photo, shared)).resolves.toBe(true);
+        await expect(isSharedPhoto(photo, new Blob(['something else']))).resolves.toBe(false);
+        // Encrypted shares carry no fingerprint: nothing to check.
+        await expect(isSharedPhoto({}, new Blob(['ciphertext']))).resolves.toBe(true);
     });
 });
 
@@ -147,6 +159,28 @@ describe('ServerFallback', () => {
         expect(emitter.emit).toHaveBeenCalledWith('torrentReady', [photo]);
         expect(photo.hasServerCopy).toBe(true);
         expect(photo.file.name).toBe('d.jpg');
+    });
+
+    it("refuses a copy that isn't the shared photo, and doesn't refetch it every poll", async () => {
+        let clock = 0;
+        const emitter = { emit: vi.fn() };
+        const fetchCopy = vi.fn().mockResolvedValue(new Blob(['not the photo']));
+        const verify = vi.fn().mockResolvedValue(false);
+        const fallback = new ServerFallback({ fetchCopy, verify, cachePut: vi.fn(), emitter, stallMs: 0, pollMs: 60000, rerequestMs: 1000, now: () => clock });
+        const photo = { infoHash: 'h10', fileName: 'e.jpg', fingerprint: '13:abc' };
+        fallback.watch(photo, () => ({ progress: 0, hasServerCopy: true }));
+
+        await fallback._check('h10');
+        expect(verify).toHaveBeenCalledWith(photo, expect.any(Blob));
+        expect(emitter.emit).not.toHaveBeenCalled();
+        expect(photo.file).toBeUndefined();
+        clock = 500;
+        await fallback._check('h10');
+        expect(fetchCopy).toHaveBeenCalledTimes(1);
+        clock = 1000;
+        await fallback._check('h10');
+        expect(fetchCopy).toHaveBeenCalledTimes(2);
+        fallback.stopAll();
     });
 
     it('does nothing while P2P is progressing to completion', async () => {

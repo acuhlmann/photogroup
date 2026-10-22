@@ -52,6 +52,9 @@ describe('P2P Flow Integration Tests', () => {
                 .expect(200);
 
             assert(joinResponse.body.peers.length === 2, 'Should have two peers');
+            // Ownership changes need the session's proof (they decide who may
+            // leave a server copy).
+            const peer2Session = { 'X-Session-Id': peer2.sessionId, 'X-Session-Token': joinResponse.body.sessionToken };
 
             // Step 3: Peer 1 adds a photo
             const photoHash = 'photo-hash-' + Date.now();
@@ -82,6 +85,7 @@ describe('P2P Flow Integration Tests', () => {
             // Step 5: Add owner for peer 2
             const addOwnerResponse = await request(app)
                 .post(`/api/rooms/${testRoomId}/photos/owners/`)
+                .set(peer2Session)
                 .send([{
                     infoHash: photoHash,
                     peerId: peer2.peerId,
@@ -106,6 +110,7 @@ describe('P2P Flow Integration Tests', () => {
             // Step 7: Update owner loading status
             const updateOwnerResponse = await request(app)
                 .put(`/api/rooms/${testRoomId}/photos/owners/`)
+                .set(peer2Session)
                 .send([{
                     infoHash: photoHash,
                     peerId: peer2.peerId,

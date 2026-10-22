@@ -32,13 +32,20 @@ afterEach(() => {
 });
 
 describe('RoomsService presence', () => {
-    it('sends an away beacon with the session proof', () => {
+    it('sends away and leave beacons with the session proof as the body, not in the URL', async () => {
         const sendBeacon = vi.fn().mockReturnValue(true);
         vi.stubGlobal('navigator', { ...navigator, sendBeacon });
         const { rooms } = service();
         expect(rooms.markAway()).toBe(true);
-        expect(sendBeacon).toHaveBeenCalledWith('/api/rooms/room1/peers/peer%2B1/away?sessionId='
-            + encodeURIComponent(rooms.sessionId) + '&token=tok');
+        rooms.handlePageHide({ persisted: false });
+
+        const [[awayUrl, awayBody], [leaveUrl, leaveBody]] = sendBeacon.mock.calls;
+        expect(awayUrl).toBe('/api/rooms/room1/peers/peer%2B1/away?sessionId=' + encodeURIComponent(rooms.sessionId));
+        expect(leaveUrl).toBe('/api/rooms/room1/peers/peer%2B1/leave?sessionId=' + encodeURIComponent(rooms.sessionId));
+        for (const body of [awayBody, leaveBody]) {
+            expect(body.type).toBe('text/plain');
+            expect(await body.text()).toBe('tok');
+        }
     });
 
     it('asks for a re-sync when the browser reconnects the update stream on its own', () => {
