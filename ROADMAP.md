@@ -98,7 +98,7 @@ videos, that's wasted transfer.
 (`deselect: true`) and select single files. Every photo torrent also
 carries a small `Thumbnail <name>` file. Peers add every room torrent in
 `TorrentAddition.handlePhotoAddEvent` / `_add`, and `ServerFallback.watch`
-can fetch the full file from the server when P2P stalls.
+asks for (and fetches) a server copy when P2P stalls.
 
 **Work:**
 
@@ -156,6 +156,38 @@ in one or two taps.
 ---
 
 # Done
+
+## Stay a peer when switching apps; server copies only when needed
+
+Switching to another app used to drop a phone from the room within 10 s.
+It then took up to 5 minutes to find peers again, because of
+bittorrent-tracker's reconnect jitter. The server-copy fallback uploaded
+every photo, but nginx's 1 MB body limit turned real photos away. Now:
+
+- **Away, not gone.** Going to the background sends an away beacon, and
+  the room keeps the phone and its photos for 10 minutes.
+- **Back at once.** On resume, `TrackerKick` reopens tracker sockets
+  immediately, including ones that only look open after a long sleep. It
+  also refreshes TURN credentials and re-syncs the room.
+- **Server copies only when needed.** A stalled receiver asks for one,
+  and someone who has the photo uploads it. A phone going to the
+  background also uploads photos someone present still lacks. The copy
+  is deleted once everyone has the photo, or after 24 h.
+- **Keep Copies for Latecomers** (Settings, per room) keeps every photo
+  for 24 h.
+- Copies are written to disk in resumable 8 MB chunks, up to 100 MB per
+  file.
+
+**Still to check on real phones** (can't be automated):
+
+- [ ] Two phones on different networks (Wi-Fi and cellular). Share, then
+  switch the sharer to another app for a minute: the receiver gets the
+  photo, from the server copy if P2P can't connect.
+- [ ] Come back to the app after 5+ minutes: you're listed again (no
+  "away") within seconds, and new photos arrive over P2P.
+- [ ] Share a 50 MB video, then lock the phone midway through the server
+  copy. After unlocking, the upload carries on, and the receiver gets the
+  video.
 
 ## Android uploads that keep locations
 

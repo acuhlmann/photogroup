@@ -103,6 +103,7 @@ function SettingsView(props) {
     const [encrypt, setEncrypt] = useState(false);
     const [strategyPreference, setStrategyPreference] = useState(false);
     const [darkMode, setDarkMode] = useState(prefersDarkMode);
+    const [keepCopies, setKeepCopies] = useState(false);
     const [logsExpanded, setLogsExpanded] = useState(false);
     const logsBeforeMountRef = useRef([]);
     const mountedRef = useRef(false);
@@ -185,6 +186,25 @@ function SettingsView(props) {
         }
     }, []);
 
+    // Room-wide, so it follows the room rather than this browser.
+    useEffect(() => {
+        const handleRoomSettings = settings => setKeepCopies(!!settings?.keepCopies);
+        master.emitter.on('roomSettings', handleRoomSettings);
+        return () => master.emitter.removeListener?.('roomSettings', handleRoomSettings);
+    }, [master.emitter]);
+
+    const handleKeepCopiesChange = useCallback(async (value) => {
+        setKeepCopies(value);
+        try {
+            const settings = await masterRef.current.service.updateRoomSettings({ keepCopies: value });
+            setKeepCopies(!!settings?.keepCopies);
+        } catch (err) {
+            Logger.warn('keepCopies: ' + err);
+            setKeepCopies(!value);
+            enqueueSnackbar?.("Couldn't change the room: " + (err?.message || err), { variant: 'error' });
+        }
+    }, [enqueueSnackbar]);
+
     useEffect(() => {
         mountedRef.current = true;
         logsBeforeMountRef.current.forEach(missedMessage => log(missedMessage.message, missedMessage.level));
@@ -257,6 +277,15 @@ function SettingsView(props) {
                         onChange={handleEncryptChange}
                         label="Encrypt End-to-End"
                         description="Encrypts all data shared between peers so only participants can read it."
+                    />
+
+                    {/* Sharing */}
+                    <SectionHeader label="Sharing (this room)" />
+                    <SettingToggle
+                        checked={keepCopies}
+                        onChange={handleKeepCopiesChange}
+                        label="Keep Copies for Latecomers"
+                        description="Photos go phone to phone. The server only keeps one, for up to 24 hours, when someone can't get it directly. Turn on to keep every photo there for 24 hours, so people who join after everyone else left still get them."
                     />
 
                     {/* Display */}

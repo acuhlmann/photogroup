@@ -17,6 +17,7 @@ import Button from "@mui/material/Button";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
 import TransferConsole from "../torrent/TransferConsole";
 import { isTransferStalled, P2P_STALL_MS } from "../torrent/ServerFallback";
+import { serverCopyStatus } from "./serverCopyStatus";
 import { rememberImageSize } from './imageSize';
 
 /** Show transfer status and recovery controls, retaining a preview URL on the tile. */
@@ -134,10 +135,12 @@ function LoadingTile({tile, master, name}) {
     const progressPercentage = currentProgress ? Math.round(currentProgress) : null;
     let have = tile.owners?.find(owner => owner.peerId === master.client.peerId && !owner.loading);
     const isLoading = !!currentProgress;
+    const copyStatus = have ? null : serverCopyStatus(tile, master.peers?.items, master.client.peerId,
+        infoHash => !!master.roomPhotos?.uploadStalled(infoHash));
     let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
     if (stalled && !have) loadingText = 'Connection stalled';
     else if (!have && tile.fromServerCopy) loadingText = 'Received via server (P2P unavailable)';
-    else if (!have && tile.hasServerCopy && !isLoading) loadingText = 'Find Network Path · server copy ready if needed';
+    else if (copyStatus && !isLoading && !tile.rendering) loadingText = copyStatus.text;
     const isRendering = loadingText === 'Rendering';
     const hasError = !!tile.uploadError;
 
@@ -352,12 +355,23 @@ function LoadingTile({tile, master, name}) {
                 {stalled && !have && !hasError && (
                     <Box sx={{ mt: 1.5 }}>
                         <Typography variant="caption" sx={{ display: 'block', color: 'warning.main', lineHeight: 1.4 }}>
-                            No data for a while — the other phone may be locked, out of range, or on a network that blocks direct connections.
+                            {copyStatus?.holdersAway
+                                ? 'Whoever has it switched to another app, so their phone can\'t send it now. A server copy gets it to you anyway.'
+                                : 'No data for a while — the other phone may be locked, out of range, or on a network that blocks direct connections.'}
                         </Typography>
+                        {copyStatus && (
+                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
+                                {copyStatus.text}
+                            </Typography>
+                        )}
                         <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                            {tile.hasServerCopy && (
+                            {tile.hasServerCopy ? (
                                 <Button size="small" variant="contained" onClick={handleUseServerCopy}>
                                     Use server copy
+                                </Button>
+                            ) : (!tile.serverCopyUploader || copyStatus?.canAsk) && (
+                                <Button size="small" variant="contained" onClick={handleUseServerCopy}>
+                                    Ask for a server copy
                                 </Button>
                             )}
                             <Button size="small" variant="outlined" onClick={handleRetry}>

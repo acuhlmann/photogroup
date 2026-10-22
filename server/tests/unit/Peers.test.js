@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 import Peers from '../../Peers.js';
 
 const GRACE_MS = 30;
+const AWAY_GRACE_MS = 150;
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 describe('Peers', () => {
@@ -28,7 +29,7 @@ describe('Peers', () => {
         sent = [];
         removedOwners = [];
         emitter.on('removeOwner', peerId => removedOwners.push(peerId));
-        peers = new Peers({ send: msg => sent.push(msg.data) }, null, null, emitter, { leaveGraceMs: GRACE_MS });
+        peers = new Peers({ send: msg => sent.push(msg.data) }, null, null, emitter, { leaveGraceMs: GRACE_MS, awayGraceMs: AWAY_GRACE_MS });
         token = peers.claimSession('s1');
         peers.create({ peerId: 'phone', sessionId: 's1', originPlatform: 'Pixel 7' }, true);
         sent = [];
@@ -139,6 +140,47 @@ describe('Peers', () => {
             assert.strictEqual(peers.leaveNow('s1', 'phone'), false);
             assert.strictEqual(peers.leaveNow('s1', 'phone', 'guess'), false);
             assert.ok(peers.webPeers.has('phone'));
+        });
+    });
+
+    describe('markAway', () => {
+        it('keeps a phone that switched apps, and its photos, past the short grace', async () => {
+            const stream = openStream('s1');
+            assert.strictEqual(peers.markAway('s1', 'phone', token), true);
+            assert.strictEqual(sent.length, 1);
+            assert.strictEqual(sent[0].type, 'update');
+            assert.ok(sent[0].item.away > 0);
+
+            closeStream(stream);
+            await wait(GRACE_MS * 2);
+            assert.ok(peers.webPeers.has('phone'), 'still listed while away');
+            assert.deepStrictEqual(removedOwners, []);
+
+            await wait(AWAY_GRACE_MS);
+            assert.ok(!peers.webPeers.has('phone'), 'gone once away too long');
+            assert.deepStrictEqual(removedOwners, ['phone']);
+        });
+
+        it('stretches the grace when the stream dropped before the beacon arrived', async () => {
+            closeStream(openStream('s1'));
+            peers.markAway('s1', 'phone', token);
+            await wait(GRACE_MS * 2);
+            assert.ok(peers.webPeers.has('phone'));
+        });
+
+        it('clears away when the phone joins again in the foreground, not from the background', () => {
+            peers.markAway('s1', 'phone', token);
+            peers.create({ peerId: 'phone', sessionId: 's1', originPlatform: 'Pixel 7', away: true }, !!peers.claimSession('s1', token));
+            assert.ok(peers.webPeers.get('phone').away > 0);
+            peers.create({ peerId: 'phone', sessionId: 's1', originPlatform: 'Pixel 7' }, !!peers.claimSession('s1', token));
+            assert.strictEqual(peers.webPeers.get('phone').away, undefined);
+        });
+
+        it('requires the session token', () => {
+            assert.strictEqual(peers.markAway('s1', 'phone'), false);
+            assert.strictEqual(peers.markAway('s1', 'phone', 'guess'), false);
+            assert.strictEqual(peers.markAway('s2', 'phone', token), false);
+            assert.strictEqual(peers.webPeers.get('phone').away, undefined);
         });
     });
 });

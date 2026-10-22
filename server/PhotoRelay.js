@@ -1,61 +1,207 @@
 /**
- * PhotoRelay - temporary server-side copy of a photo, the fallback tier
- * when P2P cannot connect two phones (carrier CGNAT, venue Wi-Fi client
- * isolation, uploader's screen locked after sharing...).
+ * PhotoRelay - temporary server copy ("pin") of a photo, the last fallback
+ * tier when P2P, TURN included, can't connect two phones (carrier CGNAT,
+ * venue Wi-Fi client isolation, the only holder's phone asleep...).
  *
- * Deliberately in-memory like everything else in this app: a copy lives
- * only while its room/photo lives, is dropped when the photo is deleted,
- * and is bounded per file and per room so a room cannot fill the disk/RAM
- * of the small production VM.
+ * The app is meant to move photos browser to browser, so a copy is only
+ * pinned when someone needs it (see the routes in Rooms.js) and goes away
+ * as soon as nobody does: once everyone in the room has the photo, at the
+ * latest after COPY_TTL_MS, or with the photo. Copies are written to a
+ * scratch directory wiped at startup (the production VM has 1 GB of RAM),
+ * uploaded in chunks a phone can resume after being backgrounded, and
+ * bounded per file, per room and in total.
  */
-export const MAX_PHOTO_BYTES = 32 * 1024 * 1024; // one large phone photo / short clip
-export const MAX_ROOM_BYTES = 256 * 1024 * 1024;
+import fs from 'fs';
+import fsp from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import { createHash } from 'crypto';
 
-export class PhotoTooLargeError extends Error {
-    constructor(message) { super(message); this.code = 'PHOTO_TOO_LARGE'; }
+const MiB = 1024 * 1024;
+export const MAX_PHOTO_BYTES = 100 * MiB;
+export const MAX_ROOM_BYTES = 1024 * MiB;
+export const MAX_TOTAL_BYTES = Number(process.env.RELAY_MAX_TOTAL_BYTES) || 2048 * MiB;
+// Under Cloud Run's 32 MiB request cap and nginx's client_max_body_size.
+export const MAX_CHUNK_BYTES = 8 * MiB;
+export const COPY_TTL_MS = 24 * 60 * 60 * 1000;
+// An uploader that has sent nothing for this long (its phone went to sleep)
+// lets another holder carry on from the same byte.
+export const UPLOAD_LEASE_MS = 60 * 1000;
+export const STALE_UPLOAD_MS = 10 * 60 * 1000;
+
+export function defaultRelayDir() {
+    if (process.env.RELAY_DIR) return process.env.RELAY_DIR;
+    const name = process.env.NODE_ENV === 'test' ? 'photogroup-relay-test-' + process.pid : 'photogroup-relay';
+    return path.join(os.tmpdir(), name);
+}
+
+/**
+ * `code` says what went wrong: TOO_LARGE / QUOTA (413), EXISTS, BUSY and
+ * OFFSET (409; OFFSET carries `received` so the uploader can resume),
+ * INVALID (400).
+ */
+export class RelayError extends Error {
+    constructor(code, message, extra = {}) {
+        super(message);
+        this.code = code;
+        Object.assign(this, extra);
+    }
 }
 
 export default class PhotoRelay {
-    constructor({ maxPhotoBytes = MAX_PHOTO_BYTES, maxRoomBytes = MAX_ROOM_BYTES } = {}) {
-        this.maxPhotoBytes = maxPhotoBytes;
-        this.maxRoomBytes = maxRoomBytes;
-        this.copies = new Map(); // infoHash -> {buffer, contentType, size}
-        this.totalBytes = 0;
+    constructor({
+        dir = defaultRelayDir(),
+        maxPhotoBytes = MAX_PHOTO_BYTES,
+        maxRoomBytes = MAX_ROOM_BYTES,
+        maxTotalBytes = MAX_TOTAL_BYTES,
+        ttlMs = COPY_TTL_MS,
+        leaseMs = UPLOAD_LEASE_MS,
+        staleUploadMs = STALE_UPLOAD_MS,
+        now = () => Date.now(),
+    } = {}) {
+        dir = path.resolve(dir);
+        Object.assign(this, { dir, maxPhotoBytes, maxRoomBytes, maxTotalBytes, ttlMs, leaseMs, staleUploadMs, now });
+        this.copies = new Map(); // key(roomId, infoHash) -> entry
+        this.totalBytes = 0; // reserved by every upload, finished or not
+        // Copies are temporary: whatever a previous process left is stale.
+        fs.rmSync(dir, { recursive: true, force: true });
+        fs.mkdirSync(dir, { recursive: true });
     }
 
-    put(infoHash, buffer, contentType) {
-        if (!infoHash || !buffer?.length) throw new PhotoTooLargeError('Empty photo copy');
-        if (buffer.length > this.maxPhotoBytes) {
-            throw new PhotoTooLargeError(`Photo copy exceeds ${this.maxPhotoBytes} bytes`);
+    static key(roomId, infoHash) {
+        return roomId + '\n' + infoHash;
+    }
+
+    roomBytes(roomId) {
+        let bytes = 0;
+        this.copies.forEach(entry => { if (entry.roomId === roomId) bytes += entry.size; });
+        return bytes;
+    }
+
+    /** Status of a copy, finished or still uploading, or null. */
+    status(roomId, infoHash) {
+        return this.copies.get(PhotoRelay.key(roomId, infoHash)) || null;
+    }
+
+    /** A finished copy, or null. */
+    get(roomId, infoHash) {
+        const entry = this.status(roomId, infoHash);
+        return entry?.complete ? entry : null;
+    }
+
+    has(roomId, infoHash) {
+        return !!this.get(roomId, infoHash);
+    }
+
+    /**
+     * Write one chunk at `offset` of a file `size` bytes long. The first
+     * chunk reserves quota for the whole file. Resolves to the entry.
+     */
+    async append(roomId, infoHash, { offset, size, buffer, uploader, contentType }) {
+        if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(size) || size <= 0) {
+            throw new RelayError('INVALID', 'Expected offset and size');
         }
-        const previous = this.copies.get(infoHash);
-        const previousSize = previous ? previous.size : 0;
-        if (this.totalBytes - previousSize + buffer.length > this.maxRoomBytes) {
-            throw new PhotoTooLargeError('Room server-copy quota exceeded');
+        if (!buffer?.length) throw new RelayError('INVALID', 'Expected photo bytes');
+        if (offset + buffer.length > size) throw new RelayError('INVALID', 'Chunk runs past the declared size');
+        if (size > this.maxPhotoBytes) {
+            throw new RelayError('TOO_LARGE', `Photos over ${Math.round(this.maxPhotoBytes / MiB)} MB aren't kept on the server`);
         }
-        this.copies.set(infoHash, { buffer, contentType: contentType || 'application/octet-stream', size: buffer.length });
-        this.totalBytes += buffer.length - previousSize;
-        return { size: buffer.length, contentType: contentType || 'application/octet-stream' };
+        const key = PhotoRelay.key(roomId, infoHash);
+        let entry = this.copies.get(key);
+        const now = this.now();
+
+        if (entry?.complete) throw new RelayError('EXISTS', 'Server copy already exists');
+        if (entry && entry.size !== size) throw new RelayError('INVALID', 'Size differs from the upload in progress');
+        if (entry && entry.uploader !== uploader) {
+            // Any holder uploads the same bytes, so another one may carry on
+            // where a sleeping uploader stopped.
+            if (now - entry.lastChunkAt < this.leaseMs) {
+                throw new RelayError('BUSY', 'Someone else is uploading this photo', { uploader: entry.uploader });
+            }
+            entry.uploader = uploader;
+        }
+        if (entry?.writing) throw new RelayError('BUSY', 'A chunk is being written', { uploader: entry.uploader });
+
+        if (!entry) {
+            if (offset !== 0) throw new RelayError('OFFSET', 'Start from the beginning', { received: 0 });
+            if (this.roomBytes(roomId) + size > this.maxRoomBytes) {
+                throw new RelayError('QUOTA', "This room's server copies are full");
+            }
+            if (this.totalBytes + size > this.maxTotalBytes) {
+                throw new RelayError('QUOTA', 'The server is full right now');
+            }
+            const file = path.join(this.dir, createHash('sha256').update(key).digest('hex'));
+            entry = {
+                roomId, infoHash, file, size, received: 0,
+                contentType: contentType || 'application/octet-stream',
+                uploader, startedAt: now, lastChunkAt: now,
+                complete: false, completedAt: null, writing: false,
+            };
+            this.copies.set(key, entry);
+            this.totalBytes += size;
+        }
+        if (offset !== entry.received) {
+            throw new RelayError('OFFSET', 'Resume from byte ' + entry.received, { received: entry.received });
+        }
+
+        entry.writing = true;
+        let failure = null;
+        try {
+            const handle = await fsp.open(entry.file, offset === 0 ? 'w' : 'r+');
+            try {
+                await handle.write(buffer, 0, buffer.length, offset);
+            } finally {
+                await handle.close();
+            }
+        } catch (err) {
+            failure = err;
+        } finally {
+            entry.writing = false;
+        }
+        // Deleted (photo removed, room reset) while writing: its file may
+        // have been removed before this chunk recreated it.
+        if (this.copies.get(key) !== entry) {
+            fs.rm(entry.file, { force: true }, () => {});
+            throw new RelayError('INVALID', 'Photo was removed');
+        }
+        if (failure) throw failure;
+
+        entry.received = offset + buffer.length;
+        entry.lastChunkAt = this.now();
+        if (entry.received === entry.size) {
+            entry.complete = true;
+            entry.completedAt = entry.lastChunkAt;
+        }
+        return entry;
     }
 
-    get(infoHash) {
-        return this.copies.get(infoHash) || null;
-    }
-
-    has(infoHash) {
-        return this.copies.has(infoHash);
-    }
-
-    delete(infoHash) {
-        const previous = this.copies.get(infoHash);
-        if (!previous) return false;
-        this.totalBytes -= previous.size;
-        this.copies.delete(infoHash);
+    delete(roomId, infoHash) {
+        const key = PhotoRelay.key(roomId, infoHash);
+        const entry = this.copies.get(key);
+        if (!entry) return false;
+        this.copies.delete(key);
+        this.totalBytes -= entry.size;
+        fs.rm(entry.file, { force: true }, () => {});
         return true;
     }
 
+    deleteRoom(roomId) {
+        [...this.copies.values()]
+            .filter(entry => entry.roomId === roomId)
+            .forEach(entry => this.delete(roomId, entry.infoHash));
+    }
+
+    /** Drop copies past their time and uploads abandoned midway; return them. */
+    sweep() {
+        const now = this.now();
+        const expired = [...this.copies.values()].filter(entry => entry.complete
+            ? now - entry.completedAt >= this.ttlMs
+            : now - entry.lastChunkAt >= this.staleUploadMs);
+        expired.forEach(entry => this.delete(entry.roomId, entry.infoHash));
+        return expired;
+    }
+
     clear() {
-        this.copies.clear();
-        this.totalBytes = 0;
+        [...this.copies.values()].forEach(entry => this.delete(entry.roomId, entry.infoHash));
     }
 }

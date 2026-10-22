@@ -34,4 +34,30 @@ describe('LoadingTile', () => {
 
         await act(async () => root.unmount());
     });
+
+    it('says who the photo waits for, and offers to ask for a server copy once stalled', async () => {
+        vi.useFakeTimers();
+        try {
+            const emitter = new EventEmitter();
+            const asked = vi.fn();
+            emitter.on('fetchServerCopyNow', asked);
+            const master = { emitter, client: { peerId: 'me' }, peers: { items: [{ peerId: 'me' }, { peerId: 'alex', name: 'Alex', away: 1 }] } };
+            const tile = { infoHash: 'h', loading: true, fileName: 'a.jpg', owners: [{ peerId: 'alex', loading: false }] };
+            const div = document.createElement('div');
+            const root = createRoot(div);
+
+            await act(async () => root.render(<LoadingTile tile={tile} master={master} name="a" />));
+            expect(div.textContent).toContain('Waiting for Alex to come back');
+
+            await act(async () => vi.advanceTimersByTime(20000));
+            const button = [...div.querySelectorAll('button')].find(item => item.textContent === 'Ask for a server copy');
+            expect(div.textContent).toContain('switched to another app');
+            await act(async () => button.click());
+            expect(asked).toHaveBeenCalledWith(tile);
+
+            await act(async () => root.unmount());
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

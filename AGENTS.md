@@ -63,6 +63,50 @@ Location comes from EXIF/XMP GPS, HEIC Exif items and video `udta`/`meta` boxes 
 
 The gallery toolbar (`gallery/GalleryToolbar.js`) sorts and filters tiles through `gallery/arrangeTiles.js` (rating, date taken, place grouped by town and country, text search over titles, descriptions, keywords and places) and switches to `gallery/RoomMap.js`, which pins every located photo on one map; the viewer pages through the tiles the current view shows.
 
+### Presence and server copies (fallback when P2P fails)
+
+Peers drop their SSE stream whenever a phone switches apps, so presence has
+two grace periods (`server/Peers.js`). A stream that closes is gone after
+10 s. A tab that goes to the background first sends an `away` beacon
+(`POST /api/rooms/:id/peers/:peerId/away`, session token in the query), and
+keeps its place and its photo ownership for 10 minutes. On resume,
+`torrent/TrackerKick.js` reopens tracker sockets at once instead of waiting
+out bittorrent-tracker's reconnect timer (10 s plus up to 5 min of jitter).
+It also works around that library's pooled-socket bug, where a tracker that
+joins a socket still connecting never announces. `util/ConnectionRecovery.js`
+reports hide and resume events.
+
+When P2P and TURN both fail, a temporary server copy is the last tier. It is
+pinned **only when needed**:
+
+- **Receiver** (`torrent/ServerFallback.js`): after a 10 s stall it calls
+  `POST .../photos/blob/request`.
+- **Holder** (`torrent/ServerPinning.js`, any device that has the whole
+  photo): it uploads when the photo carries `serverCopyRequestedAt`, or on
+  its way into the background if someone present still lacks the photo.
+  When the room setting `keepCopies` is on (`PUT /api/rooms/:id/settings`,
+  SSE event `room`), it uploads right after sharing.
+
+Uploads are resumable chunks of 8 MB or less:
+`PUT .../photos/blob?infoHash&offset&size`, with `X-Session-Id` and
+`X-Session-Token` headers. A wrong offset gets 409 with `received`. One
+uploader holds a 60 s lease.
+
+`server/PhotoRelay.js` stores copies on disk under `os.tmpdir()`, wiped at
+startup. Limits are 100 MB per file, 1 GB per room and 2 GB in total.
+
+A copy is deleted when any of these happens:
+
+- everyone in the room has the photo (unless `keepCopies` is on);
+- 24 h have passed;
+- the photo is deleted.
+
+Copy state (`hasServerCopy`, `serverCopyReceived`/`Size`/`Uploader`,
+`serverCopyRequestedAt`) is server-managed. The generic photo PUT ignores it,
+along with `owners` and `peerId`. `torrent/RoomPhotos.js` mirrors it, with
+owners, for the client logic outside React. nginx needs
+`client_max_body_size 10m` for the chunks.
+
 ### Important: No persistence
 
 Everything is in memory. Server restart = all rooms/photos gone. This is by design for the experimental stage.

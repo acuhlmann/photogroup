@@ -3,7 +3,7 @@ import Logger from 'js-logger';
 import IdbKvStore from 'idb-kv-store';
 import Peers from '../topology/Peers';
 import idb from 'indexeddb-chunk-store';
-import TorrentAddition from './TorrentAddition';
+import TorrentAddition, { readFileBlob } from './TorrentAddition';
 import TorrentDeletion from "./TorrentDeletion";
 import TorrentCreator from "./TorrentCreator";
 import FileUtil from '../util/FileUtil';
@@ -11,10 +11,14 @@ import platform from 'platform';
 import _ from 'lodash';
 import humanizeDuration from 'humanize-duration'
 import MetadataParser from "../gallery/metadata/MetadataParser";
-import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash } from './WebTorrentUtils';
+import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isCompoundInfoHash } from './WebTorrentUtils';
 import { cacheGet, cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
-import ServerFallback from './ServerFallback';
-import ConnectionRecovery from '../util/ConnectionRecovery';
+import ServerFallback, { isSharedPhoto } from './ServerFallback';
+import ServerPinning from './ServerPinning';
+import RoomPhotos from './RoomPhotos';
+import TrackerKick from './TrackerKick';
+import { holdersOf, activeHolders } from '../topology/presence';
+import ConnectionRecovery, { freezesWhenHidden } from '../util/ConnectionRecovery';
 
 export default class TorrentMaster {
 
@@ -31,6 +35,8 @@ export default class TorrentMaster {
         this.STREAMING_VIDEO_FORMATS = ['mp4', 'm4v', 'm4a'];
         this.STREAMING_AUDIO_FORMATS = ['mp3'];
         this.STREAMING_FORMATS = [...this.STREAMING_VIDEO_FORMATS, ...this.STREAMING_AUDIO_FORMATS];
+        // Before anything else listens to 'photos': others read it.
+        this.roomPhotos = new RoomPhotos(emitter);
         this.torrentsDb = new IdbKvStore('torrents');
         this.torrentsDb.on('open',() => {
             Logger.info('torrentsDb open');
@@ -75,18 +81,41 @@ export default class TorrentMaster {
             this.connectionSpeedType = type;
         });
 
-        // Fallback tier: fetch the server copy when P2P stalls.
+        // Last tier: when P2P stalls, ask for a server copy and fetch it...
         this.serverFallback = new ServerFallback({
             fetchCopy: infoHash => this.service.fetchServerCopy ? this.service.fetchServerCopy(infoHash) : Promise.resolve(null),
+            requestCopy: async infoHash => {
+                const state = await this.service.requestServerCopy(infoHash);
+                // A copy may have been announced before we were listening
+                // (joining while it was uploaded); the answer says so. Only
+                // then: it can arrive after a newer broadcast about the copy.
+                if (state?.hasServerCopy) this.emitter.emit('photos', { type: 'update', item: [state] });
+                return state;
+            },
             cachePut,
+            verify: isSharedPhoto,
             emitter: this.emitter
         });
+        // ...and leave one when someone needs a photo we have.
+        this.serverPinning = new ServerPinning({
+            service: this.service,
+            roomPhotos: this.roomPhotos,
+            getPeers: () => this.peers.items,
+            getMyPeerId: () => this.client?.peerId,
+            findBytes: infoHash => this.findPhotoBytes(infoHash),
+            emitter: this.emitter
+        });
+        this._serverCopies = new Map();
+        this.emitter.on('serverCopyReady', photo => this.handleServerCopyReady(photo));
 
         // Phones freeze pages in background: on return, re-announce to
         // trackers, reopen SSE and re-sync anything missed while asleep.
         this._lastResumeAt = 0;
+        this.trackerKick = new TrackerKick({ getTorrents: () => this.client?.torrents || [] });
+        this.trackerKick.start();
         this.connectionRecovery = new ConnectionRecovery({
-            onResume: reason => this.handleResume(reason)
+            onResume: (reason, details) => this.handleResume(reason, details),
+            onHide: () => this.handleHide()
         });
         try { this.connectionRecovery.start(); } catch { /* non-browser env */ }
 
@@ -95,16 +124,73 @@ export default class TorrentMaster {
         this.emitter.on('retryTorrent', photo => { this.retryPhoto(photo).catch(err => Logger.warn('retryPhoto: ' + err)); });
     }
 
-    /** User tapped "use server copy" on a stalled tile. */
+    /**
+     * What a receiver needs to decide about the server copy: whether one
+     * exists, and whether anyone who has the photo is still in front.
+     */
+    copyState(infoHash) {
+        const photo = this.roomPhotos.get(infoHash);
+        if (!photo) return {};
+        const peers = this.peers.items || [];
+        const me = this.client?.peerId;
+        return {
+            hasServerCopy: !!photo.hasServerCopy,
+            holders: holdersOf(photo, peers, me).length,
+            activeHolders: activeHolders(photo, peers, me).length
+        };
+    }
+
+    /** User tapped "use server copy" (or "ask for one") on a stalled tile. */
     async fetchServerCopyNow(photo) {
         if (!photo?.infoHash || !this.serverFallback) return false;
         if (!this.serverFallback.watched.has(photo.infoHash)) {
             const torrent = getTorrent(this.client, getBaseInfoHash(photo.infoHash));
-            this.serverFallback.watch(photo, () => torrent
-                ? { progress: torrent.progress, done: torrent.done }
-                : { progress: 0, done: false });
+            this.serverFallback.watch(photo, () => ({
+                ...(torrent ? { progress: torrent.progress, done: torrent.done } : { progress: 0, done: false }),
+                ...this.copyState(photo.infoHash)
+            }));
         }
         return this.serverFallback.fetchNow(photo.infoHash);
+    }
+
+    /**
+     * Got a photo from its server copy: tell the room we have it (so the
+     * copy can go once everyone does) and keep the bytes, in case someone
+     * else asks for a copy later.
+     */
+    handleServerCopyReady(photo) {
+        if (!photo?.infoHash || !photo.file) return;
+        this._serverCopies.set(photo.infoHash, photo.file);
+        const peerId = this.client?.peerId;
+        if (!peerId) return;
+        const owner = () => [{ infoHash: photo.infoHash, peerId, loading: false }];
+        Promise.resolve(this.service.addOwner?.(owner()))
+            .then(() => this.service.updateOwner?.(owner()))
+            .catch(err => Logger.warn('owner after server copy: ' + err));
+    }
+
+    /**
+     * The photo exactly as its torrent carries it (ciphertext for encrypted
+     * shares), for leaving a server copy: what we got from the server, the
+     * finished torrent, or the image cache.
+     */
+    async findPhotoBytes(infoHash) {
+        const delivered = this._serverCopies.get(infoHash);
+        if (delivered) return delivered;
+        const torrent = getTorrent(this.client, getBaseInfoHash(infoHash));
+        if (torrent?.done && torrent.files) {
+            const path = isCompoundInfoHash(infoHash) ? getFilePathFromInfoHash(infoHash) : null;
+            const file = path
+                ? torrent.files.find(item => item.path === path)
+                : torrent.files.find(item => !item.name.startsWith('Thumbnail '));
+            if (file) {
+                const blob = await readFileBlob(file).catch(() => null);
+                if (blob) return blob;
+            }
+        }
+        // The sharer's cache holds the decrypted original: never for encrypted shares.
+        if (this.roomPhotos.get(infoHash)?.secure) return null;
+        return cacheGet(infoHash).catch(() => null);
     }
 
     /** User tapped "retry connection": re-announce and re-add the torrent. */
@@ -129,12 +215,28 @@ export default class TorrentMaster {
         return true;
     }
 
-    handleResume(reason) {
+    /**
+     * A phone going to the background (another app, screen lock) is about
+     * to freeze: tell the room we're only away, so others keep counting on
+     * us when we come back, and leave a server copy of what someone still
+     * waits for. A desktop tab keeps running hidden, so neither applies.
+     */
+    handleHide({ freezes = freezesWhenHidden() } = {}) {
+        if (!freezes) return;
+        try { this.service.markAway?.(); } catch (err) { Logger.warn('markAway: ' + err); }
+        try { this.serverPinning?.onHide(); } catch (err) { Logger.warn('serverPinning on hide: ' + err); }
+    }
+
+    handleResume(reason, { hiddenMs = 0, networkChanged = false } = {}) {
+        if (hiddenMs > 0) this.serverFallback?.resetClocks();
         const now = Date.now();
         if (now - this._lastResumeAt < 2000) return; // visibility + online fire together
         this._lastResumeAt = now;
-        Logger.info('ConnectionRecovery: resuming trackers and room sync');
-        try { this.restartTrackers(); } catch (err) { Logger.warn('restartTrackers on resume: ' + err); }
+        Logger.info('ConnectionRecovery: resuming (' + reason + ', away ' + Math.round(hiddenMs / 1000) + 's)');
+        // Back in the swarm now, not after the tracker library's jitter.
+        try { this.trackerKick?.kick({ hiddenMs, networkChanged }); } catch (err) { Logger.warn('trackerKick on resume: ' + err); }
+        this.creator?.refreshIceServers?.().catch(err => Logger.warn('refreshIceServers: ' + err));
+        this.serverPinning?.onResume();
         if (reason !== 'sse') {
             try { this.service.reconnectUpdates?.(); } catch { /* SSE already handled */ }
         }
@@ -161,6 +263,7 @@ export default class TorrentMaster {
                 const peers = this.peers.items = response.peers;
                 this.peers.connections = response.connections;
                 this.emitter.emit('peers', {type: 'all', item: peers});
+                if (response.settings) this.emitter.emit('roomSettings', response.settings);
 
                 const photos = response.photos;
                 Logger.info(`photos: ${photos.length} peers ${peers.length}`);
@@ -272,10 +375,12 @@ export default class TorrentMaster {
         if(isOwner) {
             const found = item.owners && item.owners.find(owner => owner.peerId === peerId);
             if(!found) {
+                // Metadata alone isn't the photo: others (and the server's
+                // "everyone has it" check) must not count an unfinished download.
                 return {
                     infoHash: item.infoHash,
                     peerId: peerId,
-                    loading: false
+                    loading: !torrent.done
                 }
             }
         }
@@ -584,16 +689,7 @@ export default class TorrentMaster {
                 this.releaseCachedPhoto(infoHash);
                 this.torrentDeletion.handlePhotoDeleteEvent(infoHash);
                 this.serverFallback?.unwatch(infoHash);
-            } else if(event.type === 'update') {
-                // A server copy may appear after we already started (and
-                // stalled on) the P2P download - start watching it then.
-                const items = Array.isArray(event.item) ? event.item : [event.item];
-                items.filter(item => item?.hasServerCopy).forEach(item => {
-                    const torrent = getTorrent(this.client, getBaseInfoHash(item.infoHash));
-                    if (torrent && this.client.peerId !== item.peerId) {
-                        this.serverFallback?.watch(item, () => ({ progress: torrent.progress, done: torrent.done }));
-                    }
-                });
+                this._serverCopies?.delete(infoHash);
             }
         });
     }
@@ -656,24 +752,9 @@ export default class TorrentMaster {
         return foundItem;
     }
 
+    /** Reconnect every tracker socket now and announce with fresh offers. */
     restartTrackers() {
-        this.client.torrents.forEach(torrent => {
-
-            const isReady = torrent.discovery && torrent.discovery.tracker
-                && torrent.discovery.tracker._trackers && torrent.discovery.tracker._trackers.length > 0;
-            if(isReady) {
-
-                const trackers = torrent.discovery.tracker._trackers;
-
-                //Logger.info('torrent trackers ready ' + trackers.length);
-
-                trackers.forEach(tracker => {
-                    const announceUrl = tracker.announceUrl;
-                    Logger.warn('restartTrackers ' + announceUrl);
-                    tracker._openSocket();
-                });
-            }
-        });
+        return this.trackerKick.kick({ networkChanged: true });
     }
 
     leaveRoomAndReload() {
