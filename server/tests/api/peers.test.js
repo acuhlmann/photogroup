@@ -86,5 +86,22 @@ describe('Peers API', () => {
                 .expect(404, done);
         });
     });
+    describe('POST /api/rooms/:id/peers/:peerId/away', () => {
+        it('marks the caller away only with its session token', async () => {
+            const roomId = 'test-room-away-' + Date.now();
+            const peer = { peerId: 'away-peer-' + Date.now(), sessionId: 'away-session-' + Date.now(), originPlatform: 'Pixel 7' };
+            const joined = await request(app).post('/api/rooms/').send({ id: roomId, peer }).expect(200);
+            const url = `/api/rooms/${roomId}/peers/${peer.peerId}/away?sessionId=${peer.sessionId}`;
+
+            const denied = await request(app).post(url + '&token=guess').expect(200);
+            assert.strictEqual(denied.body, false);
+            await request(app).post(`/api/rooms/${roomId}/peers/${peer.peerId}/away`).expect(400);
+
+            const ok = await request(app).post(url + '&token=' + joined.body.sessionToken).expect(200);
+            assert.strictEqual(ok.body, true);
+            const room = await request(app).get(`/api/rooms/${roomId}`).expect(200);
+            assert.ok(room.body.peers.find(item => item.peerId === peer.peerId).away > 0);
+        });
+    });
 });
 

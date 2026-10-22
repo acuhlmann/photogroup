@@ -22,7 +22,13 @@ function fakeEnv() {
         addEventListener: (n, f) => { listeners['doc:' + n] = f; },
         removeEventListener: (n) => { delete listeners['doc:' + n]; },
     };
-    return { listeners, target, documentObj };
+    const navigatorObj = {
+        connection: {
+            addEventListener: (n, f) => { listeners['net:' + n] = f; },
+            removeEventListener: (n) => { delete listeners['net:' + n]; },
+        },
+    };
+    return { listeners, target, documentObj, navigatorObj };
 }
 
 describe('ConnectionRecovery', () => {
@@ -32,7 +38,7 @@ describe('ConnectionRecovery', () => {
         const recovery = new ConnectionRecovery({ onResume, target, documentObj, navigatorObj: {}, wakeLock: false });
         recovery.start();
         listeners.online();
-        expect(onResume).toHaveBeenCalledWith('online');
+        expect(onResume).toHaveBeenCalledWith('online', { hiddenMs: 0, networkChanged: true });
         documentObj.visibilityState = 'hidden';
         listeners['doc:visibilitychange']();
         expect(onResume).toHaveBeenCalledTimes(1);
@@ -41,6 +47,52 @@ describe('ConnectionRecovery', () => {
         expect(onResume).toHaveBeenCalledTimes(2);
         recovery.stop();
         expect(listeners.online).toBeUndefined();
+    });
+
+    it('tells the app when the page goes to the background and how long it was away', () => {
+        const { listeners, target, documentObj, navigatorObj } = fakeEnv();
+        let now = 1000;
+        const onResume = vi.fn();
+        const onHide = vi.fn();
+        const recovery = new ConnectionRecovery({ onResume, onHide, target, documentObj, navigatorObj, wakeLock: false, now: () => now });
+        recovery.start();
+
+        documentObj.visibilityState = 'hidden';
+        listeners['doc:visibilitychange']();
+        expect(onHide).toHaveBeenCalledTimes(1);
+
+        now += 45000;
+        documentObj.visibilityState = 'visible';
+        listeners['doc:visibilitychange']();
+        expect(onResume).toHaveBeenLastCalledWith('visible', { hiddenMs: 45000, networkChanged: false });
+
+        // Shown again without having been hidden: nothing was missed.
+        listeners['doc:visibilitychange']();
+        expect(onResume).toHaveBeenLastCalledWith('visible', { hiddenMs: 0, networkChanged: false });
+    });
+
+    it('resumes after the back/forward cache, a lifecycle unfreeze and a network change', () => {
+        const { listeners, target, documentObj, navigatorObj } = fakeEnv();
+        const onResume = vi.fn();
+        const recovery = new ConnectionRecovery({ onResume, target, documentObj, navigatorObj, wakeLock: false });
+        recovery.start();
+
+        listeners.pageshow({ persisted: false });
+        expect(onResume).not.toHaveBeenCalled();
+        listeners.pageshow({ persisted: true });
+        expect(onResume).toHaveBeenLastCalledWith('pageshow', expect.any(Object));
+        listeners['doc:resume']();
+        expect(onResume).toHaveBeenLastCalledWith('resume', expect.any(Object));
+
+        // A network change counts even in the background: Android keeps the
+        // page running a while, and it may still have peers to serve.
+        documentObj.visibilityState = 'hidden';
+        listeners['net:change']();
+        expect(onResume).toHaveBeenLastCalledWith('network', { hiddenMs: 0, networkChanged: true });
+
+        recovery.stop();
+        expect(listeners['net:change']).toBeUndefined();
+        expect(listeners['doc:resume']).toBeUndefined();
     });
 
     it('acquires a screen wake lock and tolerates its absence', async () => {

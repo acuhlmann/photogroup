@@ -75,6 +75,18 @@ export default class ServerFallback {
         [...this.watched.keys()].forEach(key => this.unwatch(key));
     }
 
+    /**
+     * The page was asleep: no transfer could make progress while frozen.
+     * Give P2P a fresh stall window to reconnect before using the server.
+     */
+    resetClocks() {
+        const now = this.now();
+        this.watched.forEach(entry => {
+            entry.startedAt = now;
+            entry.lastProgressAt = now;
+        });
+    }
+
     /** Deliver the server copy right now (user tapped "use server copy"). */
     async fetchNow(infoHash) {
         const entry = this.watched.get(infoHash);

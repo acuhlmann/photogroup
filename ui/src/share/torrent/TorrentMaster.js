@@ -14,6 +14,7 @@ import MetadataParser from "../gallery/metadata/MetadataParser";
 import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash } from './WebTorrentUtils';
 import { cacheGet, cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 import ServerFallback from './ServerFallback';
+import TrackerKick from './TrackerKick';
 import ConnectionRecovery from '../util/ConnectionRecovery';
 
 export default class TorrentMaster {
@@ -85,8 +86,11 @@ export default class TorrentMaster {
         // Phones freeze pages in background: on return, re-announce to
         // trackers, reopen SSE and re-sync anything missed while asleep.
         this._lastResumeAt = 0;
+        this.trackerKick = new TrackerKick({ getTorrents: () => this.client?.torrents || [] });
+        this.trackerKick.start();
         this.connectionRecovery = new ConnectionRecovery({
-            onResume: reason => this.handleResume(reason)
+            onResume: (reason, details) => this.handleResume(reason, details),
+            onHide: () => this.handleHide()
         });
         try { this.connectionRecovery.start(); } catch { /* non-browser env */ }
 
@@ -129,12 +133,23 @@ export default class TorrentMaster {
         return true;
     }
 
-    handleResume(reason) {
+    /**
+     * Going to the background (another app, screen lock): tell the room
+     * we're only away, so others keep counting on us when we come back.
+     */
+    handleHide() {
+        try { this.service.markAway?.(); } catch (err) { Logger.warn('markAway: ' + err); }
+    }
+
+    handleResume(reason, { hiddenMs = 0, networkChanged = false } = {}) {
+        if (hiddenMs > 0) this.serverFallback?.resetClocks();
         const now = Date.now();
         if (now - this._lastResumeAt < 2000) return; // visibility + online fire together
         this._lastResumeAt = now;
-        Logger.info('ConnectionRecovery: resuming trackers and room sync');
-        try { this.restartTrackers(); } catch (err) { Logger.warn('restartTrackers on resume: ' + err); }
+        Logger.info('ConnectionRecovery: resuming (' + reason + ', away ' + Math.round(hiddenMs / 1000) + 's)');
+        // Back in the swarm now, not after the tracker library's jitter.
+        try { this.trackerKick?.kick({ hiddenMs, networkChanged }); } catch (err) { Logger.warn('trackerKick on resume: ' + err); }
+        this.creator?.refreshIceServers?.().catch(err => Logger.warn('refreshIceServers: ' + err));
         if (reason !== 'sse') {
             try { this.service.reconnectUpdates?.(); } catch { /* SSE already handled */ }
         }
@@ -272,10 +287,12 @@ export default class TorrentMaster {
         if(isOwner) {
             const found = item.owners && item.owners.find(owner => owner.peerId === peerId);
             if(!found) {
+                // Metadata alone isn't the photo: others (and the server's
+                // "everyone has it" check) must not count an unfinished download.
                 return {
                     infoHash: item.infoHash,
                     peerId: peerId,
-                    loading: false
+                    loading: !torrent.done
                 }
             }
         }
@@ -656,24 +673,9 @@ export default class TorrentMaster {
         return foundItem;
     }
 
+    /** Reconnect every tracker socket now and announce with fresh offers. */
     restartTrackers() {
-        this.client.torrents.forEach(torrent => {
-
-            const isReady = torrent.discovery && torrent.discovery.tracker
-                && torrent.discovery.tracker._trackers && torrent.discovery.tracker._trackers.length > 0;
-            if(isReady) {
-
-                const trackers = torrent.discovery.tracker._trackers;
-
-                //Logger.info('torrent trackers ready ' + trackers.length);
-
-                trackers.forEach(tracker => {
-                    const announceUrl = tracker.announceUrl;
-                    Logger.warn('restartTrackers ' + announceUrl);
-                    tracker._openSocket();
-                });
-            }
-        });
+        return this.trackerKick.kick({ networkChanged: true });
     }
 
     leaveRoomAndReload() {

@@ -18,7 +18,8 @@ function UserListItem({peer, classes}) {
         return StringUtil.addEmptySpaces([
             peer.connectionSpeedType,
             peer.name,
-            peer.originPlatform
+            peer.originPlatform,
+            peer.away ? '· away' : ''
         ]);
     };
 

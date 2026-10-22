@@ -6,15 +6,20 @@ import _ from 'lodash';
 // handover and reopen it moments later; only a session that stays away this
 // long has left the room.
 const LEAVE_GRACE_MS = 10000;
+// A phone that said it was only switching apps (or locking its screen) keeps
+// its place, and its photos stay listed as available from it, this long.
+// Coming back within it rejoins without anyone seeing it leave.
+const AWAY_GRACE_MS = 10 * 60 * 1000;
 
 export default class Peers {
 
-    constructor(updateChannel, remoteLog, app, emitter, { leaveGraceMs = LEAVE_GRACE_MS } = {}) {
+    constructor(updateChannel, remoteLog, app, emitter, { leaveGraceMs = LEAVE_GRACE_MS, awayGraceMs = AWAY_GRACE_MS } = {}) {
         this.updateChannel = updateChannel;
         this.remoteLog = remoteLog;
         this.app = app;
         this.emitter = emitter;
         this.leaveGraceMs = leaveGraceMs;
+        this.awayGraceMs = awayGraceMs;
 
         this.webPeers = new Map();
         this.clientsBySessionId = new Map();
@@ -70,6 +75,13 @@ export default class Peers {
         });
         if(ownsSession) {
             this.replaceSession(peer);
+        }
+        // A tab joining from the background (its stream reconnected while
+        // the phone shows another app) is still away.
+        if(peer.away) {
+            peer.away = Date.now();
+        } else {
+            delete peer.away;
         }
         this.webPeers.set(peer.peerId, peer);
         this.sendWebPeers('add', peer);
@@ -184,6 +196,24 @@ export default class Peers {
         return true;
     }
 
+    // Sent by a tab going to the background (sendBeacon on visibilitychange).
+    // Its stream will likely drop while the phone sleeps; keep the peer, and
+    // the photos it holds, for the longer away grace period.
+    markAway(sessionId, peerId, token) {
+        const peer = this.webPeers.get(peerId);
+        if(!peer || peer.sessionId !== sessionId) return false;
+        if(!token || this.sessionTokens.get(sessionId) !== token) return false;
+        if(!peer.away) {
+            peer.away = Date.now();
+            this.sendWebPeers('update', peer);
+        }
+        // Its stream may already be gone, with the short grace running.
+        if(this.leaveTimers.has(sessionId)) {
+            this.scheduleLeave(sessionId);
+        }
+        return true;
+    }
+
     /** Return the session's peer for a matching token, or null if either lookup fails. */
     peerForSession(sessionId, token) {
         if(typeof sessionId !== 'string' || !sessionId) return null;
@@ -201,9 +231,14 @@ export default class Peers {
         // reaches us; only the session's current stream counts.
         if(response && this.clientsBySessionId.get(sessionId) !== response) return;
         this.clientsBySessionId.delete(sessionId);
+        this.scheduleLeave(sessionId);
+    }
 
+    scheduleLeave(sessionId) {
         clearTimeout(this.leaveTimers.get(sessionId));
-        const timer = setTimeout(() => this.leave(sessionId), this.leaveGraceMs);
+        const peer = this.peers.find(item => item.sessionId === sessionId);
+        const graceMs = peer?.away ? this.awayGraceMs : this.leaveGraceMs;
+        const timer = setTimeout(() => this.leave(sessionId), graceMs);
         timer.unref?.();
         this.leaveTimers.set(sessionId, timer);
     }

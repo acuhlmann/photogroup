@@ -88,6 +88,19 @@ export default class RoomsService {
             + '&token=' + encodeURIComponent(this.sessionToken));
     }
 
+    /**
+     * Going to the background: tell the room we're away, not gone, so it
+     * keeps us (and the photos we hold) through a longer grace period.
+     */
+    markAway() {
+        if (!this.hasRoom) return false;
+        const peerId = this.master?.client?.peerId;
+        if (!peerId || !this.sessionToken || !navigator.sendBeacon) return false;
+        return navigator.sendBeacon(this.url + '/' + this.id + '/peers/' + encodeURIComponent(peerId)
+            + '/away?sessionId=' + encodeURIComponent(this.sessionId)
+            + '&token=' + encodeURIComponent(this.sessionToken));
+    }
+
     changeUrl(name, value) {
         const location = window.location;
         const params = new URLSearchParams(location.search);
@@ -134,7 +147,18 @@ export default class RoomsService {
         this._sseIntentionallyClosed = false;
 
         const source = this._eventSource = new window.EventSource('/api/rooms/' + this.id + '/updates/?sessionId=' + this.sessionId);
-        source.addEventListener('open', () => { scope._sseReconnectAttempt = 0; }, false);
+        // Whoever opened this stream re-syncs on their own; only a reconnect
+        // the browser does by itself needs to ask for one (below).
+        this._sseDropped = false;
+        source.addEventListener('open', () => {
+            scope._sseReconnectAttempt = 0;
+            // Back after the browser's own retry: anything broadcast in the
+            // gap was missed, and after a long gap the room dropped us.
+            if (scope._sseDropped) {
+                scope._sseDropped = false;
+                scope.emitter.emit('sseReconnected');
+            }
+        }, false);
 
         source.addEventListener('photos', event => {
 
@@ -205,15 +229,10 @@ export default class RoomsService {
             if (source.readyState === EventSource.CLOSED) {
                 Logger.error('Connection was closed');
                 scope.scheduleSseReconnect();
+            } else {
+                scope._sseDropped = true;
             }
         }, false);
-
-        source.onerror = e => {
-            Logger.error('sse error: ' + JSON.stringify(e));
-            if (source.readyState === EventSource.CLOSED) {
-                scope.scheduleSseReconnect();
-            }
-        };
     }
 
     /** Leave a temporary server copy of a photo as P2P insurance. */
@@ -279,7 +298,10 @@ export default class RoomsService {
             peerId: this.master.client.peerId,
             originPlatform: this.master.originPlatform,
             name: localStorage.getItem('nickname'),
-            networkChain: this.networkChain
+            networkChain: this.networkChain,
+            // Rejoining while another app is in front (the stream came back
+            // in the background) doesn't make us present again.
+            away: typeof document !== 'undefined' && document.visibilityState === 'hidden'
         };
     }
 

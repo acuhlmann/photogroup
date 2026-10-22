@@ -184,6 +184,9 @@ export default defineConfig({
     setupFiles: './src/setupTests.js',
     exclude: ['**/node_modules/**', '**/e2e/**', '**/dist/**'],
     include: ['**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    // Processed by Vite so tests can swap its WebSocket for a fake
+    // (TrackerKick.test.js drives the real tracker client).
+    server: { deps: { inline: ['bittorrent-tracker'] } },
   },
 });
 

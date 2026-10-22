@@ -629,6 +629,20 @@ export default class Rooms {
             }
             response.send(room.peers.leaveNow(sessionId, request.params.peerId, request.query.token));
         });
+
+        // sendBeacon from a tab going to the background: only away, not gone.
+        app.post('/api/rooms/:id/peers/:peerId/away', (request, response) => {
+
+            const room = this.rooms.get(request.params.id);
+            if(!room) {
+                return response.status(404).send('Room not found');
+            }
+            const sessionId = request.query.sessionId;
+            if(typeof sessionId !== 'string' || !sessionId) {
+                return response.status(400).send('Expected sessionId');
+            }
+            response.send(room.peers.markAway(sessionId, request.params.peerId, request.query.token));
+        });
     }
 
     setupSSE() {
