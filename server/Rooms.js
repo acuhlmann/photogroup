@@ -4,7 +4,7 @@ import ServerPeer from './ServerPeer.js';
 import Topology from './Topology.js';
 import Peers from './Peers.js';
 import MyDht from './MyDht.js';
-import PhotoRelay, { MAX_PHOTO_BYTES, PhotoTooLargeError } from './PhotoRelay.js';
+import PhotoRelay, { MAX_CHUNK_BYTES, RelayError } from './PhotoRelay.js';
 import { parseDetails, applyDetails, PhotoDetailsError } from './PhotoDetails.js';
 import express from 'express';
 import _ from 'lodash';
@@ -17,6 +17,13 @@ const SAFE_MEDIA_TYPES = new Set([
     'audio/aac', 'audio/flac'
 ]);
 
+// Server-copy state is the server's to set: a client PUT carrying a stale
+// view of it (the whole tile is sent after rendering) must not revive a
+// deleted copy, and owners only change through the owner routes.
+const SERVER_MANAGED_FIELDS = ['owners', 'hasServerCopy', 'serverCopySize', 'serverCopyReceived',
+    'serverCopyRequestedAt', 'serverCopyUploader'];
+const RELAY_SWEEP_MS = 5 * 60 * 1000;
+
 export default class Rooms {
 
     constructor(updateChannel, remoteLog, app, emitter, ice, tracker) {
@@ -28,6 +35,7 @@ export default class Rooms {
         this.tracker = tracker;
 
         this.rooms = new Map();
+        this.relay = new PhotoRelay();
         //this.dht = new MyDht();
         //this.dht.start();
 
@@ -36,6 +44,9 @@ export default class Rooms {
 
             [...this.rooms.values()].forEach(room => {
                 this.removeOwner(room, peerId);
+                // The one still waiting may have been the one who left; it
+                // is only dropped from the room's peers after this event.
+                setImmediate(() => this.releaseCopiesEveryoneHas(room));
             });
         });
     }
@@ -47,6 +58,8 @@ export default class Rooms {
         this.registerOwnerRoutes(this.app);
         this.registerConnectionRoutes(this.app);
         this.registerPhotoRelayRoutes(this.app);
+        this.sweepTimer = setInterval(() => this.sweepCopies(), RELAY_SWEEP_MS);
+        this.sweepTimer.unref?.();
     }
 
     reset() {
@@ -54,6 +67,7 @@ export default class Rooms {
             if (room.photoIndex) room.photoIndex.clear();
         });
         this.rooms.clear();
+        this.relay.clear();
     }
 
     /** Register room and photo routes, including authenticated shared-detail updates. */
@@ -73,6 +87,7 @@ export default class Rooms {
                 photos: room.photos,
                 peers: peers,
                 connections: room.topology.connections,
+                settings: room.settings,
                 sessionToken: sessionToken || undefined
             });
         }
@@ -86,6 +101,7 @@ export default class Rooms {
                 response.send({
                     photos: room.photos,
                     peers: room.peers.peers,
+                    settings: room.settings,
                 });
 
             } else {
@@ -112,11 +128,13 @@ export default class Rooms {
                 id: id,
                 photos: [],
                 photoIndex: new Map(),
-                connections: []
+                connections: [],
+                // keepCopies: leave a server copy of every photo for people
+                // who join later, instead of only when someone needs one.
+                settings: { keepCopies: false }
             };
             room.peers = new Peers(this.updateChannel, this.remoteLog, this.app, this.emitter);
             room.topology = new Topology(room.peers, this.updateChannel);
-            room.relay = new PhotoRelay();
             //room.serverPeer = new ServerPeer(room.topology, this.remoteLog, this, this.ice, this.emitter, this.tracker);
             rooms.set(id, room);
 
@@ -187,6 +205,7 @@ export default class Rooms {
                     if (!photo) {
 
                         photo = requestPhoto;
+                        SERVER_MANAGED_FIELDS.forEach(field => delete photo[field]);
                         photo.owners = [];
 
                         room.photos.unshift(photo);
@@ -231,6 +250,9 @@ export default class Rooms {
                     // Shared title/description/rating only change through the
                     // validated, attributed details route below.
                     delete update.details;
+                    // Nor can anyone take over a photo by rewriting its owner.
+                    delete update.peerId;
+                    SERVER_MANAGED_FIELDS.forEach(field => delete update[field]);
                     _.merge(existing, update);
                     return existing;
                 }).filter(item => item !== null);
@@ -295,7 +317,7 @@ export default class Rooms {
                         if (item.infoHash === infoHash) {
                             room.photos.splice(index, 1);
                             this.removeFromPhotoIndex(room, infoHash);
-                            room.relay?.delete(infoHash);
+                            this.relay.delete(room.id, infoHash);
                             return true;
                         }
                         return false;
@@ -316,64 +338,203 @@ export default class Rooms {
     }
 
     /**
-     * Temporary server copy ("relay") of a photo. Uploaded by the sharer as
-     * insurance; downloaded by a peer only when P2P stalls. The infoHash is
-     * passed as a query parameter because compound hashes contain '/'.
+     * The caller's peer, proven by its session token. Sent as headers by
+     * fetch; JSON bodies may carry them as sessionId/sessionToken instead.
+     */
+    sessionPeer(room, request) {
+        const sessionId = request.get('X-Session-Id') || request.body?.sessionId;
+        const token = request.get('X-Session-Token') || request.body?.sessionToken;
+        return room.peers.peerForSession(sessionId, token);
+    }
+
+    /** Someone who can upload the photo's bytes: its sharer or anyone who has it all. */
+    static holds(photo, peerId) {
+        return photo.peerId === peerId
+            || (photo.owners || []).some(owner => owner.peerId === peerId && !owner.loading);
+    }
+
+    /** Server-copy fields of a photo, sent to the room as a partial update. */
+    static copyState(photo) {
+        return {
+            infoHash: photo.infoHash,
+            hasServerCopy: !!photo.hasServerCopy,
+            serverCopySize: photo.serverCopySize,
+            serverCopyReceived: photo.serverCopyReceived,
+            serverCopyRequestedAt: photo.serverCopyRequestedAt,
+            serverCopyUploader: photo.serverCopyUploader,
+        };
+    }
+
+    sendCopyState(room, photos) {
+        if (photos.length > 0) {
+            this.sendPhotos(room, this.allRoomClients(room), 'update', photos.map(photo => Rooms.copyState(photo)));
+        }
+    }
+
+    dropCopy(room, photo) {
+        this.relay.delete(room.id, photo.infoHash);
+        photo.hasServerCopy = false;
+        delete photo.serverCopySize;
+        delete photo.serverCopyReceived;
+        delete photo.serverCopyUploader;
+    }
+
+    /**
+     * A copy nobody needs any more goes: once everyone in the room has the
+     * photo (unless the room keeps copies for latecomers). An empty room
+     * keeps its copies until they expire; someone may come back for them.
+     */
+    releaseCopiesEveryoneHas(room) {
+        if (room.settings?.keepCopies) return [];
+        const peers = room.peers.peers;
+        if (peers.length === 0) return [];
+        const released = room.photos.filter(photo => this.relay.has(room.id, photo.infoHash)
+            && peers.every(peer => Rooms.holds(photo, peer.peerId)));
+        released.forEach(photo => this.dropCopy(room, photo));
+        this.sendCopyState(room, released);
+        return released;
+    }
+
+    sweepCopies() {
+        this.relay.sweep().forEach(entry => {
+            const room = this.rooms.get(entry.roomId);
+            const photo = room && this.findPhoto(room, entry.infoHash);
+            if (photo) {
+                this.dropCopy(room, photo);
+                this.sendCopyState(room, [photo]);
+            }
+        });
+        this.rooms.forEach(room => this.releaseCopiesEveryoneHas(room));
+    }
+
+    /**
+     * Temporary server copy ("pin") of a photo, for when P2P can't connect.
+     * Pinned only when needed: a receiver whose transfer stalled asks for
+     * one (request), and a holder's app uploads it in resumable chunks; a
+     * holder also pins on its way into the background if someone still
+     * lacks the photo, and right after sharing when the room keeps copies.
+     * The infoHash is a query parameter because compound hashes contain '/'.
      */
     registerPhotoRelayRoutes(app) {
-        const rawBody = express.raw({ type: () => true, limit: MAX_PHOTO_BYTES });
+        const rawChunk = express.raw({ type: () => true, limit: MAX_CHUNK_BYTES });
 
-        app.post('/api/rooms/:id/photos/blob', rawBody, (request, response) => {
+        // Room, photo and caller of a copy request, or null once it has answered.
+        const lookup = (request, response) => {
+            const fail = (status, message) => {
+                response.status(status).send(message);
+                return null;
+            };
             const room = this.rooms.get(request.params.id);
-            if (!room) return response.status(404).send('Room not found');
+            if (!room) return fail(404, 'Room not found');
             const infoHash = request.query.infoHash ? decodeURIComponent(request.query.infoHash) : null;
-            if (!infoHash) return response.status(400).send('Expected infoHash');
+            if (!infoHash) return fail(400, 'Expected infoHash');
             const photo = this.findPhoto(room, infoHash);
-            if (!photo) return response.status(404).send('Photo not found');
-            const peerId = request.query.peerId;
-            if (typeof peerId !== 'string' || !peerId) return response.status(400).send('Expected uploader peerId');
-            if (peerId !== photo.peerId) return response.status(403).send('Only the photo owner can upload a server copy');
-            if (photo.hasServerCopy) return response.status(409).send('Server copy already exists');
+            if (!photo) return fail(404, 'Photo not found');
+            const peer = this.sessionPeer(room, request);
+            if (!peer) return fail(403, 'Join the room first');
+            return { room, infoHash, photo, peer };
+        };
+
+        app.put('/api/rooms/:id/photos/blob', rawChunk, async (request, response) => {
+            const found = lookup(request, response);
+            if (!found) return;
+            const { room, infoHash, photo, peer } = found;
+            if (!Rooms.holds(photo, peer.peerId)) {
+                return response.status(403).send('Only someone who has the photo can leave a copy');
+            }
             if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
                 return response.status(400).send('Expected photo bytes');
             }
-            room.relay = room.relay || new PhotoRelay();
+            let entry;
             try {
-                const stored = room.relay.put(infoHash, request.body, request.headers['content-type']);
-                photo.hasServerCopy = true;
-                photo.serverCopySize = stored.size;
-                if (!photo.fileType && stored.contentType !== 'application/octet-stream') {
-                    photo.fileType = stored.contentType;
-                }
-                this.sendPhotos(room, this.allRoomClients(room), 'update', [photo]);
-                return response.send({ infoHash, size: stored.size, hasServerCopy: true });
+                entry = await this.relay.append(room.id, infoHash, {
+                    offset: Number(request.query.offset),
+                    size: Number(request.query.size),
+                    buffer: request.body,
+                    uploader: peer.peerId,
+                    contentType: request.headers['content-type'],
+                });
             } catch (err) {
-                if (err instanceof PhotoTooLargeError) return response.status(413).send(err.message);
-                throw err;
+                if (!(err instanceof RelayError)) throw err;
+                const status = { TOO_LARGE: 413, QUOTA: 413, EXISTS: 409, BUSY: 409, OFFSET: 409 }[err.code] || 400;
+                return response.status(status).send({
+                    error: err.message, code: err.code,
+                    received: err.received, exists: err.code === 'EXISTS', uploading: err.code === 'BUSY'
+                });
             }
+            if (this.findPhoto(room, infoHash) !== photo) return response.status(404).send('Photo not found');
+
+            photo.serverCopySize = entry.size;
+            photo.serverCopyReceived = entry.received;
+            photo.serverCopyUploader = peer.peerId;
+            if (entry.complete) {
+                photo.hasServerCopy = true;
+                delete photo.serverCopyRequestedAt;
+                delete photo.serverCopyUploader;
+                if (!photo.fileType && entry.contentType !== 'application/octet-stream') {
+                    photo.fileType = entry.contentType;
+                }
+            }
+            this.sendCopyState(room, [photo]);
+            return response.send({ infoHash, received: entry.received, size: entry.size, complete: entry.complete });
         });
 
         app.get('/api/rooms/:id/photos/blob', (request, response) => {
-            const room = this.rooms.get(request.params.id);
-            if (!room) return response.status(404).send('Room not found');
-            const infoHash = request.query.infoHash ? decodeURIComponent(request.query.infoHash) : null;
-            if (!infoHash) return response.status(400).send('Expected infoHash');
-            const copy = room.relay?.get(infoHash);
+            const found = lookup(request, response);
+            if (!found) return;
+            const { room, infoHash, photo } = found;
+            const copy = this.relay.get(room.id, infoHash);
             if (!copy) return response.status(404).send('No server copy for this photo');
-            const photo = this.findPhoto(room, infoHash);
-            const safeName = String(photo?.fileName || 'photo').replace(/["\r\n]/g, '');
-            const contentType = String(photo?.fileType || copy.contentType).split(';')[0].trim().toLowerCase();
-            response.header('Content-Type', SAFE_MEDIA_TYPES.has(contentType) ? contentType : 'application/octet-stream');
-            response.header('X-Content-Type-Options', 'nosniff');
-            response.header('Content-Length', copy.size);
-            response.header('Content-Disposition', `inline; filename="${safeName}"`);
-            response.header('Cache-Control', 'private, max-age=3600');
-            return response.send(copy.buffer);
+            const safeName = String(photo.fileName || 'photo').replace(/["\r\n]/g, '');
+            const contentType = String(photo.fileType || copy.contentType).split(';')[0].trim().toLowerCase();
+            response.sendFile(copy.file, {
+                dotfiles: 'allow',
+                lastModified: false,
+                cacheControl: false,
+                headers: {
+                    'Content-Type': SAFE_MEDIA_TYPES.has(contentType) ? contentType : 'application/octet-stream',
+                    'X-Content-Type-Options': 'nosniff',
+                    'Content-Disposition': `inline; filename="${safeName}"`,
+                    'Cache-Control': 'private, no-store',
+                },
+            }, err => {
+                if (err && !response.headersSent) response.status(err.status || 500).end();
+            });
+        });
+
+        // A receiver whose transfer stalled: whoever holds the photo and is
+        // awake uploads a copy (they hear this as a photo update).
+        app.post('/api/rooms/:id/photos/blob/request', (request, response) => {
+            const found = lookup(request, response);
+            if (!found) return;
+            const { room, photo } = found;
+            if (photo.hasServerCopy) return response.send(Rooms.copyState(photo));
+            photo.serverCopyRequestedAt = Date.now();
+            this.sendCopyState(room, [photo]);
+            return response.send(Rooms.copyState(photo));
         });
 
         app.use('/api/rooms/:id/photos/blob', (err, request, response, next) => {
-            if (err?.type === 'entity.too.large') return response.status(413).send('Photo copy too large');
+            if (err?.type === 'entity.too.large') return response.status(413).send('Chunk too large');
             return next(err);
+        });
+
+        app.put('/api/rooms/:id/settings', (request, response) => {
+            const room = this.rooms.get(request.params.id);
+            if (!room) return response.status(404).send('Room not found');
+            const peer = this.sessionPeer(room, request);
+            if (!peer) return response.status(403).send('Join the room first');
+            const keepCopies = request.body?.keepCopies;
+            if (typeof keepCopies !== 'boolean') return response.status(400).send('Expected keepCopies true or false');
+            room.settings = {
+                ...room.settings,
+                keepCopies,
+                changedBy: { peerId: peer.peerId, name: peer.name || '' },
+                changedAt: Date.now(),
+            };
+            this.updateChannel.send({ event: 'room', data: { settings: room.settings } }, this.allRoomClients(room));
+            this.releaseCopiesEveryoneHas(room);
+            return response.send(room.settings);
         });
     }
 
@@ -476,6 +637,7 @@ export default class Rooms {
 
         if(anyAdded) {
             this.sendPhotos(room, this.allRoomClients(room),'addOwner', updated);
+            this.releaseCopiesEveryoneHas(room);
         }
 
         return anyAdded;
@@ -532,6 +694,7 @@ export default class Rooms {
 
         if(updated.length > 0) {
             this.sendPhotos(room, this.allRoomClients(room), 'updateOwner', updated);
+            this.releaseCopiesEveryoneHas(room);
             return response.send(true);
         } else {
             //return response.status(404).send('Photo not found');

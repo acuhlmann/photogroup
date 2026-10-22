@@ -49,6 +49,11 @@ server {
         # `access_log off` cancels all access_log directives at the same level.
         access_log /var/log/nginx/wake-access.log combined if=$log_wake;
 
+        # Server copies of photos arrive in chunks of up to 8 MB
+        # (server/PhotoRelay.js MAX_CHUNK_BYTES); nginx's default 1 MB
+        # turned away every real photo.
+        client_max_body_size 10m;
+
         location /.well-known/acme-challenge/ {
                 root /var/www/certbot;
         }
