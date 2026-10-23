@@ -106,6 +106,13 @@ describe('RoomsService.uploadServerCopy', () => {
         expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 
+    it('treats a struggling server as an interruption, not a refusal', async () => {
+        fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(503, {}));
+        await expect(upload(service(), 'h', blob, { retries: 1, wait: 0 }))
+            .resolves.toEqual({ status: 'interrupted', received: 0 });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
     it('treats a lost session as an interruption: rejoining fixes it', async () => {
         fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(403, {}));
         await expect(upload(service(), 'h', blob)).resolves.toEqual({ status: 'interrupted', received: 0 });

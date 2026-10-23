@@ -305,8 +305,10 @@ export default class RoomsService {
             } else if (response.status === 403) {
                 // Dropped from the room while away; rejoining on resume fixes it.
                 return { status: 'interrupted', received: offset };
-            } else if (response.status >= 500 && await pause()) {
-                continue;
+            } else if (response.status >= 500) {
+                // The server is struggling, not saying no: worth another go later.
+                if (await pause()) continue;
+                return { status: 'interrupted', received: offset };
             } else {
                 return { status: 'refused', code: response.status, message: body.error };
             }
