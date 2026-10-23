@@ -66,9 +66,10 @@ function AddPhotosStrip({ narrow }) {
  * An unsynced empty gallery waits for a snapshot or four seconds before showing the upload prompt.
  * `showNetworkReadout` controls the readout in the empty state and defaults to true.
  * `variant` "simple" swaps the tiles for big squares with a Save button each.
+ * `singleColumn` keeps the grid to one column, for a narrow side pane.
  */
 function Gallery(props) {
-    const {master, showNetworkReadout = true, variant = 'full'} = props;
+    const {master, showNetworkReadout = true, variant = 'full', singleColumn = false} = props;
     const theme = useTheme();
     const [tiles, setTiles] = useState([]);
     const [dragOver, setDragOver] = useState(false);
@@ -569,7 +570,7 @@ function Gallery(props) {
                 {(mode === 'grid' || tiles.length < 2) && <Box
                     className="stagger-children"
                     sx={{
-                        columnCount: visible.length < 2 ? 1 : { xs: 1, sm: 2, xl: 3 },
+                        columnCount: visible.length < 2 || singleColumn ? 1 : { xs: 1, sm: 2, xl: 3 },
                         columnGap: theme.spacing(2),
                         width: '100%',
                         maxWidth: visible.length < 2 ? 880 : 'none',
@@ -624,5 +625,6 @@ Gallery.propTypes = {
     master: PropTypes.object.isRequired,
     showNetworkReadout: PropTypes.bool,
     variant: PropTypes.oneOf(['full', 'simple']),
+    singleColumn: PropTypes.bool,
 };
 export default withSnackbar(Gallery);

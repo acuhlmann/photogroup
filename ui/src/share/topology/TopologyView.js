@@ -16,8 +16,8 @@ import AloneInRoom from "./AloneInRoom";
 const REPULSION = 5000;
 const SPRING_K = 0.003;
 const DAMPING = 0.85;
-const CENTER_GRAVITY = 0.008;
-const MIN_DIST = 80;
+const CENTER_GRAVITY = 0.002;
+const MIN_DIST = 130;
 
 function layoutNodes(nodes, edges, width, height) {
     if (nodes.length === 0) return;
@@ -35,7 +35,7 @@ function layoutNodes(nodes, edges, width, height) {
     });
 
     // Run iterations
-    for (let iter = 0; iter < 60; iter++) {
+    for (let iter = 0; iter < 150; iter++) {
         // Repulsion between all pairs
         for (let i = 0; i < nodes.length; i++) {
             for (let j = i + 1; j < nodes.length; j++) {
@@ -54,7 +54,8 @@ function layoutNodes(nodes, edges, width, height) {
         }
 
         // Spring attraction along edges - rest length scales with viewport
-        const restLength = Math.min(width, height) * 0.2;
+        // Client boxes are 90px wide; shorter links stack their labels on top of each other.
+        const restLength = Math.max(180, Math.min(width, height) * 0.35);
         edges.forEach(edge => {
             const a = nodes.find(n => n.id === edge.from);
             const b = nodes.find(n => n.id === edge.to);
@@ -108,6 +109,13 @@ function getNodeColor(node, isMe, isDark) {
     return isDark ? '#8899aa' : '#667788';
 }
 
+// Idle flow in the accent colour; received packets green, sent ones amber.
+function particleRgb(kind, isDark) {
+    if (kind === 'rx') return isDark ? '61,222,139' : '4,120,87';
+    if (kind === 'tx') return isDark ? '245,185,66' : '180,83,9';
+    return isDark ? '61,214,195' : '15,118,110';
+}
+
 // Particle system for animated data flow
 class ParticleSystem {
     constructor() {
@@ -126,28 +134,39 @@ class ParticleSystem {
             });
         }
     }
+    // A packet of real traffic: crosses the edge once, from sender to receiver.
+    addBurst(fromNode, toNode, kind) {
+        if (this.particles.length > 400) return;
+        this.particles.push({
+            once: true,
+            kind,
+            progress: 0,
+            speed: 0.018 + Math.random() * 0.01,
+            fromX: fromNode.x, fromY: fromNode.y,
+            toX: toNode.x, toY: toNode.y,
+        });
+    }
     update() {
         this.particles.forEach(p => {
             p.progress += p.speed;
-            if (p.progress > 1) p.progress -= 1;
+            if (p.progress > 1 && !p.once) p.progress -= 1;
         });
+        this.particles = this.particles.filter(p => !p.once || p.progress <= 1);
     }
     draw(ctx, isDark) {
         this.particles.forEach(p => {
             const x = p.fromX + (p.toX - p.fromX) * p.progress;
             const y = p.fromY + (p.toY - p.fromY) * p.progress;
             const alpha = Math.sin(p.progress * Math.PI) * 0.9 + 0.1;
+            const rgb = particleRgb(p.kind, isDark);
+            const size = p.once ? 4 : 3;
             ctx.beginPath();
-            ctx.arc(x, y, 3, 0, Math.PI * 2);
-            ctx.fillStyle = isDark
-                ? `rgba(61,214,195,${alpha})`
-                : `rgba(15,118,110,${alpha})`;
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${rgb},${alpha})`;
             ctx.fill();
             ctx.beginPath();
-            ctx.arc(x, y, 6, 0, Math.PI * 2);
-            ctx.fillStyle = isDark
-                ? `rgba(61,214,195,${alpha * 0.2})`
-                : `rgba(15,118,110,${alpha * 0.2})`;
+            ctx.arc(x, y, size * 2, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${rgb},${alpha * 0.2})`;
             ctx.fill();
         });
     }
@@ -191,9 +210,10 @@ function drawDiamond(ctx, x, y, r) {
     ctx.closePath();
 }
 
+// x is where the badge sits: the client box's top-right corner.
 function drawPhotoBadge(ctx, x, y, count, isDark) {
     if (count <= 0) return;
-    const badgeX = x + 38;
+    const badgeX = x;
     const badgeY = y - 14;
     const text = count > 99 ? '99+' : String(count);
     ctx.font = 'bold 9px "JetBrains Mono", monospace';
@@ -528,6 +548,38 @@ function TopologyView({ master, fillHeight, active = true }) {
         };
     }, [master.emitter]);
 
+    // Send a packet along our links whenever bytes actually move.
+    useEffect(() => {
+        const emitter = master.emitter;
+        const lastAt = { rx: 0, tx: 0 };
+        const pulse = kind => () => {
+            const now = Date.now();
+            if (now - lastAt[kind] < 250) return;
+            lastAt[kind] = now;
+            const myPeerId = masterRef.current?.client?.peerId;
+            const nodes = nodesRef.current;
+            const links = edgesRef.current.filter(edge => edge.type === 'connection');
+            const mine = links.filter(edge => edge.from === myPeerId || edge.to === myPeerId);
+            (mine.length ? mine : links).forEach(edge => {
+                const from = nodes.find(n => n.id === edge.from);
+                const to = nodes.find(n => n.id === edge.to);
+                if (!from || !to) return;
+                // Received bytes travel towards us, sent ones away.
+                const towardsMe = edge.to === myPeerId;
+                const forward = kind === 'rx' ? towardsMe : !towardsMe;
+                particleSystemRef.current.addBurst(forward ? from : to, forward ? to : from, kind);
+            });
+        };
+        const onDownload = pulse('rx');
+        const onUpload = pulse('tx');
+        emitter.on('downloadProgress', onDownload);
+        emitter.on('uploadProgress', onUpload);
+        return () => {
+            emitter.removeListener('downloadProgress', onDownload);
+            emitter.removeListener('uploadProgress', onUpload);
+        };
+    }, [master.emitter]);
+
     // Canvas rendering
     useEffect(() => {
         if (!active) return;
@@ -669,8 +721,10 @@ function TopologyView({ master, fillHeight, active = true }) {
                     ctx.lineWidth = 1.5;
                     ctx.stroke();
                 } else {
-                    // Client node - rounded rectangle
-                    const w = 90;
+                    // Client node - rounded rectangle, wide enough for its label
+                    ctx.font = '11px "JetBrains Mono", "IBM Plex Sans", monospace';
+                    const labelWidth = ctx.measureText(_.truncate((node.label || '').split('\n')[0], { length: 16 })).width;
+                    const w = Math.max(90, labelWidth + 16);
                     const h = 32;
                     drawRoundedRect(ctx, x - w / 2, y - h / 2, w, h, 6);
                     ctx.fillStyle = isDark
@@ -693,7 +747,7 @@ function TopologyView({ master, fillHeight, active = true }) {
                     // Photo count badge for client nodes
                     const peerId = node.peer?.peerId || node.id;
                     const photoCount = peerPhotoCounts[peerId] || 0;
-                    drawPhotoBadge(ctx, x, y, photoCount, isDark);
+                    drawPhotoBadge(ctx, x + w / 2 - 7, y, photoCount, isDark);
                 }
 
                 // Label

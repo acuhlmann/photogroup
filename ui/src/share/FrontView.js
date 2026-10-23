@@ -98,7 +98,8 @@ function PhotoStack() {
 }
 
 function FrontView({ master }) {
-    const [visible, setVisible] = useState(false);
+    // Switching modes mounts this after setup is done; master.me says it is.
+    const [visible, setVisible] = useState(() => !!master.me);
 
     useEffect(() => {
         const handleHideFrontView = () => {
