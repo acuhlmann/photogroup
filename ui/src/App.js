@@ -26,10 +26,19 @@ import { SnackbarProvider } from 'notistack';
 import Visibility from "visibilityjs";
 import AddPeersView from "./share/header/AddPeersView";
 import { clearShareFlag, rememberRoom, SHARE_ERRORS, SHARE_WAITING, takeSharedFiles } from "./share/shareTarget";
+import ModeSwitch from "./share/header/ModeSwitch";
+import { readMode, saveMode } from "./share/uiMode";
 
 function App({theme: propsTheme, prefersDarkMode}) {
     //Logger.useDefaults();
     Logger.setLevel(Logger.INFO);
+
+    // Before RoomsService is created below: it marks the first visit.
+    const [mode, setMode] = useState(readMode);
+    const changeMode = useCallback((next) => {
+        saveMode(next);
+        setMode(next);
+    }, []);
 
     const emitterRef = useRef(null);
     const masterRef = useRef(null);
@@ -211,6 +220,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
 
                                 {/* Action buttons */}
                                 <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexShrink: 0 }}>
+                                    <ModeSwitch mode={mode} onChange={changeMode}/>
                                     <AddPeersView master={masterRef.current}/>
                                     <Uploader
                                         model={masterRef.current.torrentAddition}
@@ -269,7 +279,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
                     </header>
 
                     <main className="App-main">
-                        <ShareCanvas master={masterRef.current} />
+                        <ShareCanvas master={masterRef.current} mode={mode} />
                     </main>
                 </div>
             </SnackbarProvider>
