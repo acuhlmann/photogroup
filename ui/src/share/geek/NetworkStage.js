@@ -10,7 +10,7 @@ import CloseRounded from '@mui/icons-material/CloseRounded';
 import OpenInFullRounded from '@mui/icons-material/OpenInFullRounded';
 
 import { captureDroppedHandles } from '../gallery/replaceOriginal';
-import { buildScene, routePoints, pointAlong, TIER } from './scene';
+import { buildScene, routePoints, pointAlong, transferRoutesFor, TIER } from './scene';
 
 const mono = '"JetBrains Mono", "IBM Plex Mono", monospace';
 
@@ -191,13 +191,12 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
         const myId = () => master.client?.peerId;
         const routes = kind => (sceneRef.current?.routes || []).filter(route => route.kind === kind);
         const mine = kind => routes(kind).find(route => route.peerId === myId());
-        const transfers = () => (sceneRef.current?.routes || []).filter(route => route.peers && route.peers.includes(myId()));
 
         // The server pushes every room change to everyone at once.
         const broadcast = (name) => (event) => {
             const type = event && event.type ? ':' + event.type : '';
             if (throttled('sse' + name + type, 400)) return;
-            if (name === 'photos' && event?.type === 'add' && event.item?.peerId === myId()) {
+            if (name === 'photos' && event?.type === 'add' && [].concat(event.item || []).some(photo => photo?.peerId === myId())) {
                 send(mine('sse'), { label: 'POST magnet' });
             }
             routes('sse').forEach(route => send(route, { reverse: true, label: route.peerId === myId() ? `SSE ${name}${type}` : '' }));
@@ -208,7 +207,7 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
 
         const along = (kind, rgb) => (event) => {
             if (throttled(kind, 280)) return;
-            const list = transfers();
+            const list = transferRoutesFor(sceneRef.current?.routes || [], myId(), event?.torrent);
             const label = !throttled(kind + 'label', 1500) && event?.speed ? `${kind === 'rx' ? '↓' : '↑'} ${event.speed}` : '';
             list.forEach(route => {
                 const towardsMe = route.path[route.path.length - 1] === myId();
@@ -229,7 +228,9 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
         const onCopy = () => send(mine('copies'), { reverse: true, label: 'GET copy' });
         const onIce = (type, value) => {
             if (type !== 'icegatheringstatechange' || value !== 'gathering') return;
-            routes('stun').forEach(route => {
+            // Only our own NAT asks STUN; the others gather on their own devices.
+            const nat = (mine('sse')?.path || [])[1];
+            routes('stun').filter(route => route.path[0] === nat).forEach(route => {
                 send(route, { label: 'binding request' });
                 send(route, { reverse: true, label: 'binding response', speed: 0.009 });
             });

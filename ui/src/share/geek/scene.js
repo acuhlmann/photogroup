@@ -255,6 +255,17 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     return { nodes, routes, thumbs, byId };
 }
 
+/**
+ * The transfer routes a torrent's progress belongs on: ours to the peers
+ * we hold a wire with for it. With no wires to go by, all of ours.
+ */
+export function transferRoutesFor(routes, myPeerId, torrent) {
+    const mine = routes.filter(route => route.peers && route.peers.includes(myPeerId));
+    const wired = new Set((torrent?.wires || []).map(wire => String(wire.peerId)));
+    if (!wired.size) return mine;
+    return mine.filter(route => route.peers.some(id => id !== myPeerId && wired.has(String(id))));
+}
+
 /** The points of a route, in order. */
 export function routePoints(scene, route) {
     return route.path.map(id => scene.byId.get(id)).filter(Boolean).map(node => ({ x: node.x, y: node.y }));

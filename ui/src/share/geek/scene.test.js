@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildScene, routePoints, pointAlong, TIER, hostOf } from './scene';
+import { buildScene, routePoints, pointAlong, transferRoutesFor, TIER, hostOf } from './scene';
 
 const chain = (lan, pub) => [
     { ip: lan, port: 50000, type: 'host', transport: 'udp' },
@@ -121,5 +121,19 @@ describe('pointAlong', () => {
         const points = routePoints(scene, scene.routes.find(route => route.id === 'sse:me'));
         expect(points).toHaveLength(4);
         expect(points[3]).toEqual({ x: scene.byId.get('api').x, y: scene.byId.get('api').y });
+    });
+});
+
+describe('transferRoutesFor', () => {
+    it('puts a torrent on the routes to the peers wired for it', () => {
+        const scene = room([
+            { fromPeerId: 'me', toPeerId: 'ana', connectionType: 'p2p' },
+            { fromPeerId: 'me', toPeerId: 'ben', connectionType: 'p2p nat' },
+            { fromPeerId: 'ana', toPeerId: 'ben', connectionType: 'p2p nat' },
+        ]);
+        const ids = list => list.map(route => route.id).sort();
+        expect(ids(transferRoutesFor(scene.routes, 'me', { wires: [{ peerId: 'ben' }] }))).toEqual(['p2p:ben|me']);
+        // No wires known yet: every route of ours, never the others'.
+        expect(ids(transferRoutesFor(scene.routes, 'me', { wires: [] }))).toEqual(['p2p:ana|me', 'p2p:ben|me']);
     });
 });
