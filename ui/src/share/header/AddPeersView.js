@@ -28,7 +28,7 @@ const Transition = React.forwardRef(function Transition(props, ref) {
     return <Fade ref={ref} {...props} />;
 });
 
-function AddPeersView({ master }) {
+function AddPeersView({ master, showButton = true }) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -217,7 +217,7 @@ function AddPeersView({ master }) {
 
     return (
         visible || hasRoomValue ? <div>
-            <ButtonBase
+            {showButton && <ButtonBase
                 aria-label={`Invite peers (${numPeers} in room)`}
                 onClick={() => show(true)}
                 sx={headerButtonSx}>
@@ -239,7 +239,7 @@ function AddPeersView({ master }) {
                         {numPeers}
                     </Box>
                 )}
-            </ButtonBase>
+            </ButtonBase>}
 
             <Dialog
                 open={open}
@@ -424,6 +424,7 @@ function AddPeersView({ master }) {
 
 AddPeersView.propTypes = {
     master: PropTypes.object.isRequired,
+    showButton: PropTypes.bool,
 };
 
 export default AddPeersView;

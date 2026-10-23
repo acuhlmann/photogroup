@@ -26,10 +26,19 @@ import { SnackbarProvider } from 'notistack';
 import Visibility from "visibilityjs";
 import AddPeersView from "./share/header/AddPeersView";
 import { clearShareFlag, rememberRoom, SHARE_ERRORS, SHARE_WAITING, takeSharedFiles } from "./share/shareTarget";
+import ModeSwitch from "./share/header/ModeSwitch";
+import { readMode, saveMode } from "./share/uiMode";
 
 function App({theme: propsTheme, prefersDarkMode}) {
     //Logger.useDefaults();
     Logger.setLevel(Logger.INFO);
+
+    // Before RoomsService is created below: it marks the first visit.
+    const [mode, setMode] = useState(readMode);
+    const changeMode = useCallback((next) => {
+        saveMode(next);
+        setMode(next);
+    }, []);
 
     const emitterRef = useRef(null);
     const masterRef = useRef(null);
@@ -155,6 +164,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
     }, [theme, propsTheme]);
 
     const hasActivity = networkStatus.downSpeed || networkStatus.upSpeed;
+    const simple = mode === 'simple';
 
     return (
         <ThemeProvider theme={currentTheme}>
@@ -211,21 +221,25 @@ function App({theme: propsTheme, prefersDarkMode}) {
 
                                 {/* Action buttons */}
                                 <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexShrink: 0 }}>
-                                    <AddPeersView master={masterRef.current}/>
+                                    <ModeSwitch mode={mode} onChange={changeMode}/>
+                                    {/* Simple mode has its own buttons; these stay mounted for their dialogs. */}
+                                    <AddPeersView master={masterRef.current} showButton={!simple}/>
                                     <Uploader
                                         model={masterRef.current.torrentAddition}
                                         emitter={masterRef.current.emitter}
+                                        showButton={!simple}
                                     />
                                     <SettingsView
                                         master={masterRef.current}
                                         emitter={masterRef.current.emitter}
                                         prefersDarkMode={prefersDarkMode}
+                                        showButton={!simple}
                                     />
                                 </Stack>
                             </Toolbar>
 
                             {/* Network status bar */}
-                            {(networkStatus.peers > 0 || hasActivity) && (
+                            {!simple && (networkStatus.peers > 0 || hasActivity) && (
                                 <Box
                                     className="telemetry"
                                     sx={{
@@ -269,7 +283,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
                     </header>
 
                     <main className="App-main">
-                        <ShareCanvas master={masterRef.current} />
+                        <ShareCanvas master={masterRef.current} mode={mode} />
                     </main>
                 </div>
             </SnackbarProvider>

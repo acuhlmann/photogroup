@@ -4,34 +4,34 @@ import Gallery from "./gallery/Gallery";
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import CloseRounded from '@mui/icons-material/CloseRounded';
-import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
-import HubRounded from '@mui/icons-material/HubRounded';
 import Box from '@mui/material/Box';
-import Drawer from '@mui/material/Drawer';
-import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import Logger from 'js-logger';
 import { withSnackbar } from './compatibility/withSnackbar';
 
 import FrontView from "./FrontView";
-import NetworkPanel from "./NetworkPanel";
+import GeekStage from "./geek/GeekStage";
+import SimpleFront from "./simple/SimpleFront";
+import SimpleRoomBar from "./simple/SimpleRoomBar";
 import WebTorrent from 'webtorrent';
 
 const BACKUP_SNACK = 'serverCopyBackup';
 
-/** Show the landing page or room gallery with a responsive connection panel. */
-function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
+/**
+ * Show the landing page or room gallery for the chosen mode. The gallery
+ * keeps the same place in the tree in every mode, so switching modes in a
+ * room doesn't remount it and lose the photos it has loaded.
+ */
+function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar}) {
+    const simple = mode === 'simple';
+    // Only geek mode shows how people connect; default is photos alone.
+    const geek = mode === 'geek';
     const deferredPromptRef = useRef(null);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
     const [hasRoom, setHasRoom] = useState(false);
-    const [wtNumPeers, setWtNumPeers] = useState(0);
-    const [peopleOpen, setPeopleOpen] = useState(() => {
-        if (typeof window === 'undefined') return true;
-        return window.matchMedia('(min-width: 900px)').matches;
-    });
 
     useEffect(() => {
         if(!WebTorrent.WEBRTC_SUPPORT) {
@@ -77,15 +77,10 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             setHasRoom(true);
         };
 
-        const handleWire = (wire, addr, torrent) => {
-            setWtNumPeers(torrent.numPeers);
-        };
-
         master.emitter.on('showError', handleShowError);
         master.emitter.on('showInfo', handleShowInfo);
         master.emitter.on('readyToUpload', handleReadyToUpload);
         master.emitter.on('serverCopyBackup', handleBackup);
-        master.emitter.on('wire', handleWire);
 
         const handleBeforeInstallPrompt = (e) => {
             console.info('beforeinstallprompt');
@@ -115,7 +110,6 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             master.emitter.removeListener('showInfo', handleShowInfo);
             master.emitter.removeListener('readyToUpload', handleReadyToUpload);
             master.emitter.removeListener('serverCopyBackup', handleBackup);
-            master.emitter.removeListener('wire', handleWire);
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
             window.removeEventListener('appinstalled', handleAppInstalled);
         };
@@ -169,137 +163,34 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
         );
     }, [snack, install]);
 
-    const connectionPanel = (
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-            <Box sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                px: 2,
-                py: 1.25,
-                borderBottom: 1,
-                borderColor: 'divider',
-            }}>
-                <Box>
-                    <Typography className="tech-text" sx={{ color: 'primary.main', lineHeight: 1.2 }}>
-                        Link
-                    </Typography>
-                    <Typography variant="subtitle2" sx={{ mt: 0.25 }}>How you connect</Typography>
-                </Box>
-                <IconButton
-                    size="small"
-                    aria-label="Hide connection map"
-                    onClick={() => setPeopleOpen(false)}
-                >
-                    <ChevronRightRounded fontSize="small" />
-                </IconButton>
-            </Box>
-            <Box sx={{ flex: 1, minHeight: 0 }}>
-                <NetworkPanel
-                    master={master}
-                    isMobile={isMobile}
-                    isCenter
-                    wtNumPeers={wtNumPeers}
-                />
-            </Box>
-        </Box>
-    );
-
-    // Room: photos fill the page. The peer map sits beside them, or in a sheet on a phone.
+    // Room. Simple puts its bar above big photo squares, default is the
+    // gallery alone, geek puts the network stage first and photos beside it.
     if (hasRoom) {
         return (
             <Box sx={{
                 flex: 1,
                 minHeight: 0,
                 display: 'flex',
-                overflow: 'hidden',
+                flexDirection: geek && isMobile ? 'column' : 'row',
+                overflow: geek && isMobile ? 'auto' : 'hidden',
                 position: 'relative',
             }}>
+                {geek ? <GeekStage master={master} isMobile={isMobile} /> : null}
                 <Box sx={{
-                    flex: 1,
+                    flex: geek && !isMobile ? 'none' : 1,
+                    width: geek && !isMobile ? 440 : 'auto',
                     minWidth: 0,
-                    overflow: 'auto',
+                    overflow: geek && isMobile ? 'visible' : 'auto',
                     px: { xs: 1.5, sm: 2 },
                     pt: { xs: 1.5, sm: 2 },
-                    pb: isMobile ? 10 : 2,
+                    pb: 2,
+                    borderLeft: geek && !isMobile ? 1 : 0,
+                    borderColor: 'divider',
                 }}>
-                    {/* The Link panel shows the readout too; don't repeat it beside itself. */}
-                    <Gallery master={master} showNetworkReadout={isMobile || !peopleOpen} />
+                    {simple ? <SimpleRoomBar master={master} /> : null}
+                    <Gallery master={master} variant={simple ? 'simple' : 'full'}
+                        singleColumn={geek && !isMobile} showNetworkReadout={false} />
                 </Box>
-
-                {!isMobile && peopleOpen && (
-                    <Box sx={{
-                        width: 360,
-                        flexShrink: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        minHeight: 0,
-                        borderLeft: 1,
-                        borderColor: 'divider',
-                        bgcolor: 'transparent',
-                        background: 'color-mix(in srgb, var(--paper) 86%, transparent)',
-                        backdropFilter: 'blur(16px)',
-                    }}>
-                        {connectionPanel}
-                    </Box>
-                )}
-
-                {!isMobile && !peopleOpen && (
-                    <Box sx={{
-                        width: 48,
-                        flexShrink: 0,
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        justifyContent: 'center',
-                        pt: 1,
-                        borderLeft: 1,
-                        borderColor: 'divider',
-                    }}>
-                        <IconButton
-                            aria-label="Show how people connect"
-                            onClick={() => setPeopleOpen(true)}
-                        >
-                            <HubRounded />
-                        </IconButton>
-                    </Box>
-                )}
-
-                {isMobile && (
-                    <>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            startIcon={<HubRounded />}
-                            aria-label="Show how people connect"
-                            onClick={() => setPeopleOpen(true)}
-                            sx={{
-                                position: 'fixed',
-                                bottom: 16,
-                                right: 16,
-                                zIndex: 10,
-                            }}
-                        >
-                            People
-                        </Button>
-                        <Drawer
-                            anchor="bottom"
-                            open={peopleOpen}
-                            onClose={() => setPeopleOpen(false)}
-                            slotProps={{
-                                paper: {
-                                    sx: {
-                                        height: '72vh',
-                                        borderTopLeftRadius: 16,
-                                        borderTopRightRadius: 16,
-                                        bgcolor: 'background.default',
-                                    },
-                                },
-                            }}
-                        >
-                            {connectionPanel}
-                        </Drawer>
-                    </>
-                )}
             </Box>
         );
     }
@@ -313,7 +204,7 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             px: { xs: 1.5, sm: 2 },
             py: { xs: 1.5, sm: 2 },
         }}>
-            <FrontView master={master}/>
+            {simple ? <SimpleFront master={master}/> : <FrontView master={master}/>}
         </Box>
     );
 }

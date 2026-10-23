@@ -8,6 +8,7 @@ import CropFreeRounded from '@mui/icons-material/CropFreeRounded';
 import Slide from '@mui/material/Slide';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
+import { createRoom } from './openRoom';
 
 const frames = [
     {
@@ -97,7 +98,8 @@ function PhotoStack() {
 }
 
 function FrontView({ master }) {
-    const [visible, setVisible] = useState(false);
+    // Switching modes mounts this after setup is done; master.me says it is.
+    const [visible, setVisible] = useState(() => !!master.me);
 
     useEffect(() => {
         const handleHideFrontView = () => {
@@ -116,27 +118,7 @@ function FrontView({ master }) {
         };
     }, [master.emitter]);
 
-    const openRoom = useCallback(async () => {
-        master.emitter.emit('openRoomStart');
-
-        try {
-            await master.findExistingContent(master.service.createRoom, true);
-            master.service.changeUrl('room', master.service.id);
-
-            master.emitter.emit('openRoomEnd');
-            master.emitter.emit('readyToUpload');
-        } catch (error) {
-            console.error('Failed to create room:', error);
-            master.emitter.emit('roomCreationError', error);
-            master.emitter.emit('openRoomEnd');
-
-            if (error.message && error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-                master.emitter.emit('showError', 'Cannot connect to server. Please make sure the backend server is running on port 8081.');
-            } else {
-                master.emitter.emit('showError', `Failed to create room: ${error.message || 'Unknown error'}`);
-            }
-        }
-    }, [master]);
+    const openRoom = useCallback(() => createRoom(master), [master]);
 
     const hasRoom = () => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -225,7 +207,7 @@ function FrontView({ master }) {
                         lineHeight: 1.5,
                     }}
                 >
-                    Pictures move straight from one person to another. The room shows how you're connected.
+                    Pictures move straight from one person to another.
                 </Typography>
             </Stack>
         </Box>

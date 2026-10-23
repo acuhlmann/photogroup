@@ -87,6 +87,8 @@ module.exports = defineConfig({
         BROWSER: 'none',
         CI: 'true',
         NODE_ENV: 'test',
+        // These tests drive the default view; new visitors otherwise start in simple.
+        VITE_START_MODE: 'default',
         // Disable React dev server optimizations in CI for faster startup
         ...(isCI && {
           SKIP_PREFLIGHT_CHECK: 'true',
