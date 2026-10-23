@@ -206,7 +206,7 @@ function FrontView({ master }) {
                         lineHeight: 1.5,
                     }}
                 >
-                    Pictures move straight from one person to another. The room shows how you're connected.
+                    Pictures move straight from one person to another.
                 </Typography>
             </Stack>
         </Box>

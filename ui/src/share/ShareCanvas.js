@@ -29,6 +29,8 @@ const BACKUP_SNACK = 'serverCopyBackup';
  */
 function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar}) {
     const simple = mode === 'simple';
+    // Only geek mode shows how people connect; default is photos alone.
+    const geek = mode === 'geek';
     const deferredPromptRef = useRef(null);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -228,15 +230,15 @@ function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar})
                     overflow: 'auto',
                     px: { xs: 1.5, sm: 2 },
                     pt: { xs: 1.5, sm: 2 },
-                    pb: isMobile && !simple ? 10 : 2,
+                    pb: isMobile && geek ? 10 : 2,
                 }}>
                     {simple ? <SimpleRoomBar master={master} /> : null}
                     {/* The Link panel shows the readout too; don't repeat it beside itself. */}
                     <Gallery master={master} variant={simple ? 'simple' : 'full'}
-                        showNetworkReadout={isMobile || !peopleOpen} />
+                        showNetworkReadout={geek && (isMobile || !peopleOpen)} />
                 </Box>
 
-                {!simple && !isMobile && peopleOpen && (
+                {geek && !isMobile && peopleOpen && (
                     <Box sx={{
                         width: 360,
                         flexShrink: 0,
@@ -253,7 +255,7 @@ function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar})
                     </Box>
                 )}
 
-                {!simple && !isMobile && !peopleOpen && (
+                {geek && !isMobile && !peopleOpen && (
                     <Box sx={{
                         width: 48,
                         flexShrink: 0,
@@ -273,7 +275,7 @@ function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar})
                     </Box>
                 )}
 
-                {!simple && isMobile && (
+                {geek && isMobile && (
                     <>
                         <Button
                             variant="contained"

@@ -9,6 +9,8 @@ export const MODE_INFO = {
 };
 
 const KEY = 'photogroup.uiMode';
+// A build can start new people elsewhere; the end-to-end tests use default.
+const START = MODES.includes(import.meta.env?.VITE_START_MODE) ? import.meta.env.VITE_START_MODE : 'simple';
 // Set by RoomsService on first visit, so its presence means "been here before".
 const RETURNING = 'clientId';
 
@@ -21,9 +23,9 @@ export function readMode() {
     try {
         const stored = localStorage.getItem(KEY);
         if (MODES.includes(stored)) return stored;
-        return localStorage.getItem(RETURNING) ? 'default' : 'simple';
+        return localStorage.getItem(RETURNING) ? 'default' : START;
     } catch {
-        return 'simple';
+        return START;
     }
 }
 
