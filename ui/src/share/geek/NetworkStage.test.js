@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import EventEmitter from 'eventemitter3';
-import NetworkStage from './NetworkStage';
+import NetworkStage, { routeLabel } from './NetworkStage';
 import { TIER, THUMB } from './scene';
 
 // jsdom has no layout, so the stage falls back to an 800×600 scene.
@@ -53,5 +53,16 @@ describe('NetworkStage', () => {
         await act(async () => div.firstChild.dispatchEvent(drop));
         await vi.waitFor(() => expect(onFiles).toHaveBeenCalledWith([file]));
         await act(async () => root.unmount());
+    });
+});
+
+describe('routeLabel', () => {
+    const route = { label: 'p2p nat' };
+    it('adds pieces and speed while they move, then falls back to the connection type', () => {
+        const state = { rx: 7, tx: 0, rxSpeed: '1.2 MB/sec', at: 1000 };
+        expect(routeLabel(route, state, 2000)).toBe('p2p nat · ↓ 7 pieces 1.2 MB/sec');
+        expect(routeLabel(route, { rx: 0, tx: 3, at: 1000 }, 2000)).toBe('p2p nat · ↑ 3 pieces');
+        expect(routeLabel(route, state, 1000 + 6000)).toBe('p2p nat');
+        expect(routeLabel(route, undefined)).toBe('p2p nat');
     });
 });

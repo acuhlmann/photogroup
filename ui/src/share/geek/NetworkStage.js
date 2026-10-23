@@ -9,6 +9,7 @@ import IconButton from '@mui/material/IconButton';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import OpenInFullRounded from '@mui/icons-material/OpenInFullRounded';
 
+import FileUtil from '../util/FileUtil';
 import { captureDroppedHandles } from '../gallery/replaceOriginal';
 import { buildScene, routePoints, pointAlong, transferRoutesFor, TIER } from './scene';
 
@@ -75,6 +76,18 @@ function polygon(ctx, x, y, r, sides, rotation) {
 const prefersReducedMotion = () => typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// How long a route keeps showing its last transfer.
+const FLOW_MS = 5000;
+
+/** A transfer route's label: its connection type, plus pieces and speed while they move. */
+export function routeLabel(route, state, now = Date.now()) {
+    if (!state || now - (state.at || 0) > FLOW_MS) return route.label;
+    const parts = [route.label];
+    if (state.rx) parts.push(`↓ ${state.rx} pieces` + (state.rxSpeed ? ` ${state.rxSpeed}` : ''));
+    if (state.tx) parts.push(`↑ ${state.tx} pieces` + (state.txSpeed ? ` ${state.txSpeed}` : ''));
+    return parts.join(' · ');
+}
+
 /** `value` cut with an ellipsis to fit `max` pixels in the current font. */
 function fit(ctx, value, max) {
     const full = String(value || '');
@@ -114,6 +127,8 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
     const containerRef = useRef(null);
     const canvasRef = useRef(null);
     const packetsRef = useRef([]);
+    // Per transfer route: what is moving on it right now, for its label.
+    const flowRef = useRef(new Map());
     const imagesRef = useRef(new Map());
     const sceneRef = useRef(null);
     const [size, setSize] = useState({ width: 0, height: 0 });
@@ -205,17 +220,50 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
         const onPeers = broadcast('peers');
         const onConnections = broadcast('peerConnections');
 
-        const along = (kind, rgb) => (event) => {
-            if (throttled(kind, 280)) return;
-            const list = transferRoutesFor(sceneRef.current?.routes || [], myId(), event?.torrent);
-            const label = !throttled(kind + 'label', 1500) && event?.speed ? `${kind === 'rx' ? '↓' : '↑'} ${event.speed}` : '';
-            list.forEach(route => {
-                const towardsMe = route.path[route.path.length - 1] === myId();
-                send(route, { reverse: kind === 'rx' ? !towardsMe : towardsMe, rgb, label, speed: 0.02 });
+        // Transfer dots are real WebTorrent pieces, on the route to the peer
+        // whose wire carried them. Big files send a dot for every few pieces;
+        // the route label still counts each one.
+        const flow = route => {
+            const state = flowRef.current.get(route.id);
+            // A quiet route starts counting afresh.
+            if (state && Date.now() - state.at <= FLOW_MS) return state;
+            const fresh = { rx: 0, tx: 0, at: Date.now() };
+            flowRef.current.set(route.id, fresh);
+            return fresh;
+        };
+        const onPiece = kind => ({ torrent, index, size, total, peerId } = {}) => {
+            const route = transferRoutesFor(sceneRef.current?.routes || [], myId(), { wires: [{ peerId }] })[0];
+            if (!route) return;
+            const state = flow(route);
+            state[kind] += 1;
+            state.total = total;
+            state.name = torrent?.name;
+            state.at = Date.now();
+            const every = Math.max(1, Math.ceil(total / 40));
+            const last = index === total - 1;
+            if (!last && (index % every || throttled(kind + 'dot' + route.id, 60))) return;
+            // Pieces arrive in bursts; name one every so often so labels stay readable.
+            const named = last || !throttled(kind + 'name' + route.id, 700);
+            const towardsMe = route.path[route.path.length - 1] === myId();
+            send(route, {
+                reverse: kind === 'rx' ? !towardsMe : towardsMe,
+                rgb: kind === 'rx' ? RX : TX,
+                label: named ? `#${index + 1}/${total} ${FileUtil.formatBytes(size)}` : '',
+                speed: 0.02,
             });
         };
-        const onDownload = along('rx', RX);
-        const onUpload = along('tx', TX);
+        const onReceived = onPiece('rx');
+        const onSent = onPiece('tx');
+        // Speeds come per torrent; show them on the routes wired for it.
+        const onSpeed = kind => (event) => {
+            transferRoutesFor(sceneRef.current?.routes || [], myId(), event?.torrent).forEach(route => {
+                const state = flow(route);
+                state[kind + 'Speed'] = event?.speed;
+                state.at = Date.now();
+            });
+        };
+        const onDownload = onSpeed('rx');
+        const onUpload = onSpeed('tx');
 
         const onWire = () => {
             if (throttled('wire', 500)) return;
@@ -241,6 +289,8 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
         emitter.on('peerConnections', onConnections);
         emitter.on('downloadProgress', onDownload);
         emitter.on('uploadProgress', onUpload);
+        emitter.on('pieceReceived', onReceived);
+        emitter.on('pieceSent', onSent);
         emitter.on('wire', onWire);
         emitter.on('serverCopyBackup', onBackup);
         emitter.on('serverCopyReady', onCopy);
@@ -251,6 +301,8 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
             emitter.removeListener('peerConnections', onConnections);
             emitter.removeListener('downloadProgress', onDownload);
             emitter.removeListener('uploadProgress', onUpload);
+            emitter.removeListener('pieceReceived', onReceived);
+            emitter.removeListener('pieceSent', onSent);
             emitter.removeListener('wire', onWire);
             emitter.removeListener('serverCopyBackup', onBackup);
             emitter.removeListener('serverCopyReady', onCopy);
@@ -336,14 +388,15 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
                 if (transfer && route.label) {
                     const mid = pointAlong(points, 0.5);
                     ctx.font = `9px ${mono}`;
-                    const w = ctx.measureText(route.label).width + 10;
+                    const label = routeLabel(route, flowRef.current.get(route.id));
+                    const w = ctx.measureText(label).width + 10;
                     roundRect(ctx, mid.x - w / 2, mid.y - 8, w, 16, 4);
                     ctx.fillStyle = isDark ? 'rgba(16,20,28,0.9)' : 'rgba(255,255,255,0.92)';
                     ctx.fill();
                     ctx.fillStyle = `rgb(${style.rgb})`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(route.label, mid.x, mid.y);
+                    ctx.fillText(label, mid.x, mid.y);
                 }
             });
 
