@@ -35,4 +35,16 @@ describe('GeekStage', () => {
         expect(div.querySelector('[data-testid="me-view"]')).not.toBeNull();
         await act(async () => root.unmount());
     });
+
+    it('starts with the log closed on a phone and opens it from the selected tab', async () => {
+        const master = { emitter: new EventEmitter() };
+        const div = document.createElement('div');
+        const root = createRoot(div);
+        await act(async () => root.render(<GeekStage master={master} isMobile />));
+        expect(div.textContent).not.toContain('listening');
+        const packets = Array.from(div.querySelectorAll('[role="tab"]')).find(tab => tab.textContent.startsWith('Packets'));
+        await act(async () => packets.click());
+        expect(div.textContent).toContain('listening');
+        await act(async () => root.unmount());
+    });
 });

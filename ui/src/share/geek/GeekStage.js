@@ -116,6 +116,7 @@ function GeekStage({ master, tiles, isMobile }) {
                 borderColor: 'divider',
                 background: 'color-mix(in srgb, var(--paper) 92%, transparent)',
                 transition: 'height 160ms ease',
+                '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
             }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: open ? 1 : 0, borderColor: 'divider' }}>
                     <Tabs
@@ -133,8 +134,8 @@ function GeekStage({ master, tiles, isMobile }) {
                             },
                         }}
                     >
-                        <Tab label={`Packets${lines.length ? ' · ' + lines.length : ''}`} />
-                        <Tab label="This device" />
+                        <Tab label={`Packets${lines.length ? ' · ' + lines.length : ''}`} onClick={() => setOpen(true)} />
+                        <Tab label="This device" onClick={() => setOpen(true)} />
                     </Tabs>
                     <IconButton size="small" onClick={() => setOpen(value => !value)}
                         aria-label={open ? 'Hide the log' : 'Show the log'} aria-expanded={open} sx={{ mr: 0.5 }}>

@@ -9,6 +9,7 @@ import IconButton from '@mui/material/IconButton';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import OpenInFullRounded from '@mui/icons-material/OpenInFullRounded';
 
+import { captureDroppedHandles } from '../gallery/replaceOriginal';
 import { buildScene, routePoints, pointAlong, TIER } from './scene';
 
 const mono = '"JetBrains Mono", "IBM Plex Mono", monospace';
@@ -69,6 +70,10 @@ function polygon(ctx, x, y, r, sides, rotation) {
     }
     ctx.closePath();
 }
+
+// With reduced motion the map stays still; the packet log still lists the traffic.
+const prefersReducedMotion = () => typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** `value` cut with an ellipsis to fit `max` pixels in the current font. */
 function fit(ctx, value, max) {
@@ -162,7 +167,7 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
     /** Send a packet along a route; `reverse` runs it from the far end towards the device. */
     const send = useCallback((route, { reverse = false, rgb, label = '', speed = 0.012 } = {}) => {
         const current = sceneRef.current;
-        if (!current || !route) return;
+        if (!current || !route || prefersReducedMotion()) return;
         const points = routePoints(current, route);
         if (points.length < 2) return;
         if (packetsRef.current.length > 300) return;
@@ -492,7 +497,9 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
     const handleDrop = useCallback((event) => {
         event.preventDefault();
         const files = Array.from(event.dataTransfer?.files || []);
-        if (files.length) master.emitter.emit('filesSelected', files);
+        if (!files.length) return;
+        // Like the gallery: keep file handles so an edit can later replace the original.
+        captureDroppedHandles(event.dataTransfer).then(() => master.emitter.emit('filesSelected', files));
     }, [master.emitter]);
 
     const thumb = selected?.type === 'thumb' ? scene.thumbs.find(item => item.key === selected.key) : null;

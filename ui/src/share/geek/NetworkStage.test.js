@@ -51,7 +51,7 @@ describe('NetworkStage', () => {
         const drop = new Event('drop', { bubbles: true });
         drop.dataTransfer = { files: [file] };
         await act(async () => div.firstChild.dispatchEvent(drop));
-        expect(onFiles).toHaveBeenCalledWith([file]);
+        await vi.waitFor(() => expect(onFiles).toHaveBeenCalledWith([file]));
         await act(async () => root.unmount());
     });
 });
