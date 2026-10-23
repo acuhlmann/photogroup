@@ -52,6 +52,7 @@ export default class ServerPinning {
         this.retries = new Map(); // infoHash -> failed attempts in a row
         this.pending = new Set(); // ours to land: queued, running or due a retry
         this.landed = 0; // copies stored since nothing was pending
+        this.failed = 0; // copies we gave up on meanwhile
         this.hidden = false;
         emitter?.on?.('photos', event => this.onPhotos(event));
         emitter?.on?.('roomSettings', settings => this.setSettings(settings));
@@ -90,7 +91,7 @@ export default class ServerPinning {
                 this.done.delete(update.infoHash);
             }
             // Someone else's copy landed: nothing left for us to send.
-            if (update.hasServerCopy && !this.queued.has(update.infoHash)) this.settle(update.infoHash);
+            if (update.hasServerCopy && !this.queued.has(update.infoHash)) this.settle(update.infoHash, 'landed');
             if (update.serverCopyRequestedAt && !update.hasServerCopy) this.answerRequest(update.infoHash);
         });
     }
@@ -162,7 +163,7 @@ export default class ServerPinning {
         this.running = this.upload(job)
             .catch(err => {
                 Logger.warn('ServerPinning: ' + job.infoHash + ' ' + (err?.message || err));
-                this.settle(job.infoHash);
+                this.settle(job.infoHash, 'failed');
             })
             .finally(() => {
                 this.running = null;
@@ -174,32 +175,32 @@ export default class ServerPinning {
 
     async upload({ infoHash, reason }) {
         const photo = this.roomPhotos.get(infoHash);
-        if (photo?.hasServerCopy) return this.settle(infoHash);
+        if (photo?.hasServerCopy) return this.settle(infoHash, 'landed');
         const blob = this.localFiles.get(infoHash) || await this.findBytes?.(infoHash);
-        if (!blob) return this.settle(infoHash);
+        if (!blob) return this.settle(infoHash, 'failed');
         if (blob.size > MAX_PHOTO_BYTES) {
             this.done.add(infoHash);
             Logger.info('ServerPinning: ' + infoHash + ' is too large to leave on the server');
-            return this.settle(infoHash);
+            return this.settle(infoHash, 'failed');
         }
         Logger.info('ServerPinning: leaving a server copy of ' + (photo?.fileName || infoHash) + ' (' + reason + ')');
         const result = await this.service.uploadServerCopy(infoHash, blob);
-        if (result?.status === 'interrupted') {
+        // Cut off, or someone else is sending it: still not on the server.
+        // Retrying takes over should their upload stall.
+        if (result?.status === 'interrupted' || result?.status === 'busy') {
             if (this.hidden) this.interrupted.add(infoHash);
             else this.retryLater(infoHash);
             return;
         }
-        if (result?.status !== 'busy') {
-            // Stored, already there, or refused for good: don't send it again.
-            // Someone else uploading may stall, so a later request can retry.
-            this.done.add(infoHash);
-        }
-        this.settle(infoHash, result?.status === 'stored' || result?.status === 'exists');
+        // Stored, already there, or refused for good: don't send it again.
+        this.done.add(infoHash);
+        this.settle(infoHash, result?.status === 'stored' || result?.status === 'exists' ? 'landed' : 'failed');
     }
 
     /** Pick a cut-off upload up again, unless a copy landed meanwhile. */
     carryOn(infoHash, reason) {
-        if (!this.enqueue(infoHash, reason) && !this.queued.has(infoHash)) this.settle(infoHash);
+        if (this.enqueue(infoHash, reason) || this.queued.has(infoHash)) return;
+        this.settle(infoHash, this.roomPhotos.get(infoHash)?.hasServerCopy ? 'landed' : undefined);
     }
 
     /** Still in front: try again soon, then less and less often. */
@@ -221,23 +222,25 @@ export default class ServerPinning {
         this.report();
     }
 
-    /** Nothing more for us to send of this photo, landed or not. */
-    settle(infoHash, landed = false) {
+    /** Nothing more for us to send of this photo: `'landed'`, `'failed'`, or neither (deleted). */
+    settle(infoHash, outcome) {
         this.retries.delete(infoHash);
         this.interrupted.delete(infoHash);
         if (!this.pending.delete(infoHash)) return;
-        if (landed) this.landed++;
+        if (outcome === 'landed') this.landed++;
+        if (outcome === 'failed') this.failed++;
         this.report();
     }
 
     /**
      * `{pending, landed, safe}`: how many copies are still on their way, how
-     * many landed meanwhile, and whether all of it is now on the server.
+     * many landed meanwhile, and whether all of it is now on the server:
+     * not so if any copy was given up on.
      */
     report() {
         const pending = this.pending.size;
-        const landed = this.landed;
-        if (pending === 0) this.landed = 0;
-        this.emitter?.emit?.('serverCopyBackup', { pending, landed, safe: pending === 0 && landed > 0 });
+        const { landed, failed } = this;
+        if (pending === 0) this.landed = this.failed = 0;
+        this.emitter?.emit?.('serverCopyBackup', { pending, landed, safe: pending === 0 && landed > 0 && failed === 0 });
     }
 }

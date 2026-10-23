@@ -247,12 +247,32 @@ describe('ServerPinning', () => {
             await settle();
             expect(reports.at(-1)).toEqual({ pending: 0, landed: 2, safe: true });
 
-            // A copy refused for good is not a backup.
-            emit({ type: 'all', item: [photo('c', 'me')] });
+            // A copy refused for good is not a backup, even next to one that landed.
+            emit({ type: 'all', item: [photo('c', 'me'), photo('d', 'me')] });
             service.uploadServerCopy.mockResolvedValueOnce({ status: 'refused', code: 413 });
-            pinning.shared([{ infoHash: 'c', blob }]);
+            pinning.shared([{ infoHash: 'c', blob }, { infoHash: 'd', blob }]);
             await settle();
-            expect(reports.at(-1)).toEqual({ pending: 0, landed: 0, safe: false });
+            await settle();
+            expect(reports.at(-1)).toEqual({ pending: 0, landed: 1, safe: false });
+        });
+
+        it('stays on it while someone else is sending the copy, and counts their copy as landed', async () => {
+            const { pinning, service, emit, emitter, timers, settle } = setup();
+            const reports = [];
+            emitter.on('serverCopyBackup', report => reports.push(report));
+            emitter.emit('roomSettings', { keepCopies: true });
+            emit({ type: 'all', item: [photo('a', 'me')] });
+            service.uploadServerCopy.mockResolvedValueOnce({ status: 'busy' });
+            pinning.shared([{ infoHash: 'a', blob }]);
+            await settle();
+            expect(reports.at(-1)).toMatchObject({ pending: 1 });
+            expect(timers).toHaveLength(1);
+
+            emit({ type: 'update', item: [{ infoHash: 'a', hasServerCopy: true }] });
+            expect(reports.at(-1)).toEqual({ pending: 0, landed: 1, safe: true });
+            timers[0].fn();
+            await settle();
+            expect(service.uploadServerCopy).toHaveBeenCalledTimes(1);
         });
     });
 });
