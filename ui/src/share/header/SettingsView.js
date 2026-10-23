@@ -91,7 +91,7 @@ function getLogColor(level) {
 }
 
 function SettingsView(props) {
-    const {master, enqueueSnackbar, closeSnackbar, prefersDarkMode} = props;
+    const {master, enqueueSnackbar, closeSnackbar, prefersDarkMode, showButton = true} = props;
     const masterRef = useRef(master);
     masterRef.current = master;
 
@@ -251,14 +251,17 @@ function SettingsView(props) {
 
     return (
         <div>
-            <IconButton
-                aria-label="Settings"
-                aria-haspopup="true"
-                onClick={showLogs}
-                sx={headerButtonSx}
-            >
-                <TuneRounded />
-            </IconButton>
+            {/* Hidden in simple mode; it stays mounted for the log and stored settings. */}
+            {showButton && (
+                <IconButton
+                    aria-label="Settings"
+                    aria-haspopup="true"
+                    onClick={showLogs}
+                    sx={headerButtonSx}
+                >
+                    <TuneRounded />
+                </IconButton>
+            )}
 
             <Dialog
                 open={open}
@@ -393,6 +396,7 @@ SettingsView.propTypes = {
     emitter: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,
     prefersDarkMode: PropTypes.bool.isRequired,
+    showButton: PropTypes.bool,
 };
 
 export default withSnackbar(SettingsView);

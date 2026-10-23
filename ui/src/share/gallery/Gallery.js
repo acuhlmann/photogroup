@@ -27,6 +27,7 @@ import AndroidLocationNote from "./AndroidLocationNote";
 import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { captureDroppedHandles } from "./replaceOriginal";
+import SimpleGrid from "../simple/SimpleGrid";
 
 /** A tile's identity across updates; an upload's infoHash changes once it is hashed. */
 const tileKeyOf = tile => tile.tileKey || tile.infoHash;
@@ -64,9 +65,10 @@ function AddPhotosStrip({ narrow }) {
  * Display room tiles, accept dropped uploads, and open the media viewer.
  * An unsynced empty gallery waits for a snapshot or four seconds before showing the upload prompt.
  * `showNetworkReadout` controls the readout in the empty state and defaults to true.
+ * `variant` "simple" swaps the tiles for big squares with a Save button each.
  */
 function Gallery(props) {
-    const {master, showNetworkReadout = true} = props;
+    const {master, showNetworkReadout = true, variant = 'full'} = props;
     const theme = useTheme();
     const [tiles, setTiles] = useState([]);
     const [dragOver, setDragOver] = useState(false);
@@ -482,6 +484,8 @@ function Gallery(props) {
         </TileErrorBoundary>;
     }, [openAt, selectedKey, visible.length]);
 
+    const showError = useCallback(message => master.emitter.emit('showError', message), [master.emitter]);
+
     return (
         <Box
             onDragEnter={handleDragEnter}
@@ -507,6 +511,8 @@ function Gallery(props) {
                 </Box>
                 {roomSyncTimedOut && <AddPhotosStrip narrow />}
                 </>
+            ) : variant === 'simple' ? (
+                <SimpleGrid tiles={tiles} roomId={master.service && master.service.id} onError={showError} />
             ) : tiles.length === 0 ? (
                 <>
                 <Box
@@ -617,5 +623,6 @@ function Gallery(props) {
 Gallery.propTypes = {
     master: PropTypes.object.isRequired,
     showNetworkReadout: PropTypes.bool,
+    variant: PropTypes.oneOf(['full', 'simple']),
 };
 export default withSnackbar(Gallery);

@@ -39,7 +39,7 @@ const styles = theme => ({
     },
 });
 
-function Uploader({classes, model, emitter}) {
+function Uploader({classes, model, emitter, showButton = true}) {
     const [visible, setVisible] = useState(false);
     const [open, setOpen] = useState(false);
     const [disabled, setDisabled] = useState(true);
@@ -209,29 +209,32 @@ function Uploader({classes, model, emitter}) {
                 onChange={handleUpload}
                 ref={uploaderDomRef}
             />
-            <label htmlFor="contained-button-file" style={{cursor: disabled ? 'not-allowed' : 'pointer'}}>
-                <Button
-                    aria-haspopup="true"
-                    aria-label="Share photos"
-                    variant="contained"
-                    component="span"
-                    disabled={disabled || unpacking}
-                    aria-busy={unpacking}
-                    sx={{
-                        height: 34,
-                        minWidth: 34,
-                        px: { xs: 1, sm: 1.5 },
-                        gap: 0.75,
-                        borderRadius: '8px',
-                        '& .MuiSvgIcon-root': { fontSize: 18 },
-                    }}
-                >
-                    {unpacking ? <CircularProgress size={16} color="inherit" /> : <CloudUploadRounded />}
-                    <Box component="span" sx={{ ...headerLabelSx, display: { xs: 'none', sm: 'inline' } }}>
-                        {unpacking ? 'Unpacking…' : 'Share'}
-                    </Box>
-                </Button>
-            </label>
+            {/* Simple mode hides this and opens the input from its own button. */}
+            {showButton && (
+                <label htmlFor="contained-button-file" style={{cursor: disabled ? 'not-allowed' : 'pointer'}}>
+                    <Button
+                        aria-haspopup="true"
+                        aria-label="Share photos"
+                        variant="contained"
+                        component="span"
+                        disabled={disabled || unpacking}
+                        aria-busy={unpacking}
+                        sx={{
+                            height: 34,
+                            minWidth: 34,
+                            px: { xs: 1, sm: 1.5 },
+                            gap: 0.75,
+                            borderRadius: '8px',
+                            '& .MuiSvgIcon-root': { fontSize: 18 },
+                        }}
+                    >
+                        {unpacking ? <CircularProgress size={16} color="inherit" /> : <CloudUploadRounded />}
+                        <Box component="span" sx={{ ...headerLabelSx, display: { xs: 'none', sm: 'inline' } }}>
+                            {unpacking ? 'Unpacking…' : 'Share'}
+                        </Box>
+                    </Button>
+                </label>
+            )}
 
             <Dialog
                 open={open}
@@ -301,6 +304,7 @@ Uploader.propTypes = {
     classes: PropTypes.object.isRequired,
     model: PropTypes.object.isRequired,
     emitter: PropTypes.object.isRequired,
+    showButton: PropTypes.bool,
 };
 
 export default withStyles(styles)(Uploader);

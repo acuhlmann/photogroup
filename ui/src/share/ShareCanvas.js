@@ -16,12 +16,19 @@ import { withSnackbar } from './compatibility/withSnackbar';
 
 import FrontView from "./FrontView";
 import NetworkPanel from "./NetworkPanel";
+import SimpleFront from "./simple/SimpleFront";
+import SimpleRoomBar from "./simple/SimpleRoomBar";
 import WebTorrent from 'webtorrent';
 
 const BACKUP_SNACK = 'serverCopyBackup';
 
-/** Show the landing page or room gallery with a responsive connection panel. */
-function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
+/**
+ * Show the landing page or room gallery for the chosen mode. The gallery
+ * keeps the same place in the tree in every mode, so switching modes in a
+ * room doesn't remount it and lose the photos it has loaded.
+ */
+function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar}) {
+    const simple = mode === 'simple';
     const deferredPromptRef = useRef(null);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -221,13 +228,15 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
                     overflow: 'auto',
                     px: { xs: 1.5, sm: 2 },
                     pt: { xs: 1.5, sm: 2 },
-                    pb: isMobile ? 10 : 2,
+                    pb: isMobile && !simple ? 10 : 2,
                 }}>
+                    {simple ? <SimpleRoomBar master={master} /> : null}
                     {/* The Link panel shows the readout too; don't repeat it beside itself. */}
-                    <Gallery master={master} showNetworkReadout={isMobile || !peopleOpen} />
+                    <Gallery master={master} variant={simple ? 'simple' : 'full'}
+                        showNetworkReadout={isMobile || !peopleOpen} />
                 </Box>
 
-                {!isMobile && peopleOpen && (
+                {!simple && !isMobile && peopleOpen && (
                     <Box sx={{
                         width: 360,
                         flexShrink: 0,
@@ -244,7 +253,7 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
                     </Box>
                 )}
 
-                {!isMobile && !peopleOpen && (
+                {!simple && !isMobile && !peopleOpen && (
                     <Box sx={{
                         width: 48,
                         flexShrink: 0,
@@ -264,7 +273,7 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
                     </Box>
                 )}
 
-                {isMobile && (
+                {!simple && isMobile && (
                     <>
                         <Button
                             variant="contained"
@@ -313,7 +322,7 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             px: { xs: 1.5, sm: 2 },
             py: { xs: 1.5, sm: 2 },
         }}>
-            <FrontView master={master}/>
+            {simple ? <SimpleFront master={master}/> : <FrontView master={master}/>}
         </Box>
     );
 }

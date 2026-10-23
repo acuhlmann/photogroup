@@ -164,6 +164,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
     }, [theme, propsTheme]);
 
     const hasActivity = networkStatus.downSpeed || networkStatus.upSpeed;
+    const simple = mode === 'simple';
 
     return (
         <ThemeProvider theme={currentTheme}>
@@ -221,21 +222,24 @@ function App({theme: propsTheme, prefersDarkMode}) {
                                 {/* Action buttons */}
                                 <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexShrink: 0 }}>
                                     <ModeSwitch mode={mode} onChange={changeMode}/>
-                                    <AddPeersView master={masterRef.current}/>
+                                    {/* Simple mode has its own buttons; these stay mounted for their dialogs. */}
+                                    <AddPeersView master={masterRef.current} showButton={!simple}/>
                                     <Uploader
                                         model={masterRef.current.torrentAddition}
                                         emitter={masterRef.current.emitter}
+                                        showButton={!simple}
                                     />
                                     <SettingsView
                                         master={masterRef.current}
                                         emitter={masterRef.current.emitter}
                                         prefersDarkMode={prefersDarkMode}
+                                        showButton={!simple}
                                     />
                                 </Stack>
                             </Toolbar>
 
                             {/* Network status bar */}
-                            {(networkStatus.peers > 0 || hasActivity) && (
+                            {!simple && (networkStatus.peers > 0 || hasActivity) && (
                                 <Box
                                     className="telemetry"
                                     sx={{
