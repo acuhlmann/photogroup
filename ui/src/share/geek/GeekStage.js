@@ -100,10 +100,11 @@ function GeekStage({ master, isMobile }) {
         <Box sx={{
             display: 'flex',
             flexDirection: 'column',
-            minHeight: 0,
             minWidth: 0,
             flex: isMobile ? 'none' : 1,
             height: isMobile ? '58vh' : 'auto',
+            // The graph needs 300px and the log 150px; short phones would overlap the photos.
+            minHeight: isMobile ? 450 : 0,
             borderBottom: isMobile ? 1 : 0,
             borderColor: 'divider',
         }}>

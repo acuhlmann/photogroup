@@ -725,6 +725,7 @@ function TopologyView({ master, fillHeight, active = true }) {
                     ctx.font = '11px "JetBrains Mono", "IBM Plex Sans", monospace';
                     const labelWidth = ctx.measureText(_.truncate((node.label || '').split('\n')[0], { length: 16 })).width;
                     const w = Math.max(90, labelWidth + 16);
+                    node.boxWidth = w;
                     const h = 32;
                     drawRoundedRect(ctx, x - w / 2, y - h / 2, w, h, 6);
                     ctx.fillStyle = isDark
@@ -791,6 +792,8 @@ function TopologyView({ master, fillHeight, active = true }) {
         const clickedNode = nodes.find(node => {
             const dx = node.x - x;
             const dy = node.y - y;
+            // Client boxes are as wide as their label: anywhere on the box counts.
+            if (node.boxWidth) return Math.abs(dx) <= node.boxWidth / 2 && Math.abs(dy) < 25;
             return Math.sqrt(dx * dx + dy * dy) < 25;
         });
 

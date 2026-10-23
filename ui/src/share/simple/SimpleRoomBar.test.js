@@ -3,7 +3,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import EventEmitter from 'eventemitter3';
-import SimpleRoomBar from './SimpleRoomBar';
+vi.mock('clipboard-copy', () => ({ default: vi.fn().mockResolvedValue() }));
+
+const { default: copy } = await import('clipboard-copy');
+const { default: SimpleRoomBar } = await import('./SimpleRoomBar');
 
 async function render(peers) {
     const master = {
@@ -45,5 +48,19 @@ describe('SimpleRoomBar', () => {
         await act(async () => leave.click());
         expect(master.leaveRoomAndReload).toHaveBeenCalled();
         await act(async () => root.unmount());
+    });
+
+    it('copies the link when the share sheet fails', async () => {
+        navigator.share = vi.fn().mockRejectedValue(Object.assign(new Error('no'), { name: 'NotAllowedError' }));
+        try {
+            const { div, root } = await render([]);
+            const send = Array.from(div.querySelectorAll('button')).find(button => button.textContent === 'Send the link instead');
+            await act(async () => send.click());
+            expect(copy).toHaveBeenCalledWith(window.location.origin + '?room=room-1');
+            expect(div.textContent).toContain('Link copied');
+            await act(async () => root.unmount());
+        } finally {
+            delete navigator.share;
+        }
     });
 });

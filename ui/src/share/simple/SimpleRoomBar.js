@@ -36,19 +36,25 @@ function SimpleRoomBar({ master }) {
 
     const sendLink = useCallback(async () => {
         const data = { title: 'PhotoGroup', text: 'Get the photos', url };
-        try {
-            if (navigator.share && (!navigator.canShare || navigator.canShare(data))) {
+        if (navigator.share && (!navigator.canShare || navigator.canShare(data))) {
+            try {
                 await navigator.share(data);
                 return;
+            } catch (err) {
+                if (err && err.name === 'AbortError') return;
+                // The share sheet failed; copying the link still works.
+                Logger.warn('Sharing the room link failed: ' + (err && err.message ? err.message : err));
             }
+        }
+        try {
             await copy(url);
             setCopied(true);
             setTimeout(() => setCopied(false), 3000);
         } catch (err) {
-            if (err && err.name === 'AbortError') return;
-            Logger.warn('Sending the room link failed: ' + (err && err.message ? err.message : err));
+            Logger.warn('Copying the room link failed: ' + (err && err.message ? err.message : err));
+            master.emitter.emit('showError', "Couldn't send the link. Let them scan the code instead.");
         }
-    }, [url]);
+    }, [url, master.emitter]);
 
     return (
         <Stack spacing={2} sx={{ mb: 3, maxWidth: 560, mx: 'auto', width: '100%' }}>
