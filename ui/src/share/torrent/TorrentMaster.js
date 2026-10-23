@@ -229,6 +229,8 @@ export default class TorrentMaster {
 
     handleResume(reason, { hiddenMs = 0, networkChanged = false } = {}) {
         if (hiddenMs > 0) this.serverFallback?.resetClocks();
+        // Before the guard: a quick second resume still means we're in front.
+        this.serverPinning?.onResume();
         const now = Date.now();
         if (now - this._lastResumeAt < 2000) return; // visibility + online fire together
         this._lastResumeAt = now;
@@ -236,7 +238,6 @@ export default class TorrentMaster {
         // Back in the swarm now, not after the tracker library's jitter.
         try { this.trackerKick?.kick({ hiddenMs, networkChanged }); } catch (err) { Logger.warn('trackerKick on resume: ' + err); }
         this.creator?.refreshIceServers?.().catch(err => Logger.warn('refreshIceServers: ' + err));
-        this.serverPinning?.onResume();
         if (reason !== 'sse') {
             try { this.service.reconnectUpdates?.(); } catch { /* SSE already handled */ }
         }

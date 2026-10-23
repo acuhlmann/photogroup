@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import EventEmitter from 'eventemitter3';
 import RoomPhotos from '../RoomPhotos';
-import ServerPinning, { HELPER_DELAY_MS } from '../ServerPinning';
+import ServerPinning, { HELPER_DELAY_MS, RETRY_DELAYS_MS } from '../ServerPinning';
 import { MAX_PHOTO_BYTES } from '../ServerCopyLimits';
 
 function setup({ peers = [{ peerId: 'me' }, { peerId: 'friend' }], me = 'me', bytes = {}, now = () => 0 } = {}) {
@@ -180,5 +180,99 @@ describe('ServerPinning', () => {
         await settle();
         expect(service.uploadServerCopy).toHaveBeenCalledTimes(2);
         expect(pinning.queued.size).toBe(0);
+    });
+
+    describe('until the copy lands', () => {
+        const interrupted = { status: 'interrupted', received: 10 };
+
+        it('keeps trying while in front, waiting longer each time', async () => {
+            const { pinning, service, emit, emitter, timers, settle } = setup();
+            emitter.emit('roomSettings', { keepCopies: true });
+            emit({ type: 'all', item: [photo('a', 'me')] });
+            service.uploadServerCopy
+                .mockResolvedValueOnce(interrupted)
+                .mockResolvedValueOnce(interrupted)
+                .mockResolvedValueOnce({ status: 'stored' });
+            pinning.shared([{ infoHash: 'a', blob }]);
+            await settle();
+            expect(timers.map(t => t.ms)).toEqual([RETRY_DELAYS_MS[0]]);
+            timers[0].fn();
+            await settle();
+            expect(timers.map(t => t.ms)).toEqual([RETRY_DELAYS_MS[0], RETRY_DELAYS_MS[1]]);
+            timers[1].fn();
+            await settle();
+            expect(service.uploadServerCopy).toHaveBeenCalledTimes(3);
+            expect(timers).toHaveLength(2);
+        });
+
+        it('stops retrying once someone else\'s copy landed', async () => {
+            const { pinning, service, emit, emitter, timers, settle } = setup();
+            emitter.emit('roomSettings', { keepCopies: true });
+            emit({ type: 'all', item: [photo('a', 'me')] });
+            service.uploadServerCopy.mockResolvedValueOnce(interrupted);
+            pinning.shared([{ infoHash: 'a', blob }]);
+            await settle();
+            emit({ type: 'update', item: [{ infoHash: 'a', hasServerCopy: true }] });
+            timers[0].fn();
+            await settle();
+            expect(service.uploadServerCopy).toHaveBeenCalledTimes(1);
+        });
+
+        it('waits for the page to come back when the retry falls due in the background', async () => {
+            const { pinning, service, emit, emitter, timers, settle } = setup();
+            emitter.emit('roomSettings', { keepCopies: true });
+            emit({ type: 'all', item: [photo('a', 'me')] });
+            service.uploadServerCopy.mockResolvedValueOnce(interrupted);
+            pinning.shared([{ infoHash: 'a', blob }]);
+            await settle();
+            pinning.hidden = true; // as onHide leaves it
+            timers[0].fn();
+            await settle();
+            expect(service.uploadServerCopy).toHaveBeenCalledTimes(1);
+            await pinning.onResume();
+            expect(service.uploadServerCopy).toHaveBeenCalledTimes(2);
+        });
+
+        it('tells this device while copies are on their way, and when it is safe to lock', async () => {
+            const { pinning, service, emit, emitter, timers, settle } = setup();
+            const reports = [];
+            emitter.on('serverCopyBackup', report => reports.push(report));
+            emitter.emit('roomSettings', { keepCopies: true });
+            emit({ type: 'all', item: [photo('a', 'me'), photo('b', 'me')] });
+            service.uploadServerCopy.mockResolvedValueOnce(interrupted);
+            pinning.shared([{ infoHash: 'a', blob }, { infoHash: 'b', blob }]);
+            await settle();
+            expect(reports.at(-1)).toEqual({ pending: 1, landed: 1, safe: false });
+            timers[0].fn();
+            await settle();
+            expect(reports.at(-1)).toEqual({ pending: 0, landed: 2, safe: true });
+
+            // A copy refused for good is not a backup, even next to one that landed.
+            emit({ type: 'all', item: [photo('c', 'me'), photo('d', 'me')] });
+            service.uploadServerCopy.mockResolvedValueOnce({ status: 'refused', code: 413 });
+            pinning.shared([{ infoHash: 'c', blob }, { infoHash: 'd', blob }]);
+            await settle();
+            await settle();
+            expect(reports.at(-1)).toEqual({ pending: 0, landed: 1, safe: false });
+        });
+
+        it('stays on it while someone else is sending the copy, and counts their copy as landed', async () => {
+            const { pinning, service, emit, emitter, timers, settle } = setup();
+            const reports = [];
+            emitter.on('serverCopyBackup', report => reports.push(report));
+            emitter.emit('roomSettings', { keepCopies: true });
+            emit({ type: 'all', item: [photo('a', 'me')] });
+            service.uploadServerCopy.mockResolvedValueOnce({ status: 'busy' });
+            pinning.shared([{ infoHash: 'a', blob }]);
+            await settle();
+            expect(reports.at(-1)).toMatchObject({ pending: 1 });
+            expect(timers).toHaveLength(1);
+
+            emit({ type: 'update', item: [{ infoHash: 'a', hasServerCopy: true }] });
+            expect(reports.at(-1)).toEqual({ pending: 0, landed: 1, safe: true });
+            timers[0].fn();
+            await settle();
+            expect(service.uploadServerCopy).toHaveBeenCalledTimes(1);
+        });
     });
 });

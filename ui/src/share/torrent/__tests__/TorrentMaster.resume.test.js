@@ -33,6 +33,15 @@ describe('TorrentMaster resume', () => {
         expect(master.findExistingContent).toHaveBeenCalledTimes(1);
     });
 
+    it('tells server pinning it is in front again even on a resume too soon after the last', () => {
+        const master = fakeMaster();
+        master.serverPinning = { onResume: vi.fn() };
+        master.handleResume('visible', { hiddenMs: 1000 });
+        master.handleResume('visible', { hiddenMs: 500 }); // a quick app switch
+        expect(master.serverPinning.onResume).toHaveBeenCalledTimes(2);
+        expect(master.trackerKick.kick).toHaveBeenCalledTimes(1);
+    });
+
     it('leaves the stall clocks alone when the page never slept', () => {
         const master = fakeMaster();
         master.handleResume('sse');

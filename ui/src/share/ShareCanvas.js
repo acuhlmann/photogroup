@@ -18,6 +18,8 @@ import FrontView from "./FrontView";
 import NetworkPanel from "./NetworkPanel";
 import WebTorrent from 'webtorrent';
 
+const BACKUP_SNACK = 'serverCopyBackup';
+
 /** Show the landing page or room gallery with a responsive connection panel. */
 function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
     const deferredPromptRef = useRef(null);
@@ -55,6 +57,22 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             });
         };
 
+        // Our server copies: keep the page open until they land, then say so.
+        const handleBackup = ({ pending, safe }) => {
+            if (pending > 0) {
+                enqueueSnackbar('Leaving a backup on the server · keep PhotoGroup open until it lands', {
+                    key: BACKUP_SNACK, variant: 'info', persist: true, preventDuplicate: true
+                });
+                return;
+            }
+            closeSnackbar(BACKUP_SNACK);
+            if (safe) {
+                enqueueSnackbar('Backup is on the server · safe to lock your phone', {
+                    variant: 'success', autoHideDuration: 6000
+                });
+            }
+        };
+
         const handleReadyToUpload = () => {
             setHasRoom(true);
         };
@@ -66,6 +84,7 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
         master.emitter.on('showError', handleShowError);
         master.emitter.on('showInfo', handleShowInfo);
         master.emitter.on('readyToUpload', handleReadyToUpload);
+        master.emitter.on('serverCopyBackup', handleBackup);
         master.emitter.on('wire', handleWire);
 
         const handleBeforeInstallPrompt = (e) => {
@@ -95,11 +114,12 @@ function ShareCanvas({master, enqueueSnackbar, closeSnackbar}) {
             master.emitter.removeListener('showError', handleShowError);
             master.emitter.removeListener('showInfo', handleShowInfo);
             master.emitter.removeListener('readyToUpload', handleReadyToUpload);
+            master.emitter.removeListener('serverCopyBackup', handleBackup);
             master.emitter.removeListener('wire', handleWire);
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
             window.removeEventListener('appinstalled', handleAppInstalled);
         };
-    }, [master.emitter, enqueueSnackbar]);
+    }, [master.emitter, enqueueSnackbar, closeSnackbar]);
 
     const snack = useCallback((payload, type = 'info', persist = false, vertical = 'bottom') => {
         enqueueSnackbar(payload, {
