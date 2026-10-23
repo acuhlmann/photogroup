@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
+import ExpandLessRounded from '@mui/icons-material/ExpandLessRounded';
 
-import TopologyView from '../topology/TopologyView';
+import NetworkStage from './NetworkStage';
 import MeView from '../MeView';
 import { describeEvent, LOGGED_EVENTS } from './packetLog';
 
@@ -89,59 +92,60 @@ function PacketLog({ lines }) {
 }
 
 /**
- * Geek mode's main stage: the live network graph on top, with what is
- * crossing the wire, and this device's network path, underneath.
+ * Geek mode's whole room: the network map fills the screen, with photos as
+ * thumbnails on the devices that hold them, and a drawer along the bottom
+ * logs what is crossing the wire and shows this device's network path.
  */
-function GeekStage({ master, isMobile }) {
+function GeekStage({ master, tiles, isMobile }) {
     const [tab, setTab] = useState(0);
+    const [open, setOpen] = useState(!isMobile);
     const lines = usePacketLog(master.emitter);
+    const openPhoto = useCallback(key => master.emitter.emit('openPhoto', key), [master.emitter]);
 
     return (
-        <Box sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: 0,
-            flex: isMobile ? 'none' : 1,
-            height: isMobile ? '58vh' : 'auto',
-            // The graph needs 300px and the log 150px; short phones would overlap the photos.
-            minHeight: isMobile ? 450 : 0,
-            borderBottom: isMobile ? 1 : 0,
-            borderColor: 'divider',
-        }}>
+        <Box sx={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ flex: 1, minHeight: 0 }}>
-                <TopologyView master={master} fillHeight />
+                <NetworkStage master={master} tiles={tiles} onOpenPhoto={openPhoto} />
             </Box>
             <Box sx={{
-                height: isMobile ? 150 : '34%',
-                minHeight: isMobile ? 150 : 180,
+                height: open ? (isMobile ? '38vh' : 220) : 33,
+                flex: 'none',
                 display: 'flex',
                 flexDirection: 'column',
                 borderTop: 1,
                 borderColor: 'divider',
-                background: 'color-mix(in srgb, var(--paper) 86%, transparent)',
+                background: 'color-mix(in srgb, var(--paper) 92%, transparent)',
+                transition: 'height 160ms ease',
             }}>
-                <Tabs
-                    value={tab}
-                    onChange={(event, value) => setTab(value)}
-                    sx={{
-                        minHeight: 32,
-                        borderBottom: 1,
-                        borderColor: 'divider',
-                        '& .MuiTab-root': {
+                <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: open ? 1 : 0, borderColor: 'divider' }}>
+                    <Tabs
+                        value={tab}
+                        onChange={(event, value) => { setTab(value); setOpen(true); }}
+                        sx={{
+                            flex: 1,
                             minHeight: 32,
-                            py: 0.5,
-                            fontSize: '0.7rem',
-                            fontFamily: 'var(--font-mono)',
-                            letterSpacing: '0.06em',
-                        },
-                    }}
-                >
-                    <Tab label={`Packets${lines.length ? ' · ' + lines.length : ''}`} />
-                    <Tab label="This device" />
-                </Tabs>
-                <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                    {tab === 0 ? <PacketLog lines={lines} /> : <MeView master={master} />}
+                            '& .MuiTab-root': {
+                                minHeight: 32,
+                                py: 0.5,
+                                fontSize: '0.7rem',
+                                fontFamily: 'var(--font-mono)',
+                                letterSpacing: '0.06em',
+                            },
+                        }}
+                    >
+                        <Tab label={`Packets${lines.length ? ' · ' + lines.length : ''}`} />
+                        <Tab label="This device" />
+                    </Tabs>
+                    <IconButton size="small" onClick={() => setOpen(value => !value)}
+                        aria-label={open ? 'Hide the log' : 'Show the log'} aria-expanded={open} sx={{ mr: 0.5 }}>
+                        {open ? <ExpandMoreRounded fontSize="small" /> : <ExpandLessRounded fontSize="small" />}
+                    </IconButton>
                 </Box>
+                {open && (
+                    <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                        {tab === 0 ? <PacketLog lines={lines} /> : <MeView master={master} />}
+                    </Box>
+                )}
             </Box>
         </Box>
     );
@@ -149,6 +153,7 @@ function GeekStage({ master, isMobile }) {
 
 GeekStage.propTypes = {
     master: PropTypes.object.isRequired,
+    tiles: PropTypes.array,
     isMobile: PropTypes.bool,
 };
 

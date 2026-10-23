@@ -32,6 +32,7 @@ function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar})
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
     const [hasRoom, setHasRoom] = useState(false);
+    const [tiles, setTiles] = useState([]);
 
     useEffect(() => {
         if(!WebTorrent.WEBRTC_SUPPORT) {
@@ -164,32 +165,31 @@ function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar})
     }, [snack, install]);
 
     // Room. Simple puts its bar above big photo squares, default is the
-    // gallery alone, geek puts the network stage first and photos beside it.
+    // gallery alone. Geek is the network map alone, with the photos drawn on
+    // it; the gallery stays mounted but hidden so it keeps loading them and
+    // can still open the viewer.
     if (hasRoom) {
         return (
             <Box sx={{
                 flex: 1,
                 minHeight: 0,
                 display: 'flex',
-                flexDirection: geek && isMobile ? 'column' : 'row',
-                overflow: geek && isMobile ? 'auto' : 'hidden',
+                overflow: 'hidden',
                 position: 'relative',
             }}>
-                {geek ? <GeekStage master={master} isMobile={isMobile} /> : null}
+                {geek ? <GeekStage master={master} tiles={tiles} isMobile={isMobile} /> : null}
                 <Box sx={{
-                    flex: geek && !isMobile ? 'none' : 1,
-                    width: geek && !isMobile ? 440 : 'auto',
+                    display: geek ? 'none' : 'block',
+                    flex: 1,
                     minWidth: 0,
-                    overflow: geek && isMobile ? 'visible' : 'auto',
+                    overflow: 'auto',
                     px: { xs: 1.5, sm: 2 },
                     pt: { xs: 1.5, sm: 2 },
                     pb: 2,
-                    borderLeft: geek && !isMobile ? 1 : 0,
-                    borderColor: 'divider',
                 }}>
                     {simple ? <SimpleRoomBar master={master} /> : null}
                     <Gallery master={master} variant={simple ? 'simple' : 'full'}
-                        singleColumn={geek && !isMobile} showNetworkReadout={false} />
+                        showNetworkReadout={false} onTilesChange={setTiles} />
                 </Box>
             </Box>
         );

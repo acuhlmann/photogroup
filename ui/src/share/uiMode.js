@@ -5,7 +5,7 @@ export const MODES = ['simple', 'default', 'geek'];
 export const MODE_INFO = {
     simple: { label: 'Simple', detail: 'Just share and get photos' },
     default: { label: 'Default', detail: 'Gallery, details, sorting and maps' },
-    geek: { label: 'Geek', detail: 'Network graph first, photos second' },
+    geek: { label: 'Geek', detail: 'Live network map, photos on the devices' },
 };
 
 const KEY = 'photogroup.uiMode';

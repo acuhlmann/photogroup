@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import EventEmitter from 'eventemitter3';
 
-vi.mock('../topology/TopologyView', () => ({ default: () => <div data-testid="topology" /> }));
+vi.mock('./NetworkStage', () => ({ default: ({ tiles }) => <div data-testid="topology">{(tiles || []).length} photos</div> }));
 vi.mock('../MeView', () => ({ default: () => <div data-testid="me-view" /> }));
 
 const { default: GeekStage } = await import('./GeekStage');

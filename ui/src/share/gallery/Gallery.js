@@ -66,10 +66,10 @@ function AddPhotosStrip({ narrow }) {
  * An unsynced empty gallery waits for a snapshot or four seconds before showing the upload prompt.
  * `showNetworkReadout` controls the readout in the empty state and defaults to true.
  * `variant` "simple" swaps the tiles for big squares with a Save button each.
- * `singleColumn` keeps the grid to one column, for a narrow side pane.
+ * `onTilesChange` hears every change to the tiles, for views that draw them elsewhere.
  */
 function Gallery(props) {
-    const {master, showNetworkReadout = true, variant = 'full', singleColumn = false} = props;
+    const {master, showNetworkReadout = true, variant = 'full', onTilesChange} = props;
     const theme = useTheme();
     const [tiles, setTiles] = useState([]);
     const [dragOver, setDragOver] = useState(false);
@@ -400,6 +400,11 @@ function Gallery(props) {
         updateGalleryState();
     }, [tiles, updateGalleryState]);
 
+    // Geek mode draws the photos on its network map instead of this grid.
+    useEffect(() => {
+        if (onTilesChange) onTilesChange(tiles);
+    }, [tiles, onTilesChange]);
+
     useEffect(() => {
         const emitter = master.emitter;
         /** Mark the room synced only after a complete photo snapshot arrives. */
@@ -451,6 +456,13 @@ function Gallery(props) {
     const closeViewer = useCallback(() => {
         setSelectedKey(null);
     }, []);
+
+    // Anything else showing photos (the geek map) asks the gallery to open one.
+    useEffect(() => {
+        const handleOpen = key => setSelectedKey(key);
+        master.emitter.on('openPhoto', handleOpen);
+        return () => master.emitter.removeListener('openPhoto', handleOpen);
+    }, [master.emitter]);
     const located = visible.filter(tile => arranged.facts.get(tile)?.location).map(tile => {
         const facts = arranged.facts.get(tile);
         return { tile, location: facts.location, label: facts.title || tile.fileName || 'photo', takenAt: facts.takenAt };
@@ -570,7 +582,7 @@ function Gallery(props) {
                 {(mode === 'grid' || tiles.length < 2) && <Box
                     className="stagger-children"
                     sx={{
-                        columnCount: visible.length < 2 || singleColumn ? 1 : { xs: 1, sm: 2, xl: 3 },
+                        columnCount: visible.length < 2 ? 1 : { xs: 1, sm: 2, xl: 3 },
                         columnGap: theme.spacing(2),
                         width: '100%',
                         maxWidth: visible.length < 2 ? 880 : 'none',
@@ -625,6 +637,6 @@ Gallery.propTypes = {
     master: PropTypes.object.isRequired,
     showNetworkReadout: PropTypes.bool,
     variant: PropTypes.oneOf(['full', 'simple']),
-    singleColumn: PropTypes.bool,
+    onTilesChange: PropTypes.func,
 };
 export default withSnackbar(Gallery);
