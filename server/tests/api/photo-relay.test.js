@@ -252,4 +252,13 @@ describe('Photo relay (server copies, pinned when needed)', () => {
         await request(app).delete(`/api/rooms/${roomId}/photos/`).send({ infoHash }).expect(200);
         await download(receiver).expect(404);
     });
+
+    it('deletes the whole room, with its server copies, for someone in it', async () => {
+        await putChunk(sharer).expect(200);
+        await auth(request(app).delete(`/api/rooms/${roomId}`), null).expect(403);
+        await auth(request(app).delete(`/api/rooms/${roomId}`), receiver).expect(200);
+        await request(app).get(`/api/rooms/${roomId}`).expect(404);
+        await download(receiver).expect(404);
+        await auth(request(app).delete(`/api/rooms/${roomId}`), receiver).expect(404);
+    });
 });

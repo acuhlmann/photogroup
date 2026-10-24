@@ -615,6 +615,22 @@ export default class Rooms {
             this.persist(room);
             return response.send(room.settings);
         });
+
+        // Anyone in the room can delete it for everyone: the room, its photo
+        // list and its server copies go now, not after 30 days.
+        app.delete('/api/rooms/:id', (request, response) => {
+            const room = this.rooms.get(request.params.id);
+            if (!room) return response.status(404).send('Room not found');
+            const peer = this.sessionPeer(room, request);
+            if (!peer) return response.status(403).send('Join the room first');
+            this.updateChannel.send({ event: 'room', data: { deleted: { peerId: peer.peerId, name: peer.name || '' } } },
+                this.allRoomClients(room));
+            this.relay.deleteRoom(room.id);
+            room.photoIndex?.clear();
+            this.rooms.delete(room.id);
+            this.store.schedule([...this.rooms.values()]);
+            return response.send({ deleted: room.id });
+        });
     }
 
     static addEmptySpaces(values) {

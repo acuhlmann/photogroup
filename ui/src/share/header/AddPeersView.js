@@ -23,6 +23,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import Fade from '@mui/material/Fade';
 import { headerButtonSx, headerLabelSx } from './headerButtonSx';
+import RoomPrivacy from '../RoomPrivacy';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Fade ref={ref} {...props} />;
@@ -400,15 +401,18 @@ function AddPeersView({ master, showButton = true }) {
                     }}
                 >
                     {hasRoomValue ? (
-                        <Button
-                            variant="outlined"
-                            color="error"
-                            size="small"
-                            startIcon={<ExitToAppOutlined />}
-                            onClick={() => master.leaveRoomAndReload()}
-                        >
-                            Leave Room
-                        </Button>
+                        <Stack direction="row" spacing={1}>
+                            <Button
+                                variant="outlined"
+                                color="error"
+                                size="small"
+                                startIcon={<ExitToAppOutlined />}
+                                onClick={() => master.leaveRoomAndReload()}
+                            >
+                                Leave Room
+                            </Button>
+                            <RoomPrivacy master={master} buttonSx={{ color: 'text.secondary' }} />
+                        </Stack>
                     ) : (
                         <Box />
                     )}

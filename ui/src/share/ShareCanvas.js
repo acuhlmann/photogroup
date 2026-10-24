@@ -15,6 +15,7 @@ import GeekStage from "./geek/GeekStage";
 import SimpleFront from "./simple/SimpleFront";
 import SimpleRoomBar from "./simple/SimpleRoomBar";
 import WebTorrent from 'webtorrent';
+import { takeRoomNotice } from "./roomNotice";
 
 const BACKUP_SNACK = 'serverCopyBackup';
 
@@ -35,6 +36,9 @@ function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar})
     const [tiles, setTiles] = useState([]);
 
     useEffect(() => {
+        const notice = takeRoomNotice();
+        if (notice) enqueueSnackbar(notice, { variant: 'info', autoHideDuration: 8000 });
+
         if(!WebTorrent.WEBRTC_SUPPORT) {
             const msg = 'Your browser does not support WebRTC';
             Logger.error(msg);
