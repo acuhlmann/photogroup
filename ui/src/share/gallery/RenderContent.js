@@ -230,15 +230,17 @@ function RenderContent(props) {
             loop: tile.isVideo,
         };
 
-        if(FileUtil.largerThanMaxBlobSize(tile.torrentFile.length)) {
-            const msg = 'File is ' + FileUtil.formatBytes(tile.torrentFile.length) + ' and too large to render inline, just download instead.';
+        // A clip that came from the server copy has the file, not a torrent file.
+        const size = tile.torrentFile ? tile.torrentFile.length : file.size;
+        if(FileUtil.largerThanMaxBlobSize(size)) {
+            const msg = 'File is ' + FileUtil.formatBytes(size) + ' and too large to render inline, just download instead.';
             Logger.warn(msg);
             // Say so, over the clip's poster when it has one, instead of an empty box.
             const note = document.createElement('div');
             note.style.cssText = 'position:relative;width:100%;text-align:center';
             const caption = document.createElement('div');
             caption.style.cssText = 'padding:12px;font-size:0.85rem';
-            caption.textContent = FileUtil.formatBytes(tile.torrentFile.length) + ' is too big to play here. Save it to watch.';
+            caption.textContent = FileUtil.formatBytes(size) + ' is too big to play here. Save it to watch.';
             note.appendChild(caption);
             loadPreviewUrl(tile).then(url => {
                 if (!url) return;
@@ -338,19 +340,20 @@ function RenderContent(props) {
 
         mediaContainerRef.current = node;
 
+        // A clip delivered from the server copy has no torrent yet, only its file.
+        const tileInfoHash = tile.torrent?.infoHash || (tile.torrentFile ? null : tile.infoHash);
         if(node.hasChildNodes()) {
-            const tileInfoHash = tile.torrent?.infoHash;
             const nodeInfoHash = node.infoHash;
             if(tileInfoHash && tileInfoHash !== nodeInfoHash) {
                 removeFile(node);
-                node.infoHash = tile.torrent.infoHash;
+                node.infoHash = tileInfoHash;
                 appendFile(tile, node, file);
             }
             return;
         }
 
-        if(tile.torrent) {
-            node.infoHash = tile.torrent.infoHash;
+        if(tileInfoHash) {
+            node.infoHash = tileInfoHash;
             appendFile(tile, node, file);
         }
     }, [playbackActive, tile, removeFile, appendFile]);
@@ -560,7 +563,7 @@ function RenderContent(props) {
                     </div> : ''}
                     <div style={{
                     width: '100%', marginTop: '10px'}}
-                       ref={ref => handleContainerLoaded(ref, currentTile.torrentFile)}>
+                       ref={ref => handleContainerLoaded(ref, currentTile.torrentFile || (currentTile.fromServerCopy ? currentTile.elem : null))}>
                     </div>
                 {currentTile.isAudio ? <div ref={ref => handleWebamp(ref, currentTile.torrentFile)}>
                     </div> : ''}

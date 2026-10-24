@@ -10,6 +10,7 @@ import { extractThumbnails } from './ThumbnailExtractor';
 import { cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 import { fingerprintFile } from '../gallery/fingerprint';
 import { rememberHave } from '../gallery/alreadyHave';
+import parseTorrent from 'parse-torrent';
 
 /** Read a torrent file into a Blob with either WebTorrent API; null when neither exists. */
 export function readFileBlob(file) {
@@ -752,14 +753,17 @@ export default class TorrentAddition {
         this.master.peers.connect(torrent, this.master.client.peerId);
     }
 
-    storeTorrent(torrent) {
+    async storeTorrent(torrent) {
         //Once generated, stores the metadata for later use when re-adding the torrent!
+        // WebTorrent 3 hands over the torrent file as a Uint8Array, which the
+        // old browserified parsetorrent.js rejects; nothing was ever stored,
+        // so after a refresh a clip (not in the image cache) had no way back.
         let parsed;
         try {
-            parsed = window.parsetorrent(torrent.torrentFile);
+            parsed = await parseTorrent(torrent.torrentFile);
         } catch (e) {
-            Logger.debug('storeTorrent parsetorrent error: ' + e.message);
-            return Promise.resolve(torrent); // Don't fail the whole flow
+            Logger.warn('storeTorrent cannot parse ' + torrent.infoHash + ': ' + (e.message || e));
+            return torrent; // Don't fail the whole flow
         }
         
         const key = parsed.infoHash;

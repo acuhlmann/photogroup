@@ -242,6 +242,13 @@ function Gallery(props) {
                         }
                     }
 
+                    // Fetched from the server copy (clips aren't in the image
+                    // cache): the file is here, even with no torrent behind it.
+                    if (photo.fromServerCopy && photo.cachedFile) {
+                        resolve(mergePostloadMetadata(photo, photo.cachedFile));
+                        return;
+                    }
+
                     // Check if torrentFile exists and has required methods
                     if (!photo.torrentFile) {
                         Logger.warn('addMediaToDom: torrentFile is null/undefined for ' + (photo.fileName || 'unknown'));

@@ -110,7 +110,14 @@ sender's browser (`util/videoFrame.js`: hidden `<video>` seeks 0.1 s in,
 painted to a canvas, ~5-30 KB JPEG; no server transcoding). Receivers read it
 with `gallery/tilePreview.js` (WebTorrent 3 files have `blob()`, not
 `getBlobURL`) and show it as the loading preview, the `<video poster>`, the
-simple-mode tile and the geek-map thumbnail. jsdom can't decode video, so
+simple-mode tile and the geek-map thumbnail.
+
+After a refresh, a clip (the image cache holds images only) comes back from
+the torrent metadata `TorrentAddition.storeTorrent` keeps in the `torrents`
+IndexedDB (parsed with `parse-torrent`; the old `public/parsetorrent.js`
+rejects WebTorrent 3's Uint8Array) and its pieces in `indexeddb-chunk-store`.
+When those are gone, `ServerFallback` fetches the server copy after the stall
+and the gallery plays that file (`fromServerCopy`, no torrent file). jsdom can't decode video, so
 `setupTests.js` mocks `util/videoFrame`.
 
 A copy is deleted when any of these happens:
@@ -137,7 +144,8 @@ Not persisted, on purpose:
 
 - **peers and connections** -- nobody is connected until they knock again;
 - **photo `owners`** -- a peer id from before the restart claims nothing, and
-  each device re-declares what it holds on join (`fillMissingOwners`);
+  each device re-declares what it holds on join (`fillMissingOwners`). Restored
+  photos get an empty `owners` list, which the owner routes rely on;
 - **server copies** (`hasServerCopy` and friends) -- `PhotoRelay` wipes its
   scratch directory at startup, so a restored room must not point at bytes that
   were deleted. Clients re-request a copy if they still need one.
