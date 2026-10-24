@@ -37,7 +37,13 @@ describe('PeerNameField', () => {
         localStorage.getItem.mockReturnValue('Mine');
         const { master, div, root } = setup(vi.fn());
         await act(async () => root.render(<PeerNameField master={master} />));
-        expect(div.querySelector('input').value).toBe('Mine');
+        const input = div.querySelector('input');
+        expect(input.value).toBe('Mine');
+        // MUI 9 dropped TextField's `inputProps`: passing it leaks the object
+        // onto the DOM input, React logs "does not recognize the prop", and the
+        // E2E diagnostic spec fails the build on any critical console error.
+        expect(input.maxLength).toBe(40);
+        expect(input.getAttribute('inputprops')).toBeNull();
         await act(async () => root.unmount());
         div.remove();
     });

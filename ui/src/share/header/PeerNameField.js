@@ -55,7 +55,7 @@ function PeerNameField({ master, hint, compact }) {
                     onKeyDown={event => { if (event.key === 'Enter') save(); }}
                     onBlur={() => { if (value.trim() && value.trim() !== (localStorage.getItem(NICKNAME_KEY) || '')) save(); }}
                     placeholder="Ana"
-                    inputProps={{ maxLength: MAX_NAME, 'aria-label': 'Your name in this room' }}
+                    slotProps={{ htmlInput: { maxLength: MAX_NAME, 'aria-label': 'Your name in this room' } }}
                     size="small"
                     fullWidth
                     disabled={saving}
