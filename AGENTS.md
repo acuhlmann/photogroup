@@ -97,6 +97,21 @@ uploader holds a 60 s lease.
 
 `server/PhotoRelay.js` stores copies on disk under `os.tmpdir()`, wiped at
 startup. Limits are 100 MB per file, 1 GB per room and 2 GB in total.
+Larger files (long clips) still share, P2P only: `ServerPinning` skips them
+and tells the sharer to keep the page open. The UI says so
+(`CLIP_SIZE_NOTE` in `torrent/ServerCopyLimits.js`).
+
+### Previews and clip posters
+
+Every non-encrypted share carries a `Thumbnail <name>` file per original in
+the same torrent (`torrent/ThumbnailExtractor.js`): EXIF or canvas thumbnails
+for photos, album art for audio, and for video one frame grabbed in the
+sender's browser (`util/videoFrame.js`: hidden `<video>` seeks 0.1 s in,
+painted to a canvas, ~5-30 KB JPEG; no server transcoding). Receivers read it
+with `gallery/tilePreview.js` (WebTorrent 3 files have `blob()`, not
+`getBlobURL`) and show it as the loading preview, the `<video poster>`, the
+simple-mode tile and the geek-map thumbnail. jsdom can't decode video, so
+`setupTests.js` mocks `util/videoFrame`.
 
 A copy is deleted when any of these happens:
 
