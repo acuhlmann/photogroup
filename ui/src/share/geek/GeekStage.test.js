@@ -211,4 +211,48 @@ describe('GeekStage', () => {
         localStorage.getItem.mockReset();
         await act(async () => root.unmount());
     });
+
+    it('walks through how a share works on the map, step by step, and back out', async () => {
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' }, peers: { items: [], connections: [] } };
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        await act(async () => root.render(<GeekStage master={master} tiles={[]} />));
+        await act(async () => div.querySelector('[data-testid="start-tour"]').click());
+        const title = () => div.querySelector('[data-testid="tour-title"]')?.textContent;
+        expect(title()).toBe('Open the room');
+        expect(div.textContent).toContain('HOW A SHARE WORKS · 1/10');
+
+        const button = name => Array.from(div.querySelectorAll('button')).find(item => item.textContent.trim() === name);
+        await act(async () => button('Next').click());
+        expect(title()).toBe('Find your public address (STUN)');
+        // The arrows walk the tour while it is open, not the traffic.
+        await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
+        expect(title()).toBe('Share a photo: fingerprint it on your device');
+        await act(async () => div.querySelector('[aria-label="Step 10"]').click());
+        expect(title()).toBe('Who saw what');
+        expect(div.textContent).toContain('photogroup.network keeps');
+
+        await act(async () => button('Done').click());
+        expect(div.querySelector('[data-testid="tour-card"]')).toBeNull();
+        expect(div.querySelector('[data-testid="start-tour"]')).not.toBeNull();
+        await act(async () => root.unmount());
+        div.remove();
+    });
+
+    it('explains the real event the traffic is held on', async () => {
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' } };
+        const div = document.createElement('div');
+        const root = createRoot(div);
+        await act(async () => root.render(<GeekStage master={master} tiles={[]} />));
+        await act(async () => master.emitter.emit('peers', { type: 'add', item: { name: 'Ana', peerId: 'p1' } }));
+        expect(div.querySelector('[data-testid="explain-card"]')).toBeNull();
+        await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })));
+        const card = div.querySelector('[data-testid="explain-card"]');
+        expect(card.textContent).toContain('Someone joined, left or changed');
+        expect(card.textContent).toContain('Ana joined');
+        expect(card.textContent).toContain('WHO SEES IT');
+        await act(async () => root.unmount());
+    });
 });
+
