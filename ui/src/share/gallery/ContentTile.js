@@ -28,6 +28,7 @@ import { LocationBlankLine, LocationLine } from "./metadata/LocationCard";
 import { canSaveDetails, saveDetails } from "./metadata/saveDetails";
 import { alreadyHave, HAVE_LABELS, useHaveChanges } from "./alreadyHave";
 import { loadPreviewUrl } from "./tilePreview";
+import { canReadTorrentFile } from "./saveRoom";
 
 /** Display loaded media and metadata highlights, with save, delete, and decryption controls. */
 function ContentTile(props) {
@@ -215,7 +216,7 @@ function ContentTile(props) {
 
     const isDownloadingFile = localDownloading.includes(tile.infoHash);
     const downloadedFile = localDownloaded.includes(tile.infoHash);
-    const canSave = !isLoading && (tile.elem || (tile.torrentFile && typeof tile.torrentFile.getBlob === 'function'));
+    const canSave = !isLoading && (tile.elem || canReadTorrentFile(tile.torrentFile));
     const replaceMode = replaceKind();
 
     if (!there) {

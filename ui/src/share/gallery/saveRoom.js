@@ -7,7 +7,12 @@ import { rememberHave } from './alreadyHave';
 /** Whether a tile's whole file is on this device, so it can be saved. */
 export function isReadyToSave(tile) {
     if (tile.elem) return true;
-    return !!(tile.torrentFile && tile.torrentFile.done && typeof tile.torrentFile.getBlob === 'function');
+    return !!(tile.torrentFile && tile.torrentFile.done && canReadTorrentFile(tile.torrentFile));
+}
+
+/** Whether a torrent file can hand over its bytes: `blob()` in WebTorrent 2+, `getBlob()` before. */
+export function canReadTorrentFile(file) {
+    return !!file && (typeof file.blob === 'function' || typeof file.getBlob === 'function');
 }
 
 /**

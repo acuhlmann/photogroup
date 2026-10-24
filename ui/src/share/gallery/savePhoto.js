@@ -10,6 +10,11 @@ function blobForSave(tile) {
             return;
         }
 
+        if (tile.torrentFile && typeof tile.torrentFile.blob === 'function') {
+            tile.torrentFile.blob().then(resolve, reject);
+            return;
+        }
+
         if (tile.torrentFile && typeof tile.torrentFile.getBlob === 'function') {
             tile.torrentFile.getBlob((err, elem) => {
                 if (err) {
