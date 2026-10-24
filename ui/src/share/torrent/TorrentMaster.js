@@ -4,7 +4,7 @@ import IdbKvStore from 'idb-kv-store';
 import Peers from '../topology/Peers';
 import idb from 'indexeddb-chunk-store';
 import TorrentAddition, { readFileBlob } from './TorrentAddition';
-import TorrentDeletion from "./TorrentDeletion";
+import TorrentDeletion, { holdsRoomSnapshot } from "./TorrentDeletion";
 import TorrentCreator from "./TorrentCreator";
 import FileUtil from '../util/FileUtil';
 import platform from 'platform';
@@ -20,6 +20,7 @@ import TrackerKick from './TrackerKick';
 import { watchPieces } from './pieceEvents';
 import { holdersOf, activeHolders } from '../topology/presence';
 import ConnectionRecovery, { freezesWhenHidden } from '../util/ConnectionRecovery';
+import { requestPersistentStorage } from '../util/PersistentStorage';
 
 export default class TorrentMaster {
 
@@ -262,6 +263,11 @@ export default class TorrentMaster {
 
                 if(!response) return;
 
+                // Ask once per room open, not per photo: this is about the
+                // origin's quota, and it decides whether what is already
+                // saved here stays saved after a refresh.
+                requestPersistentStorage();
+
                 const peers = this.peers.items = response.peers;
                 this.peers.connections = response.connections;
                 this.emitter.emit('peers', {type: 'all', item: peers});
@@ -485,8 +491,14 @@ export default class TorrentMaster {
                             });
 
                         } else {
-                            //delete any local photos not found on server.
-                            self.torrentDeletion.deleteTorrent(metadata).catch(err => Logger.warn('deleteTorrent: ' + err));
+                            // A photo the room still lists but no longer holds is
+                            // gone: clear our copy. An empty room does not say
+                            // that — see holdsRoomSnapshot.
+                            if (holdsRoomSnapshot(photos)) {
+                                self.torrentDeletion.deleteTorrent(metadata).catch(err => Logger.warn('deleteTorrent: ' + err));
+                            } else {
+                                Logger.info('resurrectTorrent: keeping ' + metadata.name + ', the room listed no photos to judge by');
+                            }
                             resolve(false);
                         }
                     }
@@ -716,6 +728,12 @@ export default class TorrentMaster {
             }
             const urlItem = this.findUrl(photos, torrent.infoHash);
             if(!urlItem) {
+                // An empty room is not evidence that this photo was deleted;
+                // dropping it here would destroy the only copy left on earth.
+                if (!holdsRoomSnapshot(photos)) {
+                    Logger.info('syncUiWithServerUrls: keeping ' + torrent.infoHash + ', the room listed no photos to judge by');
+                    return;
+                }
                 self.torrentDeletion.deleteTorrent(torrent).then(infoHash => {
                     Logger.info('deleteTorrent done ' + infoHash);
                 }).catch(err => Logger.warn('deleteTorrent: ' + err));

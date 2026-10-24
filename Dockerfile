@@ -83,6 +83,12 @@ COPY --from=server-builder /app/ui ./ui
 # Create secret directory if it doesn't exist (for optional SSL validation file)
 RUN mkdir -p secret
 
+# Rooms are saved here so they outlive a restart. It must exist in the image
+# before the volume is mounted: Docker copies ownership from the image when it
+# fills an empty named volume, and a path it does not know about comes back
+# root-owned — which the nodejs user below could not write to.
+RUN mkdir -p data
+
 # Change ownership to non-root user
 RUN chown -R nodejs:nodejs /app /vendor
 

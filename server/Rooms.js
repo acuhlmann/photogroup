@@ -5,6 +5,7 @@ import Topology from './Topology.js';
 import Peers from './Peers.js';
 import MyDht from './MyDht.js';
 import PhotoRelay, { MAX_CHUNK_BYTES, RelayError } from './PhotoRelay.js';
+import RoomStore from './RoomStore.js';
 import { parseDetails, applyDetails, PhotoDetailsError } from './PhotoDetails.js';
 import express from 'express';
 import _ from 'lodash';
@@ -26,7 +27,7 @@ const RELAY_SWEEP_MS = 5 * 60 * 1000;
 
 export default class Rooms {
 
-    constructor(updateChannel, remoteLog, app, emitter, ice, tracker) {
+    constructor(updateChannel, remoteLog, app, emitter, ice, tracker, store) {
         this.updateChannel = updateChannel;
         this.remoteLog = remoteLog;
         this.app = app;
@@ -36,6 +37,9 @@ export default class Rooms {
 
         this.rooms = new Map();
         this.relay = new PhotoRelay();
+        // Rooms outlive the process: an idle stop or a crash used to empty
+        // every room, and a refresh then lost the photos they named.
+        this.store = store || new RoomStore();
         //this.dht = new MyDht();
         //this.dht.start();
 
@@ -52,6 +56,8 @@ export default class Rooms {
     }
 
     start() {
+        const restored = this.restoreRooms();
+        if (restored) this.remoteLog('[Rooms] restored ' + restored + ' room(s) from before this start');
         this.setupSSE();
         this.registerRoomRoutes(this.app);
         this.registerPeerRoutes(this.app);
@@ -68,6 +74,66 @@ export default class Rooms {
         });
         this.rooms.clear();
         this.relay.clear();
+        // Dropping every room by hand means dropping the record of them too.
+        this.store.clear().catch(() => {});
+    }
+
+    /**
+     * A room's live shape. Peers and connections start empty: they belong to
+     * the process, and everyone still in the room knocks again.
+     */
+    createRoom(id) {
+        const room = {
+            id: id,
+            photos: [],
+            photoIndex: new Map(),
+            connections: [],
+            // keepCopies: leave a server copy of every photo for people
+            // who join later, instead of only when someone needs one.
+            settings: { keepCopies: false },
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+        };
+        room.peers = new Peers(this.updateChannel, this.remoteLog, this.app, this.emitter);
+        room.topology = new Topology(room.peers, this.updateChannel);
+        return room;
+    }
+
+    /**
+     * Put the rooms back the way the last process left them, before any route
+     * can answer a join. Owners and server copies are already gone from the
+     * record (RoomStore drops them): a peer id from before the restart claims
+     * nothing, and the relay's scratch directory is wiped when it starts.
+     * Returns how many rooms came back.
+     */
+    restoreRooms() {
+        let records;
+        try {
+            records = this.store.load();
+        } catch (err) {
+            this.remoteLog('[Rooms] cannot read the saved rooms: ' + (err?.message || err));
+            return 0;
+        }
+        records.forEach(record => {
+            if (this.rooms.has(record.id)) return;
+            const room = this.createRoom(record.id);
+            room.photos = record.photos;
+            record.photos.forEach(photo => this.addToPhotoIndex(room, photo));
+            room.settings = { ...room.settings, ...record.settings };
+            room.createdAt = record.createdAt;
+            room.updatedAt = record.updatedAt;
+            this.rooms.set(record.id, room);
+        });
+        return records.length;
+    }
+
+    /**
+     * Note a change and queue the write. `room` is the one that changed, so a
+     * busy room is the one that stays freshest on disk.
+     */
+    persist(room) {
+        if (room) room.updatedAt = Date.now();
+        this.store.schedule([...this.rooms.values()]);
     }
 
     /** Register room and photo routes, including authenticated shared-detail updates. */
@@ -124,21 +190,11 @@ export default class Rooms {
                 return;
             }
 
-            const room = {
-                id: id,
-                photos: [],
-                photoIndex: new Map(),
-                connections: [],
-                // keepCopies: leave a server copy of every photo for people
-                // who join later, instead of only when someone needs one.
-                settings: { keepCopies: false }
-            };
-            room.peers = new Peers(this.updateChannel, this.remoteLog, this.app, this.emitter);
-            room.topology = new Topology(room.peers, this.updateChannel);
-            //room.serverPeer = new ServerPeer(room.topology, this.remoteLog, this, this.ice, this.emitter, this.tracker);
+            const room = this.createRoom(id);
             rooms.set(id, room);
 
             joinRoom(room, request, response);
+            this.persist();
         });
 
         //join room
@@ -223,6 +279,7 @@ export default class Rooms {
                         loading: false
                     }
                 }));
+                this.persist(room);
                 response.send(responsePhotos);
             }
         });
@@ -259,6 +316,7 @@ export default class Rooms {
                     return existing;
                 }).filter(item => item !== null);
                 this.sendPhotos(room, this.allRoomClients(room),'update', updated);
+                this.persist(room);
                 response.send(updated);
             }
         });
@@ -301,6 +359,7 @@ export default class Rooms {
             });
             const item = { infoHash: photo.infoHash, details };
             this.sendPhotos(room, this.allRoomClients(room), 'update', [item]);
+            this.persist(room);
             response.send(item);
         });
 
@@ -327,6 +386,7 @@ export default class Rooms {
 
                     if (found) {
                         this.sendPhotos(room, this.allRoomClients(room),'delete', infoHash);
+                        this.persist(room);
                     } else {
                         found = false;
                     }
@@ -540,6 +600,7 @@ export default class Rooms {
             };
             this.updateChannel.send({ event: 'room', data: { settings: room.settings } }, this.allRoomClients(room));
             this.releaseCopiesEveryoneHas(room);
+            this.persist(room);
             return response.send(room.settings);
         });
     }

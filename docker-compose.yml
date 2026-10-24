@@ -18,6 +18,10 @@ services:
       # - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
       # - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
     restart: unless-stopped
+    volumes:
+      # Rooms saved for the next start. A container this compose file recreates
+      # keeps them; without the volume the room list is empty after a redeploy.
+      - photogroup-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/"]
       interval: 30s

@@ -3,6 +3,19 @@ import IdbKvStore from "idb-kv-store";
 import { getTorrent, isCompoundInfoHash, getBaseInfoHash, getFilePathFromInfoHash } from './WebTorrentUtils';
 import { cacheDelete } from '../util/ImageBlobCache';
 
+/**
+ * Whether a room's photo list is evidence about a photo it leaves out.
+ *
+ * The room lives in memory, so a restart, an idle-stop or a re-created link
+ * all return an empty list that means "I know nothing", not "these were
+ * deleted". Only a list that names some photos can be read as the rest being
+ * gone; deleting on an empty list destroys the last copy on this device, and
+ * on phones that is often the only copy that exists.
+ */
+export function holdsRoomSnapshot(photos) {
+    return Array.isArray(photos) && photos.length > 0;
+}
+
 export default class TorrentDeletion {
 
     constructor(service, torrentsDb, emitter, master) {

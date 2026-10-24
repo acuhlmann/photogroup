@@ -9,7 +9,10 @@ P2P photo sharing web app. Users create rooms, drop photos, and share them direc
 ## Key Decisions
 
 - **ES Modules throughout** -- both server and UI use `import/export`, no CommonJS
-- **No database** -- all state is in-memory on the server (rooms, peers, photos)
+- **No database** -- rooms live in memory; `server/RoomStore.js` writes the room
+  list (ids, photo metadata, magnets, settings) to `server/data/rooms.json` so a
+  restart does not empty a room. Peers, connections, photo *owners* and server
+  copies are live and are not saved. Photos themselves stay on the peers.
 - **WebTorrent for P2P** -- not a custom WebRTC solution; uses BitTorrent protocol over WebRTC
 - **SSE not WebSocket for updates** -- real-time room updates use Server-Sent Events, not socket.io
 - **Vite, not CRA** -- migrated from create-react-app to Vite
@@ -107,9 +110,36 @@ along with `owners` and `peerId`. `torrent/RoomPhotos.js` mirrors it, with
 owners, for the client logic outside React. nginx needs
 `client_max_body_size 10m` for the chunks.
 
-### Important: No persistence
+### Important: what survives a restart
 
-Everything is in memory. Server restart = all rooms/photos gone. This is by design for the experimental stage.
+Room *identity* and *content* are persisted; live presence is not. `Rooms.start()`
+calls `restoreRooms()`, which reads ids, photo metadata (incl. `details`), magnet
+links and `settings` back from `server/data/rooms.json` (`RoomStore.js`, atomic
+write-then-rename, debounced, 30-day idle expiry). `reset()` (DELETE /api/rooms)
+clears the file too.
+
+Not persisted, on purpose:
+
+- **peers and connections** -- nobody is connected until they knock again;
+- **photo `owners`** -- a peer id from before the restart claims nothing, and
+  each device re-declares what it holds on join (`fillMissingOwners`);
+- **server copies** (`hasServerCopy` and friends) -- `PhotoRelay` wipes its
+  scratch directory at startup, so a restored room must not point at bytes that
+  were deleted. Clients re-request a copy if they still need one.
+
+`server/data/` is gitignored: it holds photo names and magnets. `deploy-docker.sh`
+and `docker-compose.yml` mount the `photogroup-data` volume at `/app/data`, so the
+rooms outlive a redeploy as well as a restart; the `Dockerfile` creates that
+directory before `USER nodejs`, because Docker fills an empty named volume from
+the image's ownership and a path it has never seen comes back root-owned.
+
+On the client, the mirror rule is in `torrent/TorrentDeletion.js`
+(`holdsRoomSnapshot`): a room that lists *no* photos is treated as a server that
+has forgotten the room, never as proof that the photos were deleted, so joining a
+freshly-restarted server no longer destroys the only copy of a clip on the device
+that shared it. Genuine deletions still arrive as a `photos` `type:'delete'`
+event. The browser is also asked for durable storage on room open
+(`util/PersistentStorage.js`), since it evicts large video pieces first.
 
 ## UI Architecture
 
@@ -211,7 +241,8 @@ No database, Redis, or Docker needed for development. All state is in-memory. Tw
 - Idle stop runs on the VM via `photogroup-idle-stop.timer` (default 60 minutes)
 
 ### Pushing changes
-Always push to `main`. Before pushing:
+Always push to `master`. It is the repository's default branch (`origin/HEAD`);
+there is no `main` branch on the remote, though CI accepts either name. Before pushing:
 1. Run all tests locally: `npm test` (runs both server and UI tests via `test-all.js`)
 2. Verify the push succeeded by checking the GitHub Actions results at https://github.com/acuhlmann/photogroup/actions
 

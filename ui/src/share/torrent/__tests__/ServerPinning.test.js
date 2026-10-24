@@ -24,12 +24,32 @@ function setup({ peers = [{ peerId: 'me' }, { peerId: 'friend' }], me = 'me', by
 
 const photo = (infoHash, sharer, owners = []) => ({ infoHash, peerId: sharer, owners: [{ peerId: sharer, loading: false }, ...owners] });
 const blob = new Blob(['jpg'], { type: 'image/jpeg' });
+const clip = new Blob(['mp4'], { type: 'video/mp4' });
 
 describe('ServerPinning', () => {
-    it('leaves nothing on the server just for sharing', async () => {
+    it('leaves nothing on the server just for sharing a photo', async () => {
         const { pinning, service, emit } = setup();
         emit({ type: 'all', item: [photo('a', 'me')] });
         pinning.shared([{ infoHash: 'a', blob }]);
+        expect(service.uploadServerCopy).not.toHaveBeenCalled();
+    });
+
+    it('leaves a copy of a clip even when the room keeps nothing', async () => {
+        // The device that shared a video is often its only holder, and a
+        // browser short on space frees video pieces first.
+        const { pinning, service, emit, settle } = setup();
+        emit({ type: 'all', item: [photo('v', 'me')] });
+        pinning.shared([{ infoHash: 'v', blob: clip }]);
+        await settle();
+        expect(service.uploadServerCopy).toHaveBeenCalledWith('v', clip);
+    });
+
+    it('still declines a clip too large for the relay', async () => {
+        const huge = { type: 'video/mp4', size: MAX_PHOTO_BYTES + 1 };
+        const { pinning, service, emit, settle } = setup();
+        emit({ type: 'all', item: [photo('v', 'me')] });
+        pinning.shared([{ infoHash: 'v', blob: huge }]);
+        await settle();
         expect(service.uploadServerCopy).not.toHaveBeenCalled();
     });
 

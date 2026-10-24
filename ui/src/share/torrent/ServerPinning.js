@@ -26,6 +26,9 @@ import Logger from 'js-logger';
 import { holds } from './RoomPhotos';
 import { MAX_PHOTO_BYTES } from './ServerCopyLimits';
 
+/** Whether a seeded file is a clip, which is worth a copy whatever the room keeps. */
+export const isVideo = blob => (blob?.type || '').startsWith('video/');
+
 export const HELPER_DELAY_MS = 3000;
 export const HELPER_JITTER_MS = 2000;
 export const RETRY_DELAYS_MS = [5000, 15000, 30000, 60000];
@@ -71,7 +74,13 @@ export default class ServerPinning {
         items.forEach(({ infoHash, blob }) => {
             if (!infoHash || !blob) return;
             this.localFiles.set(infoHash, blob);
+            // A clip is the photo most easily lost: the device that shared it
+            // is often its only holder, and a browser under storage pressure
+            // frees video pieces before images. So video gets a copy even in a
+            // room that does not keep copies of everything. One too large for
+            // the relay is declined by upload(), as it is for any photo.
             if (this.keepCopies) this.enqueue(infoHash, 'keep copies');
+            else if (isVideo(blob)) this.enqueue(infoHash, 'video');
         });
     }
 

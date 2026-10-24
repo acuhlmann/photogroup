@@ -88,9 +88,13 @@ gcloud compute scp --compress "$TAR_FILE" $INSTANCE:/tmp/ --project $PROJECT --z
 rm -f "$TAR_FILE"
 
 # Build docker run command with optional Twilio credentials
+# The named volume holds server/data/rooms.json, so a redeploy (which builds a
+# new container) keeps the rooms instead of emptying them. Without it a room
+# still survives a restart, but not an update.
 DOCKER_RUN_CMD="docker run -d \
     --name $CONTAINER_NAME \
     --restart unless-stopped \
+    -v photogroup-data:/app/data \
     -p 127.0.0.1:8081:8081 \
     -p 127.0.0.1:9000:9000 \
     -e NODE_ENV=production \
