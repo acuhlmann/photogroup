@@ -340,8 +340,11 @@ function RenderContent(props) {
 
         mediaContainerRef.current = node;
 
-        // A clip delivered from the server copy has no torrent yet, only its file.
-        const tileInfoHash = tile.torrent?.infoHash || (tile.torrentFile ? null : tile.infoHash);
+        // A clip delivered from the server copy may have no torrent, only its
+        // file. Keyed apart, so a player still waiting on a stalled torrent
+        // is swapped for the delivered file.
+        const baseHash = tile.torrent?.infoHash || (tile.torrentFile ? null : tile.infoHash);
+        const tileInfoHash = baseHash && (tile.fromServerCopy ? baseHash + ':server' : baseHash);
         if(node.hasChildNodes()) {
             const nodeInfoHash = node.infoHash;
             if(tileInfoHash && tileInfoHash !== nodeInfoHash) {
@@ -563,7 +566,7 @@ function RenderContent(props) {
                     </div> : ''}
                     <div style={{
                     width: '100%', marginTop: '10px'}}
-                       ref={ref => handleContainerLoaded(ref, currentTile.torrentFile || (currentTile.fromServerCopy ? currentTile.elem : null))}>
+                       ref={ref => handleContainerLoaded(ref, (currentTile.fromServerCopy && currentTile.elem) || currentTile.torrentFile)}>
                     </div>
                 {currentTile.isAudio ? <div ref={ref => handleWebamp(ref, currentTile.torrentFile)}>
                     </div> : ''}
