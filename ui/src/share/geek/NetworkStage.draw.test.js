@@ -126,9 +126,13 @@ describe('NetworkStage drawing', () => {
 
     it('holds the label in place while paused, and puts it back when scrubbed', async () => {
         const master = room();
-        const { root, div, timeline } = await mount({ master });
+        // The recording's own clock: seeking never goes past "now", so the
+        // packet must have finished crossing before we scrub around in it.
+        const clock = { value: 1000000 };
+        const { root, div, timeline } = await mount({ master, timeline: createTimeline({ now: () => clock.value }) });
         const torrent = { name: 'beach.jpg', infoHash: 'abc', pieces: new Array(4).fill(0), pieceLength: 1024 };
         master.emitter.emit('pieceReceived', { torrent, index: 3, total: 4, size: 1024, peerId: 'them' });
+        clock.value += 10000;
 
         // Park mid-crossing: the same label, at the same place, frame after frame.
         const entry = timeline.entries.at(-1);
