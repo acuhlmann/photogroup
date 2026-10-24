@@ -89,25 +89,25 @@ function explain({ row, photo, peersById, myPeerId, mine, hasTurn }) {
 
     if (stage?.direction === 'up') {
         if (stage.stage === 'too-large') lines.push(`No server copy: ${stage.why}.`);
-        else if (stage.stage === 'stored' || stage.stage === 'exists') lines.push(`Left a server copy because ${stage.why}. It is deleted once everyone has the photo.`);
+        else if (stage.stage === 'stored' || stage.stage === 'exists') lines.push(`Uploaded a server copy because ${stage.why}.`);
         else if (stage.why) lines.push(`Uploading a server copy because ${stage.why}.`);
     }
     if (stage?.direction === 'down') {
-        if (stage.stage === 'done') lines.push(`Came from the server over HTTPS because ${stage.why}.`);
+        if (stage.stage === 'done') lines.push(`Downloaded from the server over HTTPS because ${stage.why}.`);
         else if (stage.stage === 'requested') lines.push(`Asked the room for a server copy: ${stage.why}.`);
-        else if (stage.stage === 'rejected') lines.push(`Ignored a server copy: ${stage.why}.`);
-        else if (stage.why) lines.push(`Fetching the server copy: ${stage.why}.`);
+        else if (stage.stage === 'rejected') lines.push(`Did not use the server copy: ${stage.why}.`);
+        else if (stage.why) lines.push(`Downloading the server copy: ${stage.why}.`);
     }
 
     row.sources.filter(source => source.peerId).forEach(source => {
         const name = source.label;
         if (source.kind === 'lan') {
-            lines.push(`${name} is on your network, so pieces go host to host without leaving it.`);
+            lines.push(`${name} is on your network. The data stays on this network.`);
         } else if (source.kind === 'punch') {
-            lines.push(`${name} via a NAT hole punch: STUN found both public addresses and the bytes go straight between you.`);
+            lines.push(`Data with ${name} goes directly through both NATs (hole punch). STUN found both public addresses.`);
         } else if (source.kind === 'relay') {
             const forecast = forecastWith(source.peerId);
-            lines.push(`${name} is relayed by TURN: still encrypted end to end, but through a relay. ${forecast?.why || ''}`.trim());
+            lines.push(`Data with ${name} goes through the TURN relay. The data stays encrypted. ${forecast?.why || ''}`.trim());
         }
     });
 
@@ -115,18 +115,18 @@ function explain({ row, photo, peersById, myPeerId, mine, hasTurn }) {
         const holders = (photo?.owners || []).filter(owner => owner.peerId !== myPeerId && !owner.loading).map(owner => owner.peerId);
         if (photo?.peerId && photo.peerId !== myPeerId && !holders.includes(photo.peerId)) holders.push(photo.peerId);
         const present = holders.map(id => peersById.get(id)).filter(Boolean);
-        if (holders.length && !present.length) lines.push('Nobody who has it is in the room right now, so only a server copy can bring it.');
-        else if (present.length && present.every(isAway)) lines.push('Everyone who has it is in another app; phones freeze P2P in the background.');
+        if (holders.length && !present.length) lines.push('Nobody with this photo is in the room now. Only a server copy can bring it.');
+        else if (present.length && present.every(isAway)) lines.push('All devices with this photo are in another app. Phones stop P2P in the background.');
         else if (row.phase === 'signal' || row.phase === 'discover') {
             const forecast = present.length ? forecastWith(present[0].peerId) : null;
-            lines.push('Waiting for the tracker to introduce a peer that has it.' + (forecast ? ` Expected path: ${forecast.label}.` : ''));
+            lines.push('Waiting for the tracker to find a peer with this photo.' + (forecast ? ` Expected path: ${forecast.label}.` : ''));
         }
     }
     if (row.direction === 'up' && !row.sources.length && !stage) {
-        lines.push('Nobody has asked for pieces yet. Everyone else in the room may already have it.');
+        lines.push('Nobody asked for pieces yet. Maybe all other people in the room have it.');
     }
     if (!lines.length && row.done && row.split.server === 0 && row.split.total > 0) {
-        lines.push('Fully peer-to-peer: the server never carried a byte of it.');
+        lines.push('Fully peer-to-peer: no data went through the server.');
     }
     return lines;
 }

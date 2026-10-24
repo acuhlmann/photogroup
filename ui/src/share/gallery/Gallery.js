@@ -550,7 +550,7 @@ function Gallery(props) {
                         Share photos and clips
                     </Typography>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        Drop pictures or video clips here, or tap to choose some from this device.
+                        Drop photos or clips here, or tap to select them on this device.
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary', mt: 1, maxWidth: 420 }}>
                         {CLIP_SIZE_NOTE}

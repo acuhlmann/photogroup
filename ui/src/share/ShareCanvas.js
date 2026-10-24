@@ -61,14 +61,14 @@ function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar})
         // Our server copies: keep the page open until they land, then say so.
         const handleBackup = ({ pending, safe }) => {
             if (pending > 0) {
-                enqueueSnackbar('Leaving a backup on the server · keep PhotoGroup open until it lands', {
+                enqueueSnackbar('Uploading a server copy · keep PhotoGroup open until it is done', {
                     key: BACKUP_SNACK, variant: 'info', persist: true, preventDuplicate: true
                 });
                 return;
             }
             closeSnackbar(BACKUP_SNACK);
             if (safe) {
-                enqueueSnackbar('Backup is on the server · safe to lock your phone', {
+                enqueueSnackbar('The server copy is uploaded · you can lock your phone', {
                     variant: 'success', autoHideDuration: 6000
                 });
             }

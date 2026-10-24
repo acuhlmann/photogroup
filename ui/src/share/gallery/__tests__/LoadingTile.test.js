@@ -51,7 +51,7 @@ describe('LoadingTile', () => {
 
             await act(async () => vi.advanceTimersByTime(20000));
             const button = [...div.querySelectorAll('button')].find(item => item.textContent === 'Ask for a server copy');
-            expect(div.textContent).toContain('switched to another app');
+            expect(div.textContent).toContain('is in another app');
             await act(async () => button.click());
             expect(asked).toHaveBeenCalledWith(tile);
 

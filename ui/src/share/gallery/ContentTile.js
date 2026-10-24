@@ -25,7 +25,7 @@ import { RatingStars, ColorLabel, StarPicker } from "./metadata/MediaMetadataPan
 import InlineText from "./metadata/InlineText";
 import KeywordEditor from "./metadata/KeywordEditor";
 import { LocationBlankLine, LocationLine } from "./metadata/LocationCard";
-import { canSaveDetails, saveDetails } from "./metadata/saveDetails";
+import { canSaveDetails, saveDetails, saveErrorText } from "./metadata/saveDetails";
 import { alreadyHave, HAVE_LABELS, useHaveChanges } from "./alreadyHave";
 import { loadPreviewUrl } from "./tilePreview";
 import { canReadTorrentFile } from "./saveRoom";
@@ -196,9 +196,7 @@ function ContentTile(props) {
         try {
             await saveDetails(master, tile.infoHash, fields);
         } catch (err) {
-            snack(err && err.status === 404
-                ? 'This photo is still being shared. Try again in a moment.'
-                : (err && err.message) || 'Could not save. Try again.', 'error');
+            snack(saveErrorText(err), 'error');
             throw err;
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps

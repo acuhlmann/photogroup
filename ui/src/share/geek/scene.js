@@ -54,27 +54,27 @@ function infraNodes({ origin, trackerUrl, photos }) {
             sub: local ? host : 'Cloud Run wake → nginx',
             info: local
                 ? [`origin ${host}`, 'vite dev server proxies /api to :8081']
-                : [`origin ${host} (TLS)`, 'Cloud Run photogroup-wake starts the VM on demand', 'nginx :443 → app :8081, tracker :9000', 'VM idles to a stop when nobody is here'],
+                : [`origin ${host} (TLS)`, 'Cloud Run photogroup-wake starts the VM when needed', 'nginx :443 → app :8081, tracker :9000', 'the VM stops when nobody uses it'],
         },
         {
             id: 'api', kind: 'api', label: 'API · SSE', sub: ':8081 rooms, peers, magnets',
-            info: ['REST: rooms, peers, photo magnets, details', 'Server-Sent Events push room changes to everyone',
-                'holds · who is here: peer id, name, device, network addresses',
-                'holds · per photo: magnet (infohash), name, type, size, date taken, fingerprint, titles',
-                'rooms and photo facts are kept on disk until 30 days untouched; peers in memory only',
-                'never sees · photo bytes (unless a server copy is asked for)'],
+            info: ['REST: rooms, peers, magnet links, photo details', 'Server-Sent Events send room changes to all devices',
+                'keeps · the people here: peer ID, name, device, network addresses',
+                'keeps · per photo: magnet link (infohash), name, type, size, date taken, fingerprint, titles',
+                'keeps rooms and photo data on disk until nobody uses the room for 30 days; people in memory only',
+                'never sees · the photos (only a server copy, if someone asks for one)'],
         },
         {
             id: 'tracker', kind: 'tracker', label: 'tracker', sub: hostOf(trackerUrl) || 'ws :9000',
-            info: ['BitTorrent WebSocket tracker', 'peers announce infohashes here and swap WebRTC offers/answers',
-                'sees · which peer wants which infohash, and their ICE candidates',
-                'never sees · photo bytes', trackerUrl ? `url ${trackerUrl}` : null].filter(Boolean),
+            info: ['BitTorrent WebSocket tracker', 'devices send infohashes here, and exchange WebRTC offers and answers',
+                'sees · which device wants which infohash, and the ICE candidates',
+                'never sees · the photos', trackerUrl ? `url ${trackerUrl}` : null].filter(Boolean),
         },
         {
             id: 'copies', kind: 'copies', label: 'server copies',
             sub: copies.length ? `${copies.length} held` + (bytes ? ` · ${(bytes / 1048576).toFixed(1)} MB` : '') : (uploading.length ? `${uploading.length} uploading` : 'none held'),
-            info: ['last resort when P2P and TURN both fail', 'holds · the photo bytes, only while someone needs them',
-                'resumable 8 MB chunks, 60 s upload lease', 'deleted once everyone has the photo, or after 24 h',
+            info: ['last resort when P2P and TURN fail', 'keeps · the photo, only while a device needs it',
+                '8 MB parts, upload continues after a stop, 60 s upload lease', 'deleted when all devices have the photo, or 24 h after upload',
                 `${copies.length} held, ${uploading.length} uploading`],
         },
     ];
@@ -171,7 +171,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
                 reflexive.network?.hostname ? `rdns ${reflexive.network.hostname}` : null,
                 placeLine(reflexive.network),
                 reflexive.typeDetail ? `seen as ${reflexive.typeDetail}` : null,
-                'learned from a STUN binding response',
+                'from the STUN reply',
             ].filter(Boolean),
         });
         nat.members.push(peer.peerId);
@@ -204,7 +204,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         id: 'stun', kind: 'stun', x: Math.max(width * 0.07, 48), y: sideY,
         label: 'STUN', sub: ice.stun[0] || 'none configured',
         info: ['tells each device its public address and port', 'a public server, not photogroup.network',
-            'sees · your public IP:port, nothing else', ...ice.stun.map(host => `stun ${host}`)],
+            'sees · your public IP address and port only', ...ice.stun.map(host => `stun ${host}`)],
     });
     const relayIps = new Set();
     ordered.forEach(peer => (peer.networkChain || []).filter(isRelayCandidate).forEach(item => relayIps.add(item.ip)));
@@ -217,11 +217,11 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         label: 'TURN', sub: turnHere ? (provider || ice.turn[0] || [...relayIps][0]) : 'none configured',
         idle: !turnHere,
         info: turnHere
-            ? ['relays WebRTC traffic when no direct path works', `a ${provider ? provider + ' ' : ''}relay, not photogroup.network`,
-                'sees · both IP addresses and encrypted bytes; DTLS keeps the photo unreadable',
+            ? ['forwards WebRTC data when no direct path works', `a ${provider ? provider + ' ' : ''}relay, not photogroup.network`,
+                'sees · both IP addresses and encrypted data; it cannot read the photo',
                 ...ice.turn.map(host => `turn ${host}`), ...[...relayIps].map(ip => `relay candidate ${ip}`)]
-            : ['relays WebRTC traffic when no direct path works', 'none configured for this server',
-                'when P2P cannot connect, the HTTPS server copy takes over'],
+            : ['forwards WebRTC data when no direct path works', 'not configured on this server',
+                'if P2P cannot connect, the HTTPS server copy takes over'],
     });
 
     // Routes. Signalling: every device keeps an event stream to the API and

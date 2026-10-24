@@ -100,7 +100,7 @@ function NetworkReadout({ master, sx }) {
                         {mine.lanIps.length > 0 && ' · ' + mine.lanIps.slice(0, 2).join(', ')}
                         {mine.mdnsCount > 0 && (
                             <Box component="span" sx={{ color: 'text.secondary' }}>
-                                {' · '}{mine.mdnsCount} masked as mDNS .local (browser hides your LAN IP)
+                                {' · '}{mine.mdnsCount} hidden as mDNS .local (the browser hides your LAN IP)
                             </Box>
                         )}
                         {mine.cgnat && <Box component="span" sx={{ color: 'warning.main' }}> · CGNAT 100.64/10: your ISP adds a second NAT</Box>}
@@ -109,7 +109,7 @@ function NetworkReadout({ master, sx }) {
             </Row>
             <Row k="public">
                 {mine.reflexive.length === 0
-                    ? (stunPending ? 'asking STUN…' : 'none: STUN did not answer')
+                    ? (stunPending ? 'asking STUN…' : 'none: no answer from STUN')
                     : mine.reflexive.slice(0, 3).map(r => (
                         <Box key={r.ip + r.port}>
                             {r.ip}:{r.port}
@@ -122,7 +122,7 @@ function NetworkReadout({ master, sx }) {
             <Row k="turn">
                 {hasTurn
                     ? servers.turn.slice(0, 2).join(', ')
-                    : <Box component="span" sx={{ color: 'text.secondary' }}>none · HTTPS server copy is the fallback</Box>}
+                    : <Box component="span" sx={{ color: 'text.secondary' }}>none · the HTTPS server copy is the fallback</Box>}
             </Row>
             {(mine.transports.length > 0 || mine.ipv6) && (
                 <Row k="stack">{mine.transports.join(' + ').toUpperCase()}{mine.ipv6 ? ' · IPv6' : ' · IPv4 only'}</Row>

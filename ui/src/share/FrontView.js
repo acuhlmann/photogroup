@@ -162,7 +162,7 @@ function FrontView({ master }) {
                     variant="body1"
                     sx={{ color: 'text.secondary', maxWidth: 420, lineHeight: 1.55 }}
                 >
-                    Pass them around with the camera details still attached, see how big they are, and save them on your phone.
+                    Share photos with all their camera details. See how big they are. Save them on your phone.
                 </Typography>
 
                 <PhotoStack />
@@ -207,7 +207,7 @@ function FrontView({ master }) {
                         lineHeight: 1.5,
                     }}
                 >
-                    Pictures move straight from one person to another.
+                    Photos go directly from one person to another.
                 </Typography>
             </Stack>
         </Box>

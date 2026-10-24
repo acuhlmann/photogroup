@@ -41,8 +41,8 @@ describe('buildScene', () => {
         expect(scene.byId.get('turn')).toMatchObject({ sub: 'none configured', idle: true });
         expect(scene.byId.get('turn').info.join(' ')).toContain('server copy takes over');
         // What each server holds and never sees is spelled out on it.
-        expect(scene.byId.get('api').info.join('\n')).toMatch(/never sees · photo bytes/);
-        expect(scene.byId.get('stun').info).toContain('sees · your public IP:port, nothing else');
+        expect(scene.byId.get('api').info.join('\n')).toMatch(/never sees · the photos/);
+        expect(scene.byId.get('stun').info).toContain('sees · your public IP address and port only');
 
         // Ana and I share a public address, so one NAT sits between us.
         const shared = scene.byId.get('nat:1.1.1.1');

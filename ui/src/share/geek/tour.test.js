@@ -58,7 +58,7 @@ describe('tour scene', () => {
         // The pieces step follows the path ICE really settled on.
         const pieces = steps.find(step => step.id === 'pieces');
         expect(pieces.routes).toEqual(['p2p:ana|me']);
-        expect(steps.find(step => step.id === 'ice').body).toContain('settled straight through both NATs');
+        expect(steps.find(step => step.id === 'ice').body).toContain('ICE chose the path straight through both NATs');
     });
 });
 

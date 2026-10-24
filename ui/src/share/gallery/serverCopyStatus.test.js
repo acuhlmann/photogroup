@@ -30,7 +30,7 @@ describe('serverCopyStatus', () => {
 
     it('shows a copy on its way, then ready', () => {
         expect(serverCopyStatus(tile({ serverCopyUploader: 'alex', serverCopySize: 200, serverCopyReceived: 50 }), peers, 'me').text)
-            .toBe('Alex is leaving a server copy · 25%');
+            .toBe('Alex is uploading a server copy · 25%');
         expect(serverCopyStatus(tile({ hasServerCopy: true }), peers, 'me')).toMatchObject({ canFetch: true, canAsk: false });
     });
 });

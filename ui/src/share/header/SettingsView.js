@@ -284,7 +284,7 @@ function SettingsView(props) {
                         checked={encrypt}
                         onChange={handleEncryptChange}
                         label="Encrypt End-to-End"
-                        description="Encrypts all data shared between peers so only participants can read it."
+                        description="Encrypts all shared data. Only the people in the room can read it."
                     />
 
                     {/* Sharing */}
@@ -293,7 +293,7 @@ function SettingsView(props) {
                         checked={keepCopies}
                         onChange={handleKeepCopiesChange}
                         label="Keep Copies for Latecomers"
-                        description="Photos go phone to phone. The server only keeps one, for up to 24 hours, when someone can't get it directly. Turn on to keep every photo there for 24 hours, so people who join after everyone else left still get them."
+                        description="Photos go from phone to phone. The server keeps a copy only when someone cannot get a photo directly, for 24 hours at most. Turn this on to keep a copy of each photo for 24 hours. Then people who join later still get the photos."
                     />
 
                     {/* Display */}
@@ -302,19 +302,19 @@ function SettingsView(props) {
                         checked={showTopology}
                         onChange={handleTopologyChange}
                         label="Topology View"
-                        description="Show the network topology graph of connected peers."
+                        description="Shows a map of the connected devices."
                     />
                     <SettingToggle
                         checked={showMe}
                         onChange={handleShowMeChange}
                         label="Me View"
-                        description="Show your own node highlighted in the network view."
+                        description="Highlights your device on the network map."
                     />
                     <SettingToggle
                         checked={darkMode}
                         onChange={handleDarkModeChange}
                         label="Dark Theme"
-                        description="Switch between light and dark color schemes."
+                        description="Changes between light and dark colors."
                     />
 
                     {/* Advanced */}
@@ -323,7 +323,7 @@ function SettingsView(props) {
                         checked={strategyPreference}
                         onChange={handleStrategyPreferenceChange}
                         label="Prefer Sequential Download"
-                        description="Download pieces in order instead of rarest-first. May reduce swarming efficiency."
+                        description="Downloads pieces in order, not rarest first. Sharing between many people can be slower."
                     />
                     <Box sx={{ py: 0.5, pl: 1 }}>
                         <Button

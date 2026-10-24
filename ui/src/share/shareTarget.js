@@ -101,8 +101,8 @@ export async function takeSharedFiles(idb = typeof indexedDB !== 'undefined' ? i
 
 /** What went wrong with a share, by its "shared" value. */
 export const SHARE_ERRORS = {
-    missed: 'Those photos didn’t reach PhotoGroup. Now that it’s open, share them again.',
-    error: 'Couldn’t receive the shared photos. Try sharing them again.',
+    missed: 'The photos did not arrive in PhotoGroup. PhotoGroup is open now, so share them again.',
+    error: 'Could not receive the shared photos. Share them again.',
 };
 
 export const SHARE_WAITING = 'Open or create a room, and the photos you shared will be added to it.';

@@ -133,7 +133,7 @@ function LoadingTile({tile, master, name}) {
         infoHash => !!master.roomPhotos?.uploadStalled(infoHash));
     let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
     if (stalled && !have) loadingText = 'Connection stalled';
-    else if (!have && tile.fromServerCopy) loadingText = 'Received via server (P2P unavailable)';
+    else if (!have && tile.fromServerCopy) loadingText = 'Received from the server copy (P2P did not work)';
     else if (copyStatus && !isLoading && !tile.rendering) loadingText = copyStatus.text;
     const isRendering = loadingText === 'Rendering';
     const hasError = !!tile.uploadError;
@@ -347,8 +347,8 @@ function LoadingTile({tile, master, name}) {
                     <Box sx={{ mt: 1.5 }}>
                         <Typography variant="caption" sx={{ display: 'block', color: 'warning.main', lineHeight: 1.4 }}>
                             {copyStatus?.holdersAway
-                                ? 'Whoever has it switched to another app, so their phone can\'t send it now. A server copy gets it to you anyway.'
-                                : 'No data for a while — the other phone may be locked, out of range, or on a network that blocks direct connections.'}
+                                ? 'The person with this photo is in another app, so their phone cannot send it now. A server copy can bring it to you.'
+                                : 'No data for some time. The other phone can be locked or out of range, or its network blocks direct connections.'}
                         </Typography>
                         {copyStatus && (
                             <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>

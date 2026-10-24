@@ -21,7 +21,7 @@ test('Android: shares the photos in a zip and explains how to keep locations', a
   const page = await context.newPage();
 
   await createRoom(page);
-  await expect(page.getByTestId('android-location-note')).toContainText('choose Material Files');
+  await expect(page.getByTestId('android-location-note')).toContainText('select Material Files');
   await expect(page.locator('input#contained-button-file')).toHaveAttribute('accept', /\.zip/);
 
   const chooser = page.waitForEvent('filechooser');

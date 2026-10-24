@@ -102,56 +102,56 @@ export function describeIceServers(rtcConfig) {
  */
 export function forecastPath(mine, theirs, { hasTurn = false } = {}) {
     if (!mine.gathered || !theirs.gathered) {
-        return { path: 'unknown', level: 'unknown', label: 'waiting for candidates', why: 'One side has not published its ICE candidates yet.' };
+        return { path: 'unknown', level: 'unknown', label: 'waiting for candidates', why: 'One side did not send its ICE candidates yet.' };
     }
     const shared = mine.publicIps.find(ip => theirs.publicIps.includes(ip));
     if (shared) {
         return {
             path: 'lan', level: 'good', label: 'same network, host↔host',
-            why: 'Both of you appear behind the same public address ' + shared + ', so ICE should pair LAN candidates directly.',
+            why: 'You both use the same public address ' + shared + '. ICE can connect you directly on your network.',
         };
     }
     if (!mine.publicIps.length || !theirs.publicIps.length) {
         return {
             path: hasTurn ? 'relay' : 'server', level: 'poor', label: hasTurn ? 'TURN relay likely' : 'server copy likely',
-            why: 'STUN gave ' + (mine.publicIps.length ? 'them' : 'you') + ' no public address, so only a relay or the server copy can bridge different networks.',
+            why: 'STUN found no public address for ' + (mine.publicIps.length ? 'them' : 'you') + '. Between different networks, only a relay or the server copy can connect you.',
         };
     }
     if (mine.nat === 'symmetric' && theirs.nat === 'symmetric') {
         return {
             path: hasTurn ? 'relay' : 'server', level: 'poor', label: hasTurn ? 'TURN relay needed' : 'server copy likely',
-            why: 'Both NATs pick a new port per destination, so the ports STUN saw are not the ones the peer will hit. Hole punching rarely survives that.',
+            why: 'Both NATs use a new port for each destination. The ports from STUN are then wrong, so hole punching usually fails.',
         };
     }
     if (mine.nat === 'symmetric' || theirs.nat === 'symmetric') {
         return {
             path: 'stun', level: 'ok', label: 'hole punch, may fall back',
-            why: 'One side is symmetric. Punching can still work when the other side is a cone NAT, but it is less reliable.',
+            why: 'One NAT is symmetric. Hole punching can work if the other NAT is a cone NAT, but it is less reliable.',
         };
     }
     return {
         path: 'stun', level: 'good', label: 'direct via STUN hole punch',
-        why: 'Different networks, cone NAT mappings: both sides send to each other\'s reflexive address and the NATs let the replies in.',
+        why: 'Different networks with cone NATs. Both sides send to the public address of the other side, and both NATs let the replies in.',
     };
 }
 
 /** One-line overall verdict for this device. */
 export function verdictFor(summary, { hasTurn = false, stunPending = false } = {}) {
     if (!summary.gathered) return { level: 'unknown', text: 'Gathering ICE candidates…' };
-    if (!summary.publicIps.length && stunPending) return { level: 'unknown', text: 'Host candidates in. Waiting for a STUN server to reflect your public address…' };
+    if (!summary.publicIps.length && stunPending) return { level: 'unknown', text: 'Local candidates found. Waiting for STUN to find your public address…' };
     if (!summary.publicIps.length) {
         return {
             level: 'poor',
-            text: 'STUN could not see your public address. Same-Wi-Fi peers can still connect directly; ' +
-                (hasTurn ? 'others go through the TURN relay.' : 'others will get the server copy.'),
+            text: 'STUN could not find your public address. Peers on the same Wi-Fi can connect directly. ' +
+                (hasTurn ? 'Other peers use the TURN relay.' : 'Other peers receive the server copy.'),
         };
     }
     if (summary.nat === 'symmetric') {
         return {
             level: 'ok',
-            text: 'Your NAT changes ports per destination. Peers behind cone NATs can still reach you; ' +
-                (hasTurn ? 'the TURN relay covers the rest.' : 'the server copy covers the rest.'),
+            text: 'Your NAT changes the port for each destination. Peers behind cone NATs can still reach you. ' +
+                (hasTurn ? 'The TURN relay connects the other peers.' : 'The server copy reaches the other peers.'),
         };
     }
-    return { level: 'good', text: 'Your NAT keeps a stable mapping, so direct P2P to other networks should work.' };
+    return { level: 'good', text: 'Your NAT keeps the same port. Direct P2P to other networks will usually work.' };
 }

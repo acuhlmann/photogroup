@@ -69,7 +69,7 @@ describe('MediaMetadataPanel shared editing', () => {
         await act(async () => button(div, 'Add a title').click());
         await act(async () => button(div, '2 stars').click());
         await act(async () => button(div, 'Save for everyone').click());
-        expect(div.querySelector('[role="alert"]').textContent).toContain('still being shared');
+        expect(div.querySelector('[role="alert"]').textContent).toContain('not shared completely yet');
         expect(button(div, 'Save for everyone')).toBeTruthy();
         await act(async () => root.unmount());
     });

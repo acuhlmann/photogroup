@@ -272,7 +272,7 @@ function RenderContent(props) {
         // A clip that came from the server copy has the file, not a torrent file.
         const size = tile.torrentFile ? tile.torrentFile.length : file.size;
         if(FileUtil.largerThanMaxBlobSize(size)) {
-            const msg = 'File is ' + FileUtil.formatBytes(size) + ' and too large to render inline, just download instead.';
+            const msg = 'File is ' + FileUtil.formatBytes(size) + ' and too large to show here. Download it.';
             Logger.warn(msg);
             // Say so, over the clip's poster when it has one, instead of an empty box.
             const note = document.createElement('div');

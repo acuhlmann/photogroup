@@ -3,6 +3,13 @@ export function canSaveDetails(master) {
     return !!(master && master.service && typeof master.service.updateDetails === 'function');
 }
 
+/** What to tell someone whose change to a photo did not save. */
+export function saveErrorText(err) {
+    return err && err.status === 404
+        ? 'The photo is not shared completely yet. Try again in a moment.'
+        : (err && err.message) || 'Could not save. Try again.';
+}
+
 /**
  * Save changed shared fields (title, description, rating) and publish the
  * updated photo locally; the room hears it over SSE too. Errors propagate.

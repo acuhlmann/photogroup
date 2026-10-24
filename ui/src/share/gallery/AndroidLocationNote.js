@@ -45,7 +45,7 @@ function AndroidLocationNote({ narrow }) {
                 <Box sx={{ minWidth: 0 }}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Keep where your photos were taken</Typography>
                     <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.5 }}>
-                        Android removes the location from photos a browser picks the usual way. {KEEP_LOCATION_STEPS}
+                        Android removes the location when a browser selects photos in the usual way. {KEEP_LOCATION_STEPS}
                     </Typography>
                     <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                         <Button size="small" variant="outlined" href={MATERIAL_FILES_URL} target="_blank" rel="noopener noreferrer"

@@ -35,12 +35,12 @@ export const RETRY_DELAYS_MS = [5000, 15000, 30000, 60000];
 
 /** Why a copy is being left, in words for geek mode's transfer view. */
 export const UPLOAD_WHY = {
-    asked: "someone's P2P download stalled and they asked for a copy",
-    'going to background': 'this page went to the background while someone still lacks it',
-    'keep copies': 'the room keeps server copies for latecomers',
-    video: 'clips get a backup: often only this phone has them',
-    resuming: 'carrying on an upload a freeze cut off',
-    retrying: 'trying again after an upload was cut off',
+    asked: 'a P2P download stopped and the receiver asked for a copy',
+    'going to background': 'this page went to the background before all people had the photo',
+    'keep copies': 'the room keeps server copies for people who join later',
+    video: 'clips get a server copy, because often only this phone has them',
+    resuming: 'continuing an upload that stopped',
+    retrying: 'trying again after an upload stopped',
 };
 
 export default class ServerPinning {
@@ -103,12 +103,12 @@ export default class ServerPinning {
             if (this.keepCopies) this.enqueue(infoHash, 'keep copies');
             else if (isVideo(blob)) this.enqueue(infoHash, 'video');
         });
-        // Too large for a backup: only this device has it until someone else does.
+        // Too large for a server copy: only this device has it until someone else does.
         const big = items.filter(({ blob }) => blob && blob.size > MAX_PHOTO_BYTES);
         if (big.length) {
             const what = big.length === 1 ? (isVideo(big[0].blob) ? 'This clip is' : 'This file is') : `${big.length} files are`;
-            this.emitter?.emit?.('showInfo', `${what} over ${MAX_PHOTO_MB} MB, so it goes straight from your phone `
-                + 'with no server backup. Keep PhotoGroup open until the others have it.');
+            this.emitter?.emit?.('showInfo', `${what} larger than ${MAX_PHOTO_MB} MB, so it has no server copy. `
+                + 'Keep PhotoGroup open until the others have it.');
         }
     }
 

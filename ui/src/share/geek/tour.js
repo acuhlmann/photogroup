@@ -108,7 +108,7 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
     const hasTurn = !turnNode?.idle;
     const via = transferRoute(scene, myPeerId, friend);
     const settled = via && !via.demo ? via : null;
-    const pathWords = { lan: 'directly on your network', punch: 'straight through both NATs', relay: 'through the TURN relay' };
+    const pathWords = { lan: 'on your network', punch: 'straight through both NATs', relay: 'through the TURN relay' };
     const ids = list => list.filter(Boolean);
     const has = id => scene.routes.some(route => route.id === id);
 
@@ -123,7 +123,7 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
         {
             id: 'join',
             title: 'Open the room',
-            body: 'Your browser loads PhotoGroup from photogroup.network. If the server was asleep, a small Cloud Run service wakes it, then nginx passes the request to the app. Joining registers your device with a random peer id, and opens an event stream (SSE) the server uses to push room changes to you.',
+            body: 'Your browser loads PhotoGroup from photogroup.network. If the server is asleep, Cloud Run starts it. Then nginx sends the request to the app. When you join, the server gives your device a random peer ID. The server keeps an event stream (SSE) open to send room changes to you.',
             nodes: ids([myPeerId, mineNat, 'edge', 'api']),
             routes: ['sse:' + myPeerId],
             packets: [
@@ -133,15 +133,15 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
                 { route: 'sse:' + myPeerId, label: 'SSE open', reverse: true, at: 3000 },
             ],
             sees: [
-                { who: HOLDS, what: 'room id, your peer id, name and device type' },
-                { who: NEVER, what: 'anything from your photos', tone: 'good' },
+                { who: HOLDS, what: 'the room ID, your peer ID, your name and your device type' },
+                { who: NEVER, what: 'your photos', tone: 'good' },
             ],
             duration: 4600,
         },
         {
             id: 'stun',
             title: 'Find your public address (STUN)',
-            body: `Behind a router your device only knows its private address. It asks a public STUN server${ice.stun[0] ? ` (${ice.stun[0]})` : ''} "where do you see me from?", and the reply is the public IP and port your NAT used. That address, plus your private ones, are your ICE candidates: the ways someone could reach you. They are shared with the room so a friend's browser can try them.`,
+            body: `Behind a router, your device knows only its private address. It asks a public STUN server${ice.stun[0] ? ` (${ice.stun[0]})` : ''} which address it sees. The STUN server sends back the public IP address and port of your router. Your private and public addresses are your ICE candidates. Your browser sends them to the room, so other browsers know how to reach you.`,
             nodes: ids([myPeerId, mineNat, 'stun', 'api']),
             routes: ids([mineNat && 'stun:' + mineNat, 'sse:' + myPeerId]),
             packets: ids([
@@ -150,15 +150,15 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
                 { route: 'sse:' + myPeerId, label: 'PUT my candidates', at: 2400 },
             ]),
             sees: [
-                { who: 'STUN sees', what: 'your public IP and port, nothing else' },
-                { who: HOLDS, what: 'your candidates: private and public addresses, with ISP and city looked up from the public one' },
+                { who: 'STUN sees', what: 'your public IP address and port, and nothing more' },
+                { who: HOLDS, what: 'your candidates (private and public addresses), and the ISP and city of your public address' },
             ],
             duration: 4000,
         },
         {
             id: 'hash',
-            title: 'Share a photo: fingerprint it on your device',
-            body: 'When you share, your browser cuts the file into pieces and takes a SHA-1 hash of every piece. The hash of that list is the infohash, the photo\'s fingerprint and name on the network. Nothing has left your device yet: the photo stays on your phone, ready to be served from there.',
+            title: 'Share a photo: your device makes its fingerprint',
+            body: 'Your browser cuts the file into pieces. It calculates a SHA-1 hash for each piece. The hash of all these hashes is the infohash. The infohash is the fingerprint and the name of the photo on the network. The photo stays on your device.',
             nodes: [myPeerId],
             routes: [],
             packets: [],
@@ -167,8 +167,8 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
         },
         {
             id: 'publish',
-            title: 'Publish the magnet link',
-            body: 'Your browser sends the server a magnet link (the infohash) and a few facts about the file. The server pushes them to everyone in the room over their event streams, so the photo shows up for your friend as a placeholder. Only then does the photo itself start to move.',
+            title: 'Send the magnet link',
+            body: 'Your browser sends a magnet link (the infohash) and some data about the file to the server. The server sends this to all devices in the room. Your friend sees a placeholder for the photo. The photo itself has not moved yet.',
             nodes: ids([myPeerId, friend, 'edge', 'api']),
             routes: ids(['sse:' + myPeerId, friend && 'sse:' + friend]),
             packets: ids([
@@ -177,15 +177,15 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
                 { route: 'sse:' + myPeerId, label: 'SSE photos:add', reverse: true, at: 1300 },
             ]),
             sees: [
-                { who: HOLDS, what: 'the magnet, file name, type, size, date taken and a size+hash fingerprint. Kept on disk with the room until it is 30 days untouched' },
-                { who: NEVER, what: 'the photo\'s pixels', tone: 'good' },
+                { who: HOLDS, what: 'the magnet link, file name, type, size, date taken and fingerprint. It keeps them on disk until nobody uses the room for 30 days' },
+                { who: NEVER, what: 'the photo', tone: 'good' },
             ],
             duration: 3600,
         },
         {
             id: 'tracker',
             title: 'Meet through the tracker',
-            body: `Both browsers announce the infohash to the tracker, a WebSocket server on photogroup.network. It pairs up browsers that want the same photo and passes their WebRTC offer and answer between them. Those carry each side's ICE candidates, so ${friendName}'s browser now knows how it might reach yours.`,
+            body: `Both browsers send the infohash to the tracker. The tracker is a WebSocket server on photogroup.network. It connects browsers that want the same photo. It sends a WebRTC offer and answer between them. These messages contain the ICE candidates of each side. Now the browser of ${friendName} knows how to reach your browser.`,
             nodes: ids([myPeerId, friend, 'edge', 'tracker']),
             routes: ids(['tracker:' + myPeerId, friend && 'tracker:' + friend]),
             packets: ids([
@@ -197,16 +197,16 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
                 { route: 'tracker:' + myPeerId, label: 'answer (SDP)', reverse: true, at: 4100 },
             ]),
             sees: [
-                { who: 'tracker sees', what: 'who wants which infohash, and their ICE candidates' },
-                { who: NEVER, what: 'photo bytes: it only makes introductions', tone: 'good' },
+                { who: 'tracker sees', what: 'which device wants which infohash, and the ICE candidates' },
+                { who: NEVER, what: 'the photo: the tracker only connects devices', tone: 'good' },
             ],
             duration: 5600,
         },
         {
             id: 'ice',
             title: 'Try every path (ICE)',
-            body: 'ICE tests candidate pairs from best to worst. First direct on the same network. Then through both routers, each side sending to the other\'s STUN-learned address at once so both NATs let the replies in: hole punching. Last, via a TURN relay. The first pair that answers carries the photo.'
-                + (settled ? ` Between you and ${friendName} it settled ${pathWords[settled.kind] || 'on a path'}.` : ''),
+            body: 'ICE tests pairs of candidates, from best to worst. First, it tries a direct path on the same network. Then it tries a path through both routers. Both sides send to the public address of the other side at the same time. This opens both NATs ("hole punching"). Last, it tries a TURN relay. The first pair that works carries the photo.'
+                + (settled ? ` Between you and ${friendName}, ICE chose the path ${pathWords[settled.kind] || 'that works'}.` : ''),
             nodes: ids([myPeerId, friend, mineNat, theirNat, 'turn']),
             routes: ['demo:lan', 'demo:punch', 'demo:relay', settled?.id].filter(id => id && has(id)),
             packets: [
@@ -216,7 +216,7 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
                 { route: 'demo:relay', label: 'check relay', at: 3000, speed: 0.012 },
             ],
             sees: [
-                { who: 'routers see', what: 'packets between two addresses, as for any video call' },
+                { who: 'routers see', what: 'data between two addresses, the same as for a video call' },
             ],
             duration: 5200,
         },
@@ -224,8 +224,8 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
             id: 'turn',
             title: 'When direct fails: TURN',
             body: hasTurn
-                ? 'Some networks cannot be punched through: carrier-grade NAT on mobile data, strict office firewalls, or routers that change ports for every destination on both sides. Then both browsers send to a TURN relay, which forwards the packets. The data channel stays DTLS-encrypted end to end, so the relay moves bytes it cannot read.'
-                : 'Some networks cannot be punched through: carrier-grade NAT on mobile data, strict office firewalls, or routers that change ports for every destination on both sides. A TURN relay would forward the packets then. This server has no TURN configured, so when P2P cannot connect, the server copy (two steps on) takes over.',
+                ? 'Some networks block hole punching. Examples are mobile networks with carrier-grade NAT, strict office firewalls, and routers that change the port for each destination. Then both browsers send their data to a TURN relay. The relay forwards it. The data stays encrypted (DTLS), so the relay cannot read it.'
+                : 'Some networks block hole punching. Examples are mobile networks with carrier-grade NAT, strict office firewalls, and routers that change the port for each destination. A TURN relay can forward the data then. This server has no TURN configured. If P2P cannot connect, PhotoGroup uses a server copy (step 9).',
             nodes: ids([myPeerId, friend, mineNat, theirNat, 'turn']),
             routes: has('demo:relay') ? ['demo:relay'] : [],
             packets: hasTurn ? [
@@ -235,14 +235,14 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
             ] : [],
             sees: hasTurn ? [
                 { who: 'TURN sees', what: 'both IP addresses and encrypted bytes' },
-                { who: NEVER, what: 'the photo itself: the encryption keys stay in the two browsers', tone: 'good' },
-            ] : [{ who: 'TURN', what: 'none configured: the server copy is the fallback' }],
+                { who: NEVER, what: 'the photo: the keys stay in the two browsers', tone: 'good' },
+            ] : [{ who: 'TURN', what: 'not configured: the server copy is the fallback' }],
             duration: 4200,
         },
         {
             id: 'pieces',
             title: 'Swap pieces, browser to browser',
-            body: 'Over the encrypted WebRTC data channel the browsers speak BitTorrent. A handshake, then the file list and piece hashes (metadata), then the pieces themselves. Each piece is checked against its hash before it is kept, so a corrupted or forged piece is thrown away. Every verified piece can be passed straight on to the next person.',
+            body: 'The browsers use BitTorrent over the encrypted WebRTC data channel. First they send a handshake. Then they send the file list and the piece hashes (metadata). Then they send the pieces. The receiver checks each piece against its hash and discards a bad piece. It can send each good piece to the next person immediately.',
             nodes: ids([myPeerId, friend, ...(via?.path || [])]),
             routes: ids([via?.id]),
             packets: via ? [
@@ -251,14 +251,14 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
                 ...pieces(via, 8, 1900, 280),
             ] : [],
             sees: [
-                { who: NEVER, what: 'any of it: photogroup.network is not on this path', tone: 'good' },
+                { who: NEVER, what: 'this data: photogroup.network is not on this path', tone: 'good' },
             ],
             duration: 5200,
         },
         {
             id: 'copy',
             title: 'Last resort: a server copy',
-            body: `If a download makes no progress for ${Math.round(P2P_STALL_MS / 1000)} seconds, or everyone who has the photo has switched to another app (phones freeze the page), the receiver asks for a copy. Someone who has the photo uploads it over HTTPS in 8 MB chunks, and the receiver downloads it and checks its fingerprint. Files over ${MAX_PHOTO_MB} MB never go there.`,
+            body: `The receiver asks for a server copy if the download stops for ${Math.round(P2P_STALL_MS / 1000)} seconds. It also asks if all devices with the photo are in another app, because phones stop the page in the background. A device with the photo uploads it over HTTPS in 8 MB parts. The receiver downloads it and checks its fingerprint. Files larger than ${MAX_PHOTO_MB} MB never go to the server.`,
             nodes: ids([myPeerId, friend, 'edge', 'copies']),
             routes: ids(['copies:' + myPeerId, friend && 'copies:' + friend]),
             packets: ids([
@@ -268,22 +268,22 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
                 friend && { route: 'copies:' + friend, label: 'GET copy', reverse: true, at: 3000, rgb: RX },
             ]),
             sees: [
-                { who: HOLDS, what: 'the photo\'s bytes, only until everyone has it or 24 h pass, whichever is first' },
+                { who: HOLDS, what: 'the photo, until all devices have it, for 24 h at most' },
             ],
             duration: 4800,
         },
         {
             id: 'summary',
             title: 'Who saw what',
-            body: 'When the direct path works, the photo only ever exists on the devices in the room. photogroup.network introduces people and keeps the list of what was shared; STUN and the tracker help browsers find each other; TURN, if used, carries encrypted bytes it cannot open. The server holds a photo only as a short-lived copy when P2P has failed.',
+            body: 'When the direct path works, the photo is only on the devices in the room. photogroup.network connects the people and keeps the list of shared photos. STUN and the tracker help browsers find each other. TURN, if used, carries encrypted data that it cannot read. The server keeps a photo only as a temporary copy when P2P fails.',
             nodes: scene.nodes.map(node => node.id),
             routes: ids(['sse:' + myPeerId, 'tracker:' + myPeerId, via?.id]),
             packets: via ? pieces(via, 4, 0, 400) : [],
             sees: [
-                { who: HOLDS, what: 'room, people (names, devices, addresses), magnet links and file facts' },
-                { who: 'STUN · tracker', what: 'addresses and which photo you want, never its bytes' },
-                { who: 'TURN', what: hasTurn ? 'encrypted bytes, if direct fails' : 'not configured here' },
-                { who: 'server copy', what: 'the bytes, only after P2P failed, for up to 24 h' },
+                { who: HOLDS, what: 'the room, the people (names, devices, addresses), magnet links and file data' },
+                { who: 'STUN · tracker', what: 'addresses and which photo you want, never the photo' },
+                { who: 'TURN', what: hasTurn ? 'encrypted data, if the direct path fails' : 'not configured here' },
+                { who: 'server copy', what: 'the photo, only when P2P fails, for 24 h at most' },
             ],
             duration: 4000,
         },

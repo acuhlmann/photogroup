@@ -249,7 +249,7 @@ describe('GeekStage', () => {
         expect(title()).toBe('Find your public address (STUN)');
         // The arrows walk the tour while it is open, not the traffic.
         await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
-        expect(title()).toBe('Share a photo: fingerprint it on your device');
+        expect(title()).toBe('Share a photo: your device makes its fingerprint');
         await act(async () => div.querySelector('[aria-label="Step 10"]').click());
         expect(title()).toBe('Who saw what');
         expect(div.textContent).toContain('photogroup.network keeps');
