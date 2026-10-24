@@ -88,7 +88,30 @@ describe('Room restart', () => {
         assert.strictEqual(photo.serverCopyRequestedAt, undefined);
         assert.strictEqual(photo.serverCopySize, undefined);
         // Ownership is not restored either: each device re-declares what it holds.
-        assert.strictEqual(photo.owners, undefined);
+        assert.deepStrictEqual(photo.owners, []);
+    });
+
+    it('lets the sharer reload and re-declare the photo after a restart', async () => {
+        await shareOnePhoto('reload-room');
+
+        const next = serve(new RoomStore({ file, debounceMs: 0 }));
+        const returner = peer('sharer');
+        const joined = await request(next.app).post('/api/rooms/reload-room').send({ peer: returner }).expect(200);
+        const sessionToken = joined.body.sessionToken;
+
+        // A reload: the same session comes back with a new peer id, which
+        // drops the old peer and its ownerships.
+        const reloaded = { ...returner, peerId: 'sharer-peer-2' };
+        await request(next.app).post('/api/rooms/reload-room')
+            .send({ peer: reloaded, sessionToken })
+            .expect(200);
+
+        const owned = await request(next.app).post('/api/rooms/reload-room/photos/owners/')
+            .set('X-Session-Id', reloaded.sessionId)
+            .set('X-Session-Token', sessionToken)
+            .send([{ infoHash: 'clip-hash', peerId: reloaded.peerId, loading: false }])
+            .expect(200);
+        assert.strictEqual(owned.body, true);
     });
 
     it('keeps the photo on its first join after the restart', async () => {

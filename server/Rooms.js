@@ -117,8 +117,11 @@ export default class Rooms {
         records.forEach(record => {
             if (this.rooms.has(record.id)) return;
             const room = this.createRoom(record.id);
-            room.photos = record.photos;
-            record.photos.forEach(photo => this.addToPhotoIndex(room, photo));
+            // Owners aren't saved, but every owner route expects the list:
+            // without it the first join after a restart answered 500, and
+            // the room never loaded (Share stayed greyed out, photos gone).
+            room.photos = record.photos.map(photo => ({ ...photo, owners: [] }));
+            room.photos.forEach(photo => this.addToPhotoIndex(room, photo));
             room.settings = { ...room.settings, ...record.settings };
             room.createdAt = record.createdAt;
             room.updatedAt = record.updatedAt;
