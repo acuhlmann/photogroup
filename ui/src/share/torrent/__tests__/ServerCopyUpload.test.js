@@ -118,3 +118,33 @@ describe('RoomsService.uploadServerCopy', () => {
         await expect(upload(service(), 'h', blob)).resolves.toEqual({ status: 'interrupted', received: 0 });
     });
 });
+
+describe('RoomsService.fetchServerCopy', () => {
+    const service = { url: '/api/rooms', id: 'room', sessionHeaders: () => ({}), blobUrl: () => '/copy' };
+    const fetchCopy = (...args) => RoomsService.prototype.fetchServerCopy.call(service, ...args);
+    let fetchMock;
+
+    afterEach(() => fetchMock?.mockRestore());
+
+    it('reports bytes as the copy streams in', async () => {
+        const chunks = [new Uint8Array([1, 2]), new Uint8Array([3, 4, 5])];
+        const reader = { read: vi.fn(async () => (chunks.length ? { done: false, value: chunks.shift() } : { done: true })) };
+        fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+            ok: true,
+            headers: new Map([['Content-Length', '5'], ['Content-Type', 'image/jpeg']]),
+            body: { getReader: () => reader },
+        });
+        const progress = vi.fn();
+        const blob = await fetchCopy('h', { onProgress: progress });
+        expect(progress.mock.calls).toEqual([[2, 5], [5, 5]]);
+        expect(blob.size).toBe(5);
+        expect(blob.type).toBe('image/jpeg');
+    });
+
+    it('falls back to a plain blob without a progress callback', async () => {
+        const whole = new Blob(['x']);
+        fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, blob: async () => whole });
+        expect(await fetchCopy('h')).toBe(whole);
+    });
+});
+

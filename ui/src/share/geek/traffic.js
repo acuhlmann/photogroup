@@ -10,6 +10,8 @@ import { flightMs } from './timeline';
 
 // How long a route keeps showing its last transfer.
 export const FLOW_MS = 5000;
+// A server copy still under way keeps its route on screen between chunks.
+export const NOTE_MS = 60000;
 // Bytes coming in and going out are drawn in these colours.
 export const RX = '61,222,139';
 export const TX = '245,185,66';
@@ -62,7 +64,7 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
     };
 
     /** Write one event: its log line, plus what crossed and what to count. */
-    const record = (name, args, { flights = [], routeId, count, speed } = {}) => {
+    const record = (name, args, { flights = [], routeId, count, speed, note, sticky } = {}) => {
         const line = describeEvent(name, args) || {};
         timeline.push({
             kind: line.kind || name,
@@ -72,6 +74,8 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
             route: routeId,
             count,
             speed,
+            note,
+            sticky,
         });
     };
 
@@ -137,10 +141,27 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
         });
     };
 
-    const onBackup = ({ pending } = {}) => {
-        if (pending > 0) record('serverCopyBackup', [{ pending }], { flights: [flight(mine('copies'), { label: 'PUT chunk ≤8 MB' })] });
+    // A server copy's stages, on this device's route to the copies store:
+    // chunks going up, the copy coming down, the request asking for one.
+    const onServerCopy = (event = {}) => {
+        const route = mine('copies');
+        const up = event.direction === 'up';
+        const moving = event.stage === 'uploading' || event.stage === 'downloading';
+        const bytes = event.total ? `${FileUtil.formatBytes(event.loaded || 0)}/${FileUtil.formatBytes(event.total)}` : '';
+        const verb = up ? 'PUT' : 'GET';
+        const note = moving && bytes ? `${verb} ${bytes}` : event.stage === 'requested' ? 'POST request' : `${verb} ${event.stage}`;
+        const flights = [];
+        if (event.stage === 'requested') flights.push(flight(route, { label: 'POST /request' }));
+        else if (moving || event.stage === 'stored' || event.stage === 'done') {
+            flights.push(flight(route, { reverse: !up, label: moving ? `${verb} ${bytes}`.trim() : `${verb} ${event.stage}`, rgb: up ? TX : RX }));
+        }
+        record('serverCopy', [event], {
+            routeId: route?.id,
+            note,
+            sticky: moving || event.stage === 'queued' || event.stage === 'requested' || event.stage === 'verifying',
+            flights,
+        });
     };
-    const onCopy = () => record('serverCopyReady', [], { flights: [flight(mine('copies'), { reverse: true, label: 'GET copy' })] });
 
     const onPeers = event => record('peers', [event]);
     const onConnections = event => record('peerConnections', [event]);
@@ -169,8 +190,7 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
         ['pieceReceived', onPiece('rx')],
         ['pieceSent', onPiece('tx')],
         ['wire', onWire],
-        ['serverCopyBackup', onBackup],
-        ['serverCopyReady', onCopy],
+        ['serverCopy', onServerCopy],
         ['pcEvent', onIce],
         ['localNetwork', onLocalNetwork],
         ['sseReconnected', onReconnected],
@@ -186,11 +206,22 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
  */
 export function flowAt(entries, routeId, clock = Date.now(), window = FLOW_MS) {
     const state = { rx: 0, tx: 0, at: 0 };
+    let noted = false;
     for (let index = entries.length - 1; index >= 0; index--) {
         const entry = entries[index];
-        if (clock - entry.at > window) break;
+        const age = clock - entry.at;
+        if (age > Math.max(window, NOTE_MS)) break;
         // Traffic the room sent after the moment on screen is not news yet.
         if (entry.at > clock || entry.route !== routeId) continue;
+        // The newest stage decides: one still under way stays up a while.
+        if (entry.note && !noted) {
+            noted = true;
+            if (age <= (entry.sticky ? NOTE_MS : window)) {
+                state.note = entry.note;
+                if (!state.at) state.at = entry.at;
+            }
+        }
+        if (age > window) continue;
         if (entry.count) {
             if (entry.kind === 'rx') state.rx += entry.count;
             if (entry.kind === 'tx') state.tx += entry.count;
@@ -202,5 +233,5 @@ export function flowAt(entries, routeId, clock = Date.now(), window = FLOW_MS) {
             if (!state.at) state.at = entry.at;
         }
     }
-    return state.rx || state.tx || state.rxSpeed || state.txSpeed ? state : null;
+    return state.rx || state.tx || state.rxSpeed || state.txSpeed || state.note ? state : null;
 }

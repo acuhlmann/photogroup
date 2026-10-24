@@ -15,7 +15,7 @@ import SkipNextRounded from '@mui/icons-material/SkipNextRounded';
 import RadioRounded from '@mui/icons-material/RadioRounded';
 
 import NetworkStage from './NetworkStage';
-import MeView from '../MeView';
+import TransfersView from './TransfersView';
 import { createTimeline } from './timeline';
 
 const HEIGHT_KEY = 'photogroup.geekDrawerHeight';
@@ -30,6 +30,7 @@ const KIND_COLOR = {
     photo: 'text.primary',
     ice: 'text.secondary',
     sse: 'text.secondary',
+    copy: 'secondary.main',
 };
 
 function clock(at) {
@@ -178,7 +179,9 @@ function PacketLog({ timeline }) {
 /**
  * Geek mode's whole room: the network map fills the screen, with photos as
  * thumbnails on the devices that hold them, and a drawer along the bottom
- * logs what is crossing the wire and shows this device's network path. The
+ * logs what is crossing the wire and walks each photo's transfer through its
+ * stages, peers and server copy. This device's own network path is on its
+ * node on the map. The
  * drawer's log and the map read one recording, and the transport above it
  * holds that recording still to be studied.
  */
@@ -286,7 +289,7 @@ function GeekStage({ master, tiles, isMobile }) {
                         }}
                     >
                         <Tab label={`Packets${count ? ' · ' + count : ''}`} onClick={() => setOpen(true)} />
-                        <Tab label="This device" onClick={() => setOpen(true)} />
+                        <Tab label="Transfers" onClick={() => setOpen(true)} />
                     </Tabs>
                     <IconButton size="small" onClick={() => setOpen(value => !value)}
                         aria-label={open ? 'Hide the log' : 'Show the log'} aria-expanded={open} sx={{ mr: 0.5 }}>
@@ -295,7 +298,7 @@ function GeekStage({ master, tiles, isMobile }) {
                 </Box>
                 {open && (
                     <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                        {tab === 0 ? <PacketLog timeline={timeline} /> : <MeView master={master} />}
+                        {tab === 0 ? <PacketLog timeline={timeline} /> : <TransfersView master={master} />}
                     </Box>
                 )}
             </Box>

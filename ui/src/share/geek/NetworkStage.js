@@ -76,10 +76,14 @@ function polygon(ctx, x, y, r, sides, rotation) {
 const prefersReducedMotion = () => typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** A transfer route's label: its connection type, plus pieces and speed while they move. */
-export function routeLabel(route, state, now = Date.now()) {
-    if (!state || now - (state.at || 0) > FLOW_MS) return route.label;
-    const parts = [route.label];
+/**
+ * A route's label: its connection type (or kind), plus pieces and speed while
+ * they move, or the stage a server copy is at.
+ */
+export function routeLabel(route, state, now = Date.now(), base = route.label) {
+    if (state?.note) return [base, state.note].filter(Boolean).join(' · ');
+    if (!state || now - (state.at || 0) > FLOW_MS) return base;
+    const parts = [base];
     if (state.rx) parts.push(`↓ ${state.rx} pieces` + (state.rxSpeed ? ` ${state.rxSpeed}` : ''));
     if (state.tx) parts.push(`↑ ${state.tx} pieces` + (state.txSpeed ? ` ${state.txSpeed}` : ''));
     return parts.join(' · ');
@@ -270,22 +274,27 @@ function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
             // parked on is lit up, so a stepped event shows the path it took.
             scene.routes.forEach(route => {
                 const style = ROUTE_STYLE[route.kind];
-                if (!style || style.hidden) return;
+                if (!style) return;
+                const lit = focused.has(route.id);
+                const flow = flowAt(timeline.entries, route.id, at);
+                // Server copies are the exception: drawn only while one is moving.
+                if (style.hidden && !lit && !flow?.note) return;
                 const points = pointsOf.get(route.id);
                 if (points.length < 2) return;
                 const transfer = !!route.peers;
-                const lit = focused.has(route.id);
+                const base = transfer ? route.label : flow?.note ? style.label : null;
                 ctx.beginPath();
                 points.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
                 ctx.setLineDash(style.dash);
                 ctx.lineWidth = lit ? style.width + 1.5 : style.width;
-                ctx.strokeStyle = `rgba(${style.rgb},${lit ? 1 : transfer ? 0.75 : 0.28})`;
+                ctx.strokeStyle = `rgba(${style.rgb},${lit ? 1 : transfer || style.hidden ? 0.75 : 0.28})`;
                 ctx.stroke();
                 ctx.setLineDash([]);
-                if (transfer && route.label) {
-                    const mid = pointAlong(points, 0.5);
+                if (base) {
+                    // Signalling routes share their first legs; label a copy near its end.
+                    const mid = pointAlong(points, transfer ? 0.5 : 0.78);
                     ctx.font = `9px ${mono}`;
-                    const label = routeLabel(route, flowAt(timeline.entries, route.id, at), at);
+                    const label = routeLabel(route, flow, at, base);
                     const w = ctx.measureText(label).width + 10;
                     roundRect(ctx, mid.x - w / 2, mid.y - 8, w, 16, 4);
                     ctx.fillStyle = isDark ? 'rgba(16,20,28,0.9)' : 'rgba(255,255,255,0.92)';
@@ -595,7 +604,7 @@ function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
                     className="glass"
                     data-testid="node-details"
                     sx={{
-                        position: 'absolute', left: 8, top: 8, maxWidth: 300, p: 1.25, borderRadius: 2,
+                        position: 'absolute', left: 8, top: 8, maxWidth: 300, maxHeight: 'calc(100% - 16px)', overflow: 'auto', p: 1.25, borderRadius: 2,
                         border: 1, borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 6,
                     }}
                 >
@@ -608,7 +617,7 @@ function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
                         </IconButton>
                     </Stack>
                     {(node.info || []).map((line, index) => (
-                        <Typography key={index} sx={{ fontFamily: mono, fontSize: '0.64rem', color: 'text.secondary', lineHeight: 1.55, wordBreak: 'break-all' }}>
+                        <Typography key={index} sx={{ fontFamily: mono, fontSize: '0.64rem', color: 'text.secondary', lineHeight: 1.55, overflowWrap: 'anywhere' }}>
                             {line}
                         </Typography>
                     ))}
