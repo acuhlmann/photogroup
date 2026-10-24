@@ -122,4 +122,93 @@ describe('GeekStage', () => {
         expect(div.querySelector('[role="separator"]')).not.toBeNull();
         await act(async () => root.unmount());
     });
+
+    it('makes the log taller when the grip is dragged up, tracking the finger', async () => {
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' } };
+        const div = document.createElement('div');
+        const root = createRoot(div);
+        await act(async () => root.render(<GeekStage master={master} tiles={[]} />));
+        const edge = () => div.querySelector('[role="separator"]');
+        const value = () => Number(edge().getAttribute('aria-valuenow'));
+        const start = value();
+
+        // 768px of jsdom viewport, so the log may take 630px of it.
+        await act(async () => {
+            edge().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: 500, pointerId: 1 }));
+        });
+        await act(async () => {
+            window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: 300, pointerId: 1 }));
+        });
+        expect(value()).toBe(start + 200);
+        await act(async () => {
+            window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientY: 300, pointerId: 1 }));
+        });
+        expect(localStorage.setItem).toHaveBeenCalledWith('photogroup.geekDrawerHeight', String(start + 200));
+        await act(async () => root.unmount());
+    });
+
+    it('grows a collapsed drawer as soon as the grip moves, without a dead zone', async () => {
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' } };
+        const div = document.createElement('div');
+        const root = createRoot(div);
+        await act(async () => root.render(<GeekStage master={master} isMobile tiles={[]} />));
+        const edge = () => div.querySelector('[role="separator"]');
+        const value = () => Number(edge().getAttribute('aria-valuenow'));
+        expect(value()).toBe(33);
+
+        await act(async () => {
+            edge().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: 700, pointerId: 2 }));
+        });
+        await act(async () => {
+            window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: 660, pointerId: 2 }));
+        });
+        // The log is open and already 40px past where it started, not parked
+        // at some floor until the finger catches up.
+        expect(value()).toBe(260 + 40);
+        await act(async () => root.unmount());
+    });
+
+    it('resizes the log from the keyboard, and fills the screen from the button', async () => {
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' } };
+        const div = document.createElement('div');
+        const root = createRoot(div);
+        await act(async () => root.render(<GeekStage master={master} tiles={[]} />));
+        const edge = () => div.querySelector('[role="separator"]');
+        const value = () => Number(edge().getAttribute('aria-valuenow'));
+        const key = k => act(async () => {
+            edge().dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: k }));
+        });
+        const start = value();
+
+        await key('ArrowUp');
+        expect(value()).toBe(start + 40);
+        await key('PageUp');
+        expect(value()).toBe(start + 160);
+        await key('ArrowDown');
+        expect(value()).toBe(start + 120);
+
+        // Holding the grip and pressing End takes the whole stage, which is
+        // what the button on the bar does too.
+        await key('End');
+        const tallest = Number(edge().getAttribute('aria-valuemax'));
+        expect(value()).toBe(tallest);
+        await act(async () => div.querySelector('[aria-label="Give the map its room back"]').click());
+        expect(value()).toBeLessThan(tallest);
+        await act(async () => div.querySelector('[aria-label="Give the log the whole screen"]').click());
+        expect(value()).toBe(tallest);
+        await act(async () => root.unmount());
+    });
+
+    it('keeps a height taller than the old ceiling, clamped to this screen', async () => {
+        localStorage.getItem.mockReturnValue('700');
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' } };
+        const div = document.createElement('div');
+        const root = createRoot(div);
+        await act(async () => root.render(<GeekStage master={master} tiles={[]} />));
+        const edge = div.querySelector('[role="separator"]');
+        // 700 was thrown away before, so the log came back at its default.
+        expect(Number(edge.getAttribute('aria-valuenow'))).toBe(Number(edge.getAttribute('aria-valuemax')));
+        localStorage.getItem.mockReset();
+        await act(async () => root.unmount());
+    });
 });

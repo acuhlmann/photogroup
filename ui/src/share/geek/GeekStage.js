@@ -8,6 +8,8 @@ import IconButton from '@mui/material/IconButton';
 import Button from '@mui/material/Button';
 import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
 import ExpandLessRounded from '@mui/icons-material/ExpandLessRounded';
+import OpenInFullRounded from '@mui/icons-material/OpenInFullRounded';
+import CloseFullscreenRounded from '@mui/icons-material/CloseFullscreenRounded';
 import PauseRounded from '@mui/icons-material/PauseRounded';
 import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
 import SkipPreviousRounded from '@mui/icons-material/SkipPreviousRounded';
@@ -20,6 +22,11 @@ import { createTimeline } from './timeline';
 
 const HEIGHT_KEY = 'photogroup.geekDrawerHeight';
 const COLLAPSED = 33;
+// Transport bar + tabs + a couple of log lines is the least worth showing.
+const MIN_OPEN = 150;
+// The map still has to be readable above the drawer.
+const SHARE = 0.82;
+const DEFAULT_HEIGHT = { desktop: 220, mobile: 260 };
 
 const KIND_COLOR = {
     wire: 'primary.main',
@@ -191,9 +198,14 @@ function GeekStage({ master, tiles, isMobile }) {
     const [open, setOpen] = useState(!isMobile);
     const [height, setHeight] = useState(() => {
         const saved = Number(localStorage.getItem(HEIGHT_KEY));
-        return saved >= 140 && saved <= 600 ? saved : (isMobile ? 260 : 220);
+        return Number.isFinite(saved) && saved >= MIN_OPEN
+            ? saved
+            : (isMobile ? DEFAULT_HEIGHT.mobile : DEFAULT_HEIGHT.desktop);
     });
+    const stage = useRef(null);
     const drag = useRef(null);
+    const heightRef = useRef(height);
+    const [room, setRoom] = useState(0);
     const openPhoto = useCallback(key => master.emitter.emit('openPhoto', key), [master.emitter]);
 
     // Space holds and releases the traffic; the arrows walk through it.
@@ -218,35 +230,107 @@ function GeekStage({ master, tiles, isMobile }) {
         return () => window.removeEventListener('keydown', onKey);
     }, [timeline]);
 
-    // A taller log is the point when studying: drag the drawer's top edge.
+    // How much of the stage the log may take. Measured off the stage itself,
+    // not the viewport: a phone's browser bar can leave the drawer's bottom
+    // below the screen, so `100vh` is not the room that is really there.
+    const limit = useCallback(() => {
+        const box = room || window.innerHeight;
+        return Math.max(MIN_OPEN, Math.round(box * SHARE));
+    }, [room]);
+
+    const apply = useCallback((next, persist = true) => {
+        const clamped = Math.round(Math.min(limit(), Math.max(MIN_OPEN, next)));
+        heightRef.current = clamped;
+        setHeight(clamped);
+        if (persist) localStorage.setItem(HEIGHT_KEY, String(clamped));
+        return clamped;
+    }, [limit]);
+
+    useEffect(() => {
+        const read = () => {
+            const px = Math.round(stage.current?.getBoundingClientRect().height || window.innerHeight);
+            setRoom(px);
+            // A height saved on a bigger screen has to fit this one.
+            apply(heightRef.current, false);
+        };
+        read();
+        if (typeof ResizeObserver === 'function' && stage.current) {
+            const observer = new ResizeObserver(read);
+            observer.observe(stage.current);
+            return () => observer.disconnect();
+        }
+        window.addEventListener('resize', read);
+        return () => window.removeEventListener('resize', read);
+    }, [apply]);
+
+    // A taller log is the point when studying: drag the grip and the log
+    // follows the finger from wherever it was, up for more lines, down for
+    // the map. What you settle on is kept for the next time.
     useEffect(() => {
         const move = event => {
-            if (drag.current === null) return;
-            const at = event.touches ? event.touches[0].clientY : event.clientY;
-            const next = window.innerHeight - at;
-            const clamped = Math.max(COLLAPSED + 107, Math.min(Math.round(window.innerHeight * 0.8), next));
-            setHeight(clamped);
+            const started = drag.current;
+            if (!started || (event.pointerId !== undefined && event.pointerId !== started.id)) return;
+            event.preventDefault();
+            apply(started.height + started.at - event.clientY, false);
         };
-        const stop = () => {
-            if (drag.current === null) return;
+        const release = event => {
+            if (!drag.current || (event.pointerId !== undefined && event.pointerId !== drag.current.id)) return;
             drag.current = null;
-            localStorage.setItem(HEIGHT_KEY, String(height));
+            localStorage.setItem(HEIGHT_KEY, String(heightRef.current));
         };
         window.addEventListener('pointermove', move);
-        window.addEventListener('pointerup', stop);
+        window.addEventListener('pointerup', release);
+        window.addEventListener('pointercancel', release);
         return () => {
             window.removeEventListener('pointermove', move);
-            window.removeEventListener('pointerup', stop);
+            window.removeEventListener('pointerup', release);
+            window.removeEventListener('pointercancel', release);
         };
-    }, [height]);
+    }, [apply]);
+
+    // So the log can be grown without hitting a six-pixel strip: the grip
+    // takes focus and resizes on the keys. Space stays the transport's.
+    const gripKey = event => {
+        const steps = { ArrowUp: 1, PageUp: 3, ArrowDown: -1, PageDown: -3 };
+        if (event.key in steps) {
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(true);
+            apply(height + steps[event.key] * 40);
+        } else if (event.key === 'Home' || event.key === 'End') {
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(true);
+            apply(event.key === 'End' ? limit() : (isMobile ? DEFAULT_HEIGHT.mobile : DEFAULT_HEIGHT.desktop));
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(value => !value);
+        }
+    };
+
+    const tallest = limit();
+    const full = open && height >= tallest - 1;
+    const beforeFull = useRef(0);
+
+    const toggleFull = () => {
+        if (full) {
+            apply(beforeFull.current || (isMobile ? DEFAULT_HEIGHT.mobile : DEFAULT_HEIGHT.desktop));
+        } else {
+            beforeFull.current = height;
+            setOpen(true);
+            apply(tallest);
+        }
+    };
 
     const count = timeline.entries.length;
     return (
-        <Box sx={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <Box ref={stage} sx={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ flex: 1, minHeight: 0 }}>
                 <NetworkStage master={master} tiles={tiles} onOpenPhoto={openPhoto} timeline={timeline} />
             </Box>
             <Box sx={{
+                position: 'relative',
                 height: open ? height : COLLAPSED,
                 flex: 'none',
                 display: 'flex',
@@ -256,21 +340,46 @@ function GeekStage({ master, tiles, isMobile }) {
                 background: 'color-mix(in srgb, var(--paper) 92%, transparent)',
                 '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
             }}>
-                {/* Drag this edge to give the log more room. */}
+                {/* The grip: drag it for a taller log, or focus it and press the
+                    arrows. It straddles the edge, so it is reachable without
+                    taking room from the transport bar above the log. */}
                 <Box
                     role="separator"
                     aria-orientation="horizontal"
-                    aria-label="Resize the event log"
+                    aria-label="Event log height"
                     aria-valuenow={open ? height : COLLAPSED}
-                    aria-valuemin={COLLAPSED + 107}
-                    aria-valuemax={Math.round(window.innerHeight * 0.8)}
-                    onPointerDown={() => { drag.current = height; setOpen(true); }}
+                    aria-valuemin={MIN_OPEN}
+                    aria-valuemax={tallest}
+                    aria-valuetext={open ? `${height} pixels tall` : 'collapsed'}
+                    title="Drag up for a taller log"
+                    tabIndex={0}
+                    onPointerDown={event => {
+                        if (event.button) return;
+                        event.currentTarget.setPointerCapture?.(event.pointerId);
+                        drag.current = { id: event.pointerId, at: event.clientY, height };
+                        setOpen(true);
+                    }}
+                    onPointerMove={event => {
+                        // Where pointer capture is missing, keep the grip's own
+                        // moves alive; the window listener covers the rest.
+                        if (drag.current) event.preventDefault();
+                    }}
+                    onKeyDown={gripKey}
                     onDoubleClick={() => setOpen(value => !value)}
                     sx={{
-                        height: 7, mt: -1, cursor: 'ns-resize', flex: 'none', touchAction: 'none',
-                        '&:hover, &:active': { bgcolor: 'action.hover' },
+                        position: 'absolute', top: -8, left: 0, right: 0, height: 16,
+                        cursor: 'ns-resize', touchAction: 'none', outline: 'none',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        zIndex: 1,
+                        '&:hover > span, &:focus-visible > span': { width: 72, bgcolor: 'text.secondary' },
                     }}
-                />
+                >
+                    <Box component="span" sx={{
+                        width: 44, height: 5, flex: 'none', borderRadius: 5,
+                        bgcolor: 'action.disabled', transition: 'width .12s ease-out',
+                        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+                    }} />
+                </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: open ? 1 : 0, borderColor: 'divider' }}>
                     <Transport timeline={timeline} />
                     <Tabs
@@ -291,6 +400,11 @@ function GeekStage({ master, tiles, isMobile }) {
                         <Tab label={`Packets${count ? ' · ' + count : ''}`} onClick={() => setOpen(true)} />
                         <Tab label="Transfers" onClick={() => setOpen(true)} />
                     </Tabs>
+                    <IconButton size="small" onClick={toggleFull}
+                        aria-label={full ? 'Give the map its room back' : 'Give the log the whole screen'}
+                        aria-pressed={full} sx={{ mr: 0.25 }}>
+                        {full ? <CloseFullscreenRounded fontSize="small" /> : <OpenInFullRounded fontSize="small" />}
+                    </IconButton>
                     <IconButton size="small" onClick={() => setOpen(value => !value)}
                         aria-label={open ? 'Hide the log' : 'Show the log'} aria-expanded={open} sx={{ mr: 0.5 }}>
                         {open ? <ExpandMoreRounded fontSize="small" /> : <ExpandLessRounded fontSize="small" />}
