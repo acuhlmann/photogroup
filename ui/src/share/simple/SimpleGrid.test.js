@@ -32,7 +32,7 @@ describe('SimpleGrid', () => {
 
     it('says what happens when there are no photos yet', async () => {
         const { div, root } = await render([]);
-        expect(div.textContent).toContain('No photos yet');
+        expect(div.textContent).toContain('No photos or clips yet');
         await act(async () => root.unmount());
     });
 
@@ -64,8 +64,35 @@ describe('SimpleGrid', () => {
         await act(async () => div.querySelector('[aria-label="Look at this photo"]').click());
         const viewer = document.querySelector('[role="dialog"]');
         expect(viewer.querySelector('img').getAttribute('src')).toBe('blob:a');
-        await act(async () => viewer.querySelector('[aria-label="Next photo"]').click());
+        await act(async () => viewer.querySelector('[aria-label="Next"]').click());
         expect(document.querySelector('[role="dialog"] img').getAttribute('src')).toBe('blob:b');
+        await act(async () => root.unmount());
+    });
+
+    it('shows a clip by its poster frame, counts it as a clip and plays it full screen', async () => {
+        const clip = ready('c', { fileName: 'c.mp4', img: null, isVideo: true, fileType: 'video/mp4', previewUrl: 'blob:poster' });
+        const { div, root } = await render([ready('a'), clip]);
+        expect(div.textContent).toContain('1 photo and 1 clip');
+        const play = div.querySelector('[aria-label="Play this clip"]');
+        expect(play.querySelector('img').getAttribute('src')).toBe('blob:poster');
+        await act(async () => play.click());
+        const video = document.querySelector('[role="dialog"] video');
+        expect(video.getAttribute('poster')).toBe('blob:poster');
+        await act(async () => root.unmount());
+    });
+
+    it('shows the poster of a clip still arriving under its progress', async () => {
+        const arriving = {
+            infoHash: 'v', fileName: 'v.mp4', isVideo: true, loading: true,
+            torrentFile: { progress: 0.5 },
+            torrentFileThumb: { blob: async () => new Blob(['jpeg']) },
+        };
+        URL.createObjectURL = URL.createObjectURL || (() => 'blob:x');
+        const { div, root } = await render([arriving]);
+        await act(async () => {});
+        expect(div.textContent).toContain('Arriving · 50%');
+        expect(div.querySelector('img')).not.toBeNull();
+        expect(div.querySelector('[aria-label="Play this clip"]')).toBeNull();
         await act(async () => root.unmount());
     });
 });

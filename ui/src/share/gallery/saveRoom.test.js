@@ -61,6 +61,8 @@ describe('saveRoom', () => {
         expect(isReadyToSave({ elem: new Blob([]) })).toBe(true);
         expect(isReadyToSave({ torrentFile: { done: true, getBlob() {} } })).toBe(true);
         expect(isReadyToSave({ torrentFile: { done: false, getBlob() {} } })).toBe(false);
+        // WebTorrent 2+ files read through blob().
+        expect(isReadyToSave({ torrentFile: { done: true, blob: async () => new Blob([]) } })).toBe(true);
         expect(isReadyToSave({})).toBe(false);
     });
 

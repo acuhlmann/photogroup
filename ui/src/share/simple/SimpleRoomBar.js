@@ -11,6 +11,7 @@ import ShareRounded from '@mui/icons-material/ShareRounded';
 import { QRCodeSVG } from 'qrcode.react';
 import copy from 'clipboard-copy';
 import Logger from 'js-logger';
+import { CLIP_SIZE_NOTE } from '../torrent/ServerCopyLimits';
 
 function peopleLabel(count) {
     if (count <= 1) return 'Just you so far';
@@ -19,7 +20,7 @@ function peopleLabel(count) {
 
 /**
  * The top of a room in simple mode: the code others scan to join, how many
- * are here, and one big button to add photos (it opens the header's file input).
+ * are here, and one big button to add photos or clips (it opens the header's file input).
  */
 function SimpleRoomBar({ master }) {
     const [count, setCount] = useState(() => master.peers?.items?.length || 1);
@@ -107,8 +108,11 @@ function SimpleRoomBar({ master }) {
                 startIcon={<AddAPhotoRounded />}
                 sx={{ py: 2, fontSize: '1.2rem', fontWeight: 700, textTransform: 'none', borderRadius: 3 }}
             >
-                Share a photo
+                Share photos or clips
             </Button>
+            <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mt: '8px !important' }}>
+                {CLIP_SIZE_NOTE}
+            </Typography>
         </Stack>
     );
 }

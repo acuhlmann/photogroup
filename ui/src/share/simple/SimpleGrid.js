@@ -20,6 +20,54 @@ import Logger from 'js-logger';
 import { isReadyToSave } from '../gallery/saveRoom';
 import { alreadyHave, useHaveChanges } from '../gallery/alreadyHave';
 import { saveToDevice } from './saveToDevice';
+import { loadPreviewUrl, previewUrlOf } from '../gallery/tilePreview';
+
+/** A clip whose whole file is on this device, so it can play. */
+const playableClip = tile => !!(tile.isVideo && !tile.loading && (tile.elem || tile.file));
+/** What a tile can be opened as: a photo to look at or a clip to play. */
+const viewable = tile => (!tile.loading && !!tile.img) || playableClip(tile);
+
+/** "3 photos", "1 clip", "3 photos and 2 clips". */
+export function countLabel(tiles) {
+    const clips = tiles.filter(tile => tile.isVideo).length;
+    const photos = tiles.length - clips;
+    const parts = [];
+    if (photos) parts.push(photos === 1 ? '1 photo' : `${photos} photos`);
+    if (clips) parts.push(clips === 1 ? '1 clip' : `${clips} clips`);
+    return parts.join(' and ');
+}
+
+/** The tile's preview picture (a clip's poster frame), once it is here. */
+function usePreview(tile) {
+    const ready = previewUrlOf(tile);
+    const [fetched, setFetched] = useState({});
+    const key = tile.tileKey || tile.infoHash;
+    useEffect(() => {
+        let live = true;
+        if (!ready && tile.torrentFileThumb) {
+            loadPreviewUrl(tile).then(url => live && url && setFetched({ key, url }));
+        }
+        return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [key, ready, tile.torrentFileThumb]);
+    return ready || (fetched.key === key ? fetched.url : null);
+}
+
+/** An object URL for the clip's local file while the viewer shows it. */
+function useClipUrl(tile) {
+    const file = tile && tile.isVideo ? (tile.elem || tile.file) : null;
+    const [url, setUrl] = useState(null);
+    useEffect(() => {
+        if (!(file instanceof Blob) || typeof URL.createObjectURL !== 'function') return undefined;
+        const made = URL.createObjectURL(file);
+        setUrl(made);
+        return () => {
+            URL.revokeObjectURL(made);
+            setUrl(null);
+        };
+    }, [file]);
+    return url;
+}
 
 /** Save these tiles, tracking whether it is busy; `onError` hears about failures. */
 function useSave(tiles, roomId, onError) {
@@ -71,15 +119,19 @@ function SaveButton({ tile, roomId, onError }) {
 
 function SimpleTile({ tile, roomId, onOpen, onError }) {
     const percent = useArriving(tile);
+    const poster = usePreview(tile);
     const showImage = !tile.loading && tile.img;
+    const canOpen = viewable(tile);
+    const picture = showImage ? tile.img : (tile.isVideo ? poster : null);
     const Icon = tile.isAudio ? AudiotrackRounded : PlayCircleRounded;
     return (
         <Stack spacing={1} data-testid="simple-tile">
             <ButtonBase
                 onClick={onOpen}
-                disabled={!showImage}
-                aria-label={showImage ? 'Look at this photo' : undefined}
+                disabled={!canOpen}
+                aria-label={canOpen ? (tile.isVideo ? 'Play this clip' : 'Look at this photo') : undefined}
                 sx={{
+                    position: 'relative',
                     width: '100%',
                     aspectRatio: '1 / 1',
                     borderRadius: 2,
@@ -92,18 +144,28 @@ function SimpleTile({ tile, roomId, onOpen, onError }) {
                     gap: 1,
                 }}
             >
-                {showImage ? (
-                    <Box component="img" src={tile.img} alt={tile.fileName || 'Photo'}
-                        sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                ) : tile.loading ? (
+                {picture && (
+                    <Box component="img" src={picture} alt={tile.fileName || (tile.isVideo ? 'Clip' : 'Photo')}
+                        sx={{
+                            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                            // A clip still arriving shows its first frame, dimmed under the progress.
+                            filter: tile.loading ? 'brightness(0.55)' : 'none',
+                        }} />
+                )}
+                {tile.loading ? (
                     <>
-                        <CircularProgress variant={percent > 0 ? 'determinate' : 'indeterminate'} value={percent} size={40} />
-                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                        <CircularProgress variant={percent > 0 ? 'determinate' : 'indeterminate'} value={percent} size={40}
+                            sx={{ position: 'relative', color: picture ? '#fff' : undefined }} />
+                        <Typography variant="body2" sx={{ position: 'relative', color: picture ? '#fff' : 'text.secondary' }}>
                             {percent > 0 ? `Arriving · ${percent}%` : 'Arriving…'}
                         </Typography>
                     </>
-                ) : (
-                    <Icon sx={{ fontSize: 56, color: 'text.secondary' }} />
+                ) : !showImage && (
+                    <Icon sx={{
+                        position: 'relative', fontSize: 56,
+                        color: picture ? '#fff' : 'text.secondary',
+                        filter: picture ? 'drop-shadow(0 1px 4px rgba(0,0,0,0.6))' : 'none',
+                    }} />
                 )}
             </ButtonBase>
             <SaveButton tile={tile} roomId={roomId} onError={onError} />
@@ -111,9 +173,11 @@ function SimpleTile({ tile, roomId, onOpen, onError }) {
     );
 }
 
-/** One photo at a time, full screen, with a single Save button. */
+/** One photo or clip at a time, full screen, with a single Save button. */
 function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError }) {
     const tile = tiles[index];
+    const clipUrl = useClipUrl(tile);
+    const poster = usePreview(tile || {});
     const go = useCallback(step => {
         const next = index + step;
         if (next >= 0 && next < tiles.length) onIndexChange(next);
@@ -133,20 +197,27 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
         <Dialog open fullScreen onClose={onClose}
             slotProps={{ paper: { sx: { bgcolor: '#000', color: '#fff' } } }}>
             <Box sx={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Box component="img" src={tile.img} alt={tile.fileName || 'Photo'}
-                    sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                {tile.isVideo ? (
+                    <Box component="video" key={tile.tileKey || tile.infoHash} src={clipUrl || undefined}
+                        poster={poster || undefined} controls autoPlay playsInline
+                        aria-label={tile.fileName || 'Clip'}
+                        sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                ) : (
+                    <Box component="img" src={tile.img} alt={tile.fileName || 'Photo'}
+                        sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                )}
                 <IconButton aria-label="Close" onClick={onClose}
                     sx={{ position: 'absolute', top: 12, right: 12, color: '#fff', bgcolor: 'rgba(0,0,0,0.5)' }}>
                     <CloseRounded />
                 </IconButton>
                 {index > 0 && (
-                    <IconButton aria-label="Previous photo" onClick={() => go(-1)}
+                    <IconButton aria-label="Previous" onClick={() => go(-1)}
                         sx={{ position: 'absolute', left: 8, color: '#fff', bgcolor: 'rgba(0,0,0,0.5)' }}>
                         <ArrowBackRounded />
                     </IconButton>
                 )}
                 {index < tiles.length - 1 && (
-                    <IconButton aria-label="Next photo" onClick={() => go(1)}
+                    <IconButton aria-label="Next" onClick={() => go(1)}
                         sx={{ position: 'absolute', right: 8, color: '#fff', bgcolor: 'rgba(0,0,0,0.5)' }}>
                         <ArrowForwardRounded />
                     </IconButton>
@@ -160,22 +231,22 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
 }
 
 /**
- * The simple view of a room's photos: big squares, each with a Save button,
- * and one button to save everything new at once.
+ * The simple view of a room's photos and clips: big squares, each with a Save
+ * button, and one button to save everything new at once.
  */
 function SimpleGrid({ tiles, roomId, onError }) {
     useHaveChanges();
     const [openKey, setOpenKey] = useState(null);
     const keyOf = tile => tile.tileKey || tile.infoHash;
-    const viewable = tiles.filter(tile => !tile.loading && tile.img);
-    const openIndex = viewable.findIndex(tile => keyOf(tile) === openKey);
+    const open = tiles.filter(viewable);
+    const openIndex = open.findIndex(tile => keyOf(tile) === openKey);
     const fresh = tiles.filter(tile => !tile.loading && isReadyToSave(tile) && !alreadyHave(tile));
     const [saveAll, savingAll] = useSave(fresh, roomId, onError);
 
     if (!tiles.length) {
         return (
             <Typography variant="h6" component="p" sx={{ textAlign: 'center', color: 'text.secondary', py: 6, px: 2, fontWeight: 500 }}>
-                No photos yet. When anyone here adds one, it shows up on every phone.
+                No photos or clips yet. When anyone here adds one, it shows up on every phone.
             </Typography>
         );
     }
@@ -184,7 +255,7 @@ function SimpleGrid({ tiles, roomId, onError }) {
         <Box>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6" component="h2" sx={{ flex: 1, fontWeight: 600 }}>
-                    {tiles.length === 1 ? '1 photo' : `${tiles.length} photos`}
+                    {countLabel(tiles)}
                 </Typography>
                 {fresh.length > 1 && (
                     <Button variant="contained" size="large" onClick={saveAll} disabled={savingAll}
@@ -194,7 +265,7 @@ function SimpleGrid({ tiles, roomId, onError }) {
                     </Button>
                 )}
             </Stack>
-            {/* A single photo gets the whole width. */}
+            {/* A single photo or clip gets the whole width. */}
             <Box sx={{
                 display: 'grid',
                 gridTemplateColumns: tiles.length === 1 ? '1fr'
@@ -209,8 +280,8 @@ function SimpleGrid({ tiles, roomId, onError }) {
                 ))}
             </Box>
             {openIndex > -1 && (
-                <SimpleViewer tiles={viewable} index={openIndex} roomId={roomId} onError={onError}
-                    onIndexChange={index => setOpenKey(keyOf(viewable[index]))}
+                <SimpleViewer tiles={open} index={openIndex} roomId={roomId} onError={onError}
+                    onIndexChange={index => setOpenKey(keyOf(open[index]))}
                     onClose={() => setOpenKey(null)} />
             )}
         </Box>

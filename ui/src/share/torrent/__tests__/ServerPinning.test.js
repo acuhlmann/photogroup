@@ -34,6 +34,24 @@ describe('ServerPinning', () => {
         expect(service.uploadServerCopy).not.toHaveBeenCalled();
     });
 
+    it('tells the sharer a clip too large for a backup only lives on their phone', () => {
+        const { pinning, emitter, service, emit } = setup();
+        const infos = [];
+        emitter.on('showInfo', message => infos.push(message));
+        const big = { type: 'video/mp4', size: MAX_PHOTO_BYTES + 1 };
+        emit({ type: 'all', item: [photo('a', 'me'), photo('b', 'me')] });
+        pinning.shared([{ infoHash: 'a', blob: clip }]);
+        expect(infos).toEqual([]);
+        pinning.shared([{ infoHash: 'b', blob: big }]);
+        expect(infos).toHaveLength(1);
+        expect(infos[0]).toMatch(/This clip is over 100 MB.*no server backup.*Keep PhotoGroup open/);
+        // Only the small clip is sent.
+        return pinning.running.then(() => {
+            expect(service.uploadServerCopy).toHaveBeenCalledTimes(1);
+            expect(service.uploadServerCopy.mock.calls[0][0]).toBe('a');
+        });
+    });
+
     it('leaves a copy of a clip even when the room keeps nothing', async () => {
         // The device that shared a video is often its only holder, and a
         // browser short on space frees video pieces first.

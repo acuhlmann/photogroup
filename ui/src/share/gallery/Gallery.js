@@ -28,6 +28,7 @@ import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { captureDroppedHandles } from "./replaceOriginal";
 import SimpleGrid from "../simple/SimpleGrid";
+import { CLIP_SIZE_NOTE } from "../torrent/ServerCopyLimits";
 
 /** A tile's identity across updates; an upload's infoHash changes once it is hashed. */
 const tileKeyOf = tile => tile.tileKey || tile.infoHash;
@@ -52,7 +53,7 @@ function AddPhotosStrip({ narrow }) {
         >
             <AddPhotoAlternateRounded sx={{ fontSize: 20, color: 'primary.main' }} />
             <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 600 }}>
-                Add photos
+                Add photos or clips
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 drop here or tap
@@ -539,10 +540,13 @@ function Gallery(props) {
                         Drop or choose
                     </Typography>
                     <Typography variant="h6" sx={{ color: 'text.primary', mb: 0.5, fontWeight: 600 }}>
-                        Share a photo
+                        Share photos and clips
                     </Typography>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        Drop pictures here, or tap to choose some from this device.
+                        Drop pictures or video clips here, or tap to choose some from this device.
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', mt: 1, maxWidth: 420 }}>
+                        {CLIP_SIZE_NOTE}
                     </Typography>
                 </Box>
                 <AndroidLocationNote narrow />

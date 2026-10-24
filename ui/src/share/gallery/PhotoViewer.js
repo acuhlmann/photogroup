@@ -23,6 +23,7 @@ import RenderContent from './RenderContent';
 import { saveLabel, savePhoto } from './savePhoto';
 import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
 import { canSaveDetails, saveDetails } from './metadata/saveDetails';
+import { canReadTorrentFile } from './saveRoom';
 
 /** Display the selected media in a dialog with navigation, saving, and shared metadata editing. */
 function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
@@ -117,7 +118,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     if (!tile) return null;
 
     const isImage = !!tile.isImage;
-    const canSave = !!(tile.elem || (tile.torrentFile && typeof tile.torrentFile.getBlob === 'function'));
+    const canSave = !!(tile.elem || canReadTorrentFile(tile.torrentFile));
     const stillArriving = !!(tile.torrentFile && !tile.torrentFile.done);
     const replaceMode = replaceKind();
     const hint = replaceHint(tile);

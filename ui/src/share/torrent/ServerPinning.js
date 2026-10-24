@@ -24,7 +24,7 @@
  */
 import Logger from 'js-logger';
 import { holds } from './RoomPhotos';
-import { MAX_PHOTO_BYTES } from './ServerCopyLimits';
+import { MAX_PHOTO_BYTES, MAX_PHOTO_MB } from './ServerCopyLimits';
 
 /** Whether a seeded file is a clip, which is worth a copy whatever the room keeps. */
 export const isVideo = blob => (blob?.type || '').startsWith('video/');
@@ -82,6 +82,13 @@ export default class ServerPinning {
             if (this.keepCopies) this.enqueue(infoHash, 'keep copies');
             else if (isVideo(blob)) this.enqueue(infoHash, 'video');
         });
+        // Too large for a backup: only this device has it until someone else does.
+        const big = items.filter(({ blob }) => blob && blob.size > MAX_PHOTO_BYTES);
+        if (big.length) {
+            const what = big.length === 1 ? (isVideo(big[0].blob) ? 'This clip is' : 'This file is') : `${big.length} files are`;
+            this.emitter?.emit?.('showInfo', `${what} over ${MAX_PHOTO_MB} MB, so it goes straight from your phone `
+                + 'with no server backup. Keep PhotoGroup open until the others have it.');
+        }
     }
 
     onPhotos({ type, item } = {}) {

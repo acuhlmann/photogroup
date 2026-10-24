@@ -19,6 +19,7 @@ import TransferConsole from "../torrent/TransferConsole";
 import { isTransferStalled, P2P_STALL_MS } from "../torrent/ServerFallback";
 import { serverCopyStatus } from "./serverCopyStatus";
 import { rememberImageSize } from './imageSize';
+import { loadPreviewUrl, previewUrlOf } from './tilePreview';
 
 /** Show transfer status and recovery controls, retaining a preview URL on the tile. */
 function LoadingTile({tile, master, name}) {
@@ -63,15 +64,8 @@ function LoadingTile({tile, master, name}) {
 
     /** Load a missing preview for a loading tile; thumbnail errors leave it unset. */
     const listenToPreview = useCallback(() => {
-        if(tile.loading && !tile.previewUrl && tile.torrentFileThumb && typeof tile.torrentFileThumb.getBlobURL === 'function') {
-            tile.torrentFileThumb.getBlobURL((err, url) => {
-                if(err) {
-                    Logger.error('preview ' + err);
-                } else {
-                    tile.previewUrl = url;
-                    setPreviewThumbnail(url);
-                }
-            });
+        if(tile.loading && !tile.previewUrl && tile.torrentFileThumb) {
+            loadPreviewUrl(tile).then(url => url && setPreviewThumbnail(url));
         }
     }, [tile]);
 
@@ -160,11 +154,8 @@ function LoadingTile({tile, master, name}) {
     // Create the preview URL once and keep it on the tile: a fresh blob URL
     // on every render reloads the image, and the content tile shows the same
     // preview while the full photo decodes.
-    if(isRendering && tile.thumbnailFiles && !tile.previewUrl) {
-        const thumbFile = tile.thumbnailFiles.find(item => 'Thumbnail ' + tile.fileName === item.name);
-        if(thumbFile) {
-            tile.previewUrl = URL.createObjectURL(thumbFile);
-        }
+    if(isRendering) {
+        previewUrlOf(tile);
     }
     const displayPreviewThumbnail = previewThumbnail || tile.previewUrl;
 
