@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readTransfers, describeSplit, serverSteps, linkKind, totals } from './transfers';
+import { readTransfers, describeSplit, serverSteps, linkKind, totals, formatDuration } from './transfers';
 
 const chain = ip => [
     { type: 'host', typeDetail: 'host', ip: '192.168.1.' + ip.split('.').pop() },
@@ -99,6 +99,66 @@ describe('readTransfers', () => {
             ],
         });
         expect(rows.map(row => row.infoHash)).toEqual(['new', 'old']);
+    });
+});
+
+describe('timings', () => {
+    it('says how long a finished transfer took, and how long each stage ran', () => {
+        const [row] = readTransfers({
+            ...room,
+            items: [ledgerItem({
+                peers: new Map([['ana', { rx: 4000, tx: 0 }]]),
+                stages: [
+                    { at: 1000, lane: 'p2p', stage: 'signal', text: 'announce' },
+                    { at: 3000, lane: 'p2p', stage: 'handshake', text: 'wire up' },
+                    { at: 9000, lane: 'p2p', stage: 'verify', text: 'verified' },
+                ],
+            })],
+            photos: [{ infoHash: 'abc', peerId: 'ana', fileName: 'beach.jpg', fileSize: 4000 }],
+            torrents: [{ infoHash: 'abc', progress: 1, done: true, length: 4000, pieces: [1], wires: [] }],
+        });
+        // 1 s to announce, 6 s to the last stage, and nothing after it.
+        expect(row.elapsedMs).toBe(8000);
+        expect(row.runningMs).toBe(null);
+        expect(row.stages.map(stage => stage.tookMs)).toEqual([2000, 6000, null]);
+    });
+
+    it('counts up while a transfer is still going, with no end to measure', () => {
+        const [row] = readTransfers({
+            ...room,
+            now: 11000,
+            items: [ledgerItem({ stages: [{ at: 1000, lane: 'p2p', stage: 'signal', text: 'announce' }] })],
+            photos: [{ infoHash: 'abc', peerId: 'ana', fileName: 'beach.jpg' }],
+            torrents: [{ infoHash: 'abc', progress: 0.2, done: false, length: 4000, pieces: [1], wires: [] }],
+        });
+        expect(row.done).toBe(false);
+        expect(row.elapsedMs).toBe(null);
+        expect(row.runningMs).toBe(10000);
+    });
+
+    it('uses the last update of a stage that rewrote itself', () => {
+        const [row] = readTransfers({
+            ...room,
+            items: [ledgerItem({
+                stages: [
+                    { at: 1000, until: 4000, lane: 'server', stage: 'uploading', text: 'PUT' },
+                    { at: 4000, lane: 'server', stage: 'stored', text: 'stored' },
+                ],
+                serverStage: { direction: 'up', stage: 'stored' },
+                server: { rx: 0, tx: 4000 },
+            })],
+            photos: [{ infoHash: 'abc', peerId: 'me', fileName: 'beach.jpg' }],
+        });
+        expect(row.direction).toBe('up');
+        expect(row.stages[0].tookMs).toBe(3000);
+    });
+
+    it('formats a duration to read at a glance in a narrow row', () => {
+        expect(formatDuration(420)).toBe('420 ms');
+        expect(formatDuration(4200)).toBe('4.2 s');
+        expect(formatDuration(45800)).toBe('46 s');
+        expect(formatDuration(125000)).toBe('2 m 05 s');
+        expect(formatDuration(null)).toBe('');
     });
 });
 

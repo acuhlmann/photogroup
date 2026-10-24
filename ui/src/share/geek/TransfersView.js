@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
 import FileUtil from '../util/FileUtil';
-import { readTransfers, totals, describeSplit } from './transfers';
+import { readTransfers, totals, describeSplit, formatDuration } from './transfers';
 import { describeIceServers, summarizeChain, verdictFor } from '../topology/NetworkInsight';
 import { ROUTE_STYLE } from './NetworkStage';
 
@@ -111,6 +111,12 @@ function TransferRow({ row }) {
     const percent = Math.round(row.progress * 100);
     const p2pNote = row.direction === 'down' && !row.done ? `${percent}%` : null;
     const first = row.stages[0]?.at || row.startedAt;
+    // How long it took, and how fast that works out at; while it is still
+    // going the same clock reads as elapsed so far.
+    const timing = row.elapsedMs != null
+        ? [formatDuration(row.elapsedMs) + ' took',
+            row.size && row.elapsedMs > 500 ? FileUtil.formatBytes(row.size / (row.elapsedMs / 1000)) + '/s' : null]
+        : row.runningMs != null ? [formatDuration(row.runningMs) + ' so far'] : [];
     return (
         <Box component="li" data-testid="transfer-row" sx={{ px: 1, py: 0.75, borderBottom: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'baseline', columnGap: 1, flexWrap: 'wrap', minWidth: 0 }}>
@@ -118,9 +124,9 @@ function TransferRow({ row }) {
                 <Box component="span" sx={{ fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, maxWidth: '100%' }}>
                     {row.name}
                 </Box>
-                <Box component="span" sx={{ color: 'text.disabled', flex: 'none' }}>
-                    {[row.size ? FileUtil.formatBytes(row.size) : null, row.direction === 'down' ? (row.done ? 'got it' : 'receiving') : 'sharing']
-                        .filter(Boolean).join(' · ')}
+                <Box component="span" data-testid="transfer-timing" sx={{ color: 'text.disabled', flex: 'none' }}>
+                    {[row.size ? FileUtil.formatBytes(row.size) : null, row.direction === 'down' ? (row.done ? 'got it' : 'receiving') : 'sharing',
+                        ...timing].filter(Boolean).join(' · ')}
                 </Box>
                 <Box component="span" data-testid="decentral" sx={{ ml: 'auto', flex: 'none', color: LEVEL_COLOR[row.decentral.level] }}>
                     {row.decentral.text}
@@ -169,7 +175,7 @@ function TransferRow({ row }) {
                                     <Box component="span" sx={{ color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                         {stage.text}
                                         {stage.total ? ` · ${FileUtil.formatBytes(stage.loaded || 0)}/${FileUtil.formatBytes(stage.total)}` : ''}
-                                        {stage.until ? ` · ${((stage.until - stage.at) / 1000).toFixed(1)}s` : ''}
+                                        {stage.tookMs ? ` · ${formatDuration(stage.tookMs)}` : ''}
                                         {stage.why && index === row.stages.findIndex(item => item.why === stage.why) ? ` · ${stage.why}` : ''}
                                     </Box>
                                 </Box>

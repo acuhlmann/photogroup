@@ -144,7 +144,7 @@ function explain({ row, photo, peersById, myPeerId, mine, hasTurn }) {
  * @param {boolean} input.hasTurn
  */
 export function readTransfers({ items = [], torrents = [], photos = [], peers = [], connections = [], myPeerId,
-    localNetwork = null, hasTurn = false }) {
+    localNetwork = null, hasTurn = false, now = Date.now() }) {
     const peersById = new Map(peers.map(peer => [peer.peerId, peer]));
     const mePeer = peersById.get(myPeerId);
     const mine = summarizeChain(mePeer?.networkChain?.length ? mePeer.networkChain : localNetwork);
@@ -204,6 +204,18 @@ export function readTransfers({ items = [], torrents = [], photos = [], peers = 
         const relay = sources.filter(source => source.kind === 'relay').reduce((sum, source) => sum + source.bytes, 0);
         const split = { total, server: serverBytes, relay, p2p: total - serverBytes - relay };
 
+        // How long each stage ran: until the next one began, or, for a stage
+        // that kept rewriting itself (a chunked upload), until its last update.
+        const withDurations = item.stages.map((stage, index) => {
+            const next = item.stages[index + 1];
+            const end = stage.until || (next ? next.at : null);
+            return { ...stage, tookMs: end > stage.at ? end - stage.at : null };
+        });
+        const lastStage = withDurations[withDurations.length - 1];
+        // Over when its last stage was written; still going, there is no end,
+        // only how long this device has been at it.
+        const endedAt = done ? (lastStage ? lastStage.until || lastStage.at : null) : null;
+
         const row = {
             infoHash: item.infoHash,
             name: nameOf(item.infoHash, item.name || torrent?.name || short(item.infoHash)),
@@ -218,15 +230,29 @@ export function readTransfers({ items = [], torrents = [], photos = [], peers = 
             serverSteps: serverSteps(item.serverStage?.direction, item.serverStage, photo),
             sources,
             split,
-            stages: item.stages,
+            stages: withDurations,
             startedAt: item.startedAt,
-            lastAt: item.stages.length ? item.stages[item.stages.length - 1].until || item.stages[item.stages.length - 1].at : item.startedAt,
+            lastAt: lastStage ? lastStage.until || lastStage.at : item.startedAt,
+            // Wall-clock time the whole transfer took, or, while it is still
+            // going, how long this device has been at it.
+            elapsedMs: done && endedAt !== null ? Math.max(0, endedAt - item.startedAt) : null,
+            runningMs: done ? null : Math.max(0, now - item.startedAt),
         };
         row.decentral = describeSplit(split);
         row.why = explain({ row, photo, peersById, myPeerId, mine, hasTurn });
         return row;
     });
     return rows.sort((a, b) => b.lastAt - a.lastAt);
+}
+
+/** How long something took: "0.4 s", "12.4 s", "2 m 05 s". */
+export function formatDuration(ms) {
+    if (!Number.isFinite(ms) || ms < 0) return '';
+    if (ms < 1000) return `${Math.round(ms)} ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} s`;
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.round((ms % 60000) / 1000);
+    return `${minutes} m ${String(seconds).padStart(2, '0')} s`;
 }
 
 /** "fully peer-to-peer", "70% P2P · 30% server", and so on. */
