@@ -258,7 +258,7 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
         {
             id: 'copy',
             title: 'Last resort: a server copy',
-            body: `The receiver asks for a server copy if the download stops for ${Math.round(P2P_STALL_MS / 1000)} seconds. It also asks if all devices with the photo are in another app, because phones stop the page in the background. A device with the photo uploads it over HTTPS in 8 MB parts. The receiver downloads it and checks its fingerprint. Files larger than ${MAX_PHOTO_MB} MB never go to the server.`,
+            body: `The receiver asks for a server copy if the download stops for ${Math.round(P2P_STALL_MS / 1000)} seconds. It also asks if all devices with the photo are in another app, because phones stop the page in the background. A device with the photo uploads it over HTTPS in 8 MB parts. The receiver downloads it and checks its fingerprint. Clips also get a server copy when they are shared, because often only one phone has them. Files larger than ${MAX_PHOTO_MB} MB never go to the server.`,
             nodes: ids([myPeerId, friend, 'edge', 'copies']),
             routes: ids(['copies:' + myPeerId, friend && 'copies:' + friend]),
             packets: ids([
@@ -275,7 +275,7 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
         {
             id: 'summary',
             title: 'Who saw what',
-            body: 'When the direct path works, the photo is only on the devices in the room. photogroup.network connects the people and keeps the list of shared photos. STUN and the tracker help browsers find each other. TURN, if used, carries encrypted data that it cannot read. The server keeps a photo only as a temporary copy when P2P fails.',
+            body: 'When the direct path works, the photo is only on the devices in the room. photogroup.network connects the people and keeps the list of shared photos. STUN and the tracker help browsers find each other. TURN, if used, carries encrypted data that it cannot read. The server keeps a photo only as a temporary server copy, for example when P2P fails.',
             nodes: scene.nodes.map(node => node.id),
             routes: ids(['sse:' + myPeerId, 'tracker:' + myPeerId, via?.id]),
             packets: via ? pieces(via, 4, 0, 400) : [],
@@ -283,7 +283,7 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
                 { who: HOLDS, what: 'the room, the people (names, devices, addresses), magnet links and file data' },
                 { who: 'STUN · tracker', what: 'addresses and which photo you want, never the photo' },
                 { who: 'TURN', what: hasTurn ? 'encrypted data, if the direct path fails' : 'not configured here' },
-                { who: 'server copy', what: 'the photo, only when P2P fails, for 24 h at most' },
+                { who: 'server copy', what: 'the photo, when needed, for 24 h at most' },
             ],
             duration: 4000,
         },

@@ -14,14 +14,16 @@ import Logger from 'js-logger';
 /** What the server keeps about this room, in plain words, one line each. */
 export function privacyLines({ keepCopies = false, copies = 0 } = {}) {
     return [
-        'Photos go directly from phone to phone. The server does not keep them.',
-        'The server keeps the room: its link and, for each photo, the name, type, size, date, title and fingerprint. '
+        'Photos usually go directly from phone to phone.',
+        'The server keeps the room: its link and, for each photo, the magnet link, name, type, size, date and fingerprint, '
+            + 'and the details people add (title, description, rating, keywords, location). '
             + 'It deletes the room when nobody uses it for 30 days.',
         'The server knows who is in the room now: names, device types and network addresses. '
             + 'It forgets a person soon after they leave.',
         keepCopies
             ? 'This room keeps a server copy of each photo for 24 hours, so people who join later still get the photos.'
-            : 'When a phone cannot get a photo directly, the server keeps a copy. '
+            : 'Sometimes the server keeps a copy of a photo: when a phone cannot get it directly, for clips, '
+                + 'or when a phone goes to the background before all people have it. '
                 + 'It deletes the copy when all people have the photo, or after 24 hours.',
         copies ? `The server has ${copies === 1 ? '1 server copy' : `${copies} server copies`} for this room now.` : null,
     ].filter(Boolean);

@@ -430,7 +430,8 @@ export default class Rooms {
             serverCopyReceived: photo.serverCopyReceived,
             serverCopyRequestedAt: photo.serverCopyRequestedAt,
             serverCopyUploader: photo.serverCopyUploader,
-            ...Object.fromEntries(COPY_TIMES.map(field => [field, photo[field]])),
+            // null, not missing: a client merging this must forget a dropped copy's times.
+            ...Object.fromEntries(COPY_TIMES.map(field => [field, photo[field] ?? null])),
         };
     }
 

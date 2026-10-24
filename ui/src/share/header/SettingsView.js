@@ -284,7 +284,7 @@ function SettingsView(props) {
                         checked={encrypt}
                         onChange={handleEncryptChange}
                         label="Encrypt End-to-End"
-                        description="Encrypts all shared data. Only the people in the room can read it."
+                        description="Encrypts the photo files. Only the people in the room can open them. File names and details are not encrypted."
                     />
 
                     {/* Sharing */}
@@ -293,7 +293,7 @@ function SettingsView(props) {
                         checked={keepCopies}
                         onChange={handleKeepCopiesChange}
                         label="Keep Copies for Latecomers"
-                        description="Photos go from phone to phone. The server keeps a copy only when someone cannot get a photo directly, for 24 hours at most. Turn this on to keep a copy of each photo for 24 hours. Then people who join later still get the photos."
+                        description="Photos go from phone to phone. Sometimes the server keeps a copy for 24 hours at most: when a phone cannot get a photo directly, for clips, or when a phone goes to the background before all people have a photo. Turn this on to keep a copy of each photo for 24 hours. Then people who join later still get the photos."
                     />
 
                     {/* Display */}

@@ -17,7 +17,7 @@ describe('SimpleHowItWorks', () => {
         expect(title()).toBe('You share a photo');
         await act(async () => button('Next').click());
         expect(title()).toBe('The server connects the phones');
-        expect(document.body.textContent).toContain('The server does not get the photo.');
+        expect(document.body.textContent).toContain('helps them find your phone');
         await act(async () => button('Next').click());
         expect(title()).toBe('The photo goes from phone to phone');
         await act(async () => button('Done').click());

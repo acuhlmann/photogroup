@@ -216,6 +216,12 @@ describe('readServerCopies', () => {
         expect(row.goes).toBe('kept for latecomers, deleted in 30 m');
     });
 
+    it('does not count someone still loading the photo as having it', () => {
+        const [row] = readServerCopies({ myPeerId: 'me', peers, now: 5000 + H,
+            photos: [{ ...stored, owners: [{ peerId: 'ana' }, { peerId: 'me' }, { peerId: 'bo', loading: true }] }] });
+        expect(row.goes).toMatch(/^deleted when the last person gets it/);
+    });
+
     it('reads coarse spans', () => {
         expect(formatSpan(40 * 1000)).toBe('40 s');
         expect(formatSpan(12 * 60 * 1000)).toBe('12 m');

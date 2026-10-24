@@ -9,8 +9,9 @@ const button = text => Array.from(document.body.querySelectorAll('button')).find
 describe('RoomPrivacy', () => {
     it('says what the server keeps, and for how long', () => {
         const lines = privacyLines({ copies: 2 });
-        expect(lines[0]).toContain('The server does not keep them');
+        expect(lines[0]).toBe('Photos usually go directly from phone to phone.');
         expect(lines.join(' ')).toContain('when nobody uses it for 30 days');
+        expect(lines.join(' ')).toContain('for clips');
         expect(lines.join(' ')).toContain('when all people have the photo, or after 24 hours');
         expect(lines.at(-1)).toBe('The server has 2 server copies for this room now.');
         expect(privacyLines({ keepCopies: true }).join(' ')).toContain('keeps a server copy of each photo for 24 hours');

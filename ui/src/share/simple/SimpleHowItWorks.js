@@ -16,11 +16,11 @@ export const SIMPLE_STEPS = [
     },
     {
         title: 'The server connects the phones',
-        body: 'The server tells the other phones about the new photo and helps them find your phone. The server does not get the photo.',
+        body: 'The server tells the other phones about the new photo and helps them find your phone.',
     },
     {
         title: 'The photo goes from phone to phone',
-        body: 'The photo goes directly to the other phones, encrypted. If that is not possible, the server keeps a copy for 24 hours at most.',
+        body: 'The photo goes directly to the other phones, encrypted. Sometimes the server keeps a copy for 24 hours at most, for example for clips or when a phone cannot get the photo directly.',
     },
 ];
 

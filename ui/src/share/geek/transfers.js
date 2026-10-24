@@ -293,7 +293,7 @@ export function formatSpan(ms) {
 export function readServerCopies({ photos = [], peers = [], myPeerId, keepCopies = false, now = Date.now() }) {
     const peersById = new Map(peers.map(peer => [peer.peerId, peer]));
     const who = peerId => (peerId === myPeerId ? 'you' : peerName(peersById.get(peerId)) || (peerId ? 'peer ' + short(peerId) : 'someone'));
-    const holders = photo => new Set((photo.owners || []).map(owner => owner.peerId));
+    const holders = photo => new Set((photo.owners || []).filter(owner => !owner.loading).map(owner => owner.peerId));
     return photos
         .filter(photo => photo.hasServerCopy || photo.serverCopyReceived > 0 || photo.serverCopyRequestedAt)
         .map(photo => {
