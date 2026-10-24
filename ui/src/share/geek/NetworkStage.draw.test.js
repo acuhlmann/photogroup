@@ -193,6 +193,39 @@ describe('NetworkStage drawing', () => {
         div.remove();
     });
 
+    it('paints the preview that came with the share for media this device does not hold', async () => {
+        const master = room();
+        // The server's shelf: a photo it keeps that this browser has no bytes
+        // of, so it has no img - only the small preview that came with it.
+        const tiles = [{
+            infoHash: 's1', fileName: 'away.jpg', fileType: 'image/jpeg', img: null,
+            previewUrl: 'blob:preview-s1', hasServerCopy: true, owners: [{ peerId: 'ana' }],
+        }];
+        const requested = [];
+        const RealImage = window.Image;
+        // jsdom never finishes an Image, so the loop would fall back to the
+        // grey void no matter which source it picked. A completed fake lets the
+        // test see which URL the drawing actually asked for.
+        window.Image = class FakeImage {
+            constructor() { this.complete = true; this.naturalWidth = 20; this.naturalHeight = 10; }
+            set src(value) { requested.push(value); }
+            get src() { return ''; }
+        };
+        try {
+            const { root, div } = await mount({ master, tiles });
+            await runFrames(1);
+            expect(requested).toContain('blob:preview-s1');
+            // Painted, not the grey void: once under this device and once on
+            // the server's shelf. The count is per frame, so assert it drew.
+            expect(contexts.at(-1).calls).toBeGreaterThan(0);
+            expect(contexts.at(-1).plates).not.toContain('rgba(9,12,18,0.92)');
+            await act(async () => root.unmount());
+            div.remove();
+        } finally {
+            window.Image = RealImage;
+        }
+    });
+
     it('keeps drawing frames until unmounted, and stops when it is', async () => {
         const master = room();
         const { root } = await mount({ master });

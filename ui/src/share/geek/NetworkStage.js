@@ -8,11 +8,14 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import OpenInFullRounded from '@mui/icons-material/OpenInFullRounded';
+import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
+import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 
 import { captureDroppedHandles } from '../gallery/replaceOriginal';
 import { buildScene, routePoints, pointAlong, TIER } from './scene';
 import { attachTraffic, flowAt, FLOW_MS, RX, TX } from './traffic';
 import { posterFor, mediaUrlFor } from './videoPoster';
+import PeerNameField from '../header/PeerNameField';
 
 const mono = '"JetBrains Mono", "IBM Plex Mono", monospace';
 
@@ -129,7 +132,7 @@ export function canOpen(tile) {
  * The traffic it draws comes from `timeline`, which the footer logs the same
  * recording of — so pausing holds every label in place to be read.
  */
-function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
+function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
     const containerRef = useRef(null);
@@ -388,7 +391,10 @@ function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
             scene.thumbs.forEach(thumb => {
                 const { x, y, size: s, tile } = thumb;
                 const isSelected = selected?.type === 'thumb' && selected.key === thumb.key;
-                const source = tile.img || posterFor(tile);
+                // The preview that came with the share counts even when this
+                // device holds no bytes of its own - which is exactly the case
+                // for the server's shelf, where most of it is other people's.
+                const source = tile.img || tile.previewUrl || posterFor(tile);
                 const img = source ? image(source) : null;
                 ctx.save();
                 roundRect(ctx, x - s / 2, y - s / 2, s, s, 6);
@@ -464,6 +470,7 @@ function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
         if (thumb) {
             // First tap enlarges, a second tap on the same photo opens it in full.
             if (selected?.type === 'thumb' && selected.key === thumb.key) {
+                setSelected(null);
                 onOpenPhoto(thumb.tileKey);
             } else {
                 setSelected({ type: 'thumb', key: thumb.key });
@@ -485,6 +492,45 @@ function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
     const thumb = selected?.type === 'thumb' ? scene.thumbs.find(item => item.key === selected.key) : null;
     const node = selected?.type === 'node' ? scene.byId.get(selected.id) : null;
     const others = scene.nodes.filter(item => item.kind === 'device' && !item.isMe).length;
+
+    // The media on the map, once each, in the order they are drawn: the detail
+    // card walks this list, so it flips through the room like simple mode does.
+    const mediaKeys = useMemo(() => {
+        const seen = new Set();
+        const keys = [];
+        scene.thumbs.forEach(item => {
+            if (seen.has(item.tileKey)) return;
+            seen.add(item.tileKey);
+            keys.push(item.tileKey);
+        });
+        return keys;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scene]);
+    const stepMedia = offset => {
+        const at = mediaKeys.indexOf(thumb?.tileKey);
+        if (at < 0 || mediaKeys.length < 2) return;
+        const next = mediaKeys[(at + offset + mediaKeys.length) % mediaKeys.length];
+        const target = scene.thumbs.find(item => item.tileKey === next);
+        if (target) setSelected({ type: 'thumb', key: target.key });
+    };
+    // Opening the full viewer closes this card: left open, its own player sits
+    // behind the dialog on a desktop, so the same clip shows two control bars.
+    const openFull = key => {
+        setSelected(null);
+        onOpenPhoto(key);
+    };
+
+    // How much of the room this device has, in one number. The per-photo ring
+    // says which one is moving; this says how far to go before the room is
+    // all here, which is what a waiting person actually reads.
+    const arrival = useMemo(() => {
+        const total = tiles.length;
+        if (!total) return null;
+        const here = tiles.filter(tile => !tile.loading).length;
+        if (here === total) return null;
+        const sum = tiles.reduce((acc, tile) => acc + (tile.loading ? tile.torrentFile?.progress || 0 : 1), 0);
+        return { here, total, percent: Math.round(sum / total * 100) };
+    }, [tiles]);
 
     return (
         <Box
@@ -522,6 +568,24 @@ function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
                 }}>
                     alone in this room · Invite someone to see the path between you
                 </Typography>
+            )}
+
+            {arrival && (
+                <Stack direction="row" spacing={0.75} data-testid="room-progress" sx={{
+                    position: 'absolute', right: 8, top: 8, alignItems: 'center', pointerEvents: 'none',
+                    px: 0.75, py: 0.4, borderRadius: 1, border: 1, borderColor: 'divider',
+                    bgcolor: 'background.paper', fontFamily: mono,
+                }}>
+                    <Typography sx={{ fontFamily: mono, fontSize: '0.62rem', color: 'text.secondary' }}>
+                        {`${arrival.here} of ${arrival.total} here`}
+                    </Typography>
+                    <Box sx={{ width: 46, height: 4, borderRadius: 4, bgcolor: 'action.hover', overflow: 'hidden' }}>
+                        <Box sx={{ width: `${arrival.percent}%`, height: '100%', bgcolor: `rgb(${RX})` }} />
+                    </Box>
+                    <Typography sx={{ fontFamily: mono, fontSize: '0.62rem', color: `rgb(${RX})`, fontWeight: 700 }}>
+                        {`${arrival.percent}%`}
+                    </Typography>
+                </Stack>
             )}
 
             {paused && (
@@ -570,7 +634,7 @@ function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
                             component={thumb.tile.img ? 'img' : 'div'}
                             src={thumb.tile.img || undefined}
                             alt={thumb.tile.fileName || 'Photo'}
-                            onClick={() => thumb.tile.img && onOpenPhoto(thumb.tileKey)}
+                            onClick={() => thumb.tile.img && openFull(thumb.tileKey)}
                             sx={{
                                 width: '100%', height: 150, objectFit: 'cover', borderRadius: 1, display: 'block',
                                 bgcolor: 'action.hover', cursor: thumb.tile.img ? 'zoom-in' : 'default',
@@ -588,9 +652,22 @@ function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
                     </Box>
                     <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
                         <Button size="small" variant="contained" startIcon={<OpenInFullRounded />} disabled={!canOpen(thumb.tile)}
-                            onClick={() => onOpenPhoto(thumb.tileKey)} sx={{ textTransform: 'none', flex: 1 }}>
+                            onClick={() => openFull(thumb.tileKey)} sx={{ textTransform: 'none', flex: 1 }}>
                             Open full size
                         </Button>
+                        {/* Flip to the next and previous thing in the room, the way
+                            simple mode's viewer does, without leaving the map. */}
+                        <IconButton size="small" aria-label="Previous photo" onClick={() => stepMedia(-1)}
+                            disabled={mediaKeys.length < 2}>
+                            <ArrowBackRounded fontSize="small" />
+                        </IconButton>
+                        <Box component="span" sx={{ alignSelf: 'center', fontFamily: mono, fontSize: '0.62rem', color: 'text.disabled' }}>
+                            {mediaKeys.length > 1 ? `${mediaKeys.indexOf(thumb.tileKey) + 1}/${mediaKeys.length}` : ''}
+                        </Box>
+                        <IconButton size="small" aria-label="Next photo" onClick={() => stepMedia(1)}
+                            disabled={mediaKeys.length < 2}>
+                            <ArrowForwardRounded fontSize="small" />
+                        </IconButton>
                         <IconButton size="small" aria-label="Close preview" onClick={() => setSelected(null)}>
                             <CloseRounded fontSize="small" />
                         </IconButton>
@@ -623,7 +700,18 @@ function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
                     ))}
                     {node.kind === 'device' && (
                         <Typography sx={{ fontFamily: mono, fontSize: '0.64rem', color: 'text.secondary', lineHeight: 1.55 }}>
-                            {`photos held ${node.photoCount || 0}`}
+                            {`photos held ${node.mediaCount || 0}`}
+                        </Typography>
+                    )}
+                    {/* This device's own node is where the name gets changed:
+                        it is what the map and the log call you, and there was
+                        no way to set it from the map at all. */}
+                    {node.kind === 'device' && node.isMe && (
+                        <PeerNameField master={master} compact hint="Shown to everyone in the room." />
+                    )}
+                    {node.kind === 'copies' && (
+                        <Typography sx={{ fontFamily: mono, fontSize: '0.64rem', color: 'text.secondary', lineHeight: 1.55 }}>
+                            {node.mediaCount ? `holding ${node.mediaCount} of them` : 'holding none of them'}
                         </Typography>
                     )}
                 </Box>

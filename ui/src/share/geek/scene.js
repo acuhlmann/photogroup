@@ -247,30 +247,38 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
 
     // Photos: under each device that holds a full copy; ours also while arriving.
     const devices = nodes.filter(node => node.kind === 'device');
+    // One row of thumbnails, centred under a node, with a +N when they overflow.
+    const shelf = (node, held, offset) => {
+        const shown = held.slice(0, MAX_THUMBS);
+        const gap = 6;
+        const total = shown.length * THUMB + (shown.length - 1) * gap;
+        shown.forEach((tile, index) => {
+            thumbs.push({
+                key: node.id + ':' + (tile.tileKey || tile.infoHash),
+                tileKey: tile.tileKey || tile.infoHash,
+                deviceId: node.id,
+                x: Math.min(width - THUMB / 2 - 4, Math.max(THUMB / 2 + 4, node.x - total / 2 + index * (THUMB + gap) + THUMB / 2)),
+                y: node.y + offset + THUMB / 2,
+                size: THUMB,
+                tile,
+                more: index === MAX_THUMBS - 1 && held.length > MAX_THUMBS ? held.length - MAX_THUMBS + 1 : 0,
+            });
+        });
+        node.mediaCount = held.length;
+    };
     devices.forEach(device => {
         const held = tiles.filter(tile => {
             const owners = tile.owners || [];
             if (device.isMe) return true;
             return tile.peerId === device.id || owners.some(owner => owner.peerId === device.id && !owner.loading);
         });
-        const shown = held.slice(0, MAX_THUMBS);
-        const gap = 6;
-        const total = shown.length * THUMB + (shown.length - 1) * gap;
-        shown.forEach((tile, index) => {
-            const more = index === MAX_THUMBS - 1 && held.length > MAX_THUMBS ? held.length - MAX_THUMBS + 1 : 0;
-            thumbs.push({
-                key: device.id + ':' + (tile.tileKey || tile.infoHash),
-                tileKey: tile.tileKey || tile.infoHash,
-                deviceId: device.id,
-                x: device.x - total / 2 + index * (THUMB + gap) + THUMB / 2,
-                y: device.y + 44 + THUMB / 2,
-                size: THUMB,
-                tile,
-                more,
-            });
-        });
+        shelf(device, held, 44);
         device.photoCount = held.length;
     });
+    // The server holds bytes too, and used to be the one node that showed no
+    // media for them: the copies it keeps sit under it like a device's photos.
+    const copies = byId.get('copies');
+    if (copies) shelf(copies, tiles.filter(tile => tile.hasServerCopy), 30);
 
     return { nodes, routes, thumbs, byId };
 }

@@ -110,6 +110,22 @@ describe('buildScene', () => {
         expect(scene.byId.get('copies').sub).toBe('1 held · 2.0 MB');
     });
 
+    it('gives the server a shelf of the copies it holds, like a device photos', () => {
+        const tiles = [
+            { infoHash: 'h1', peerId: 'me', owners: [{ peerId: 'me' }], hasServerCopy: true },
+            { infoHash: 'h2', peerId: 'me', owners: [{ peerId: 'me' }] },
+            { infoHash: 'h3', peerId: 'me', owners: [{ peerId: 'me' }], hasServerCopy: true },
+        ];
+        const scene = room([], { tiles });
+        const onServer = scene.thumbs.filter(thumb => thumb.deviceId === 'copies');
+        // Only the two the server actually keeps, not everything in the room.
+        expect(onServer.map(thumb => thumb.tileKey)).toEqual(['h1', 'h3']);
+        const copies = scene.byId.get('copies');
+        expect(copies.mediaCount).toBe(2);
+        // Under the node, the way a device's photos sit under its box.
+        expect(onServer[0].y).toBeGreaterThan(copies.y);
+    });
+
     it('names a local dev server instead of the production edge', () => {
         const scene = room([], { origin: 'http://localhost:3000' });
         expect(scene.byId.get('edge')).toMatchObject({ label: 'dev server', sub: 'localhost:3000' });

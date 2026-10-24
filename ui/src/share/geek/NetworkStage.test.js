@@ -86,6 +86,70 @@ describe('NetworkStage', () => {
         await act(async () => root.unmount());
         div.remove();
     });
+    it('flips through the room from the detail card, and closes it when the photo opens', async () => {
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' }, me: { name: 'Mine' } };
+        const tiles = [
+            { infoHash: 'h1', fileName: 'one.jpg', img: 'blob:1', owners: [{ peerId: 'me' }] },
+            { infoHash: 'h2', fileName: 'two.jpg', img: 'blob:2', owners: [{ peerId: 'me' }] },
+        ];
+        const onOpenPhoto = vi.fn();
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        await act(async () => root.render(<NetworkStage master={master} tiles={tiles} onOpenPhoto={onOpenPhoto} timeline={createTimeline()} />));
+        const canvas = div.querySelector('[data-testid="network-stage"]');
+        const card = () => div.querySelector('[data-testid="thumb-preview"]');
+        const thumbY = 600 * TIER.device + 44 + THUMB / 2;
+
+        // Two photos under one device: 34px each with a 6px gap, centred on 400.
+        await act(async () => tap(canvas, 380, thumbY));
+        expect(card().textContent).toContain('one.jpg');
+        expect(card().textContent).toContain('1/2');
+
+        await act(async () => card().querySelector('[aria-label="Next photo"]').click());
+        expect(card().textContent).toContain('two.jpg');
+        await act(async () => card().querySelector('[aria-label="Previous photo"]').click());
+        expect(card().textContent).toContain('one.jpg');
+
+        // Opening full size closes the card: left open, its own player sits
+        // behind the viewer and the same clip shows two control bars.
+        await act(async () => card().querySelector('button').click());
+        expect(onOpenPhoto).toHaveBeenCalledWith('h1');
+        expect(card()).toBeNull();
+
+        await act(async () => root.unmount());
+        div.remove();
+    });
+
+    it('says how much of the room has arrived, in one number', async () => {
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' } };
+        const tiles = [
+            { infoHash: 'h1', fileName: 'a.jpg', img: 'blob:a', owners: [] },
+            { infoHash: 'h2', fileName: 'b.jpg', loading: true, torrentFile: { progress: 0.5 }, owners: [] },
+        ];
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        await act(async () => root.render(<NetworkStage master={master} tiles={tiles} onOpenPhoto={() => {}} timeline={createTimeline()} />));
+        const chip = div.querySelector('[data-testid="room-progress"]');
+        // One whole photo plus half of the other, of two: 75%.
+        expect(chip.textContent).toContain('1 of 2 here');
+        expect(chip.textContent).toContain('75%');
+        await act(async () => root.unmount());
+        div.remove();
+    });
+
+    it('says nothing about loading once everything is here', async () => {
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' } };
+        const tiles = [{ infoHash: 'h1', fileName: 'a.jpg', img: 'blob:a', owners: [] }];
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        await act(async () => root.render(<NetworkStage master={master} tiles={tiles} onOpenPhoto={() => {}} timeline={createTimeline()} />));
+        expect(div.querySelector('[data-testid="room-progress"]')).toBeNull();
+        await act(async () => root.unmount());
+        div.remove();
+    });
 });
 
 describe('canOpen', () => {
