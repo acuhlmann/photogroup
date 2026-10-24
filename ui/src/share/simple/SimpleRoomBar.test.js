@@ -27,7 +27,7 @@ describe('SimpleRoomBar', () => {
         expect(div.textContent).toContain('Just you so far');
         expect(div.textContent).toContain('Let the people next to you scan this');
         expect(div.querySelector('svg')).not.toBeNull();
-        expect(div.querySelector('label[for="contained-button-file"]').textContent).toContain('Share a photo');
+        expect(div.querySelector('label[for="contained-button-file"]').textContent).toContain('Share photos or clips');
         await act(async () => root.unmount());
     });
 

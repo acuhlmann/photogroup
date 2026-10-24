@@ -4,8 +4,10 @@
  * This module extracts preview thumbnails from media files:
  * - Images: Uses EXIF data when available, falls back to canvas-based resizing
  * - Audio: Extracts album art from audio file metadata
+ * - Video: Grabs one frame in the browser (no server work), as a small JPEG
  */
 import Logger from 'js-logger';
+import { posterFromFile } from '../util/videoFrame';
 import exifr from 'exifr/dist/full.esm.mjs';
 import * as musicMetadata from 'music-metadata';
 
@@ -250,6 +252,36 @@ export async function getPreviewFromAudio(filesArr) {
 }
 
 /**
+ * Grab a poster frame for each video file, so the people waiting for a clip
+ * see what it is. Each is a JPEG of a few dozen KB that travels in the same
+ * torrent ahead of the clip. Clips the browser can't decode get none.
+ *
+ * @param {File[]} filesArr - Array of video files
+ * @returns {Promise<File[]>} Array of thumbnail File objects
+ */
+export async function getPreviewFromVideo(filesArr) {
+    if (!filesArr || filesArr.length === 0) {
+        return [];
+    }
+    const thumbnailFiles = [];
+    // One at a time: decoding several clips at once stalls a phone.
+    for (const file of filesArr) {
+        try {
+            const blob = await posterFromFile(file);
+            if (blob) {
+                thumbnailFiles.push(new File([blob], 'Thumbnail ' + file.name, {
+                    type: 'image/jpeg',
+                    lastModified: file.lastModified
+                }));
+            }
+        } catch (e) {
+            Logger.warn('Failed to grab a video frame for ' + file.name + ': ' + e);
+        }
+    }
+    return thumbnailFiles;
+}
+
+/**
  * Extract thumbnails from media files based on their type
  * 
  * Automatically detects file type and uses appropriate extraction method.
@@ -269,26 +301,18 @@ export async function extractThumbnails(filesArr) {
         return [];
     }
 
-    // Check file types
-    const allImages = validFiles.every(file => file.type && file.type.includes('image/'));
-    const allAudio = validFiles.every(file => file.type && file.type.includes('audio/'));
+    const ofType = kind => validFiles.filter(file => file.type && file.type.includes(kind + '/'));
+    const imageFiles = ofType('image');
+    const audioFiles = ofType('audio');
+    const videoFiles = ofType('video');
 
-    if (allImages) {
-        return getPreviewFromImage(validFiles);
-    } else if (allAudio) {
-        return getPreviewFromAudio(validFiles);
-    }
-
-    // Mixed content - handle each type separately
-    const imageFiles = validFiles.filter(file => file.type && file.type.includes('image/'));
-    const audioFiles = validFiles.filter(file => file.type && file.type.includes('audio/'));
-
-    const [imageThumbs, audioThumbs] = await Promise.all([
+    const [imageThumbs, audioThumbs, videoThumbs] = await Promise.all([
         imageFiles.length > 0 ? getPreviewFromImage(imageFiles) : [],
-        audioFiles.length > 0 ? getPreviewFromAudio(audioFiles) : []
+        audioFiles.length > 0 ? getPreviewFromAudio(audioFiles) : [],
+        videoFiles.length > 0 ? getPreviewFromVideo(videoFiles) : []
     ]);
 
-    return [...imageThumbs, ...audioThumbs];
+    return [...imageThumbs, ...audioThumbs, ...videoThumbs];
 }
 
 /**
@@ -316,6 +340,7 @@ export function getOriginalFilename(thumbnailName) {
 export default {
     getPreviewFromImage,
     getPreviewFromAudio,
+    getPreviewFromVideo,
     extractThumbnails,
     isThumbnail,
     getOriginalFilename

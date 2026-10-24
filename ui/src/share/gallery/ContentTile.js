@@ -27,6 +27,7 @@ import KeywordEditor from "./metadata/KeywordEditor";
 import { LocationBlankLine, LocationLine } from "./metadata/LocationCard";
 import { canSaveDetails, saveDetails } from "./metadata/saveDetails";
 import { alreadyHave, HAVE_LABELS, useHaveChanges } from "./alreadyHave";
+import { loadPreviewUrl } from "./tilePreview";
 
 /** Display loaded media and metadata highlights, with save, delete, and decryption controls. */
 function ContentTile(props) {
@@ -67,13 +68,8 @@ function ContentTile(props) {
     }, [tile.infoHash]);
 
     const listenToPreview = useCallback(() => {
-        if(tile.torrentFileThumb && tile.isAudio && typeof tile.torrentFileThumb.getBlobURL === 'function') {
-            tile.torrentFileThumb.getBlobURL((err, url) => {
-                if(err) {
-                    Logger.error('preview ' + err);
-                }
-                setPreviewThumbnail(url);
-            });
+        if(tile.torrentFileThumb && tile.isAudio) {
+            loadPreviewUrl(tile).then(url => url && setPreviewThumbnail(url));
         }
     }, [tile.torrentFileThumb, tile.isAudio]);
 

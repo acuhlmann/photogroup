@@ -214,7 +214,7 @@ function Uploader({classes, model, emitter, showButton = true}) {
                 <label htmlFor="contained-button-file" style={{cursor: disabled ? 'not-allowed' : 'pointer'}}>
                     <Button
                         aria-haspopup="true"
-                        aria-label="Share photos"
+                        aria-label="Share photos and clips"
                         variant="contained"
                         component="span"
                         disabled={disabled || unpacking}

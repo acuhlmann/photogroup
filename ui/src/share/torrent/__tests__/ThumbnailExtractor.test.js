@@ -1,11 +1,14 @@
 /**
  * Unit tests for ThumbnailExtractor
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
     isThumbnail,
-    getOriginalFilename
+    getOriginalFilename,
+    extractThumbnails,
+    getPreviewFromVideo
 } from '../ThumbnailExtractor';
+import { posterFromFile } from '../../util/videoFrame';
 
 // Note: getPreviewFromImage, getPreviewFromAudio, and extractThumbnails
 // require browser APIs (Canvas, Image, URL.createObjectURL) and external
@@ -85,5 +88,21 @@ describe('ThumbnailExtractor', () => {
             expect(getOriginalFilename('Thumbnail ')).toBe('');
         });
     });
-});
 
+    describe('getPreviewFromVideo', () => {
+        it('sends a frame of each clip as its thumbnail, skipping clips with none', async () => {
+            vi.mocked(posterFromFile)
+                .mockResolvedValueOnce(new Blob(['jpeg'], { type: 'image/jpeg' }))
+                .mockResolvedValueOnce(null);
+            const clips = ['beach.mp4', 'broken.mov'].map(name => new File(['x'], name, { type: 'video/mp4' }));
+            const thumbs = await getPreviewFromVideo(clips);
+            expect(thumbs.map(file => [file.name, file.type])).toEqual([['Thumbnail beach.mp4', 'image/jpeg']]);
+        });
+
+        it('covers clips mixed in with other files', async () => {
+            vi.mocked(posterFromFile).mockResolvedValueOnce(new Blob(['jpeg'], { type: 'image/jpeg' }));
+            const thumbs = await extractThumbnails([new File(['x'], 'clip.mp4', { type: 'video/mp4' })]);
+            expect(thumbs.map(file => file.name)).toEqual(['Thumbnail clip.mp4']);
+        });
+    });
+});

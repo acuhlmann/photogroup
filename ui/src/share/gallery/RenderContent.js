@@ -12,6 +12,7 @@ import PropTypes from "prop-types";
 import AudioMotionAnalyzer from 'audiomotion-analyzer';
 import FileUtil from "../util/FileUtil";
 import { imageAspectRatio, rememberImageSize } from "./imageSize";
+import { loadPreviewUrl } from "./tilePreview";
 
 const styles = theme => ({
     horizontal: {
@@ -36,6 +37,7 @@ const styles = theme => ({
 
 // WebTorrent 2+ dropped File#appendTo. Play the local copy when we have one
 // (the uploader always does), otherwise wait for the download and play its blob.
+// A clip shows its poster frame meanwhile, so nobody stares at an empty box.
 export function renderMedia(tile, file, node, opts, callback) {
     if (typeof file.appendTo === 'function') {
         try {
@@ -45,22 +47,32 @@ export function renderMedia(tile, file, node, opts, callback) {
         }
         return;
     }
+    const elem = document.createElement(tile.isAudio ? 'audio' : 'video');
+    elem.autoplay = opts.autoplay;
+    elem.controls = true;
+    elem.muted = opts.muted;
+    elem.loop = opts.loop;
+    elem.playsInline = true;
+    if (tile.isVideo) {
+        elem.preload = 'metadata';
+        loadPreviewUrl(tile).then(url => {
+            if (url) elem.poster = url;
+        });
+    }
     const local = tile.elem || tile.file;
+    if (!local) node.appendChild(elem);
     Promise.resolve(local || file.blob())
         .then(blob => {
             if (!node.isConnected) return;
-            const elem = document.createElement(tile.isAudio ? 'audio' : 'video');
             elem.dataset.objectUrl = URL.createObjectURL(blob);
             elem.src = elem.dataset.objectUrl;
-            elem.autoplay = opts.autoplay;
-            elem.controls = true;
-            elem.muted = opts.muted;
-            elem.loop = opts.loop;
-            elem.playsInline = true;
-            node.appendChild(elem);
+            if (elem.parentNode !== node) node.appendChild(elem);
             callback(null, elem);
         })
-        .catch(err => callback(err));
+        .catch(err => {
+            elem.remove();
+            callback(err);
+        });
 }
 
 /**
@@ -221,6 +233,23 @@ function RenderContent(props) {
         if(FileUtil.largerThanMaxBlobSize(tile.torrentFile.length)) {
             const msg = 'File is ' + FileUtil.formatBytes(tile.torrentFile.length) + ' and too large to render inline, just download instead.';
             Logger.warn(msg);
+            // Say so, over the clip's poster when it has one, instead of an empty box.
+            const note = document.createElement('div');
+            note.style.cssText = 'position:relative;width:100%;text-align:center';
+            const caption = document.createElement('div');
+            caption.style.cssText = 'padding:12px;font-size:0.85rem';
+            caption.textContent = FileUtil.formatBytes(tile.torrentFile.length) + ' is too big to play here. Save it to watch.';
+            note.appendChild(caption);
+            loadPreviewUrl(tile).then(url => {
+                if (!url) return;
+                const poster = document.createElement('img');
+                poster.src = url;
+                poster.alt = tile.fileName || '';
+                poster.style.cssText = 'width:100%;display:block;filter:brightness(0.6)';
+                note.prepend(poster);
+                caption.style.cssText += ';position:absolute;left:0;right:0;bottom:12px;color:#fff';
+            });
+            node.appendChild(note);
         } else {
             renderMedia(tile, file, node, opts, (err, elem) => {
                 if (err) {

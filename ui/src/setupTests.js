@@ -22,6 +22,14 @@ vi.mock('audiomotion-analyzer', () => {
   };
 });
 
+// jsdom can't decode video, so a poster frame grab would only wait out its
+// timeout. Give up at once instead.
+vi.mock('./share/util/videoFrame', () => {
+  const captureFrame = vi.fn(async () => null);
+  const posterFromFile = vi.fn(async () => null);
+  return { captureFrame, posterFromFile, default: { captureFrame, posterFromFile } };
+});
+
 // Mock window.matchMedia for jsdom
 window.matchMedia = window.matchMedia || function(query) {
   return {

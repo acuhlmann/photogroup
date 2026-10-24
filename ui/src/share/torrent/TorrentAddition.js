@@ -6,7 +6,7 @@ import _ from 'lodash';
 import FileUtil from "../util/FileUtil";
 import React from "react";
 import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isDuplicateTorrentError, extractDuplicateTorrentId } from './WebTorrentUtils';
-import { getPreviewFromImage, getPreviewFromAudio } from './ThumbnailExtractor';
+import { extractThumbnails } from './ThumbnailExtractor';
 import { cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 import { fingerprintFile } from '../gallery/fingerprint';
 import { rememberHave } from '../gallery/alreadyHave';
@@ -343,17 +343,11 @@ export default class TorrentAddition {
 
         let thumbnailFiles = [];
 
-        if(!secure && filesArr
-            .filter(item => item)
-            .every(item => (item.type.includes('image/') || item.type.includes('audio/')))
-        ) {
+        if(!secure) {
 
             try {
-                if(filesArr.every(item => item.type.includes('image/'))) {
-                    thumbnailFiles = await getPreviewFromImage(filesArr);
-                } else if(filesArr.every(item => item.type.includes('audio/'))) {
-                    thumbnailFiles = await getPreviewFromAudio(filesArr);
-                }
+                // Photos, album art and a frame of each clip, all grabbed here.
+                thumbnailFiles = await extractThumbnails(filesArr);
             } catch(err) {
                 // The tile is already showing; share without a preview.
                 Logger.warn('thumbnail generation failed: ' + (err.message || err));
@@ -379,7 +373,7 @@ export default class TorrentAddition {
                 files = filesArr.filter(item => item instanceof File);
             }
         } else {
-            // For secure files or non-image/audio, ensure we only pass valid File objects
+            // Encrypted shares carry no preview, ensure we only pass valid File objects
             files = filesArr.filter(item => item instanceof File);
         }
 

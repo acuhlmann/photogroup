@@ -49,7 +49,7 @@ function SimpleFront({ master }) {
             <Stack spacing={3} sx={{ width: '100%', maxWidth: 420, textAlign: 'center' }}>
                 <Box>
                     <Typography variant="h4" component="h1" sx={{ fontWeight: 700, mb: 1, fontSize: { xs: '1.9rem', sm: '2.2rem' } }}>
-                        Swap photos with the people around you
+                        Swap photos and clips with the people around you
                     </Typography>
                     <Typography variant="body1" sx={{ color: 'text.secondary', fontSize: '1.05rem' }}>
                         No app, no account, no social media.
