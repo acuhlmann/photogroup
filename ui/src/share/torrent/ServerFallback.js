@@ -17,6 +17,8 @@ export const P2P_STALL_MS = 10000;
 export const FALLBACK_POLL_MS = 2000;
 // Ask again while still stuck: whoever has the photo may only now be back.
 export const REREQUEST_MS = 60000;
+// Download progress is reported at most this often.
+const PROGRESS_MS = 250;
 
 export function shouldUseServerFallback({ hasServerCopy, done, progress, startedAt, lastProgressAt, now, stallMs = P2P_STALL_MS }) {
     if (!hasServerCopy || done) return false;
@@ -57,7 +59,7 @@ export async function isSharedPhoto(photo, blob) {
 export default class ServerFallback {
     /**
      * @param {object} deps
-     * @param {(infoHash:string)=>Promise<Blob|null>} deps.fetchCopy
+     * @param {(infoHash:string, opts:{onProgress})=>Promise<Blob|null>} deps.fetchCopy
      * @param {(infoHash:string)=>Promise<any>} deps.requestCopy ask the room for a copy
      * @param {(infoHash:string, blob:Blob)=>Promise<void>} deps.cachePut
      * @param {(photo:object, blob:Blob)=>Promise<boolean>} [deps.verify] whether
@@ -132,8 +134,19 @@ export default class ServerFallback {
     async fetchNow(infoHash) {
         const entry = this.watched.get(infoHash);
         if (!entry || entry.inFlight) return false;
-        if (this._hasCopy(entry, entry.getState?.() || {})) return this._deliver(entry);
-        return this._request(entry);
+        const why = 'you tapped use server copy';
+        if (this._hasCopy(entry, entry.getState?.() || {})) return this._deliver(entry, why);
+        return this._request(entry, why);
+    }
+
+    /**
+     * Say where the fallback stands (`serverCopy` events): requested,
+     * downloading (with bytes), verifying, done, rejected or failed.
+     */
+    _stage(entry, stage, extra = {}) {
+        this.emitter?.emit('serverCopy', {
+            infoHash: entry.photo.infoHash, direction: 'down', stage, name: entry.photo.fileName, ...extra,
+        });
     }
 
     _hasCopy(entry, state) {
@@ -161,33 +174,51 @@ export default class ServerFallback {
         const hasCopy = this._hasCopy(entry, state);
         // A copy that wasn't the photo: don't fetch it again every poll.
         const rejectedLately = entry.rejectedAt !== undefined && now - entry.rejectedAt < this.rerequestMs;
-        if (hasCopy && !rejectedLately && (stalled || holdersAllAway(state))) return this._deliver(entry);
+        const why = stalled
+            ? `no P2P progress for ${Math.round(this.stallMs / 1000)} s`
+            : 'everyone who has it is in another app';
+        if (hasCopy && !rejectedLately && (stalled || holdersAllAway(state))) return this._deliver(entry, why);
         if (!hasCopy && stalled && (entry.requestedAt === null || now - entry.requestedAt >= this.rerequestMs)) {
-            return this._request(entry);
+            return this._request(entry, why);
         }
     }
 
-    async _request(entry) {
+    async _request(entry, why) {
         if (typeof this.requestCopy !== 'function') return false;
         entry.requestedAt = this.now();
         try {
             await this.requestCopy(entry.photo.infoHash);
+            this._stage(entry, 'requested', { why });
             Logger.info('ServerFallback: asked for a server copy of ' + (entry.photo.fileName || entry.photo.infoHash));
             return true;
         } catch (err) {
             Logger.warn('ServerFallback request failed for ' + entry.photo.infoHash + ': ' + (err?.message || err));
+            this._stage(entry, 'failed', { why: 'asking for a copy failed: ' + (err?.message || err) });
             return false;
         }
     }
 
-    async _deliver(entry) {
+    async _deliver(entry, why) {
         const infoHash = entry.photo.infoHash;
         entry.inFlight = true;
+        let reported = -Infinity;
+        const onProgress = (loaded, total) => {
+            const at = this.now();
+            if (at - reported < PROGRESS_MS && loaded < total) return;
+            reported = at;
+            this._stage(entry, 'downloading', { why, loaded, total });
+        };
         try {
-            const blob = await this.fetchCopy(infoHash);
-            if (!blob) return false;
+            this._stage(entry, 'downloading', { why, loaded: 0, total: entry.photo.serverCopySize });
+            const blob = await this.fetchCopy(infoHash, { onProgress });
+            if (!blob) {
+                this._stage(entry, 'failed', { why: 'the server has no copy any more' });
+                return false;
+            }
+            this._stage(entry, 'verifying', { why, loaded: blob.size, total: blob.size });
             if (this.verify && !(await this.verify(entry.photo, blob))) {
                 entry.rejectedAt = this.now();
+                this._stage(entry, 'rejected', { why: "the copy's fingerprint is not the shared photo's" });
                 Logger.warn('ServerFallback: server copy of ' + (entry.photo.fileName || infoHash) + " isn't the shared photo; ignored");
                 return false;
             }
@@ -203,12 +234,14 @@ export default class ServerFallback {
             photo.file = file;
             photo.loading = false;
             Logger.info('ServerFallback: delivered ' + (photo.fileName || infoHash) + ' via server copy');
+            this._stage(entry, 'done', { why, loaded: blob.size, total: blob.size });
             this.emitter?.emit('serverCopyReady', photo);
             this.emitter?.emit('torrentReady', [photo]);
             this.unwatch(infoHash);
             return true;
         } catch (err) {
             Logger.warn('ServerFallback fetch failed for ' + infoHash + ': ' + (err?.message || err));
+            this._stage(entry, 'failed', { why: 'download failed: ' + (err?.message || err) });
             return false;
         } finally {
             const current = this.watched.get(infoHash);

@@ -117,7 +117,7 @@ describe('ServerFallback', () => {
         expect(fetchCopy).not.toHaveBeenCalled(); // someone is in front: let P2P try
         state = { ...state, activeHolders: 0 };
         await fallback._check('h6');
-        expect(fetchCopy).toHaveBeenCalledWith('h6');
+        expect(fetchCopy).toHaveBeenCalledWith('h6', expect.anything());
     });
 
     it("trusts the room's view of the copy over the photo it started with", async () => {
@@ -172,7 +172,8 @@ describe('ServerFallback', () => {
 
         await fallback._check('h10');
         expect(verify).toHaveBeenCalledWith(photo, expect.any(Blob));
-        expect(emitter.emit).not.toHaveBeenCalled();
+        expect(emitter.emit).not.toHaveBeenCalledWith('torrentReady', expect.anything());
+        expect(emitter.emit).toHaveBeenCalledWith('serverCopy', expect.objectContaining({ stage: 'rejected' }));
         expect(photo.file).toBeUndefined();
         clock = 500;
         await fallback._check('h10');
@@ -190,5 +191,28 @@ describe('ServerFallback', () => {
         await new Promise(r => setTimeout(r, 30));
         expect(fetchCopy).not.toHaveBeenCalled();
         fallback.stopAll();
+    });
+
+    it('reports each stage of the fallback, with progress and why', async () => {
+        const events = [];
+        const emitter = { emit: (name, event) => { if (name === 'serverCopy') events.push(event); } };
+        const fetchCopy = vi.fn(async (infoHash, { onProgress }) => {
+            onProgress(2, 4);
+            onProgress(4, 4);
+            return new Blob(['abcd']);
+        });
+        const requestCopy = vi.fn().mockResolvedValue({});
+        let hasServerCopy = false;
+        const fallback = new ServerFallback({ fetchCopy, requestCopy, cachePut: vi.fn(), emitter, stallMs: 10000, pollMs: 60000, now: () => 20000 });
+        const photo = { infoHash: 'h11', fileName: 'f.jpg' };
+        fallback.watch(photo, () => ({ progress: 0, hasServerCopy }));
+        fallback.watched.get('h11').lastProgressAt = 0;
+
+        await fallback._check('h11');
+        expect(events.at(-1)).toMatchObject({ stage: 'requested', direction: 'down', why: 'no P2P progress for 10 s' });
+        hasServerCopy = true;
+        await fallback._check('h11');
+        expect(events.map(event => event.stage)).toEqual(['requested', 'downloading', 'downloading', 'downloading', 'verifying', 'done']);
+        expect(events[3]).toMatchObject({ loaded: 4, total: 4, name: 'f.jpg' });
     });
 });

@@ -66,7 +66,7 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
      * `key` only writes a line this often, so a busy route stays readable
      * while every one of its packets still flies.
      */
-    const push = ({ kind, text = '', key = '', flights = [], route, count, speed, at = now() }) => {
+    const push = ({ kind, text = '', key = '', flights = [], route, count, speed, note, sticky, at = now() }) => {
         // A key never written is not throttled; `|| 0` would eat the first line.
         if (text && key && at - (lastText.get(key) ?? -Infinity) < SAME_TEXT_MS) text = '';
         if (text && key) lastText.set(key, at);
@@ -80,6 +80,10 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
             route,
             count,
             speed,
+            // A stage the route shows beside its name (a server copy's
+            // progress); sticky while it is still under way.
+            note,
+            sticky,
             flights: flights.filter(Boolean).map(flight => ({
                 routeId: flight.routeId,
                 rgb: flight.rgb,

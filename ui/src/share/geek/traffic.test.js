@@ -125,14 +125,28 @@ describe('attachTraffic', () => {
         expect(timeline.recent()).toHaveLength(1);
     });
 
-    it('gives a server copy a chunk going up and one coming down', () => {
-        const { emitter, timeline } = setup();
-        emitter.emit('serverCopyBackup', { pending: 1 });
-        expect(timeline.entries.at(-1).flights[0].label).toBe('PUT chunk ≤8 MB');
-        emitter.emit('serverCopyReady', {});
+    it('flies a server copy up in chunks and down as it streams, with its progress on the route', () => {
+        const { emitter, timeline, clock } = setup();
+        emitter.emit('serverCopy', { infoHash: 'abc', direction: 'up', stage: 'uploading', loaded: 8000000, total: 20000000, name: 'clip.mp4' });
+        const up = timeline.entries.at(-1);
+        expect(up.flights[0]).toMatchObject({ routeId: 'copies:me', reverse: false, label: 'PUT 8 MB/20 MB' });
+        expect(up.text).toContain('server copy ↑ PUT uploading 8 MB/20 MB 40% · clip.mp4');
+        // Between chunks the route keeps saying where the upload is.
+        clock.value += 30000;
+        expect(flowAt(timeline.entries, 'copies:me', clock.value).note).toBe('PUT 8 MB/20 MB');
+
+        emitter.emit('serverCopy', { infoHash: 'abc', direction: 'down', stage: 'requested', why: 'no P2P progress for 10 s' });
+        expect(timeline.entries.at(-1).flights[0].label).toBe('POST /request');
+        expect(timeline.entries.at(-1).text).toContain('no P2P progress for 10 s');
+        emitter.emit('serverCopy', { infoHash: 'abc', direction: 'down', stage: 'downloading', loaded: 1000000, total: 2000000 });
         const down = timeline.entries.at(-1).flights[0];
-        expect(down.label).toBe('GET copy');
         expect(down.reverse).toBe(true);
+        expect(down.label).toBe('GET 1 MB/2 MB');
+
+        // Finished: the route goes back to hidden once the moment passes.
+        emitter.emit('serverCopy', { infoHash: 'abc', direction: 'down', stage: 'done', loaded: 2000000, total: 2000000 });
+        clock.value += FLOW_MS + 1;
+        expect(flowAt(timeline.entries, 'copies:me', clock.value)).toBeNull();
     });
 });
 

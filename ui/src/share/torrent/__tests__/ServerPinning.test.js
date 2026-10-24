@@ -59,7 +59,7 @@ describe('ServerPinning', () => {
         emit({ type: 'all', item: [photo('v', 'me')] });
         pinning.shared([{ infoHash: 'v', blob: clip }]);
         await settle();
-        expect(service.uploadServerCopy).toHaveBeenCalledWith('v', clip);
+        expect(service.uploadServerCopy).toHaveBeenCalledWith('v', clip, expect.objectContaining({ onProgress: expect.any(Function) }));
     });
 
     it('still declines a clip too large for the relay', async () => {
@@ -77,7 +77,7 @@ describe('ServerPinning', () => {
         emit({ type: 'all', item: [photo('a', 'me')] });
         pinning.shared([{ infoHash: 'a', blob }]);
         await settle();
-        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob);
+        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob, expect.anything());
     });
 
     it('answers a request for a photo it shared at once', async () => {
@@ -103,7 +103,7 @@ describe('ServerPinning', () => {
 
         timers[0].fn();
         await settle();
-        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob);
+        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob, expect.anything());
     });
 
     it('stays out of it when someone else already started', async () => {
@@ -133,7 +133,7 @@ describe('ServerPinning', () => {
         emit({ type: 'update', item: [{ infoHash: 'a', serverCopyRequestedAt: 2 }] }); // asked again
         timers[1].fn();
         await settle();
-        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob);
+        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob, expect.anything());
     });
 
     it('on the way into the background, takes over a stalled upload too', async () => {
@@ -177,7 +177,7 @@ describe('ServerPinning', () => {
         expect(pinning.onHide()).toBe(1);
         await settle();
         expect(service.uploadServerCopy).toHaveBeenCalledTimes(1);
-        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob);
+        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob, expect.anything());
     });
 
     it('does nothing in the background when alone in the room', () => {
@@ -312,5 +312,33 @@ describe('ServerPinning', () => {
             await settle();
             expect(service.uploadServerCopy).toHaveBeenCalledTimes(1);
         });
+    });
+
+    it('reports each stage of an upload, with bytes and why', async () => {
+        const { pinning, service, emit, emitter, settle } = setup();
+        service.uploadServerCopy.mockImplementation(async (infoHash, data, { onProgress }) => {
+            onProgress(2, 3);
+            return { status: 'stored', size: 3 };
+        });
+        const stages = [];
+        emitter.on('serverCopy', event => stages.push(event));
+        emit({ type: 'all', item: [{ ...photo('a', 'me'), fileName: 'cat.jpg' }] });
+        emitter.emit('roomSettings', { keepCopies: true });
+        pinning.shared([{ infoHash: 'a', blob }]);
+        await settle();
+        expect(stages.map(event => event.stage)).toEqual(['queued', 'uploading', 'uploading', 'stored']);
+        expect(stages[2]).toMatchObject({ infoHash: 'a', direction: 'up', name: 'cat.jpg', loaded: 2, total: 3 });
+        expect(stages[0].why).toMatch(/latecomers/);
+    });
+
+    it('says why a file too large for the server stays P2P only', async () => {
+        const { pinning, emit, emitter, settle } = setup();
+        const stages = [];
+        emitter.on('serverCopy', event => stages.push(event));
+        emit({ type: 'all', item: [photo('v', 'me')] });
+        pinning.shared([{ infoHash: 'v', blob: { type: 'video/mp4', size: MAX_PHOTO_BYTES + 1 } }]);
+        await settle();
+        expect(stages.at(-1)).toMatchObject({ stage: 'too-large' });
+        expect(stages.at(-1).why).toMatch(/P2P only/);
     });
 });
