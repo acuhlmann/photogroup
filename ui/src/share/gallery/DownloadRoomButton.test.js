@@ -35,7 +35,7 @@ describe('DownloadRoomButton', () => {
         expect(button.textContent).toBe('Zipping 1 of 1…');
         expect(button.disabled).toBe(true);
         await act(async () => finish({ saved: 1, skipped: 1 }));
-        expect(div.querySelector('[role="status"]').textContent).toBe('Saved 1 photo · 1 not ready, left out');
+        expect(div.querySelector('[role="status"]').textContent).toBe('Saved 1 photo · 1 not ready, not included');
         expect(button.disabled).toBe(false);
         await act(async () => root.unmount());
     });
@@ -60,7 +60,7 @@ describe('DownloadRoomButton', () => {
             expect(button.textContent).toBe('Download 1 new');
             await act(async () => button.click());
             expect(saveRoom).toHaveBeenLastCalledWith([ready], expect.anything());
-            expect(div.querySelector('[role="status"]').textContent).toBe('Saved 1 photo · 1 you have, left out');
+            expect(div.querySelector('[role="status"]').textContent).toBe('Saved 1 photo · 1 you have, not included');
             await act(async () => root.unmount());
         });
 

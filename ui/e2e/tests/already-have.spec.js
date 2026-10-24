@@ -51,7 +51,7 @@ test('Download room leaves out photos you shared or already saved', async ({ bro
     const zipped = page2.waitForEvent('download');
     await downloadButton(page2).click();
     expect((await zipped).suggestedFilename()).toMatch(/^photogroup-.+\.zip$/);
-    await expect(page2.getByRole('status').filter({ hasText: 'Saved 1 photo' })).toHaveText('Saved 1 photo · 1 you have, left out');
+    await expect(page2.getByRole('status').filter({ hasText: 'Saved 1 photo' })).toHaveText('Saved 1 photo · 1 you have, not included');
     await expect(downloadButton(page2)).toHaveText('You have them all');
   } finally {
     await sender.close();

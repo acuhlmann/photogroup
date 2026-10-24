@@ -37,8 +37,12 @@ describe('buildScene', () => {
         expect(scene.byId.get('edge').sub).toBe('Cloud Run wake → nginx');
         expect(scene.byId.get('tracker').sub).toBe('photogroup.network');
         expect(scene.byId.get('stun').sub).toContain('stun.l.google.com');
-        // No TURN server and no relay candidates: no TURN node.
-        expect(scene.byId.get('turn')).toBeUndefined();
+        // No TURN server and no relay candidates: TURN is still shown, as missing.
+        expect(scene.byId.get('turn')).toMatchObject({ sub: 'none configured', idle: true });
+        expect(scene.byId.get('turn').info.join(' ')).toContain('server copy takes over');
+        // What each server holds and never sees is spelled out on it.
+        expect(scene.byId.get('api').info.join('\n')).toMatch(/never sees · the photos/);
+        expect(scene.byId.get('stun').info).toContain('sees · your public IP address and port only');
 
         // Ana and I share a public address, so one NAT sits between us.
         const shared = scene.byId.get('nat:1.1.1.1');

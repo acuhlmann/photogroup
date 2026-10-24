@@ -225,6 +225,7 @@ export default class RoomsService {
         source.addEventListener('room', event => {
             const data = JSON.parse(event.data);
             if (data?.settings) scope.emitter.emit('roomSettings', data.settings);
+            if (data?.deleted) scope.emitter.emit('roomDeleted', data.deleted);
         }, false);
 
         source.addEventListener('peerConnections', event => {
@@ -355,6 +356,13 @@ export default class RoomsService {
             body: JSON.stringify(settings)
         });
         if (!response.ok) throw new Error('Could not change the room (' + response.status + ')');
+        return response.json();
+    }
+
+    /** Delete this room for everyone: its photo list and server copies go now. */
+    async deleteRoom() {
+        const response = await fetch(this.url + '/' + this.id, { method: 'DELETE', headers: this.sessionHeaders() });
+        if (!response.ok) throw new Error('Could not delete the room (' + response.status + ')');
         return response.json();
     }
 

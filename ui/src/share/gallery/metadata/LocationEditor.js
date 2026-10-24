@@ -12,6 +12,7 @@ import SearchRounded from '@mui/icons-material/SearchRounded';
 import MyLocationRounded from '@mui/icons-material/MyLocationRounded';
 import TileMap from './TileMap';
 import { formatDecimal, isValidLocation, searchPlaces } from './geo';
+import { saveErrorText } from './saveDetails';
 
 const WORLD = { lat: 20, long: 0, zoom: 2 };
 const PLACE_ZOOM = 15;
@@ -87,9 +88,7 @@ function LocationEditor({ initial, canRemove, onSave, onCancel }) {
         try {
             await onSave(location);
         } catch (err) {
-            setError(err && err.status === 404
-                ? 'This photo is still being shared. Try again in a moment.'
-                : (err && err.message) || 'Could not save. Try again.');
+            setError(saveErrorText(err));
             setBusy('');
         }
     };

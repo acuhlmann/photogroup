@@ -255,7 +255,7 @@ function OwnersList(props) {
                         </List>
                     </Paper>
                 </AccordionDetails>
-            </Accordion> : <Typography variant="caption">No peer has this image</Typography>
+            </Accordion> : <Typography variant="caption">Nobody has this photo now</Typography>
     );
 }
 

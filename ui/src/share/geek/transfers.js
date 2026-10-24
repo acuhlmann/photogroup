@@ -39,7 +39,7 @@ export const SERVER_STEPS = {
     ],
 };
 
-const peerName = peer => (peer && (peer.name || StringUtil.slimPlatform(peer.originPlatform || ''))) || null;
+export const peerName = peer => (peer && (peer.name || StringUtil.slimPlatform(peer.originPlatform || ''))) || null;
 const short = value => String(value || '').slice(0, 8);
 const percent = (part, total) => (total ? Math.round(part / total * 100) : 0);
 
@@ -89,25 +89,25 @@ function explain({ row, photo, peersById, myPeerId, mine, hasTurn }) {
 
     if (stage?.direction === 'up') {
         if (stage.stage === 'too-large') lines.push(`No server copy: ${stage.why}.`);
-        else if (stage.stage === 'stored' || stage.stage === 'exists') lines.push(`Left a server copy because ${stage.why}. It is deleted once everyone has the photo.`);
+        else if (stage.stage === 'stored' || stage.stage === 'exists') lines.push(`Uploaded a server copy because ${stage.why}.`);
         else if (stage.why) lines.push(`Uploading a server copy because ${stage.why}.`);
     }
     if (stage?.direction === 'down') {
-        if (stage.stage === 'done') lines.push(`Came from the server over HTTPS because ${stage.why}.`);
+        if (stage.stage === 'done') lines.push(`Downloaded from the server over HTTPS because ${stage.why}.`);
         else if (stage.stage === 'requested') lines.push(`Asked the room for a server copy: ${stage.why}.`);
-        else if (stage.stage === 'rejected') lines.push(`Ignored a server copy: ${stage.why}.`);
-        else if (stage.why) lines.push(`Fetching the server copy: ${stage.why}.`);
+        else if (stage.stage === 'rejected') lines.push(`Did not use the server copy: ${stage.why}.`);
+        else if (stage.why) lines.push(`Downloading the server copy: ${stage.why}.`);
     }
 
     row.sources.filter(source => source.peerId).forEach(source => {
         const name = source.label;
         if (source.kind === 'lan') {
-            lines.push(`${name} is on your network, so pieces go host to host without leaving it.`);
+            lines.push(`${name} is on your network. The data stays on this network.`);
         } else if (source.kind === 'punch') {
-            lines.push(`${name} via a NAT hole punch: STUN found both public addresses and the bytes go straight between you.`);
+            lines.push(`Data with ${name} goes directly through both NATs (hole punch). STUN found both public addresses.`);
         } else if (source.kind === 'relay') {
             const forecast = forecastWith(source.peerId);
-            lines.push(`${name} is relayed by TURN: still encrypted end to end, but through a relay. ${forecast?.why || ''}`.trim());
+            lines.push(`Data with ${name} goes through the TURN relay. The data stays encrypted. ${forecast?.why || ''}`.trim());
         }
     });
 
@@ -115,18 +115,18 @@ function explain({ row, photo, peersById, myPeerId, mine, hasTurn }) {
         const holders = (photo?.owners || []).filter(owner => owner.peerId !== myPeerId && !owner.loading).map(owner => owner.peerId);
         if (photo?.peerId && photo.peerId !== myPeerId && !holders.includes(photo.peerId)) holders.push(photo.peerId);
         const present = holders.map(id => peersById.get(id)).filter(Boolean);
-        if (holders.length && !present.length) lines.push('Nobody who has it is in the room right now, so only a server copy can bring it.');
-        else if (present.length && present.every(isAway)) lines.push('Everyone who has it is in another app; phones freeze P2P in the background.');
+        if (holders.length && !present.length) lines.push('Nobody with this photo is in the room now. Only a server copy can bring it.');
+        else if (present.length && present.every(isAway)) lines.push('All devices with this photo are in another app. Phones stop P2P in the background.');
         else if (row.phase === 'signal' || row.phase === 'discover') {
             const forecast = present.length ? forecastWith(present[0].peerId) : null;
-            lines.push('Waiting for the tracker to introduce a peer that has it.' + (forecast ? ` Expected path: ${forecast.label}.` : ''));
+            lines.push('Waiting for the tracker to find a peer with this photo.' + (forecast ? ` Expected path: ${forecast.label}.` : ''));
         }
     }
     if (row.direction === 'up' && !row.sources.length && !stage) {
-        lines.push('Nobody has asked for pieces yet. Everyone else in the room may already have it.');
+        lines.push('Nobody asked for pieces yet. Maybe all other people in the room have it.');
     }
     if (!lines.length && row.done && row.split.server === 0 && row.split.total > 0) {
-        lines.push('Fully peer-to-peer: the server never carried a byte of it.');
+        lines.push('Fully peer-to-peer: no data went through the server.');
     }
     return lines;
 }
@@ -272,4 +272,60 @@ export function totals(rows) {
         relay: sum.relay + row.split.relay,
         server: sum.server + row.split.server,
     }), { total: 0, p2p: 0, relay: 0, server: 0 });
+}
+
+/** "23 h 05 m", "12 m", "40 s": how long until (or since) something, coarse. */
+export function formatSpan(ms) {
+    if (!Number.isFinite(ms)) return '';
+    const seconds = Math.max(0, Math.round(ms / 1000));
+    if (seconds < 60) return `${seconds} s`;
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes} m`;
+    return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} m`;
+}
+
+/**
+ * Every server copy in the room, not only this device's: what it is, who
+ * sent it, how far it got, when it arrived and when it will be gone. A copy
+ * goes once everyone in the room has the photo (unless the room keeps copies
+ * for latecomers) or when it expires, whichever is first.
+ */
+export function readServerCopies({ photos = [], peers = [], myPeerId, keepCopies = false, now = Date.now() }) {
+    const peersById = new Map(peers.map(peer => [peer.peerId, peer]));
+    const who = peerId => (peerId === myPeerId ? 'you' : peerName(peersById.get(peerId)) || (peerId ? 'peer ' + short(peerId) : 'someone'));
+    const holders = photo => new Set((photo.owners || []).filter(owner => !owner.loading).map(owner => owner.peerId));
+    return photos
+        .filter(photo => photo.hasServerCopy || photo.serverCopyReceived > 0 || photo.serverCopyRequestedAt)
+        .map(photo => {
+            const size = photo.serverCopySize || 0;
+            const received = photo.hasServerCopy ? size : photo.serverCopyReceived || 0;
+            const state = photo.hasServerCopy ? 'stored' : received > 0 ? 'uploading' : 'requested';
+            const have = holders(photo);
+            const missing = peers.filter(peer => !have.has(peer.peerId)).length;
+            let goes;
+            if (state === 'stored') {
+                const left = photo.serverCopyExpiresAt ? formatSpan(photo.serverCopyExpiresAt - now) : null;
+                goes = keepCopies
+                    ? `kept for latecomers${left ? `, deleted in ${left}` : ''}`
+                    : missing === 0 ? 'everyone has it, so it is being deleted'
+                        : `deleted when ${missing === 1 ? 'the last person gets it' : `${missing} more people get it`}${left ? `, or in ${left} at most` : ''}`;
+            } else if (state === 'uploading') {
+                goes = 'kept up to 24 h once complete';
+            } else {
+                goes = 'waiting for someone who has it to upload';
+            }
+            return {
+                infoHash: photo.infoHash,
+                name: photo.fileName || short(photo.infoHash),
+                state,
+                size,
+                received,
+                percent: size ? Math.round(received / size * 100) : 0,
+                from: photo.serverCopyFrom || photo.serverCopyUploader ? who(photo.serverCopyFrom || photo.serverCopyUploader) : null,
+                startedAt: photo.serverCopyStartedAt || null,
+                storedAt: photo.serverCopyStoredAt || null,
+                expiresAt: photo.serverCopyExpiresAt || null,
+                goes,
+            };
+        });
 }

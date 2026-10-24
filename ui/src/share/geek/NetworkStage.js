@@ -14,6 +14,7 @@ import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import { captureDroppedHandles } from '../gallery/replaceOriginal';
 import { buildScene, routePoints, pointAlong, TIER } from './scene';
 import { attachTraffic, flowAt, FLOW_MS, RX, TX } from './traffic';
+import { demoInputs, withDemoRoutes } from './tour';
 import { posterFor, mediaUrlFor } from './videoPoster';
 import PeerNameField from '../header/PeerNameField';
 
@@ -35,9 +36,9 @@ const NODE_RGB = {
     edge: '96,165,250', api: '96,165,250', tracker: '167,139,250', copies: '232,121,249',
 };
 
-function readScene(master, tiles, width, height) {
+function readScene(master, tiles, width, height, demo = false) {
     const creator = master.creator || {};
-    return buildScene({
+    const inputs = {
         myPeerId: master.client?.peerId,
         peers: master.peers?.items || [],
         connections: master.peers?.connections || [],
@@ -50,7 +51,10 @@ function readScene(master, tiles, width, height) {
         photos: master.roomPhotos?.all?.() || [],
         width,
         height,
-    });
+    };
+    // The tour needs someone to send to and public addresses to point at.
+    if (!demo) return buildScene(inputs);
+    return withDemoRoutes(buildScene(demoInputs(inputs)), inputs.myPeerId);
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -76,6 +80,9 @@ function polygon(ctx, x, y, r, sides, rotation) {
 
 // With reduced motion nothing moves on its own; a paused or scrubbed view is
 // still drawn, because there the viewer asked for that one moment.
+// One empty list, so a stage given no tiles doesn't rebuild its scene every render.
+const NO_TILES = [];
+
 const prefersReducedMotion = () => typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -132,7 +139,13 @@ export function canOpen(tile) {
  * The traffic it draws comes from `timeline`, which the footer logs the same
  * recording of — so pausing holds every label in place to be read.
  */
-function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
+/**
+ * `timeline` records the room's traffic; `playback` is what is drawn (the
+ * tour plays its own), and `tour` — the step on screen — switches to the
+ * tour's scene and dims everything that step is not about.
+ */
+function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playback, tour = null, onScene }) {
+    const shown = playback || timeline;
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
     const containerRef = useRef(null);
@@ -144,9 +157,12 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
     const [selected, setSelected] = useState(null);
     // The drawing reads the playhead every frame, so only the chrome that says
     // "held" needs re-rendering when it moves — not the canvas.
-    const [paused, setPaused] = useState(!timeline.playing);
+    const [paused, setPaused] = useState(!shown.playing);
 
-    useEffect(() => timeline.subscribeClock(() => setPaused(!timeline.playing)), [timeline]);
+    useEffect(() => {
+        setPaused(!shown.playing);
+        return shown.subscribeClock(() => setPaused(!shown.playing));
+    }, [shown]);
 
     // Rebuild whenever the room changes shape.
     useEffect(() => {
@@ -174,11 +190,20 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
         return () => observer.disconnect();
     }, []);
 
+    const touring = !!tour;
+    // The example tour brings example peers and addresses; a replay shows the real room.
+    const demo = touring && tour.demo !== false;
     const scene = useMemo(
-        () => readScene(master, tiles, size.width || 800, size.height || 600),
+        () => readScene(master, tiles, size.width || 800, size.height || 600, demo),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-        [master, tiles, size.width, size.height, version]);
+        [master, tiles, size.width, size.height, version, demo]);
     sceneRef.current = scene;
+    useEffect(() => { onScene?.(scene); }, [scene, onScene]);
+
+    // What the tour's step is about; everything else is drawn faint.
+    const spotlight = useMemo(() => (tour?.step
+        ? { nodes: new Set(tour.step.nodes || []), routes: new Set(tour.step.routes || []) }
+        : null), [tour?.step]);
 
     // Record the room's traffic into the shared timeline; the footer logs it.
     useEffect(() => attachTraffic({
@@ -230,9 +255,9 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
             if (!running) return;
             ctx.clearRect(0, 0, width, height);
             // The moment on screen: the live edge, or wherever the playhead sits.
-            const at = timeline.clock();
-            const moving = !prefersReducedMotion() || !timeline.playing;
-            const focus = timeline.shown();
+            const at = shown.clock();
+            const moving = !prefersReducedMotion() || !shown.playing;
+            const focus = shown.shown();
             const focused = new Set(focus ? focus.flights.map(flight => flight.routeId) : []);
 
             // Tiers, so position reads as role.
@@ -278,24 +303,28 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
             scene.routes.forEach(route => {
                 const style = ROUTE_STYLE[route.kind];
                 if (!style) return;
-                const lit = focused.has(route.id);
-                const flow = flowAt(timeline.entries, route.id, at);
-                // Server copies are the exception: drawn only while one is moving.
-                if (style.hidden && !lit && !flow?.note) return;
+                const spot = spotlight ? spotlight.routes.has(route.id) : false;
+                const lit = focused.has(route.id) || spot;
+                const flow = flowAt(shown.entries, route.id, at);
+                // Server copies are the exception: drawn only while one is
+                // moving. The tour's own paths only when a step is about them.
+                if ((style.hidden || route.demo) && !lit && !flow?.note) return;
                 const points = pointsOf.get(route.id);
                 if (points.length < 2) return;
                 const transfer = !!route.peers;
-                const base = transfer ? route.label : flow?.note ? style.label : null;
+                const base = (transfer || route.demo) && (!spotlight || spot) ? route.label
+                    : flow?.note ? style.label : null;
                 ctx.beginPath();
                 points.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
                 ctx.setLineDash(style.dash);
                 ctx.lineWidth = lit ? style.width + 1.5 : style.width;
-                ctx.strokeStyle = `rgba(${style.rgb},${lit ? 1 : transfer || style.hidden ? 0.75 : 0.28})`;
+                const strength = lit ? 1 : transfer || style.hidden ? 0.75 : 0.28;
+                ctx.strokeStyle = `rgba(${style.rgb},${spotlight && !spot ? strength * 0.25 : strength})`;
                 ctx.stroke();
                 ctx.setLineDash([]);
                 if (base) {
                     // Signalling routes share their first legs; label a copy near its end.
-                    const mid = pointAlong(points, transfer ? 0.5 : 0.78);
+                    const mid = pointAlong(points, transfer || route.demo ? 0.5 : 0.78);
                     ctx.font = `9px ${mono}`;
                     const label = routeLabel(route, flow, at, base);
                     const w = ctx.measureText(label).width + 10;
@@ -312,7 +341,7 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
             // Packets, with what they carry. Placed by the clock, so a paused
             // map keeps every dot and its label exactly where it was.
             if (moving) {
-                timeline.inFlight(at).forEach(packet => {
+                shown.inFlight(at).forEach(packet => {
                     const route = routeById.get(packet.routeId);
                     if (!route) return;
                     const all = pointsOf.get(route.id);
@@ -346,13 +375,34 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
             scene.nodes.forEach(node => {
                 const rgb = NODE_RGB[node.kind] || '200,200,200';
                 const isSelected = selected?.type === 'node' && selected.id === node.id;
+                const spot = spotlight?.nodes.has(node.id);
+                // Faint: not what the tour's step is about, or a TURN that
+                // is not there. Dashed: an example standing in for the tour.
+                ctx.globalAlpha = (spotlight && !spot ? 0.28 : 1) * (node.idle ? 0.6 : 1);
+                // A glow around what the step is about, hugging its shape.
+                if (spot && spotlight.nodes.size < scene.nodes.length) {
+                    if (node.w && node.kind !== 'nat' && node.kind !== 'stun' && node.kind !== 'turn') {
+                        roundRect(ctx, node.x - node.w / 2 - 7, node.y - node.h / 2 - 7, node.w + 14, node.h + 14, 11);
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(node.x, node.y, 27, 0, Math.PI * 2);
+                    }
+                    ctx.fillStyle = `rgba(${rgb},0.16)`;
+                    ctx.fill();
+                    ctx.strokeStyle = `rgba(${rgb},0.55)`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+                const dash = node.example || node.idle ? [4, 3] : [];
                 if (node.kind === 'nat' || node.kind === 'stun' || node.kind === 'turn') {
                     polygon(ctx, node.x, node.y, 17, node.kind === 'nat' ? 6 : 4, node.kind === 'nat' ? 0 : Math.PI / 4);
                     ctx.fillStyle = `rgba(${rgb},0.14)`;
                     ctx.fill();
                     ctx.strokeStyle = `rgba(${rgb},${isSelected ? 1 : 0.8})`;
                     ctx.lineWidth = isSelected ? 2.5 : 1.5;
+                    ctx.setLineDash(dash);
                     ctx.stroke();
+                    ctx.setLineDash([]);
                     ctx.font = `600 8px ${mono}`;
                     ctx.fillStyle = `rgb(${rgb})`;
                     ctx.textAlign = 'center';
@@ -366,6 +416,7 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
                         ctx.fillStyle = muted;
                         ctx.fillText(fit(ctx, node.sub, 150), node.x, node.y + 38);
                     }
+                    ctx.globalAlpha = 1;
                     return;
                 }
                 const { w, h } = node;
@@ -374,7 +425,9 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
                 ctx.fill();
                 ctx.strokeStyle = `rgba(${rgb},${isSelected || node.isMe ? 1 : 0.7})`;
                 ctx.lineWidth = isSelected ? 2.5 : node.isMe ? 2 : 1;
+                ctx.setLineDash(dash);
                 ctx.stroke();
+                ctx.setLineDash([]);
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.font = `600 11px ${mono}`;
@@ -385,12 +438,14 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
                     ctx.fillStyle = muted;
                     ctx.fillText(fit(ctx, node.sub, w - 10), node.x, node.y + 8);
                 }
+                ctx.globalAlpha = 1;
             });
 
             // Photos under the devices holding them.
             scene.thumbs.forEach(thumb => {
                 const { x, y, size: s, tile } = thumb;
                 const isSelected = selected?.type === 'thumb' && selected.key === thumb.key;
+                ctx.globalAlpha = spotlight && !spotlight.nodes.has(thumb.deviceId) ? 0.28 : 1;
                 // The preview that came with the share counts even when this
                 // device holds no bytes of its own - which is exactly the case
                 // for the server's shelf, where most of it is other people's.
@@ -450,6 +505,7 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
                 }
             });
 
+            ctx.globalAlpha = 1;
             frame = requestAnimationFrame(draw);
         };
         draw();
@@ -457,7 +513,7 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
             running = false;
             cancelAnimationFrame(frame);
         };
-    }, [scene, size, isDark, selected, image, timeline]);
+    }, [scene, size, isDark, selected, image, shown, spotlight]);
 
     const handlePointer = useCallback((event) => {
         const canvas = canvasRef.current;
@@ -546,8 +602,9 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
                 style={{ display: 'block', width: '100%', height: '100%', touchAction: 'manipulation', cursor: 'pointer' }}
             />
 
-            {/* Legend, in the empty space under the devices. */}
-            <Stack spacing={0.4} sx={{ position: 'absolute', bottom: 8, right: 8, pointerEvents: 'none' }}>
+            {/* Legend, in the empty space under the devices; on a phone the
+                tour's map needs that space more. */}
+            <Stack spacing={0.4} sx={{ position: 'absolute', bottom: 8, right: 8, pointerEvents: 'none', display: tour && size.width < 640 ? 'none' : 'flex' }}>
                 {Object.entries(ROUTE_STYLE).map(([kind, style]) => (
                     <Stack key={kind} direction="row" spacing={0.75} sx={{ alignItems: 'center', justifyContent: 'flex-end' }}>
                         <Typography sx={{ fontFamily: mono, fontSize: '0.6rem', color: 'text.secondary' }}>{style.label}</Typography>
@@ -561,7 +618,7 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
                 </Stack>
             </Stack>
 
-            {others === 0 && (
+            {others === 0 && !tour && (
                 <Typography sx={{
                     position: 'absolute', left: 0, right: 0, top: `calc(${TIER.device * 100}% - 64px)`, textAlign: 'center',
                     fontFamily: mono, fontSize: '0.7rem', color: 'text.secondary', pointerEvents: 'none',
@@ -595,7 +652,7 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
                     px: 0.75, py: 0.25, borderRadius: 1, border: 1, borderColor: 'warning.main', color: 'warning.main',
                     bgcolor: 'background.paper',
                 }}>
-                    held · {new Date(timeline.clock()).toLocaleTimeString()}
+                    held · {new Date(shown.clock()).toLocaleTimeString()}
                 </Typography>
             )}
 
@@ -721,6 +778,9 @@ function NetworkStage({ master, tiles = [], onOpenPhoto, timeline }) {
 }
 
 NetworkStage.propTypes = {
+    playback: PropTypes.object,
+    tour: PropTypes.object,
+    onScene: PropTypes.func,
     master: PropTypes.object.isRequired,
     tiles: PropTypes.array.isRequired,
     onOpenPhoto: PropTypes.func.isRequired,

@@ -14,7 +14,7 @@ export async function createRoom(master) {
         master.emitter.emit('openRoomEnd');
 
         if (error.message && error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            master.emitter.emit('showError', 'Cannot connect to server. Please make sure the backend server is running on port 8081.');
+            master.emitter.emit('showError', 'Cannot connect to the server. Make sure the backend server runs on port 8081.');
         } else {
             master.emitter.emit('showError', `Failed to create room: ${error.message || 'Unknown error'}`);
         }

@@ -70,6 +70,31 @@ describe('ServerFallback', () => {
         fallback.stopAll();
     });
 
+    it('does not fetch while bytes keep arriving inside a piece that is not verified yet', async () => {
+        // A big clip has big pieces: on a slow link, progress (verified
+        // pieces) can stand still for longer than the stall window while
+        // blocks of the next piece keep arriving.
+        let clock = 0;
+        let received = 0;
+        const fetchCopy = vi.fn().mockResolvedValue(new Blob(['x']));
+        const fallback = new ServerFallback({ fetchCopy, cachePut: vi.fn(), emitter: { emit: vi.fn() }, stallMs: 100, pollMs: 5, now: () => clock });
+        fallback.watch({ infoHash: 'h3b', hasServerCopy: true }, () => { received += 16384; return { progress: 0.2, received, done: false }; });
+        for (let i = 0; i < 10; i++) { clock += 50; await new Promise(r => setTimeout(r, 12)); }
+        expect(fetchCopy).not.toHaveBeenCalled();
+        fallback.stopAll();
+    });
+
+    it('still falls back when bytes arrive but no piece ever verifies', async () => {
+        let clock = 0;
+        let received = 0;
+        const fetchCopy = vi.fn().mockResolvedValue(new Blob(['x']));
+        const fallback = new ServerFallback({ fetchCopy, cachePut: vi.fn(), emitter: { emit: vi.fn() }, stallMs: 100, verifyStallMs: 400, pollMs: 5, now: () => clock });
+        fallback.watch({ infoHash: 'h3c', hasServerCopy: true }, () => { received += 16384; return { progress: 0.2, received, done: false }; });
+        for (let i = 0; i < 12; i++) { clock += 50; await new Promise(r => setTimeout(r, 12)); }
+        expect(fetchCopy).toHaveBeenCalled();
+        fallback.stopAll();
+    });
+
     it('fetchNow delivers immediately without waiting for the stall window', async () => {
         const emitter = { emit: vi.fn() };
         const fallback = new ServerFallback({

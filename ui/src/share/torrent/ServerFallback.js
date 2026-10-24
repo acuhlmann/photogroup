@@ -14,6 +14,9 @@ import Logger from 'js-logger';
 import { fingerprintFile } from '../gallery/fingerprint';
 
 export const P2P_STALL_MS = 10000;
+// Arriving bytes keep a download alive, but not for ever: bytes that never
+// verify (a bad peer) count as a stall after this long without a whole piece.
+export const VERIFY_STALL_MS = 60000;
 export const FALLBACK_POLL_MS = 2000;
 // Ask again while still stuck: whoever has the photo may only now be back.
 export const REREQUEST_MS = 60000;
@@ -66,7 +69,7 @@ export default class ServerFallback {
      *   the copy is the photo that was shared; anyone who has it may upload one
      * @param {object} deps.emitter emits 'torrentReady' with [photo] on success
      */
-    constructor({ fetchCopy, requestCopy, cachePut, verify, emitter, stallMs = P2P_STALL_MS, pollMs = FALLBACK_POLL_MS,
+    constructor({ fetchCopy, requestCopy, cachePut, verify, emitter, stallMs = P2P_STALL_MS, verifyStallMs = VERIFY_STALL_MS, pollMs = FALLBACK_POLL_MS,
         rerequestMs = REREQUEST_MS, now = () => Date.now() } = {}) {
         this.fetchCopy = fetchCopy;
         this.requestCopy = requestCopy;
@@ -74,6 +77,7 @@ export default class ServerFallback {
         this.cachePut = cachePut;
         this.emitter = emitter;
         this.stallMs = stallMs;
+        this.verifyStallMs = verifyStallMs;
         this.pollMs = pollMs;
         this.rerequestMs = rerequestMs;
         this.now = now;
@@ -81,8 +85,8 @@ export default class ServerFallback {
     }
 
     /**
-     * Watch a download. `getState()` returns {progress, done} and, when
-     * known, {hasServerCopy, holders, activeHolders}.
+     * Watch a download. `getState()` returns {progress, done}, the bytes
+     * `received` so far and, when known, {hasServerCopy, holders, activeHolders}.
      */
     watch(photo, getState) {
         if (!photo?.infoHash || typeof this.fetchCopy !== 'function') return false;
@@ -91,7 +95,7 @@ export default class ServerFallback {
             this.update(photo);
             return false;
         }
-        const entry = { photo, original: photo, getState, startedAt: this.now(), lastProgressAt: this.now(), lastProgress: 0, requestedAt: null, inFlight: false, timer: null };
+        const entry = { photo, original: photo, getState, startedAt: this.now(), lastProgressAt: this.now(), lastVerifiedAt: this.now(), lastProgress: 0, requestedAt: null, inFlight: false, timer: null };
         entry.timer = setInterval(() => this._check(photo.infoHash), this.pollMs);
         entry.timer?.unref?.();
         this.watched.set(photo.infoHash, entry);
@@ -126,6 +130,7 @@ export default class ServerFallback {
         this.watched.forEach(entry => {
             entry.startedAt = now;
             entry.lastProgressAt = now;
+            entry.lastVerifiedAt = now;
             entry.requestedAt = null;
         });
     }
@@ -163,20 +168,25 @@ export default class ServerFallback {
             return;
         }
         const now = this.now();
-        if ((state.progress || 0) > (entry.lastProgress || 0)) {
-            entry.lastProgress = state.progress;
+        // Bytes arriving count as progress too: verified pieces (progress)
+        // can stand still for a while inside one big piece of a clip.
+        if ((state.progress || 0) > (entry.lastProgress || 0)) entry.lastVerifiedAt = now;
+        if ((state.progress || 0) > (entry.lastProgress || 0) || (state.received || 0) > (entry.lastReceived || 0)) {
+            entry.lastProgress = state.progress || 0;
+            entry.lastReceived = state.received || 0;
             entry.lastProgressAt = now;
         }
-        const stalled = isTransferStalled({
+        const noVerifiedPiece = now - entry.lastVerifiedAt >= this.verifyStallMs;
+        const stalled = noVerifiedPiece || isTransferStalled({
             progress: state.progress, startedAt: entry.startedAt, lastProgressAt: entry.lastProgressAt,
             now, stallMs: this.stallMs,
         });
         const hasCopy = this._hasCopy(entry, state);
         // A copy that wasn't the photo: don't fetch it again every poll.
         const rejectedLately = entry.rejectedAt !== undefined && now - entry.rejectedAt < this.rerequestMs;
-        const why = stalled
-            ? `no P2P progress for ${Math.round(this.stallMs / 1000)} s`
-            : 'everyone who has it is in another app';
+        const why = !stalled ? 'everyone who has it is in another app'
+            : noVerifiedPiece ? `no complete P2P piece for ${Math.round(this.verifyStallMs / 1000)} s`
+                : `no P2P progress for ${Math.round(this.stallMs / 1000)} s`;
         if (hasCopy && !rejectedLately && (stalled || holdersAllAway(state))) return this._deliver(entry, why);
         if (!hasCopy && stalled && (entry.requestedAt === null || now - entry.requestedAt >= this.rerequestMs)) {
             return this._request(entry, why);

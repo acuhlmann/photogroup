@@ -42,10 +42,10 @@ function DownloadRoomButton({ tiles, roomId }) {
         saveRoom(chosen, { roomId, onProgress: (done, total) => setProgress(`Zipping ${done} of ${total}…`) })
             .then(({ saved, skipped }) => setStatus([
                 `Saved ${plural(saved, 'photo')}`,
-                leftOut ? `${leftOut} you have, left out` : '',
-                skipped ? `${skipped} not ready, left out` : '',
+                leftOut ? `${leftOut} you have, not included` : '',
+                skipped ? `${skipped} not ready, not included` : '',
             ].filter(Boolean).join(' · ')))
-            .catch(err => setStatus('Couldn’t make the zip: ' + message(err)))
+            .catch(err => setStatus('Could not make the zip: ' + message(err)))
             .finally(() => setProgress(null));
     };
 
@@ -68,21 +68,21 @@ function DownloadRoomButton({ tiles, roomId }) {
                     ? `Found ${plural(found.length, 'photo')} already on this device`
                     : 'None of these photos are in that folder');
             })
-            .catch(err => setStatus('Couldn’t look in that folder: ' + message(err)))
+            .catch(err => setStatus('Could not look in that folder: ' + message(err)))
             .finally(() => setProgress(null));
     };
 
     let label = 'Download room';
     let title = readyAll < tiles.length
-        ? `Save the ${plural(readyAll, 'photo')} here in full as one zip; the rest are still arriving`
+        ? `Save the ${plural(readyAll, 'complete photo')} as one zip. The other photos are still arriving.`
         : 'Save every photo in the room, with its details, as one zip';
     if (had.length && fresh.length) {
         label = readyFresh ? `Download ${readyFresh} new` : 'Download new';
-        title = `Save the photos you don't have yet as one zip, leaving out the ${had.length} you have`
-            + (readyFresh < fresh.length ? '; some are still arriving' : '');
+        title = `Save the new photos as one zip, without the ${had.length} you have.`
+            + (readyFresh < fresh.length ? ' Some photos are still arriving.' : '');
     } else if (had.length) {
         label = 'You have them all';
-        title = 'Every photo here was shared or saved by you, or found on this device';
+        title = 'You shared or saved each photo here, or it is on this device.';
     }
     const disabled = !!progress || (had.length ? readyFresh === 0 : readyAll === 0);
 
@@ -103,7 +103,7 @@ function DownloadRoomButton({ tiles, roomId }) {
             <Menu anchorEl={menu} open={!!menu} onClose={() => setMenu(null)}>
                 <MenuItem onClick={find} disabled={!canFindOnDevice(tiles)}>
                     <ListItemText primary="Find the ones on this device…"
-                        secondary="Pick a folder of your photos. Nothing in it is uploaded." />
+                        secondary="Select a folder with your photos. PhotoGroup does not upload it." />
                 </MenuItem>
                 {had.length > 0 && (
                     <MenuItem onClick={() => download(tiles, 0)} disabled={readyAll === 0}>

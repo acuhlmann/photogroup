@@ -12,6 +12,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import copy from 'clipboard-copy';
 import Logger from 'js-logger';
 import { CLIP_SIZE_NOTE } from '../torrent/ServerCopyLimits';
+import RoomPrivacy from '../RoomPrivacy';
 
 function peopleLabel(count) {
     if (count <= 1) return 'Just you so far';
@@ -94,6 +95,7 @@ function SimpleRoomBar({ master }) {
                         {showCode ? 'Hide code' : 'Add people'}
                     </Button>
                 )}
+                <RoomPrivacy master={master} compact buttonSx={{ color: 'text.secondary' }} />
                 <Button color="inherit" onClick={() => master.leaveRoomAndReload()}
                     sx={{ textTransform: 'none', color: 'text.secondary' }}>
                     Leave

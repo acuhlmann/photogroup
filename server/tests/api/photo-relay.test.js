@@ -77,6 +77,10 @@ describe('Photo relay (server copies, pinned when needed)', () => {
         assert.strictEqual(photo.hasServerCopy, true);
         assert.strictEqual(photo.serverCopySize, bytes.length);
         assert.strictEqual(photo.serverCopyUploader, undefined);
+        // The room can see who sent it, when it arrived and when it goes.
+        assert.strictEqual(photo.serverCopyFrom, sharer.peerId);
+        assert.ok(photo.serverCopyStartedAt <= photo.serverCopyStoredAt);
+        assert.strictEqual(photo.serverCopyExpiresAt - photo.serverCopyStoredAt, 24 * 60 * 60 * 1000);
 
         const down = await download(receiver)
             .expect(200)
@@ -247,5 +251,14 @@ describe('Photo relay (server copies, pinned when needed)', () => {
         await putChunk(sharer).expect(200);
         await request(app).delete(`/api/rooms/${roomId}/photos/`).send({ infoHash }).expect(200);
         await download(receiver).expect(404);
+    });
+
+    it('deletes the whole room, with its server copies, for someone in it', async () => {
+        await putChunk(sharer).expect(200);
+        await auth(request(app).delete(`/api/rooms/${roomId}`), null).expect(403);
+        await auth(request(app).delete(`/api/rooms/${roomId}`), receiver).expect(200);
+        await request(app).get(`/api/rooms/${roomId}`).expect(404);
+        await download(receiver).expect(404);
+        await auth(request(app).delete(`/api/rooms/${roomId}`), receiver).expect(404);
     });
 });

@@ -15,10 +15,15 @@ import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
 import SkipPreviousRounded from '@mui/icons-material/SkipPreviousRounded';
 import SkipNextRounded from '@mui/icons-material/SkipNextRounded';
 import RadioRounded from '@mui/icons-material/RadioRounded';
+import SchoolRounded from '@mui/icons-material/SchoolRounded';
 
 import NetworkStage from './NetworkStage';
 import TransfersView from './TransfersView';
 import { createTimeline } from './timeline';
+import { tourSteps } from './tour';
+import { replaySteps } from './replay';
+import { createTourPlayer } from './tourPlayer';
+import { TourCard, ExplainCard } from './TourCard';
 
 const HEIGHT_KEY = 'photogroup.geekDrawerHeight';
 const COLLAPSED = 33;
@@ -208,11 +213,64 @@ function GeekStage({ master, tiles, isMobile }) {
     const [room, setRoom] = useState(0);
     const openPhoto = useCallback(key => master.emitter.emit('openPhoto', key), [master.emitter]);
 
-    // Space holds and releases the traffic; the arrows walk through it.
+    // The tour plays into its own recording, so the room's real traffic keeps
+    // being logged underneath and is still there when you leave it.
+    const tourTimeline = useMemo(() => createTimeline(), []);
+    const player = useMemo(() => createTourPlayer({ timeline: tourTimeline }), [tourTimeline]);
+    const [touring, setTouring] = useState(false);
+    // A real share to replay instead of the example tour: { infoHash, name }.
+    const [replay, setReplay] = useState(null);
+    const [scene, setScene] = useState(null);
+    const [, bumpTour] = useReducer(value => value + 1, 0);
+    useEffect(() => player.subscribe(bumpTour), [player]);
+    useEffect(() => {
+        if (!touring || !scene) return;
+        const myPeerId = master.client?.peerId;
+        player.load(replay
+            ? replaySteps(scene, master.ledger?.get?.(replay.infoHash), { myPeerId, peers: master.peers?.items || [] })
+            : tourSteps(scene, { myPeerId, rtcConfig: master.creator?.iceServers }));
+    }, [touring, replay, scene, player, master]);
+    useEffect(() => {
+        if (!touring) return undefined;
+        const timer = setInterval(() => player.tick(), 50);
+        return () => clearInterval(timer);
+    }, [touring, player]);
+    const startTour = () => {
+        setReplay(null);
+        setTouring(true);
+        player.start(0);
+    };
+    /** Play one photo's real transfer back on the map, from its first stage. */
+    const startReplay = useCallback(row => {
+        setReplay({ infoHash: row.infoHash, name: row.name });
+        setTouring(true);
+        player.start(0);
+        player.setAuto(true);
+    }, [player]);
+    const exitTour = useCallback(() => {
+        player.setAuto(false);
+        setTouring(false);
+        setReplay(null);
+        tourTimeline.clear();
+    }, [player, tourTimeline]);
+
+    // Space holds and releases the traffic; the arrows walk through it. In
+    // the tour they walk its steps instead.
     useEffect(() => {
         const onKey = event => {
             const field = event.target;
             if (field && (field.tagName === 'INPUT' || field.tagName === 'TEXTAREA' || field.isContentEditable)) return;
+            if (touring) {
+                const keys = {
+                    ArrowRight: () => player.next(), ArrowLeft: () => player.prev(),
+                    ' ': () => player.setHeld(!player.held), Escape: exitTour,
+                };
+                if (keys[event.key]) {
+                    event.preventDefault();
+                    keys[event.key]();
+                }
+                return;
+            }
             if (event.key === ' ' || event.key === 'k') {
                 event.preventDefault();
                 timeline.playing ? timeline.pause() : timeline.resume();
@@ -228,7 +286,7 @@ function GeekStage({ master, tiles, isMobile }) {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [timeline]);
+    }, [timeline, touring, player, exitTour]);
 
     // How much of the stage the log may take. Measured off the stage itself,
     // not the viewport: a phone's browser bar can leave the drawer's bottom
@@ -326,14 +384,38 @@ function GeekStage({ master, tiles, isMobile }) {
     const count = timeline.entries.length;
     return (
         <Box ref={stage} sx={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ flex: 1, minHeight: 0 }}>
-                <NetworkStage master={master} tiles={tiles} onOpenPhoto={openPhoto} timeline={timeline} />
+            <Box sx={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: { xs: 'column-reverse', sm: 'row' } }}>
+                {touring && <TourCard player={player} onExit={exitTour} heading={replay ? `REPLAY · ${replay.name}` : undefined} />}
+                <Box sx={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+                    <NetworkStage master={master} tiles={tiles} onOpenPhoto={openPhoto} timeline={timeline}
+                        playback={touring ? tourTimeline : undefined} tour={touring ? { step: player.step, demo: !replay } : null} onScene={setScene} />
+                </Box>
+                {!touring && (
+                    <>
+                        <ExplainCard timeline={timeline} />
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<SchoolRounded />}
+                            onClick={startTour}
+                            data-testid="start-tour"
+                            sx={{
+                                position: 'absolute', zIndex: 1, left: '50%', transform: 'translateX(-50%)', bottom: 8,
+                                textTransform: 'none', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+                                bgcolor: 'background.paper', '&:hover': { bgcolor: 'background.paper' },
+                            }}
+                        >
+                            How a share works
+                        </Button>
+                    </>
+                )}
             </Box>
             <Box sx={{
+                // The tour tells its own story; the live log waits underneath.
+                display: touring ? 'none' : 'flex',
                 position: 'relative',
                 height: open ? height : COLLAPSED,
                 flex: 'none',
-                display: 'flex',
                 flexDirection: 'column',
                 borderTop: 1,
                 borderColor: 'divider',
@@ -412,7 +494,7 @@ function GeekStage({ master, tiles, isMobile }) {
                 </Box>
                 {open && (
                     <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                        {tab === 0 ? <PacketLog timeline={timeline} /> : <TransfersView master={master} />}
+                        {tab === 0 ? <PacketLog timeline={timeline} /> : <TransfersView master={master} onReplay={startReplay} />}
                     </Box>
                 )}
             </Box>

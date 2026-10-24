@@ -9,11 +9,12 @@ import PhotoCameraRounded from '@mui/icons-material/PhotoCameraRounded';
 import QrCodeScannerRounded from '@mui/icons-material/QrCodeScannerRounded';
 
 import { createRoom } from '../openRoom';
+import SimpleHowItWorks from './SimpleHowItWorks';
 
 const STEPS = [
     'One person taps Start.',
     'Everyone else scans the code on that phone.',
-    'Any photo someone adds lands on every phone.',
+    'Each photo that someone adds goes to all phones.',
 ];
 
 /** The simple landing page: start a group or join one, nothing else. */
@@ -92,6 +93,9 @@ function SimpleFront({ master }) {
                             <Typography variant="body1">{step}</Typography>
                         </Stack>
                     ))}
+                </Box>
+                <Box>
+                    <SimpleHowItWorks />
                 </Box>
             </Stack>
         </Box>

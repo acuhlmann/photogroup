@@ -32,6 +32,7 @@ import { groupMetadataForDisplay, humanizeMetadataValue, labelForMetadataKey } f
 import LocationCard, { LocationBlankNote } from './LocationCard';
 import LocationEditor from './LocationEditor';
 import KeywordEditor from './KeywordEditor';
+import { saveErrorText } from './saveDetails';
 import AddLocationAltRounded from '@mui/icons-material/AddLocationAltRounded';
 
 const monoLabelSx = {
@@ -306,9 +307,7 @@ function DetailsEditor({ values, focus, onSave, onCancel }) {
             await onSave(changes);
             onCancel();
         } catch (err) {
-            setError(err && err.status === 404
-                ? 'This photo is still being shared. Try again in a moment.'
-                : (err && err.message) || 'Could not save. Try again.');
+            setError(saveErrorText(err));
             setSaving(false);
         }
     };

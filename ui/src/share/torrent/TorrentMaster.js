@@ -22,6 +22,7 @@ import { watchPieces } from './pieceEvents';
 import { holdersOf, activeHolders } from '../topology/presence';
 import ConnectionRecovery, { freezesWhenHidden } from '../util/ConnectionRecovery';
 import { requestPersistentStorage } from '../util/PersistentStorage';
+import { leaveRoomNotice } from '../roomNotice';
 
 export default class TorrentMaster {
 
@@ -126,6 +127,7 @@ export default class TorrentMaster {
 
         this.emitter.on('sseReconnected', () => this.handleResume('sse'));
         this.emitter.on('fetchServerCopyNow', photo => { this.fetchServerCopyNow(photo).catch(() => {}); });
+        this.emitter.on('roomDeleted', deleted => this.roomDeleted(deleted));
         this.emitter.on('retryTorrent', photo => { this.retryPhoto(photo).catch(err => Logger.warn('retryPhoto: ' + err)); });
     }
 
@@ -151,7 +153,7 @@ export default class TorrentMaster {
         if (!this.serverFallback.watched.has(photo.infoHash)) {
             const torrent = getTorrent(this.client, getBaseInfoHash(photo.infoHash));
             this.serverFallback.watch(photo, () => ({
-                ...(torrent ? { progress: torrent.progress, done: torrent.done } : { progress: 0, done: false }),
+                ...(torrent ? { progress: torrent.progress, received: torrent.received, done: torrent.done } : { progress: 0, done: false }),
                 ...this.copyState(photo.infoHash)
             }));
         }
@@ -779,6 +781,17 @@ export default class TorrentMaster {
     /** Reconnect every tracker socket now and announce with fresh offers. */
     restartTrackers() {
         return this.trackerKick.kick({ networkChanged: true });
+    }
+
+    /**
+     * Someone deleted the room: say so on the front page, where we go now.
+     * The photos stay on the devices that have them.
+     */
+    roomDeleted(deleted) {
+        const byMe = deleted?.peerId && deleted.peerId === this.client?.peerId;
+        const note = byMe ? 'You deleted the room.' : `${deleted?.name || 'Someone'} deleted the room.`;
+        leaveRoomNotice(note + ' The photos stay on the phones that have them.');
+        this.leaveRoomAndReload();
     }
 
     leaveRoomAndReload() {

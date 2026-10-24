@@ -44,7 +44,7 @@ describe('ServerPinning', () => {
         expect(infos).toEqual([]);
         pinning.shared([{ infoHash: 'b', blob: big }]);
         expect(infos).toHaveLength(1);
-        expect(infos[0]).toMatch(/This clip is over 100 MB.*no server backup.*Keep PhotoGroup open/);
+        expect(infos[0]).toMatch(/This clip is larger than 100 MB, so it has no server copy.*Keep PhotoGroup open/);
         // Only the small clip is sent.
         return pinning.running.then(() => {
             expect(service.uploadServerCopy).toHaveBeenCalledTimes(1);
@@ -328,7 +328,7 @@ describe('ServerPinning', () => {
         await settle();
         expect(stages.map(event => event.stage)).toEqual(['queued', 'uploading', 'uploading', 'stored']);
         expect(stages[2]).toMatchObject({ infoHash: 'a', direction: 'up', name: 'cat.jpg', loaded: 2, total: 3 });
-        expect(stages[0].why).toMatch(/latecomers/);
+        expect(stages[0].why).toMatch(/people who join later/);
     });
 
     it('says why a file too large for the server stays P2P only', async () => {

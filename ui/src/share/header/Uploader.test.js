@@ -155,7 +155,7 @@ describe('Uploader on Android', () => {
     expect(model.seed).toHaveBeenCalledTimes(1);
     expect(model.seed.mock.calls[0][0]).toEqual([good]);
     expect(heldList().textContent).toContain('PXL_stripped.jpg');
-    expect(document.body.textContent).toContain('choose Material Files');
+    expect(document.body.textContent).toContain('select Material Files');
     expect(document.body.textContent).toContain('share the zip');
   });
 

@@ -37,7 +37,8 @@ export function defaultStorePath() {
  * not history, and both are stale the moment the process restarts.
  */
 const SERVER_ONLY = new Set(['owners', 'hasServerCopy', 'serverCopySize', 'serverCopyReceived',
-    'serverCopyRequestedAt', 'serverCopyUploader']);
+    'serverCopyRequestedAt', 'serverCopyUploader', 'serverCopyStartedAt', 'serverCopyStoredAt',
+    'serverCopyExpiresAt', 'serverCopyFrom']);
 
 export function serializablePhoto(photo) {
     const kept = {};

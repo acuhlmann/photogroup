@@ -54,20 +54,27 @@ function infraNodes({ origin, trackerUrl, photos }) {
             sub: local ? host : 'Cloud Run wake → nginx',
             info: local
                 ? [`origin ${host}`, 'vite dev server proxies /api to :8081']
-                : [`origin ${host} (TLS)`, 'Cloud Run photogroup-wake starts the VM on demand', 'nginx :443 → app :8081, tracker :9000', 'VM idles to a stop when nobody is here'],
+                : [`origin ${host} (TLS)`, 'Cloud Run photogroup-wake starts the VM when needed', 'nginx :443 → app :8081, tracker :9000', 'the VM stops when nobody uses it'],
         },
         {
             id: 'api', kind: 'api', label: 'API · SSE', sub: ':8081 rooms, peers, magnets',
-            info: ['REST: rooms, peers, photo magnets, details', 'Server-Sent Events push room changes to everyone', 'state is in memory only, nothing stored'],
+            info: ['REST: rooms, peers, magnet links, photo details', 'Server-Sent Events send room changes to all devices',
+                'keeps · the people here: peer ID, name, device, network addresses',
+                'keeps · per photo: magnet link (infohash), name, type, size, date taken, fingerprint, titles',
+                'keeps rooms and photo data on disk until nobody uses the room for 30 days; people in memory only',
+                'never sees · the photos (only a server copy, if someone asks for one)'],
         },
         {
             id: 'tracker', kind: 'tracker', label: 'tracker', sub: hostOf(trackerUrl) || 'ws :9000',
-            info: ['BitTorrent WebSocket tracker', 'peers announce infohashes here and swap WebRTC offers/answers', trackerUrl ? `url ${trackerUrl}` : null].filter(Boolean),
+            info: ['BitTorrent WebSocket tracker', 'devices send infohashes here, and exchange WebRTC offers and answers',
+                'sees · which device wants which infohash, and the ICE candidates',
+                'never sees · the photos', trackerUrl ? `url ${trackerUrl}` : null].filter(Boolean),
         },
         {
             id: 'copies', kind: 'copies', label: 'server copies',
             sub: copies.length ? `${copies.length} held` + (bytes ? ` · ${(bytes / 1048576).toFixed(1)} MB` : '') : (uploading.length ? `${uploading.length} uploading` : 'none held'),
-            info: ['last resort when P2P and TURN both fail', 'resumable 8 MB chunks, 60 s upload lease', 'deleted once everyone has the photo, or after 24 h',
+            info: ['last resort when P2P and TURN fail', 'keeps · the photo, only while a device needs it',
+                '8 MB parts, upload continues after a stop, 60 s upload lease', 'deleted when all devices have the photo, or 24 h after upload',
                 `${copies.length} held, ${uploading.length} uploading`],
         },
     ];
@@ -132,7 +139,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         const summary = summarizeChain(chain);
         const isMe = peer.peerId === myPeerId;
         add({
-            id: peer.peerId, kind: 'device', isMe,
+            id: peer.peerId, kind: 'device', isMe, example: !!peer.example,
             x: width * (index + 1) / (ordered.length + 1), y: deviceY,
             maxW: Math.min(260, Math.max(72, width / (ordered.length + 1) - 12)),
             label: (isMe ? 'you · ' : '') + deviceName(peer),
@@ -157,13 +164,14 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         const id = 'nat:' + reflexive.ip;
         const nat = add({
             id, kind: 'nat', x: 0, y: netY, members: [],
-            label: reflexive.ip, sub: placeLine(reflexive.network) || 'public address',
+            label: reflexive.ip, sub: reflexive.example ? 'example address' : placeLine(reflexive.network) || 'public address',
+            example: !!reflexive.example,
             info: [
                 `public ${reflexive.ip}${reflexive.port ? ':' + reflexive.port : ''}`,
                 reflexive.network?.hostname ? `rdns ${reflexive.network.hostname}` : null,
                 placeLine(reflexive.network),
                 reflexive.typeDetail ? `seen as ${reflexive.typeDetail}` : null,
-                'learned from a STUN binding response',
+                'from the STUN reply',
             ].filter(Boolean),
         });
         nat.members.push(peer.peerId);
@@ -195,15 +203,26 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     const stun = add({
         id: 'stun', kind: 'stun', x: Math.max(width * 0.07, 48), y: sideY,
         label: 'STUN', sub: ice.stun[0] || 'none configured',
-        info: ['tells each device its public address and port', ...ice.stun.map(host => `stun ${host}`)],
+        info: ['tells each device its public address and port', 'a public server, not photogroup.network',
+            'sees · your public IP address and port only', ...ice.stun.map(host => `stun ${host}`)],
     });
     const relayIps = new Set();
     ordered.forEach(peer => (peer.networkChain || []).filter(isRelayCandidate).forEach(item => relayIps.add(item.ip)));
-    const turn = (ice.turn.length || relayIps.size) ? add({
+    // Always on the map: when there is none, that is worth seeing too, since
+    // the server copy then catches what TURN would have.
+    const turnHere = ice.turn.length > 0 || relayIps.size > 0;
+    const provider = ice.turn.some(host => /twilio/i.test(host)) ? 'Twilio' : null;
+    const turn = add({
         id: 'turn', kind: 'turn', x: Math.min(width * 0.93, width - 48), y: sideY,
-        label: 'TURN', sub: ice.turn[0] || [...relayIps][0],
-        info: ['relays WebRTC traffic when no direct path works', ...ice.turn.map(host => `turn ${host}`), ...[...relayIps].map(ip => `relay candidate ${ip}`)],
-    }) : null;
+        label: 'TURN', sub: turnHere ? (provider || ice.turn[0] || [...relayIps][0]) : 'none configured',
+        idle: !turnHere,
+        info: turnHere
+            ? ['forwards WebRTC data when no direct path works', `a ${provider ? provider + ' ' : ''}relay, not photogroup.network`,
+                'sees · both IP addresses and encrypted data; it cannot read the photo',
+                ...ice.turn.map(host => `turn ${host}`), ...[...relayIps].map(ip => `relay candidate ${ip}`)]
+            : ['forwards WebRTC data when no direct path works', 'not configured on this server',
+                'if P2P cannot connect, the HTTPS server copy takes over'],
+    });
 
     // Routes. Signalling: every device keeps an event stream to the API and
     // a socket to the tracker, out through its NAT.
@@ -229,7 +248,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         const type = String(conn.connectionType || '').trim();
         let path;
         let kind;
-        if (type.startsWith('relay') && turn) {
+        if (type.startsWith('relay')) {
             kind = 'relay';
             path = [...via(a), turn.id, ...via(b).reverse()];
         } else if (type === 'p2p') {

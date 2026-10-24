@@ -267,8 +267,8 @@ function Uploader({classes, model, emitter, showButton = true}) {
                 <DialogContent>
                     <Typography variant="body2" sx={{ mb: 1 }}>
                         {held.length === 1
-                            ? "Android removed where this was taken before handing it over, so it wasn't shared:"
-                            : "Android removed where these were taken before handing them over, so they weren't shared:"}
+                            ? "Android removed the location from this photo, so PhotoGroup did not share it:"
+                            : "Android removed the location from these photos, so PhotoGroup did not share them:"}
                     </Typography>
                     <Box component="ul" data-testid="location-held" sx={{ m: 0, mb: 1.5, pl: 2.5 }}>
                         {held.slice(0, SHOWN_HELD).map((file, index) => (

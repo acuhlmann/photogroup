@@ -122,7 +122,7 @@ export default class TorrentAddition {
         if (torrent && this.master.serverFallback) {
             photos.forEach(photo => {
                 this.master.serverFallback.watch(photo, () => ({
-                    progress: torrent.progress, done: torrent.done,
+                    progress: torrent.progress, received: torrent.received, done: torrent.done,
                     ...this.master.copyState?.(photo.infoHash)
                 }));
             });

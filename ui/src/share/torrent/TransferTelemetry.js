@@ -9,43 +9,39 @@
  */
 
 export const PHASES = [
-    { id: 'signal', label: 'Announce', long: 'Tracker announce over WebSocket' },
-    { id: 'discover', label: 'Discover', long: 'Waiting for a peer offer' },
-    { id: 'handshake', label: 'Handshake', long: 'WebRTC ICE + BitTorrent handshake' },
-    { id: 'metadata', label: 'Metadata', long: 'Fetching info dictionary (BEP 9)' },
-    { id: 'pieces', label: 'Pieces', long: 'Exchanging pieces' },
-    { id: 'verify', label: 'Verify', long: 'SHA-1 verified, rendering' },
+    { id: 'signal', label: 'Announce', long: 'Telling the tracker which photo you want' },
+    { id: 'discover', label: 'Discover', long: 'Waiting for a peer with the photo' },
+    { id: 'handshake', label: 'Handshake', long: 'Connecting to the peer' },
+    { id: 'metadata', label: 'Metadata', long: 'Getting the file list and piece hashes' },
+    { id: 'pieces', label: 'Pieces', long: 'Receiving the pieces' },
+    { id: 'verify', label: 'Verify', long: 'All pieces checked, showing the photo' },
 ];
 
 /** Short explainers, keyed by phase, rotated while the user waits. */
 export const PHASE_NOTES = {
     signal: [
-        'The tracker only brokers SDP offers between browsers. It never sees a single byte of the photo.',
-        'Announce = "I want info_hash X". The tracker replies with offers from peers holding the same hash.',
-        'Browsers cannot open raw TCP sockets, so the BitTorrent wire protocol runs over WebRTC data channels.',
+        'The tracker only connects browsers. It never sees the photo.',
+        'Your browser tells the tracker the infohash of the photo. The tracker finds peers with the same infohash.',
     ],
     discover: [
-        'No peer offer yet. The sender may be backgrounded: mobile browsers freeze WebRTC when the screen locks.',
-        'Peers are found three ways here: tracker offers, PEX (BEP 11) gossip, and the server-side seed.',
-        'Each offer carries ICE candidates: host (LAN), srflx (your public IP via STUN) and relay (TURN).',
+        'No peer yet. The sender may have locked their phone. Phones stop WebRTC when the screen is locked.',
+        'Each peer sends its addresses: local (LAN), public (from STUN) and relay (TURN).',
     ],
     handshake: [
-        'ICE is testing candidate pairs in priority order, preferring host-to-host, then STUN, then TURN.',
-        'After DTLS completes, both sides send the 68-byte BitTorrent handshake: pstr, reserved bits, info_hash, peer_id.',
-        'Reserved bit 20 announces the extension protocol (BEP 10), which unlocks ut_metadata and ut_pex.',
+        'ICE tests the addresses in order: local first, then public, then the TURN relay.',
+        'When the connection is encrypted, both browsers send a BitTorrent handshake.',
     ],
     metadata: [
-        'A magnet link holds only the hash. The file list and piece hashes come from peers via ut_metadata in 16 KiB blocks.',
-        'The info dictionary is SHA-1 hashed on arrival. It must match the info_hash, so a peer cannot lie about content.',
+        'A magnet link contains only the infohash. Peers send the file list and the piece hashes.',
+        'Your browser checks the file list against the infohash. A peer cannot send a different file.',
     ],
     pieces: [
-        'Files are cut into fixed-size pieces. Each one is checked against its SHA-1 in the info dictionary before use.',
-        'Pieces travel as 16 KiB blocks. Several requests stay in flight per peer to keep the pipe full.',
-        'With several peers, WebTorrent fetches rarest pieces first so the swarm stays healthy.',
-        'Every piece you finish, you can serve too: as soon as a piece verifies, you are a partial seed.',
+        'Your browser checks each piece against its SHA-1 hash before it keeps it.',
+        'With many peers, your browser asks for the rarest pieces first.',
+        'You can send each piece that you have to other people immediately.',
     ],
     verify: [
-        'All pieces verified. Reassembling the blob and decoding the image.',
+        'All pieces are correct. Your browser puts the file together and shows it.',
     ],
 };
 

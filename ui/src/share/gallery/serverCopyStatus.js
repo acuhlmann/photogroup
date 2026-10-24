@@ -32,7 +32,7 @@ export function serverCopyStatus(tile, peers, myPeerId, uploadStalled = () => fa
             // Their phone likely froze: asking again lets someone else carry on.
             return { text: `${peerLabel(uploader)}'s server copy stopped at ${percent}%`, canFetch: false, canAsk: true, holdersAway };
         }
-        return { text: `${peerLabel(uploader)} is leaving a server copy · ${percent}%`, canFetch: false, canAsk: false, holdersAway };
+        return { text: `${peerLabel(uploader)} is uploading a server copy · ${percent}%`, canFetch: false, canAsk: false, holdersAway };
     }
     if (tile.serverCopyRequestedAt) {
         return {

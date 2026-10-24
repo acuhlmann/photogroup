@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
 import FileUtil from '../util/FileUtil';
-import { readTransfers, totals, describeSplit, formatDuration } from './transfers';
+import { readTransfers, totals, describeSplit, formatDuration, readServerCopies } from './transfers';
 import { describeIceServers, summarizeChain, verdictFor } from '../topology/NetworkInsight';
 import { ROUTE_STYLE } from './NetworkStage';
 
@@ -43,6 +43,7 @@ function readInput(master) {
         myPeerId: master.client?.peerId,
         localNetwork: master.localNetwork,
         hasTurn: describeIceServers(creator.iceServers).turn.length > 0,
+        keepCopies: !!master.serverPinning?.keepCopies,
     };
 }
 
@@ -105,7 +106,7 @@ function serverNote(stage) {
         .filter(Boolean).join(' · ');
 }
 
-function TransferRow({ row }) {
+function TransferRow({ row, onReplay }) {
     const [open, setOpen] = useState(false);
     const arrow = row.direction === 'down' ? '↓' : '↑';
     const percent = Math.round(row.progress * 100);
@@ -131,6 +132,14 @@ function TransferRow({ row }) {
                 <Box component="span" data-testid="decentral" sx={{ ml: 'auto', flex: 'none', color: LEVEL_COLOR[row.decentral.level] }}>
                     {row.decentral.text}
                 </Box>
+                {onReplay && row.stages.length > 0 && (
+                    <Box component="button" type="button" onClick={() => onReplay(row)} data-testid="replay"
+                        aria-label={`Replay how ${row.name} was shared, step by step`}
+                        sx={{ all: 'unset', cursor: 'pointer', flex: 'none', color: 'primary.main', fontSize: '0.62rem',
+                            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}>
+                        ▶ replay
+                    </Box>
+                )}
             </Box>
             <Lane name="P2P" steps={row.p2p} rgb={ROUTE_STYLE.punch.rgb} note={p2pNote} />
             {row.serverSteps && (
@@ -188,13 +197,68 @@ function TransferRow({ row }) {
     );
 }
 
-TransferRow.propTypes = { row: PropTypes.object.isRequired };
+TransferRow.propTypes = { row: PropTypes.object.isRequired, onReplay: PropTypes.func };
+
+const clockTime = at => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// An expiry is often tomorrow: say which day when it is not today.
+const dayTime = at => (new Date(at).toDateString() === new Date().toDateString()
+    ? clockTime(at)
+    : new Date(at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }));
+const COPY_COLOR = { stored: `rgb(${ROUTE_STYLE.copies.rgb})`, uploading: 'warning.main', requested: 'text.disabled' };
+
+/**
+ * What sits on photogroup.network right now, for the whole room: each copy,
+ * who sent it, how much of it has arrived, when, and when it will be gone.
+ */
+function ServerCopies({ copies }) {
+    return (
+        <Box data-testid="server-copies" sx={{ px: 1, py: 0.75, borderBottom: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 0.6 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
+                <Box component="span" sx={{ color: 'text.disabled', letterSpacing: '0.06em' }}>ON THE SERVER</Box>
+                <Box component="span" sx={{ color: 'text.secondary' }}>
+                    {copies.length
+                        ? `${copies.length} ${copies.length === 1 ? 'copy' : 'copies'} in this room`
+                        : 'nothing · every photo so far went browser to browser'}
+                </Box>
+            </Box>
+            {copies.map(copy => (
+                <Box key={copy.infoHash} data-testid="server-copy" sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'baseline', columnGap: 1, flexWrap: 'wrap', minWidth: 0 }}>
+                        <Box component="span" sx={{ fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, maxWidth: '100%' }}>
+                            {copy.name}
+                        </Box>
+                        <Box component="span" sx={{ color: COPY_COLOR[copy.state] }}>
+                            {copy.state === 'uploading' ? `uploading ${copy.percent}%` : copy.state}
+                        </Box>
+                        <Box component="span" sx={{ color: 'text.disabled' }}>
+                            {[copy.size ? (copy.state === 'uploading'
+                                ? `${FileUtil.formatBytes(copy.received)}/${FileUtil.formatBytes(copy.size)}`
+                                : FileUtil.formatBytes(copy.size)) : null,
+                            copy.from ? `from ${copy.from}` : null,
+                            copy.startedAt ? `started ${clockTime(copy.startedAt)}` : null,
+                            copy.storedAt ? `stored ${clockTime(copy.storedAt)}` : null].filter(Boolean).join(' · ')}
+                        </Box>
+                    </Box>
+                    <Box sx={{ height: 4, borderRadius: 1, bgcolor: 'action.hover', overflow: 'hidden' }}>
+                        <Box sx={{ height: '100%', width: `${copy.percent}%`, bgcolor: COPY_COLOR[copy.state] }} />
+                    </Box>
+                    <Typography data-testid="server-copy-goes" sx={{ fontFamily: mono, fontSize: '0.6rem', color: 'text.secondary' }}>
+                        <Box component="span" sx={{ color: 'text.disabled' }}>stays </Box>
+                        {copy.goes}{copy.expiresAt ? ` (by ${dayTime(copy.expiresAt)})` : ''}
+                    </Typography>
+                </Box>
+            ))}
+        </Box>
+    );
+}
+
+ServerCopies.propTypes = { copies: PropTypes.array.isRequired };
 
 /**
  * Every photo this device sent or received, as stages, sources and the share
  * that went browser to browser — and, when it didn't, why.
  */
-function TransfersView({ master }) {
+function TransfersView({ master, onReplay }) {
     const [, bump] = useReducer(value => value + 1, 0);
     useEffect(() => {
         const timer = setInterval(bump, REFRESH_MS);
@@ -242,9 +306,10 @@ function TransfersView({ master }) {
                     <Box component="span" sx={{ color: 'text.disabled' }}>your link </Box>{verdict.text}
                 </Typography>
             </Box>
+            <ServerCopies copies={readServerCopies(input)} />
             {rows.length ? (
                 <Box component="ol" sx={{ m: 0, p: 0, listStyle: 'none' }}>
-                    {rows.map(row => <TransferRow key={row.infoHash} row={row} />)}
+                    {rows.map(row => <TransferRow key={row.infoHash} row={row} onReplay={onReplay} />)}
                 </Box>
             ) : (
                 <Typography sx={{ display: 'block', p: 1.5, fontFamily: mono, fontSize: '0.68rem', color: 'text.disabled' }}>
@@ -257,6 +322,7 @@ function TransfersView({ master }) {
 
 TransfersView.propTypes = {
     master: PropTypes.object.isRequired,
+    onReplay: PropTypes.func,
 };
 
 export default TransfersView;

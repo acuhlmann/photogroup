@@ -36,7 +36,7 @@ describe('AndroidLocationNote', () => {
         userAgent.mockReturnValue(ANDROID);
         const { div, root } = await render();
         const note = div.querySelector('[data-testid="android-location-note"]');
-        expect(note.textContent).toContain('choose Material Files');
+        expect(note.textContent).toContain('select Material Files');
         expect(note.textContent).toContain('share the zip');
         expect(note.querySelector('a').getAttribute('href')).toContain('me.zhanghai.android.files');
 

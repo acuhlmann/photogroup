@@ -11,8 +11,8 @@ export const ACCEPT = 'image/*,video/*,audio/*';
 export const ANDROID_ACCEPT = ACCEPT + ',.zip,application/zip';
 
 /** How to share with the location kept, for the note and the hold-back dialog. */
-export const KEEP_LOCATION_STEPS = 'In the picker, open ☰ and choose Material Files (allow it to manage all files first), '
-    + 'then go to DCIM › Camera. Or zip the photos in your file manager and share the zip.';
+export const KEEP_LOCATION_STEPS = 'In the picker, open ☰ and select Material Files. (First, let it manage all files.) '
+    + 'Then go to DCIM › Camera. Or make a zip of the photos in your file manager and share the zip.';
 
 export function onAndroid(nav = typeof navigator !== 'undefined' ? navigator : undefined) {
     if (!nav) return false;

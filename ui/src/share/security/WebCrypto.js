@@ -97,7 +97,7 @@ export default class WebCrypto {
                         //resetInputs(); // reset file and key inputs when done
                     })
                     .catch(function (err) {
-                        const msg = 'An error occured while Encrypting the file, try again! ' + err;
+                        const msg = 'Could not encrypt the file. Try again.' + err;
                         console.error(msg);
                         reject(msg);
                     });
