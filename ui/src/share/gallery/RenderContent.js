@@ -13,6 +13,7 @@ import AudioMotionAnalyzer from 'audiomotion-analyzer';
 import FileUtil from "../util/FileUtil";
 import { imageAspectRatio, rememberImageSize } from "./imageSize";
 import { loadPreviewUrl } from "./tilePreview";
+import { captureFrame } from "../util/videoFrame";
 
 const styles = theme => ({
     horizontal: {
@@ -35,6 +36,46 @@ const styles = theme => ({
     }
 });
 
+/**
+ * Give a clip something to look at before anyone presses play. The thumbnail
+ * that came with the share is the cheap route, but a clip this device just
+ * uploaded has no such file - it holds the original, not the torrent's
+ * `Thumbnail …` - so a frame is grabbed from the bytes in hand. With neither,
+ * the element is seeked a hair into its own stream, which is what makes a
+ * browser paint a first frame at all instead of an empty box and a control bar.
+ */
+function showFirstFrame(tile, elem) {
+    const paint = () => {
+        if (elem.poster) return;
+        const nudge = () => {
+            if (elem.poster || elem.currentTime > 0) return;
+            try { elem.currentTime = 0.1; } catch { /* nothing to seek yet */ }
+        };
+        if (elem.readyState >= 1) nudge();
+        else elem.addEventListener('loadedmetadata', nudge, { once: true });
+    };
+    loadPreviewUrl(tile).then(url => {
+        if (url) {
+            elem.poster = url;
+            return;
+        }
+        const src = elem.dataset.objectUrl;
+        if (!src) {
+            paint();
+            return;
+        }
+        captureFrame(src, { maxSide: 320 }).then(canvas => {
+            if (canvas && !elem.poster) {
+                try {
+                    elem.poster = canvas.toDataURL('image/jpeg', 0.7);
+                    return;
+                } catch { /* a tainted canvas simply leaves no poster */ }
+            }
+            paint();
+        }, paint);
+    });
+}
+
 // WebTorrent 2+ dropped File#appendTo. Play the local copy when we have one
 // (the uploader always does), otherwise wait for the download and play its blob.
 // A clip shows its poster frame meanwhile, so nobody stares at an empty box.
@@ -55,9 +96,6 @@ export function renderMedia(tile, file, node, opts, callback) {
     elem.playsInline = true;
     if (tile.isVideo) {
         elem.preload = 'metadata';
-        loadPreviewUrl(tile).then(url => {
-            if (url) elem.poster = url;
-        });
     }
     const local = tile.elem || tile.file;
     if (!local) node.appendChild(elem);
@@ -67,6 +105,7 @@ export function renderMedia(tile, file, node, opts, callback) {
             elem.dataset.objectUrl = URL.createObjectURL(blob);
             elem.src = elem.dataset.objectUrl;
             if (elem.parentNode !== node) node.appendChild(elem);
+            if (tile.isVideo) showFirstFrame(tile, elem);
             callback(null, elem);
         })
         .catch(err => {
@@ -273,6 +312,13 @@ function RenderContent(props) {
                 Logger.info('New DOM node with the content', elem);
                 if(elem && elem.style) {
                     elem.style.width = '100%';
+                    if(!tile.isAudio) {
+                        // Width alone leaves a video at its 150px default height
+                        // rather than the clip's own ratio, so the player looked
+                        // broken until it was already playing.
+                        elem.style.height = 'auto';
+                        elem.style.display = 'block';
+                    }
                 }
 
                 if(tile.isVideo) {
@@ -345,20 +391,18 @@ function RenderContent(props) {
         // is swapped for the delivered file.
         const baseHash = tile.torrent?.infoHash || (tile.torrentFile ? null : tile.infoHash);
         const tileInfoHash = baseHash && (tile.fromServerCopy ? baseHash + ':server' : baseHash);
-        if(node.hasChildNodes()) {
-            const nodeInfoHash = node.infoHash;
-            if(tileInfoHash && tileInfoHash !== nodeInfoHash) {
-                removeFile(node);
-                node.infoHash = tileInfoHash;
-                appendFile(tile, node, file);
-            }
+        // Claim the node before appending, not after the element lands: the
+        // player is attached in a promise, so a re-render while it was still in
+        // flight found an empty node and started a second one for the same
+        // photo - two control bars, two blob URLs, neither sized.
+        if(!tileInfoHash || node.infoHash === tileInfoHash) {
             return;
         }
-
-        if(tileInfoHash) {
-            node.infoHash = tileInfoHash;
-            appendFile(tile, node, file);
+        if(node.infoHash) {
+            removeFile(node);
         }
+        node.infoHash = tileInfoHash;
+        appendFile(tile, node, file);
     }, [playbackActive, tile, removeFile, appendFile]);
 
     const handleWebamp = useCallback((node, file) => {
