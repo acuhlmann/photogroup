@@ -151,7 +151,7 @@ export default class TorrentMaster {
         if (!this.serverFallback.watched.has(photo.infoHash)) {
             const torrent = getTorrent(this.client, getBaseInfoHash(photo.infoHash));
             this.serverFallback.watch(photo, () => ({
-                ...(torrent ? { progress: torrent.progress, done: torrent.done } : { progress: 0, done: false }),
+                ...(torrent ? { progress: torrent.progress, received: torrent.received, done: torrent.done } : { progress: 0, done: false }),
                 ...this.copyState(photo.infoHash)
             }));
         }

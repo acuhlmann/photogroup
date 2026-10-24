@@ -81,8 +81,8 @@ export default class ServerFallback {
     }
 
     /**
-     * Watch a download. `getState()` returns {progress, done} and, when
-     * known, {hasServerCopy, holders, activeHolders}.
+     * Watch a download. `getState()` returns {progress, done}, the bytes
+     * `received` so far and, when known, {hasServerCopy, holders, activeHolders}.
      */
     watch(photo, getState) {
         if (!photo?.infoHash || typeof this.fetchCopy !== 'function') return false;
@@ -163,8 +163,11 @@ export default class ServerFallback {
             return;
         }
         const now = this.now();
-        if ((state.progress || 0) > (entry.lastProgress || 0)) {
-            entry.lastProgress = state.progress;
+        // Bytes arriving count as progress too: verified pieces (progress)
+        // can stand still for a while inside one big piece of a clip.
+        if ((state.progress || 0) > (entry.lastProgress || 0) || (state.received || 0) > (entry.lastReceived || 0)) {
+            entry.lastProgress = state.progress || 0;
+            entry.lastReceived = state.received || 0;
             entry.lastProgressAt = now;
         }
         const stalled = isTransferStalled({
