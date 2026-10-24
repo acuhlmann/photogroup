@@ -18,11 +18,14 @@ const SAFE_MEDIA_TYPES = new Set([
     'audio/aac', 'audio/flac'
 ]);
 
+// When a copy started and finished arriving, who sent it and when it goes,
+// so the room can see what sits on the server and for how long.
+const COPY_TIMES = ['serverCopyStartedAt', 'serverCopyStoredAt', 'serverCopyExpiresAt', 'serverCopyFrom'];
 // Server-copy state is the server's to set: a client PUT carrying a stale
 // view of it (the whole tile is sent after rendering) must not revive a
 // deleted copy, and owners only change through the owner routes.
 const SERVER_MANAGED_FIELDS = ['owners', 'hasServerCopy', 'serverCopySize', 'serverCopyReceived',
-    'serverCopyRequestedAt', 'serverCopyUploader'];
+    'serverCopyRequestedAt', 'serverCopyUploader', ...COPY_TIMES];
 const RELAY_SWEEP_MS = 5 * 60 * 1000;
 
 export default class Rooms {
@@ -427,6 +430,7 @@ export default class Rooms {
             serverCopyReceived: photo.serverCopyReceived,
             serverCopyRequestedAt: photo.serverCopyRequestedAt,
             serverCopyUploader: photo.serverCopyUploader,
+            ...Object.fromEntries(COPY_TIMES.map(field => [field, photo[field]])),
         };
     }
 
@@ -442,6 +446,7 @@ export default class Rooms {
         delete photo.serverCopySize;
         delete photo.serverCopyReceived;
         delete photo.serverCopyUploader;
+        COPY_TIMES.forEach(field => delete photo[field]);
     }
 
     /**
@@ -536,8 +541,12 @@ export default class Rooms {
             photo.serverCopySize = entry.size;
             photo.serverCopyReceived = entry.received;
             photo.serverCopyUploader = peer.peerId;
+            photo.serverCopyFrom = peer.peerId;
+            if (!photo.serverCopyStartedAt) photo.serverCopyStartedAt = Date.now();
             if (entry.complete) {
                 photo.hasServerCopy = true;
+                photo.serverCopyStoredAt = entry.completedAt;
+                photo.serverCopyExpiresAt = entry.completedAt + this.relay.ttlMs;
                 delete photo.serverCopyRequestedAt;
                 delete photo.serverCopyUploader;
                 if (!photo.fileType && entry.contentType !== 'application/octet-stream') {

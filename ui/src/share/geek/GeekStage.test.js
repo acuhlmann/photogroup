@@ -37,6 +37,27 @@ describe('GeekStage', () => {
         await act(async () => transfers.click());
         expect(div.querySelector('[data-testid="transfers"]')).not.toBeNull();
         expect(div.textContent).toContain('no transfers yet');
+        expect(div.querySelector('[data-testid="server-copies"]').textContent).toContain('nothing');
+        await act(async () => root.unmount());
+    });
+
+    it("lists the room's server copies with their progress and when they go", async () => {
+        const photos = [
+            { infoHash: 'h1', fileName: 'clip.mp4', serverCopySize: 1000, serverCopyReceived: 400, serverCopyFrom: 'p1', serverCopyUploader: 'p1', owners: [] },
+        ];
+        const master = {
+            emitter: new EventEmitter(), client: { peerId: 'me' },
+            roomPhotos: { all: () => photos },
+            peers: { items: [{ peerId: 'me' }, { peerId: 'p1', name: 'Ana' }] },
+        };
+        const div = document.createElement('div');
+        const root = createRoot(div);
+        await act(async () => root.render(<GeekStage master={master} tiles={[]} />));
+        await act(async () => tab(div, 'Transfers').click());
+        const copy = div.querySelector('[data-testid="server-copy"]');
+        expect(copy.textContent).toContain('uploading 40%');
+        expect(copy.textContent).toContain('from Ana');
+        expect(copy.textContent).toContain('kept up to 24 h once complete');
         await act(async () => root.unmount());
     });
 

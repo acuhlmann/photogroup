@@ -273,3 +273,59 @@ export function totals(rows) {
         server: sum.server + row.split.server,
     }), { total: 0, p2p: 0, relay: 0, server: 0 });
 }
+
+/** "23 h 05 m", "12 m", "40 s": how long until (or since) something, coarse. */
+export function formatSpan(ms) {
+    if (!Number.isFinite(ms)) return '';
+    const seconds = Math.max(0, Math.round(ms / 1000));
+    if (seconds < 60) return `${seconds} s`;
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes} m`;
+    return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} m`;
+}
+
+/**
+ * Every server copy in the room, not only this device's: what it is, who
+ * sent it, how far it got, when it arrived and when it will be gone. A copy
+ * goes once everyone in the room has the photo (unless the room keeps copies
+ * for latecomers) or when it expires, whichever is first.
+ */
+export function readServerCopies({ photos = [], peers = [], myPeerId, keepCopies = false, now = Date.now() }) {
+    const peersById = new Map(peers.map(peer => [peer.peerId, peer]));
+    const who = peerId => (peerId === myPeerId ? 'you' : peerName(peersById.get(peerId)) || (peerId ? 'peer ' + short(peerId) : 'someone'));
+    const holders = photo => new Set((photo.owners || []).map(owner => owner.peerId));
+    return photos
+        .filter(photo => photo.hasServerCopy || photo.serverCopyReceived > 0 || photo.serverCopyRequestedAt)
+        .map(photo => {
+            const size = photo.serverCopySize || 0;
+            const received = photo.hasServerCopy ? size : photo.serverCopyReceived || 0;
+            const state = photo.hasServerCopy ? 'stored' : received > 0 ? 'uploading' : 'requested';
+            const have = holders(photo);
+            const missing = peers.filter(peer => !have.has(peer.peerId)).length;
+            let goes;
+            if (state === 'stored') {
+                const left = photo.serverCopyExpiresAt ? formatSpan(photo.serverCopyExpiresAt - now) : null;
+                goes = keepCopies
+                    ? `kept for latecomers${left ? `, deleted in ${left}` : ''}`
+                    : missing === 0 ? 'everyone has it, so it is being deleted'
+                        : `deleted when ${missing === 1 ? 'the last person gets it' : `${missing} more people get it`}${left ? `, or in ${left} at most` : ''}`;
+            } else if (state === 'uploading') {
+                goes = 'kept up to 24 h once complete';
+            } else {
+                goes = 'waiting for someone who has it to upload';
+            }
+            return {
+                infoHash: photo.infoHash,
+                name: photo.fileName || short(photo.infoHash),
+                state,
+                size,
+                received,
+                percent: size ? Math.round(received / size * 100) : 0,
+                from: photo.serverCopyFrom || photo.serverCopyUploader ? who(photo.serverCopyFrom || photo.serverCopyUploader) : null,
+                startedAt: photo.serverCopyStartedAt || null,
+                storedAt: photo.serverCopyStoredAt || null,
+                expiresAt: photo.serverCopyExpiresAt || null,
+                goes,
+            };
+        });
+}

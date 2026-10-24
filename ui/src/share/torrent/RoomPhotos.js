@@ -10,7 +10,8 @@
 import { UPLOAD_LEASE_MS } from './ServerCopyLimits';
 
 const TRACKED_FIELDS = ['peerId', 'fileName', 'fileType', 'secure', 'hasServerCopy', 'serverCopySize',
-    'serverCopyReceived', 'serverCopyRequestedAt', 'serverCopyUploader'];
+    'serverCopyReceived', 'serverCopyRequestedAt', 'serverCopyUploader',
+    'serverCopyStartedAt', 'serverCopyStoredAt', 'serverCopyExpiresAt', 'serverCopyFrom'];
 
 function pick(item) {
     const picked = { infoHash: item.infoHash };

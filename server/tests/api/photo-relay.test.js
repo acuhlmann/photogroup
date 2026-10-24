@@ -77,6 +77,10 @@ describe('Photo relay (server copies, pinned when needed)', () => {
         assert.strictEqual(photo.hasServerCopy, true);
         assert.strictEqual(photo.serverCopySize, bytes.length);
         assert.strictEqual(photo.serverCopyUploader, undefined);
+        // The room can see who sent it, when it arrived and when it goes.
+        assert.strictEqual(photo.serverCopyFrom, sharer.peerId);
+        assert.ok(photo.serverCopyStartedAt <= photo.serverCopyStoredAt);
+        assert.strictEqual(photo.serverCopyExpiresAt - photo.serverCopyStoredAt, 24 * 60 * 60 * 1000);
 
         const down = await download(receiver)
             .expect(200)

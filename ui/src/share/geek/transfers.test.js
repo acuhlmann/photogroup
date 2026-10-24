@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readTransfers, describeSplit, serverSteps, linkKind, totals, formatDuration } from './transfers';
+import { readTransfers, describeSplit, serverSteps, linkKind, totals, formatDuration, formatSpan, readServerCopies } from './transfers';
 
 const chain = ip => [
     { type: 'host', typeDetail: 'host', ip: '192.168.1.' + ip.split('.').pop() },
@@ -181,5 +181,44 @@ describe('helpers', () => {
     it('marks a refused upload as failed where it stopped', () => {
         expect(serverSteps('up', { stage: 'too-large' }).map(step => step.state)).toEqual(['done', 'failed', 'todo']);
         expect(serverSteps('down', { stage: 'requested' }, { hasServerCopy: false }).map(step => step.state)).toEqual(['done', 'active', 'todo', 'todo']);
+    });
+});
+
+describe('readServerCopies', () => {
+    const H = 60 * 60 * 1000;
+    const peers = [{ peerId: 'me', name: 'Mine' }, { peerId: 'ana', name: 'Ana' }, { peerId: 'bo', name: 'Bo' }];
+    const stored = {
+        infoHash: 'h1', fileName: 'beach.jpg', hasServerCopy: true, serverCopySize: 2000,
+        serverCopyFrom: 'ana', serverCopyStartedAt: 1000, serverCopyStoredAt: 5000, serverCopyExpiresAt: 5000 + 24 * H,
+        owners: [{ peerId: 'ana' }, { peerId: 'me' }],
+    };
+
+    it('lists every copy in the room with who sent it, how far it got and when it goes', () => {
+        const rows = readServerCopies({
+            myPeerId: 'me', peers, now: 5000 + 2 * H,
+            photos: [
+                stored,
+                { infoHash: 'h2', fileName: 'clip.mp4', serverCopySize: 1000, serverCopyReceived: 250, serverCopyUploader: 'me', serverCopyFrom: 'me', owners: [] },
+                { infoHash: 'h3', fileName: 'asked.jpg', serverCopyRequestedAt: 4000, owners: [] },
+                { infoHash: 'h4', fileName: 'p2p-only.jpg', owners: [] },
+            ],
+        });
+        expect(rows.map(row => [row.name, row.state, row.percent, row.from])).toEqual([
+            ['beach.jpg', 'stored', 100, 'Ana'],
+            ['clip.mp4', 'uploading', 25, 'you'],
+            ['asked.jpg', 'requested', 0, null],
+        ]);
+        expect(rows[0].goes).toBe('deleted when the last person gets it, or in 22 h 00 m at most');
+    });
+
+    it('says a room that keeps copies holds them until they expire', () => {
+        const [row] = readServerCopies({ myPeerId: 'me', peers, keepCopies: true, now: 5000 + 23.5 * H, photos: [stored] });
+        expect(row.goes).toBe('kept for latecomers, deleted in 30 m');
+    });
+
+    it('reads coarse spans', () => {
+        expect(formatSpan(40 * 1000)).toBe('40 s');
+        expect(formatSpan(12 * 60 * 1000)).toBe('12 m');
+        expect(formatSpan(23 * H + 5 * 60 * 1000)).toBe('23 h 05 m');
     });
 });
