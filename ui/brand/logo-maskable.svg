@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Maskable: full-bleed square, no rounded corners (the launcher clips its
+       own shape), artwork inside the central 80% safe zone. -->
+  <defs>
+    <clipPath id="card">
+      <rect x="-118" y="-100" width="236" height="200" rx="30"/>
+    </clipPath>
+  </defs>
+  <rect width="512" height="512" fill="#07090d"/>
+  <g transform="translate(256 262) scale(0.72)">
+    <g transform="translate(-26 -30)">
+      <rect x="-118" y="-100" width="236" height="200" rx="30" fill="#1f9d92"/>
+    </g>
+    <rect x="-118" y="-100" width="236" height="200" rx="30" fill="#f4f8fb"/>
+    <g clip-path="url(#card)">
+      <circle cx="-54" cy="-40" r="27" fill="#07090d"/>
+      <path d="M-118 100 L-40 6 L4 44 L58 -18 L118 100 Z" fill="#07090d"/>
+    </g>
+    <circle cx="104" cy="86" r="42" fill="#3dd6c3" stroke="#07090d" stroke-width="14"/>
+  </g>
+</svg>

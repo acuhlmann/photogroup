@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Favicons: the same photo-stack mark, drawn for 16px. Fewer shapes, much
+       heavier contrast - the sun and the thin ridge disappear at that size. -->
+  <rect width="512" height="512" rx="112" fill="#07090d"/>
+  <rect x="70" y="96" width="290" height="242" rx="46" fill="#1f9d92"/>
+  <rect x="150" y="172" width="292" height="244" rx="46" fill="#f4f8fb"/>
+  <path d="M150 416 L254 268 L322 332 L384 258 L442 416 Z" fill="#07090d"/>
+  <circle cx="416" cy="404" r="76" fill="#3dd6c3" stroke="#07090d" stroke-width="26"/>
+</svg>
