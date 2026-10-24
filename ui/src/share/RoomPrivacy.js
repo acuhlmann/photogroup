@@ -8,6 +8,7 @@ import DialogActions from '@mui/material/DialogActions';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import ShieldOutlined from '@mui/icons-material/ShieldOutlined';
+import IconButton from '@mui/material/IconButton';
 import Logger from 'js-logger';
 
 /** What the server keeps about this room, in plain words, one line each. */
@@ -38,7 +39,7 @@ function readState(master) {
  * A "Privacy" button and the dialog behind it: what the server keeps about
  * this room and for how long, and a way to delete the room now.
  */
-export default function RoomPrivacy({ master, buttonSx }) {
+export default function RoomPrivacy({ master, buttonSx, compact = false }) {
     const [open, setOpen] = useState(false);
     const [confirm, setConfirm] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -66,10 +67,16 @@ export default function RoomPrivacy({ master, buttonSx }) {
 
     return (
         <>
-            <Button color="inherit" startIcon={<ShieldOutlined />} onClick={() => setOpen(true)}
-                sx={{ textTransform: 'none', ...buttonSx }}>
-                Privacy
-            </Button>
+            {compact ? (
+                <IconButton aria-label="Privacy" onClick={() => setOpen(true)} sx={buttonSx}>
+                    <ShieldOutlined />
+                </IconButton>
+            ) : (
+                <Button color="inherit" startIcon={<ShieldOutlined />} onClick={() => setOpen(true)}
+                    sx={{ textTransform: 'none', ...buttonSx }}>
+                    Privacy
+                </Button>
+            )}
             <Dialog open={open} onClose={close} maxWidth="xs" fullWidth aria-labelledby="room-privacy-title">
                 <DialogTitle id="room-privacy-title">{confirm ? 'Delete the room for everyone?' : 'What the server keeps'}</DialogTitle>
                 <DialogContent>
@@ -108,4 +115,5 @@ export default function RoomPrivacy({ master, buttonSx }) {
 RoomPrivacy.propTypes = {
     master: PropTypes.object.isRequired,
     buttonSx: PropTypes.object,
+    compact: PropTypes.bool,
 };

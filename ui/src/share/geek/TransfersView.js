@@ -106,7 +106,7 @@ function serverNote(stage) {
         .filter(Boolean).join(' · ');
 }
 
-function TransferRow({ row }) {
+function TransferRow({ row, onReplay }) {
     const [open, setOpen] = useState(false);
     const arrow = row.direction === 'down' ? '↓' : '↑';
     const percent = Math.round(row.progress * 100);
@@ -132,6 +132,14 @@ function TransferRow({ row }) {
                 <Box component="span" data-testid="decentral" sx={{ ml: 'auto', flex: 'none', color: LEVEL_COLOR[row.decentral.level] }}>
                     {row.decentral.text}
                 </Box>
+                {onReplay && row.stages.length > 0 && (
+                    <Box component="button" type="button" onClick={() => onReplay(row)} data-testid="replay"
+                        aria-label={`Replay how ${row.name} was shared, step by step`}
+                        sx={{ all: 'unset', cursor: 'pointer', flex: 'none', color: 'primary.main', fontSize: '0.62rem',
+                            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}>
+                        ▶ replay
+                    </Box>
+                )}
             </Box>
             <Lane name="P2P" steps={row.p2p} rgb={ROUTE_STYLE.punch.rgb} note={p2pNote} />
             {row.serverSteps && (
@@ -189,7 +197,7 @@ function TransferRow({ row }) {
     );
 }
 
-TransferRow.propTypes = { row: PropTypes.object.isRequired };
+TransferRow.propTypes = { row: PropTypes.object.isRequired, onReplay: PropTypes.func };
 
 const clockTime = at => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 // An expiry is often tomorrow: say which day when it is not today.
@@ -250,7 +258,7 @@ ServerCopies.propTypes = { copies: PropTypes.array.isRequired };
  * Every photo this device sent or received, as stages, sources and the share
  * that went browser to browser — and, when it didn't, why.
  */
-function TransfersView({ master }) {
+function TransfersView({ master, onReplay }) {
     const [, bump] = useReducer(value => value + 1, 0);
     useEffect(() => {
         const timer = setInterval(bump, REFRESH_MS);
@@ -301,7 +309,7 @@ function TransfersView({ master }) {
             <ServerCopies copies={readServerCopies(input)} />
             {rows.length ? (
                 <Box component="ol" sx={{ m: 0, p: 0, listStyle: 'none' }}>
-                    {rows.map(row => <TransferRow key={row.infoHash} row={row} />)}
+                    {rows.map(row => <TransferRow key={row.infoHash} row={row} onReplay={onReplay} />)}
                 </Box>
             ) : (
                 <Typography sx={{ display: 'block', p: 1.5, fontFamily: mono, fontSize: '0.68rem', color: 'text.disabled' }}>
@@ -314,6 +322,7 @@ function TransfersView({ master }) {
 
 TransfersView.propTypes = {
     master: PropTypes.object.isRequired,
+    onReplay: PropTypes.func,
 };
 
 export default TransfersView;

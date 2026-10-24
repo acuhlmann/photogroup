@@ -61,15 +61,15 @@ function Diagram({ step }) {
             '@keyframes howPulse': { '50%': { opacity: 0.25 } },
             '@media (prefers-reduced-motion: reduce)': { '& circle': { animation: 'none !important' } },
         }}>
-            <svg viewBox="0 0 280 160" width="100%" role="img" aria-label={SIMPLE_STEPS[step].title}>
+            <svg viewBox="0 0 280 172" width="100%" role="img" aria-label={SIMPLE_STEPS[step].title}>
                 <g opacity={serverLit ? 1 : 0.35}>
                     <rect x={SERVER.x - 34} y={SERVER.y - 18} width="68" height="36" rx="8" fill="none" stroke="currentColor" strokeWidth="2.5" />
                     <text x={SERVER.x} y={SERVER.y + 5} textAnchor="middle" fontSize="13" fill="currentColor">server</text>
                 </g>
                 <Phone {...LEFT} lit />
                 <Phone {...RIGHT} lit={step !== 0} />
-                <text x={LEFT.x} y={156} textAnchor="middle" fontSize="12" fill="currentColor">you</text>
-                <text x={RIGHT.x} y={156} textAnchor="middle" fontSize="12" fill="currentColor" opacity={step ? 1 : 0.35}>friend</text>
+                <text x={LEFT.x} y={166} textAnchor="middle" fontSize="12" fill="currentColor">you</text>
+                <text x={RIGHT.x} y={166} textAnchor="middle" fontSize="12" fill="currentColor" opacity={step ? 1 : 0.35}>friend</text>
 
                 {step === 0 && (
                     <circle cx={LEFT.x} cy={LEFT.y - 4} r="8" fill="var(--mui-palette-primary-main, #0f766e)"

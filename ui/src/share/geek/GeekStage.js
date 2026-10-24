@@ -21,6 +21,7 @@ import NetworkStage from './NetworkStage';
 import TransfersView from './TransfersView';
 import { createTimeline } from './timeline';
 import { tourSteps } from './tour';
+import { replaySteps } from './replay';
 import { createTourPlayer } from './tourPlayer';
 import { TourCard, ExplainCard } from './TourCard';
 
@@ -217,25 +218,39 @@ function GeekStage({ master, tiles, isMobile }) {
     const tourTimeline = useMemo(() => createTimeline(), []);
     const player = useMemo(() => createTourPlayer({ timeline: tourTimeline }), [tourTimeline]);
     const [touring, setTouring] = useState(false);
+    // A real share to replay instead of the example tour: { infoHash, name }.
+    const [replay, setReplay] = useState(null);
     const [scene, setScene] = useState(null);
     const [, bumpTour] = useReducer(value => value + 1, 0);
     useEffect(() => player.subscribe(bumpTour), [player]);
     useEffect(() => {
         if (!touring || !scene) return;
-        player.load(tourSteps(scene, { myPeerId: master.client?.peerId, rtcConfig: master.creator?.iceServers }));
-    }, [touring, scene, player, master]);
+        const myPeerId = master.client?.peerId;
+        player.load(replay
+            ? replaySteps(scene, master.ledger?.get?.(replay.infoHash), { myPeerId, peers: master.peers?.items || [] })
+            : tourSteps(scene, { myPeerId, rtcConfig: master.creator?.iceServers }));
+    }, [touring, replay, scene, player, master]);
     useEffect(() => {
         if (!touring) return undefined;
         const timer = setInterval(() => player.tick(), 50);
         return () => clearInterval(timer);
     }, [touring, player]);
     const startTour = () => {
+        setReplay(null);
         setTouring(true);
         player.start(0);
     };
+    /** Play one photo's real transfer back on the map, from its first stage. */
+    const startReplay = useCallback(row => {
+        setReplay({ infoHash: row.infoHash, name: row.name });
+        setTouring(true);
+        player.start(0);
+        player.setAuto(true);
+    }, [player]);
     const exitTour = useCallback(() => {
         player.setAuto(false);
         setTouring(false);
+        setReplay(null);
         tourTimeline.clear();
     }, [player, tourTimeline]);
 
@@ -370,10 +385,10 @@ function GeekStage({ master, tiles, isMobile }) {
     return (
         <Box ref={stage} sx={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: { xs: 'column-reverse', sm: 'row' } }}>
-                {touring && <TourCard player={player} onExit={exitTour} />}
+                {touring && <TourCard player={player} onExit={exitTour} heading={replay ? `REPLAY · ${replay.name}` : undefined} />}
                 <Box sx={{ flex: 1, minWidth: 0, minHeight: 0 }}>
                     <NetworkStage master={master} tiles={tiles} onOpenPhoto={openPhoto} timeline={timeline}
-                        playback={touring ? tourTimeline : undefined} tour={touring ? { step: player.step } : null} onScene={setScene} />
+                        playback={touring ? tourTimeline : undefined} tour={touring ? { step: player.step, demo: !replay } : null} onScene={setScene} />
                 </Box>
                 {!touring && (
                     <>
@@ -479,7 +494,7 @@ function GeekStage({ master, tiles, isMobile }) {
                 </Box>
                 {open && (
                     <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                        {tab === 0 ? <PacketLog timeline={timeline} /> : <TransfersView master={master} />}
+                        {tab === 0 ? <PacketLog timeline={timeline} /> : <TransfersView master={master} onReplay={startReplay} />}
                     </Box>
                 )}
             </Box>

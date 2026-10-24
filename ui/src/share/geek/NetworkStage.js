@@ -191,10 +191,12 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
     }, []);
 
     const touring = !!tour;
+    // The example tour brings example peers and addresses; a replay shows the real room.
+    const demo = touring && tour.demo !== false;
     const scene = useMemo(
-        () => readScene(master, tiles, size.width || 800, size.height || 600, touring),
+        () => readScene(master, tiles, size.width || 800, size.height || 600, demo),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-        [master, tiles, size.width, size.height, version, touring]);
+        [master, tiles, size.width, size.height, version, demo]);
     sceneRef.current = scene;
     useEffect(() => { onScene?.(scene); }, [scene, onScene]);
 

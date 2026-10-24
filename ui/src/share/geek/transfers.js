@@ -39,7 +39,7 @@ export const SERVER_STEPS = {
     ],
 };
 
-const peerName = peer => (peer && (peer.name || StringUtil.slimPlatform(peer.originPlatform || ''))) || null;
+export const peerName = peer => (peer && (peer.name || StringUtil.slimPlatform(peer.originPlatform || ''))) || null;
 const short = value => String(value || '').slice(0, 8);
 const percent = (part, total) => (total ? Math.round(part / total * 100) : 0);
 

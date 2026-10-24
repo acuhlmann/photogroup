@@ -95,7 +95,7 @@ function SimpleRoomBar({ master }) {
                         {showCode ? 'Hide code' : 'Add people'}
                     </Button>
                 )}
-                <RoomPrivacy master={master} buttonSx={{ color: 'text.secondary' }} />
+                <RoomPrivacy master={master} compact buttonSx={{ color: 'text.secondary' }} />
                 <Button color="inherit" onClick={() => master.leaveRoomAndReload()}
                     sx={{ textTransform: 'none', color: 'text.secondary' }}>
                     Leave

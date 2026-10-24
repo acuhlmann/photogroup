@@ -51,7 +51,7 @@ const card = {
  * The tour's narrator: what this step is about, who sees what, and the
  * controls to walk it at your own pace, let it run, hold it or slow it down.
  */
-export function TourCard({ player, onExit }) {
+export function TourCard({ player, onExit, heading = 'HOW A SHARE WORKS' }) {
     useBump(player.subscribe);
     const step = player.step;
     const [, tick] = useReducer(value => value + 1, 0);
@@ -77,7 +77,7 @@ export function TourCard({ player, onExit }) {
         >
             <Stack direction="row" sx={{ alignItems: 'center', mb: 0.5 }}>
                 <Typography sx={{ flex: 1, fontFamily: mono, fontSize: '0.62rem', letterSpacing: '0.08em', color: 'primary.main' }}>
-                    {`HOW A SHARE WORKS · ${player.index + 1}/${player.count}`}
+                    {`${heading} · ${player.index + 1}/${player.count}`}
                 </Typography>
                 <IconButton size="small" aria-label="Leave the tour" onClick={onExit}><CloseRounded fontSize="small" /></IconButton>
             </Stack>
@@ -143,6 +143,7 @@ export function TourCard({ player, onExit }) {
 TourCard.propTypes = {
     player: PropTypes.object.isRequired,
     onExit: PropTypes.func.isRequired,
+    heading: PropTypes.string,
 };
 
 /**
