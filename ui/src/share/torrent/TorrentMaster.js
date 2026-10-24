@@ -17,6 +17,7 @@ import ServerFallback, { isSharedPhoto } from './ServerFallback';
 import ServerPinning from './ServerPinning';
 import RoomPhotos from './RoomPhotos';
 import TrackerKick from './TrackerKick';
+import { watchPieces } from './pieceEvents';
 import { holdersOf, activeHolders } from '../topology/presence';
 import ConnectionRecovery, { freezesWhenHidden } from '../util/ConnectionRecovery';
 
@@ -670,6 +671,7 @@ export default class TorrentMaster {
         torrent.on('noPeers', announceType => self.torrentAddition.noPeers(torrent, announceType));
         torrent.on('warning', err => self.torrentAddition.warning(torrent, err));
         torrent.on('wire', (wire, addr) => self.torrentAddition.wire(wire, addr, torrent));
+        watchPieces(torrent, self.emitter);
 
         this.emitter.emit('newTorrent', torrent);
 

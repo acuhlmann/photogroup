@@ -31,8 +31,18 @@ describe('describeEvent', () => {
     it('logs new photos with their magnet and room snapshots', () => {
         expect(describeEvent('photos', [{ type: 'add', item: { fileName: 'a.jpg', infoHash: '0123456789abcdef' } }]).text)
             .toBe('+ a.jpg magnet 0123456789');
+        // The app sends adds as a list.
+        expect(describeEvent('photos', [{ type: 'add', item: [{ fileName: 'a.jpg', infoHash: '0123456789abcdef' }, {}] }]).text)
+            .toBe('+ a.jpg magnet 0123456789 +1');
         expect(describeEvent('photos', [{ type: 'all', item: [{}, {}] }]).text).toBe('room snapshot · 2 photos');
         expect(describeEvent('photos', [{ type: 'updateOwner', item: {} }])).toBeNull();
+    });
+
+    it('logs whole pieces with the peer they moved to or from', () => {
+        const torrent = { name: 'beach.jpg', infoHash: 'abc' };
+        const entry = describeEvent('pieceReceived', [{ torrent, index: 2, total: 12, peerId: 'ana12345678' }]);
+        expect(entry).toMatchObject({ kind: 'rx', text: 'piece 3/12 ← peer ana12345 · beach.jpg' });
+        expect(describeEvent('pieceSent', [{ torrent, index: 0, total: 12, peerId: 'ben' }]).text).toBe('piece 1/12 → peer ben · beach.jpg');
     });
 
     it('logs ICE state changes and candidates', () => {

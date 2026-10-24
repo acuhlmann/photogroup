@@ -36,6 +36,16 @@ export function describeEvent(name, args) {
         if (!first) return null;
         return { kind: 'tx', key: 'tx' + (first.torrent?.infoHash || ''), text: `${first.speed || '0 B/s'} → ${torrentName(first.torrent)}` };
     }
+    case 'pieceReceived':
+    case 'pieceSent': {
+        if (!first) return null;
+        const arrow = name === 'pieceReceived' ? '←' : '→';
+        return {
+            kind: name === 'pieceReceived' ? 'rx' : 'tx',
+            key: name + (first.torrent?.infoHash || '') + first.peerId,
+            text: `piece ${first.index + 1}/${first.total} ${arrow} peer ${short(first.peerId)} · ${torrentName(first.torrent)}`,
+        };
+    }
     case 'peers': {
         if (!first) return null;
         if (first.type === 'add') return { kind: 'peer', text: `+ ${peerName(first.item)} joined (${short(first.item?.peerId)})` };
@@ -54,7 +64,13 @@ export function describeEvent(name, args) {
     }
     case 'photos': {
         if (!first) return null;
-        if (first.type === 'add') return { kind: 'photo', text: `+ ${first.item?.fileName || 'photo'} magnet ${short(first.item?.infoHash, 10)}` };
+        if (first.type === 'add') {
+            // Adds come as a list of photos.
+            const added = [].concat(first.item || []);
+            const photo = added[0] || {};
+            const more = added.length > 1 ? ` +${added.length - 1}` : '';
+            return { kind: 'photo', text: `+ ${photo.fileName || 'photo'} magnet ${short(photo.infoHash, 10)}${more}` };
+        }
         if (first.type === 'delete') return { kind: 'photo', text: `− ${short(first.item?.infoHash || first.item, 10)} removed` };
         if (first.type === 'all' && Array.isArray(first.item)) return { kind: 'sse', text: `room snapshot · ${first.item.length} photos` };
         return null;
@@ -76,6 +92,6 @@ export function describeEvent(name, args) {
 }
 
 export const LOGGED_EVENTS = [
-    'wire', 'downloadProgress', 'uploadProgress', 'peers', 'peerConnections',
+    'wire', 'downloadProgress', 'uploadProgress', 'pieceReceived', 'pieceSent', 'peers', 'peerConnections',
     'photos', 'pcEvent', 'localNetwork', 'sseReconnected',
 ];

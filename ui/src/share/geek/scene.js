@@ -1,0 +1,296 @@
+import StringUtil from '../util/StringUtil';
+import { describeIceServers, summarizeChain, NAT_LABELS } from '../topology/NetworkInsight';
+
+// The geek stage draws the room as layers, top to bottom, so where a node
+// sits says what it is:
+//   photogroup.network (edge, API + SSE, tracker, server copies)
+//   the internet between: STUN, NATs (public addresses), TURN relays
+//   devices, each with the photos it holds underneath
+// Routes go through those layers the way traffic actually does.
+
+export const TIER = { infra: 0.12, net: 0.4, device: 0.66 };
+export const THUMB = 34;
+const MAX_THUMBS = 5;
+
+const isReflexive = item => item && (item.type === 'srflx' || item.type === 'prflx'
+    || (item.typeDetail || '').includes('srflx') || (item.typeDetail || '').includes('prflx'));
+const isRelayCandidate = item => item && (item.type === 'relay' || (item.typeDetail || '').startsWith('relay'));
+
+export function hostOf(url) {
+    try {
+        const parsed = new URL(url);
+        return parsed.host;
+    } catch {
+        return String(url || '');
+    }
+}
+
+function deviceName(peer) {
+    return peer.name || StringUtil.slimPlatform(peer.originPlatform || '') || String(peer.peerId || '').slice(0, 8);
+}
+
+function candidateLine(item) {
+    const transport = (item.transport || '').toLowerCase();
+    return `${item.type || item.typeDetail || '?'} ${item.ip}${item.port ? ':' + item.port : ''}${transport ? ' ' + transport : ''}`;
+}
+
+function placeLine(network) {
+    if (!network) return null;
+    const isp = network.connection && (network.connection.isp || network.connection.org);
+    const where = [network.city, network.country].filter(Boolean).join(', ');
+    return [where, isp].filter(Boolean).join(' · ') || null;
+}
+
+/** What the page can learn about photogroup.network from where it was loaded. */
+function infraNodes({ origin, trackerUrl, photos }) {
+    const host = hostOf(origin) || 'photogroup.network';
+    const local = /localhost|127\.0\.0\.1/.test(host);
+    const copies = photos.filter(photo => photo.hasServerCopy);
+    const uploading = photos.filter(photo => photo.serverCopyUploader && !photo.hasServerCopy);
+    const bytes = copies.reduce((sum, photo) => sum + (photo.serverCopySize || 0), 0);
+    return [
+        {
+            id: 'edge', kind: 'edge', label: local ? 'dev server' : 'edge',
+            sub: local ? host : 'Cloud Run wake → nginx',
+            info: local
+                ? [`origin ${host}`, 'vite dev server proxies /api to :8081']
+                : [`origin ${host} (TLS)`, 'Cloud Run photogroup-wake starts the VM on demand', 'nginx :443 → app :8081, tracker :9000', 'VM idles to a stop when nobody is here'],
+        },
+        {
+            id: 'api', kind: 'api', label: 'API · SSE', sub: ':8081 rooms, peers, magnets',
+            info: ['REST: rooms, peers, photo magnets, details', 'Server-Sent Events push room changes to everyone', 'state is in memory only, nothing stored'],
+        },
+        {
+            id: 'tracker', kind: 'tracker', label: 'tracker', sub: hostOf(trackerUrl) || 'ws :9000',
+            info: ['BitTorrent WebSocket tracker', 'peers announce infohashes here and swap WebRTC offers/answers', trackerUrl ? `url ${trackerUrl}` : null].filter(Boolean),
+        },
+        {
+            id: 'copies', kind: 'copies', label: 'server copies',
+            sub: copies.length ? `${copies.length} held` + (bytes ? ` · ${(bytes / 1048576).toFixed(1)} MB` : '') : (uploading.length ? `${uploading.length} uploading` : 'none held'),
+            info: ['last resort when P2P and TURN both fail', 'resumable 8 MB chunks, 60 s upload lease', 'deleted once everyone has the photo, or after 24 h',
+                `${copies.length} held, ${uploading.length} uploading`],
+        },
+    ];
+}
+
+/**
+ * Build the scene for the current room: nodes with positions, routes as
+ * lists of node ids, and photo thumbnails placed under the devices holding them.
+ * `tiles` are the gallery's tiles (they carry owners, the image URL and progress).
+ */
+export function buildScene({ myPeerId, peers = [], connections = [], localNetwork = null, me = {}, rtcConfig = null,
+    trackerUrl = '', origin = '', tiles = [], photos = [], width = 800, height = 600 }) {
+    const nodes = [];
+    const routes = [];
+    const thumbs = [];
+    const byId = new Map();
+    const add = node => {
+        if (byId.has(node.id)) return byId.get(node.id);
+        byId.set(node.id, node);
+        nodes.push(node);
+        return node;
+    };
+
+    // Devices: everyone in the room, with us in the middle.
+    const list = peers.map(peer => ({ ...peer }));
+    if (myPeerId && !list.find(peer => peer.peerId === myPeerId)) {
+        list.push({ ...me, peerId: myPeerId, networkChain: localNetwork || [] });
+    }
+    const mine = list.find(peer => peer.peerId === myPeerId);
+    if (mine && !(mine.networkChain && mine.networkChain.length) && localNetwork) mine.networkChain = localNetwork;
+    const others = list.filter(peer => peer.peerId !== myPeerId);
+    const ordered = [...others.slice(0, Math.ceil(others.length / 2)), ...(mine ? [mine] : []), ...others.slice(Math.ceil(others.length / 2))];
+
+    // Phones are too narrow for one row of servers or wide device boxes.
+    const compact = width < 640;
+    const deviceY = height * TIER.device;
+    const netY = height * TIER.net;
+    const infraY = height * TIER.infra;
+
+    ordered.forEach((peer, index) => {
+        const chain = peer.networkChain || [];
+        const summary = summarizeChain(chain);
+        const isMe = peer.peerId === myPeerId;
+        add({
+            id: peer.peerId, kind: 'device', isMe,
+            x: width * (index + 1) / (ordered.length + 1), y: deviceY,
+            maxW: Math.min(260, Math.max(72, width / (ordered.length + 1) - 12)),
+            label: (isMe ? 'you · ' : '') + deviceName(peer),
+            sub: summary.lanIps[0] || (summary.mdnsCount ? 'mDNS host' : ''),
+            peer, summary,
+            info: [
+                `peer ${String(peer.peerId).slice(0, 16)}`,
+                StringUtil.slimPlatform(peer.originPlatform || '') || null,
+                peer.connectionSpeedType ? `link ${peer.connectionSpeedType}` : null,
+                `NAT ${NAT_LABELS[summary.nat] || summary.nat}${summary.cgnat ? ' · carrier-grade NAT' : ''}`,
+                ...chain.slice(0, 8).map(candidateLine),
+            ].filter(Boolean),
+        });
+    });
+
+    // NATs: one per public address, above the devices behind it.
+    const natOf = new Map();
+    ordered.forEach(peer => {
+        const reflexive = (peer.networkChain || []).find(isReflexive);
+        if (!reflexive) return;
+        const id = 'nat:' + reflexive.ip;
+        const nat = add({
+            id, kind: 'nat', x: 0, y: netY, members: [],
+            label: reflexive.ip, sub: placeLine(reflexive.network) || 'public address',
+            info: [
+                `public ${reflexive.ip}${reflexive.port ? ':' + reflexive.port : ''}`,
+                reflexive.network?.hostname ? `rdns ${reflexive.network.hostname}` : null,
+                placeLine(reflexive.network),
+                reflexive.typeDetail ? `seen as ${reflexive.typeDetail}` : null,
+                'learned from a STUN binding response',
+            ].filter(Boolean),
+        });
+        nat.members.push(peer.peerId);
+        natOf.set(peer.peerId, id);
+    });
+    nodes.filter(node => node.kind === 'nat').forEach(nat => {
+        const xs = nat.members.map(id => byId.get(id).x);
+        nat.x = xs.reduce((a, b) => a + b, 0) / xs.length;
+    });
+
+    // photogroup.network across the top middle, third parties at the sides.
+    const rack = infraNodes({ origin, trackerUrl, photos });
+    if (compact) {
+        // Two rows of two, right of STUN.
+        rack.forEach((node, index) => add({
+            ...node,
+            x: width * (index % 2 ? 0.81 : 0.5),
+            y: infraY + (index < 2 ? -22 : 22),
+            maxW: width * 0.29,
+        }));
+    } else {
+        const rackLeft = width * 0.2;
+        const rackWidth = width * 0.6;
+        rack.forEach((node, index) => add({ ...node, x: rackLeft + rackWidth * (index + 0.5) / rack.length, y: infraY, maxW: rackWidth / rack.length - 12 }));
+    }
+    // STUN and TURN sit between the servers and the NATs, clear of the tier labels.
+    const sideY = compact ? (infraY + netY) / 2 - 10 : infraY + (netY - infraY) * 0.4;
+
+    const ice = describeIceServers(rtcConfig);
+    const stun = add({
+        id: 'stun', kind: 'stun', x: Math.max(width * 0.07, 48), y: sideY,
+        label: 'STUN', sub: ice.stun[0] || 'none configured',
+        info: ['tells each device its public address and port', ...ice.stun.map(host => `stun ${host}`)],
+    });
+    const relayIps = new Set();
+    ordered.forEach(peer => (peer.networkChain || []).filter(isRelayCandidate).forEach(item => relayIps.add(item.ip)));
+    const turn = (ice.turn.length || relayIps.size) ? add({
+        id: 'turn', kind: 'turn', x: Math.min(width * 0.93, width - 48), y: sideY,
+        label: 'TURN', sub: ice.turn[0] || [...relayIps][0],
+        info: ['relays WebRTC traffic when no direct path works', ...ice.turn.map(host => `turn ${host}`), ...[...relayIps].map(ip => `relay candidate ${ip}`)],
+    }) : null;
+
+    // Routes. Signalling: every device keeps an event stream to the API and
+    // a socket to the tracker, out through its NAT.
+    const via = id => (natOf.has(id) ? [id, natOf.get(id)] : [id]);
+    ordered.forEach(peer => {
+        routes.push({ id: 'sse:' + peer.peerId, kind: 'sse', path: [...via(peer.peerId), 'edge', 'api'], peerId: peer.peerId });
+        routes.push({ id: 'tracker:' + peer.peerId, kind: 'tracker', path: [...via(peer.peerId), 'edge', 'tracker'], peerId: peer.peerId });
+        routes.push({ id: 'copies:' + peer.peerId, kind: 'copies', path: [...via(peer.peerId), 'edge', 'copies'], peerId: peer.peerId });
+    });
+    nodes.filter(node => node.kind === 'nat').forEach(nat => {
+        routes.push({ id: 'stun:' + nat.id, kind: 'stun', path: [nat.id, stun.id] });
+    });
+
+    // Transfers, by the path ICE settled on.
+    const seen = new Set();
+    connections.forEach(conn => {
+        const a = conn.fromPeerId;
+        const b = conn.toPeerId;
+        if (!byId.has(a) || !byId.has(b) || a === b) return;
+        const key = [a, b].sort().join('|');
+        if (seen.has(key)) return;
+        seen.add(key);
+        const type = String(conn.connectionType || '').trim();
+        let path;
+        let kind;
+        if (type.startsWith('relay') && turn) {
+            kind = 'relay';
+            path = [...via(a), turn.id, ...via(b).reverse()];
+        } else if (type === 'p2p') {
+            kind = 'lan';
+            path = [a, b];
+        } else {
+            kind = 'punch';
+            const left = via(a);
+            const right = via(b).reverse();
+            // Same NAT: hairpin through it.
+            path = left[1] && left[1] === right[0] ? [a, left[1], b] : [...left, ...right];
+        }
+        routes.push({ id: 'p2p:' + key, kind, path, peers: [a, b], label: type || 'p2p', conn });
+    });
+
+    // Photos: under each device that holds a full copy; ours also while arriving.
+    const devices = nodes.filter(node => node.kind === 'device');
+    devices.forEach(device => {
+        const held = tiles.filter(tile => {
+            const owners = tile.owners || [];
+            if (device.isMe) return true;
+            return tile.peerId === device.id || owners.some(owner => owner.peerId === device.id && !owner.loading);
+        });
+        const shown = held.slice(0, MAX_THUMBS);
+        const gap = 6;
+        const total = shown.length * THUMB + (shown.length - 1) * gap;
+        shown.forEach((tile, index) => {
+            const more = index === MAX_THUMBS - 1 && held.length > MAX_THUMBS ? held.length - MAX_THUMBS + 1 : 0;
+            thumbs.push({
+                key: device.id + ':' + (tile.tileKey || tile.infoHash),
+                tileKey: tile.tileKey || tile.infoHash,
+                deviceId: device.id,
+                x: device.x - total / 2 + index * (THUMB + gap) + THUMB / 2,
+                y: device.y + 44 + THUMB / 2,
+                size: THUMB,
+                tile,
+                more,
+            });
+        });
+        device.photoCount = held.length;
+    });
+
+    return { nodes, routes, thumbs, byId };
+}
+
+/**
+ * The transfer routes a torrent's progress belongs on: ours to the peers
+ * we hold a wire with for it. With no wires to go by, all of ours.
+ */
+export function transferRoutesFor(routes, myPeerId, torrent) {
+    const mine = routes.filter(route => route.peers && route.peers.includes(myPeerId));
+    const wired = new Set((torrent?.wires || []).map(wire => String(wire.peerId)));
+    if (!wired.size) return mine;
+    return mine.filter(route => route.peers.some(id => id !== myPeerId && wired.has(String(id))));
+}
+
+/** The points of a route, in order. */
+export function routePoints(scene, route) {
+    return route.path.map(id => scene.byId.get(id)).filter(Boolean).map(node => ({ x: node.x, y: node.y }));
+}
+
+/** A point `t` (0..1) of the way along a polyline, by length. */
+export function pointAlong(points, t) {
+    if (points.length < 2) return points[0] || { x: 0, y: 0 };
+    const lengths = [];
+    let total = 0;
+    for (let i = 1; i < points.length; i++) {
+        const length = Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+        lengths.push(length);
+        total += length;
+    }
+    let left = Math.max(0, Math.min(1, t)) * total;
+    for (let i = 0; i < lengths.length; i++) {
+        if (left <= lengths[i] || i === lengths.length - 1) {
+            const k = lengths[i] ? left / lengths[i] : 0;
+            return {
+                x: points[i].x + (points[i + 1].x - points[i].x) * k,
+                y: points[i].y + (points[i + 1].y - points[i].y) * k,
+            };
+        }
+        left -= lengths[i];
+    }
+    return points[points.length - 1];
+}

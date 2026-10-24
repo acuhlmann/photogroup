@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import EventEmitter from 'eventemitter3';
 
-vi.mock('../topology/TopologyView', () => ({ default: () => <div data-testid="topology" /> }));
+vi.mock('./NetworkStage', () => ({ default: ({ tiles }) => <div data-testid="topology">{(tiles || []).length} photos</div> }));
 vi.mock('../MeView', () => ({ default: () => <div data-testid="me-view" /> }));
 
 const { default: GeekStage } = await import('./GeekStage');
@@ -33,6 +33,18 @@ describe('GeekStage', () => {
         const deviceTab = Array.from(div.querySelectorAll('[role="tab"]')).find(tab => tab.textContent === 'This device');
         await act(async () => deviceTab.click());
         expect(div.querySelector('[data-testid="me-view"]')).not.toBeNull();
+        await act(async () => root.unmount());
+    });
+
+    it('starts with the log closed on a phone and opens it from the selected tab', async () => {
+        const master = { emitter: new EventEmitter() };
+        const div = document.createElement('div');
+        const root = createRoot(div);
+        await act(async () => root.render(<GeekStage master={master} isMobile />));
+        expect(div.textContent).not.toContain('listening');
+        const packets = Array.from(div.querySelectorAll('[role="tab"]')).find(tab => tab.textContent.startsWith('Packets'));
+        await act(async () => packets.click());
+        expect(div.textContent).toContain('listening');
         await act(async () => root.unmount());
     });
 });
