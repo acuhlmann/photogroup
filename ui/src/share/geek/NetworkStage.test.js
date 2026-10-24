@@ -3,7 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import EventEmitter from 'eventemitter3';
-import NetworkStage, { routeLabel } from './NetworkStage';
+import NetworkStage, { routeLabel, canOpen } from './NetworkStage';
+import { createTimeline } from './timeline';
 import { TIER, THUMB } from './scene';
 
 // jsdom has no layout, so the stage falls back to an 800×600 scene.
@@ -17,7 +18,7 @@ describe('NetworkStage', () => {
         const div = document.createElement('div');
         document.body.appendChild(div);
         const root = createRoot(div);
-        await act(async () => root.render(<NetworkStage master={master} tiles={tiles} onOpenPhoto={onOpenPhoto} />));
+        await act(async () => root.render(<NetworkStage master={master} tiles={tiles} onOpenPhoto={onOpenPhoto} timeline={createTimeline()} />));
         const canvas = div.querySelector('[data-testid="network-stage"]');
         expect(div.textContent).toContain('alone in this room');
 
@@ -46,13 +47,55 @@ describe('NetworkStage', () => {
         master.emitter.on('filesSelected', onFiles);
         const div = document.createElement('div');
         const root = createRoot(div);
-        await act(async () => root.render(<NetworkStage master={master} tiles={[]} onOpenPhoto={() => {}} />));
+        await act(async () => root.render(<NetworkStage master={master} tiles={[]} onOpenPhoto={() => {}} timeline={createTimeline()} />));
         const file = new File(['x'], 'a.jpg', { type: 'image/jpeg' });
         const drop = new Event('drop', { bubbles: true });
         drop.dataTransfer = { files: [file] };
         await act(async () => div.firstChild.dispatchEvent(drop));
         await vi.waitFor(() => expect(onFiles).toHaveBeenCalledWith([file]));
         await act(async () => root.unmount());
+    });
+
+    it('opens a video from the map, though it has no still image', async () => {
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' }, me: { name: 'Mine' } };
+        const clip = new File(['clip'], 'dock.mp4', { type: 'video/mp4' });
+        // A video tile looks exactly like the one the gallery builds: no img,
+        // because the player is the file itself.
+        const tiles = [{
+            infoHash: 'v1', fileName: 'dock.mp4', fileType: 'video/mp4', isVideo: true,
+            img: null, file: clip, owners: [{ peerId: 'me' }],
+        }];
+        const onOpenPhoto = vi.fn();
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        await act(async () => root.render(<NetworkStage master={master} tiles={tiles} onOpenPhoto={onOpenPhoto} timeline={createTimeline()} />));
+        const canvas = div.querySelector('[data-testid="network-stage"]');
+        const thumbY = 600 * TIER.device + 44 + THUMB / 2;
+        await act(async () => tap(canvas, 400, thumbY));
+
+        const preview = div.querySelector('[data-testid="thumb-preview"]');
+        expect(preview.textContent).toContain('dock.mp4');
+        expect(preview.querySelector('video')).not.toBeNull();
+        // The grey box used to leave no way out: Open was disabled without an img.
+        const open = Array.from(preview.querySelectorAll('button')).find(button => button.textContent.includes('Open full size'));
+        expect(open.disabled).toBe(false);
+        await act(async () => open.click());
+        expect(onOpenPhoto).toHaveBeenCalledWith('v1');
+
+        await act(async () => root.unmount());
+        div.remove();
+    });
+});
+
+describe('canOpen', () => {
+    it('needs a picture or bytes to show', () => {
+        expect(canOpen({})).toBe(false);
+        expect(canOpen(null)).toBe(false);
+        expect(canOpen({ img: 'blob:a' })).toBe(true);
+        // A video the torrent can stream is openable without any still frame.
+        expect(canOpen({ isVideo: true, torrentFile: {} })).toBe(true);
+        expect(canOpen({ isVideo: true, file: new File(['x'], 'a.mp4') })).toBe(true);
     });
 });
 

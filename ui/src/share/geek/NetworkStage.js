@@ -9,9 +9,10 @@ import IconButton from '@mui/material/IconButton';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import OpenInFullRounded from '@mui/icons-material/OpenInFullRounded';
 
-import FileUtil from '../util/FileUtil';
 import { captureDroppedHandles } from '../gallery/replaceOriginal';
-import { buildScene, routePoints, pointAlong, transferRoutesFor, TIER } from './scene';
+import { buildScene, routePoints, pointAlong, TIER } from './scene';
+import { attachTraffic, flowAt, FLOW_MS, RX, TX } from './traffic';
+import { posterFor, mediaUrlFor } from './videoPoster';
 
 const mono = '"JetBrains Mono", "IBM Plex Mono", monospace';
 
@@ -25,8 +26,6 @@ export const ROUTE_STYLE = {
     punch: { rgb: '45,212,191', label: 'P2P via NAT', dash: [], width: 2.5 },
     relay: { rgb: '255,93,115', label: 'TURN relay', dash: [], width: 2.5 },
 };
-const RX = '61,222,139';
-const TX = '245,185,66';
 
 const NODE_RGB = {
     device: '61,214,195', nat: '245,185,66', stun: '148,163,184', turn: '255,93,115',
@@ -72,12 +71,10 @@ function polygon(ctx, x, y, r, sides, rotation) {
     ctx.closePath();
 }
 
-// With reduced motion the map stays still; the packet log still lists the traffic.
+// With reduced motion nothing moves on its own; a paused or scrubbed view is
+// still drawn, because there the viewer asked for that one moment.
 const prefersReducedMotion = () => typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-// How long a route keeps showing its last transfer.
-const FLOW_MS = 5000;
 
 /** A transfer route's label: its connection type, plus pieces and speed while they move. */
 export function routeLabel(route, state, now = Date.now()) {
@@ -116,24 +113,33 @@ function hitNode(node, x, y) {
     return Math.abs(node.x - x) <= (node.w || 90) / 2 && Math.abs(node.y - y) <= (node.h || 30) / 2 + 4;
 }
 
+/** A tile we can show full size: a still image, or media the torrent can stream. */
+export function canOpen(tile) {
+    return !!(tile && (tile.img || tile.elem || tile.file || tile.torrentFile));
+}
+
 /**
  * The geek view: the whole room as a live network diagram. Packets travel
  * the routes they really take; photos sit under the devices that hold them.
  * Tap a photo to enlarge it, tap it again (or Open) to see it in full.
+ * The traffic it draws comes from `timeline`, which the footer logs the same
+ * recording of — so pausing holds every label in place to be read.
  */
-function NetworkStage({ master, tiles, onOpenPhoto }) {
+function NetworkStage({ master, tiles, onOpenPhoto, timeline }) {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
     const containerRef = useRef(null);
     const canvasRef = useRef(null);
-    const packetsRef = useRef([]);
-    // Per transfer route: what is moving on it right now, for its label.
-    const flowRef = useRef(new Map());
     const imagesRef = useRef(new Map());
     const sceneRef = useRef(null);
     const [size, setSize] = useState({ width: 0, height: 0 });
     const [version, setVersion] = useState(0);
     const [selected, setSelected] = useState(null);
+    // The drawing reads the playhead every frame, so only the chrome that says
+    // "held" needs re-rendering when it moves — not the canvas.
+    const [paused, setPaused] = useState(!timeline.playing);
+
+    useEffect(() => timeline.subscribeClock(() => setPaused(!timeline.playing)), [timeline]);
 
     // Rebuild whenever the room changes shape.
     useEffect(() => {
@@ -167,6 +173,14 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
         [master, tiles, size.width, size.height, version]);
     sceneRef.current = scene;
 
+    // Record the room's traffic into the shared timeline; the footer logs it.
+    useEffect(() => attachTraffic({
+        timeline,
+        emitter: master.emitter,
+        getScene: () => sceneRef.current,
+        getMyId: () => master.client?.peerId,
+    }), [master, timeline]);
+
     const image = useCallback((url) => {
         if (!url) return null;
         const cache = imagesRef.current;
@@ -178,137 +192,6 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
         const img = cache.get(url);
         return img.complete && img.naturalWidth ? img : null;
     }, []);
-
-    /** Send a packet along a route; `reverse` runs it from the far end towards the device. */
-    const send = useCallback((route, { reverse = false, rgb, label = '', speed = 0.012 } = {}) => {
-        const current = sceneRef.current;
-        if (!current || !route || prefersReducedMotion()) return;
-        const points = routePoints(current, route);
-        if (points.length < 2) return;
-        if (packetsRef.current.length > 300) return;
-        packetsRef.current.push({
-            points: reverse ? points.slice().reverse() : points,
-            t: 0, speed: speed * (0.85 + Math.random() * 0.3),
-            rgb: rgb || ROUTE_STYLE[route.kind]?.rgb || '255,255,255', label,
-        });
-    }, []);
-
-    // Turn the app's events into packets on the routes they use.
-    useEffect(() => {
-        const emitter = master.emitter;
-        const last = new Map();
-        const throttled = (key, ms) => {
-            const now = Date.now();
-            if (now - (last.get(key) || 0) < ms) return true;
-            last.set(key, now);
-            return false;
-        };
-        const myId = () => master.client?.peerId;
-        const routes = kind => (sceneRef.current?.routes || []).filter(route => route.kind === kind);
-        const mine = kind => routes(kind).find(route => route.peerId === myId());
-
-        // The server pushes every room change to everyone at once.
-        const broadcast = (name) => (event) => {
-            const type = event && event.type ? ':' + event.type : '';
-            if (throttled('sse' + name + type, 400)) return;
-            if (name === 'photos' && event?.type === 'add' && [].concat(event.item || []).some(photo => photo?.peerId === myId())) {
-                send(mine('sse'), { label: 'POST magnet' });
-            }
-            routes('sse').forEach(route => send(route, { reverse: true, label: route.peerId === myId() ? `SSE ${name}${type}` : '' }));
-        };
-        const onPhotos = broadcast('photos');
-        const onPeers = broadcast('peers');
-        const onConnections = broadcast('peerConnections');
-
-        // Transfer dots are real WebTorrent pieces, on the route to the peer
-        // whose wire carried them. Big files send a dot for every few pieces;
-        // the route label still counts each one.
-        const flow = route => {
-            const state = flowRef.current.get(route.id);
-            // A quiet route starts counting afresh.
-            if (state && Date.now() - state.at <= FLOW_MS) return state;
-            const fresh = { rx: 0, tx: 0, at: Date.now() };
-            flowRef.current.set(route.id, fresh);
-            return fresh;
-        };
-        const onPiece = kind => ({ torrent, index, size, total, peerId } = {}) => {
-            const route = transferRoutesFor(sceneRef.current?.routes || [], myId(), { wires: [{ peerId }] })[0];
-            if (!route) return;
-            const state = flow(route);
-            state[kind] += 1;
-            state.total = total;
-            state.name = torrent?.name;
-            state.at = Date.now();
-            const every = Math.max(1, Math.ceil(total / 40));
-            const last = index === total - 1;
-            if (!last && (index % every || throttled(kind + 'dot' + route.id, 60))) return;
-            // Pieces arrive in bursts; name one every so often so labels stay readable.
-            const named = last || !throttled(kind + 'name' + route.id, 700);
-            const towardsMe = route.path[route.path.length - 1] === myId();
-            send(route, {
-                reverse: kind === 'rx' ? !towardsMe : towardsMe,
-                rgb: kind === 'rx' ? RX : TX,
-                label: named ? `#${index + 1}/${total} ${FileUtil.formatBytes(size)}` : '',
-                speed: 0.02,
-            });
-        };
-        const onReceived = onPiece('rx');
-        const onSent = onPiece('tx');
-        // Speeds come per torrent; show them on the routes wired for it.
-        const onSpeed = kind => (event) => {
-            transferRoutesFor(sceneRef.current?.routes || [], myId(), event?.torrent).forEach(route => {
-                const state = flow(route);
-                state[kind + 'Speed'] = event?.speed;
-                state.at = Date.now();
-            });
-        };
-        const onDownload = onSpeed('rx');
-        const onUpload = onSpeed('tx');
-
-        const onWire = () => {
-            if (throttled('wire', 500)) return;
-            send(mine('tracker'), { label: 'announce' });
-            send(mine('tracker'), { reverse: true, label: 'offer/answer', speed: 0.01 });
-        };
-        const onBackup = ({ pending } = {}) => {
-            if (pending > 0) send(mine('copies'), { label: 'PUT chunk ≤8 MB' });
-        };
-        const onCopy = () => send(mine('copies'), { reverse: true, label: 'GET copy' });
-        const onIce = (type, value) => {
-            if (type !== 'icegatheringstatechange' || value !== 'gathering') return;
-            // Only our own NAT asks STUN; the others gather on their own devices.
-            const nat = (mine('sse')?.path || [])[1];
-            routes('stun').filter(route => route.path[0] === nat).forEach(route => {
-                send(route, { label: 'binding request' });
-                send(route, { reverse: true, label: 'binding response', speed: 0.009 });
-            });
-        };
-
-        emitter.on('photos', onPhotos);
-        emitter.on('peers', onPeers);
-        emitter.on('peerConnections', onConnections);
-        emitter.on('downloadProgress', onDownload);
-        emitter.on('uploadProgress', onUpload);
-        emitter.on('pieceReceived', onReceived);
-        emitter.on('pieceSent', onSent);
-        emitter.on('wire', onWire);
-        emitter.on('serverCopyBackup', onBackup);
-        emitter.on('serverCopyReady', onCopy);
-        emitter.on('pcEvent', onIce);
-        return () => {
-            emitter.removeListener('photos', onPhotos);
-            emitter.removeListener('peers', onPeers);
-            emitter.removeListener('peerConnections', onConnections);
-            emitter.removeListener('downloadProgress', onDownload);
-            emitter.removeListener('uploadProgress', onUpload);
-            emitter.removeListener('pieceReceived', onReceived);
-            emitter.removeListener('pieceSent', onSent);
-            emitter.removeListener('wire', onWire);
-            emitter.removeListener('serverCopyBackup', onBackup);
-            emitter.removeListener('serverCopyReady', onCopy);
-            emitter.removeListener('pcEvent', onIce);
-        };
-    }, [master, send]);
 
     // Draw.
     useEffect(() => {
@@ -326,12 +209,24 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
         const muted = isDark ? 'rgba(232,238,246,0.55)' : 'rgba(20,24,32,0.55)';
         const faint = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
         scene.nodes.forEach(node => measureNode(ctx, node));
+        // Route geometry only changes with the scene, so resolve it once here.
+        const pointsOf = new Map();
+        const routeById = new Map();
+        scene.routes.forEach(route => {
+            routeById.set(route.id, route);
+            pointsOf.set(route.id, routePoints(scene, route));
+        });
 
         let frame;
         let running = true;
         const draw = () => {
             if (!running) return;
             ctx.clearRect(0, 0, width, height);
+            // The moment on screen: the live edge, or wherever the playhead sits.
+            const at = timeline.clock();
+            const moving = !prefersReducedMotion() || !timeline.playing;
+            const focus = timeline.shown();
+            const focused = new Set(focus ? focus.flights.map(flight => flight.routeId) : []);
 
             // Tiers, so position reads as role.
             const bands = [
@@ -339,8 +234,8 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
                 ['internet · NAT · STUN · TURN', TIER.net],
                 ['devices · photos they hold', TIER.device],
             ];
-            bands.forEach(([label, at]) => {
-                const y = height * at;
+            bands.forEach(([label, bandY]) => {
+                const y = height * bandY;
                 ctx.strokeStyle = faint;
                 ctx.lineWidth = 1;
                 ctx.setLineDash([]);
@@ -371,24 +266,26 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
                 ctx.fill();
             }
 
-            // Routes: signalling faint, transfers bold.
+            // Routes: signalling faint, transfers bold. The one the playhead is
+            // parked on is lit up, so a stepped event shows the path it took.
             scene.routes.forEach(route => {
                 const style = ROUTE_STYLE[route.kind];
                 if (!style || style.hidden) return;
-                const points = routePoints(scene, route);
+                const points = pointsOf.get(route.id);
                 if (points.length < 2) return;
                 const transfer = !!route.peers;
+                const lit = focused.has(route.id);
                 ctx.beginPath();
                 points.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
                 ctx.setLineDash(style.dash);
-                ctx.lineWidth = style.width;
-                ctx.strokeStyle = `rgba(${style.rgb},${transfer ? 0.75 : 0.28})`;
+                ctx.lineWidth = lit ? style.width + 1.5 : style.width;
+                ctx.strokeStyle = `rgba(${style.rgb},${lit ? 1 : transfer ? 0.75 : 0.28})`;
                 ctx.stroke();
                 ctx.setLineDash([]);
                 if (transfer && route.label) {
                     const mid = pointAlong(points, 0.5);
                     ctx.font = `9px ${mono}`;
-                    const label = routeLabel(route, flowRef.current.get(route.id));
+                    const label = routeLabel(route, flowAt(timeline.entries, route.id, at), at);
                     const w = ctx.measureText(label).width + 10;
                     roundRect(ctx, mid.x - w / 2, mid.y - 8, w, 16, 4);
                     ctx.fillStyle = isDark ? 'rgba(16,20,28,0.9)' : 'rgba(255,255,255,0.92)';
@@ -400,31 +297,38 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
                 }
             });
 
-            // Packets, with what they carry.
-            packetsRef.current = packetsRef.current.filter(packet => packet.t <= 1);
-            packetsRef.current.forEach(packet => {
-                packet.t += packet.speed;
-                const at = pointAlong(packet.points, packet.t);
-                const tail = pointAlong(packet.points, Math.max(0, packet.t - 0.06));
-                const alpha = Math.min(1, Math.sin(Math.min(1, packet.t) * Math.PI) * 1.4 + 0.2);
-                ctx.strokeStyle = `rgba(${packet.rgb},${alpha * 0.5})`;
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(tail.x, tail.y);
-                ctx.lineTo(at.x, at.y);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.arc(at.x, at.y, 3.5, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(${packet.rgb},${alpha})`;
-                ctx.fill();
-                if (packet.label) {
-                    ctx.font = `9px ${mono}`;
-                    ctx.fillStyle = `rgba(${packet.rgb},${alpha})`;
-                    ctx.textAlign = 'left';
-                    ctx.textBaseline = 'bottom';
-                    ctx.fillText(packet.label, at.x + 6, at.y - 4);
-                }
-            });
+            // Packets, with what they carry. Placed by the clock, so a paused
+            // map keeps every dot and its label exactly where it was.
+            if (moving) {
+                timeline.inFlight(at).forEach(packet => {
+                    const route = routeById.get(packet.routeId);
+                    if (!route) return;
+                    const all = pointsOf.get(route.id);
+                    if (all.length < 2) return;
+                    const points = packet.reverse ? all.slice().reverse() : all;
+                    const here = pointAlong(points, packet.progress);
+                    const tail = pointAlong(points, Math.max(0, packet.progress - 0.06));
+                    const rgb = packet.rgb || ROUTE_STYLE[route.kind]?.rgb || '255,255,255';
+                    const alpha = Math.min(1, Math.sin(Math.min(1, packet.progress) * Math.PI) * 1.4 + 0.2);
+                    ctx.strokeStyle = `rgba(${rgb},${alpha * 0.5})`;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(tail.x, tail.y);
+                    ctx.lineTo(here.x, here.y);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(here.x, here.y, 3.5, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${rgb},${alpha})`;
+                    ctx.fill();
+                    if (packet.label) {
+                        ctx.font = `9px ${mono}`;
+                        ctx.fillStyle = `rgba(${rgb},${alpha})`;
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'bottom';
+                        ctx.fillText(packet.label, here.x + 6, here.y - 4);
+                    }
+                });
+            }
 
             // Nodes.
             scene.nodes.forEach(node => {
@@ -475,15 +379,28 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
             scene.thumbs.forEach(thumb => {
                 const { x, y, size: s, tile } = thumb;
                 const isSelected = selected?.type === 'thumb' && selected.key === thumb.key;
-                const img = image(tile.img);
+                const source = tile.img || posterFor(tile);
+                const img = source ? image(source) : null;
                 ctx.save();
                 roundRect(ctx, x - s / 2, y - s / 2, s, s, 6);
                 ctx.clip();
                 if (img) {
-                    const scale = Math.max(s / img.naturalWidth, s / img.naturalHeight);
+                    const scale = Math.max(s / img.naturalWidth, img.naturalHeight ? s / img.naturalHeight : 1);
                     const iw = img.naturalWidth * scale;
-                    const ih = img.naturalHeight * scale;
+                    const ih = (img.naturalHeight || s) * scale;
                     ctx.drawImage(img, x - iw / 2, y - ih / 2, iw, ih);
+                } else if (tile.isVideo) {
+                    // No poster yet: say plainly that this is a video, rather
+                    // than a grey box that reads like a broken image.
+                    ctx.fillStyle = 'rgba(9,12,18,0.92)';
+                    ctx.fillRect(x - s / 2, y - s / 2, s, s);
+                    ctx.fillStyle = `rgba(${RX},0.9)`;
+                    ctx.beginPath();
+                    ctx.moveTo(x - s * 0.14, y - s * 0.2);
+                    ctx.lineTo(x - s * 0.14, y + s * 0.2);
+                    ctx.lineTo(x + s * 0.2, y);
+                    ctx.closePath();
+                    ctx.fill();
                 } else {
                     ctx.fillStyle = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
                     ctx.fillRect(x - s / 2, y - s / 2, s, s);
@@ -525,7 +442,7 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
             running = false;
             cancelAnimationFrame(frame);
         };
-    }, [scene, size, isDark, selected, image]);
+    }, [scene, size, isDark, selected, image, timeline]);
 
     const handlePointer = useCallback((event) => {
         const canvas = canvasRef.current;
@@ -598,6 +515,17 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
                 </Typography>
             )}
 
+            {paused && (
+                <Typography data-testid="paused-mark" sx={{
+                    position: 'absolute', left: 8, bottom: 8, pointerEvents: 'none',
+                    fontFamily: mono, fontSize: '0.62rem', letterSpacing: '0.08em',
+                    px: 0.75, py: 0.25, borderRadius: 1, border: 1, borderColor: 'warning.main', color: 'warning.main',
+                    bgcolor: 'background.paper',
+                }}>
+                    held · {new Date(timeline.clock()).toLocaleTimeString()}
+                </Typography>
+            )}
+
             {/* An enlarged photo, next to where it sits. */}
             {thumb && (
                 <Box
@@ -616,16 +544,30 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
                         boxShadow: 6,
                     }}
                 >
-                    <Box
-                        component={thumb.tile.img ? 'img' : 'div'}
-                        src={thumb.tile.img || undefined}
-                        alt={thumb.tile.fileName || 'Photo'}
-                        onClick={() => thumb.tile.img && onOpenPhoto(thumb.tileKey)}
-                        sx={{
-                            width: '100%', height: 150, objectFit: 'cover', borderRadius: 1, display: 'block',
-                            bgcolor: 'action.hover', cursor: thumb.tile.img ? 'zoom-in' : 'default',
-                        }}
-                    />
+                    {thumb.tile.isVideo && canOpen(thumb.tile) ? (
+                        <Box
+                            component="video"
+                            // The clip this device holds, played here rather than only in
+                            // the viewer; a device without it falls back to the poster.
+                            src={mediaUrlFor(thumb.tile) || undefined}
+                            poster={posterFor(thumb.tile) || undefined}
+                            controls
+                            muted
+                            playsInline
+                            sx={{ width: '100%', height: 150, objectFit: 'cover', borderRadius: 1, display: 'block', bgcolor: '#0a0c10' }}
+                        />
+                    ) : (
+                        <Box
+                            component={thumb.tile.img ? 'img' : 'div'}
+                            src={thumb.tile.img || undefined}
+                            alt={thumb.tile.fileName || 'Photo'}
+                            onClick={() => thumb.tile.img && onOpenPhoto(thumb.tileKey)}
+                            sx={{
+                                width: '100%', height: 150, objectFit: 'cover', borderRadius: 1, display: 'block',
+                                bgcolor: 'action.hover', cursor: thumb.tile.img ? 'zoom-in' : 'default',
+                            }}
+                        />
+                    )}
                     <Box sx={{ mt: 0.75, fontFamily: mono, fontSize: '0.62rem', lineHeight: 1.5, color: 'text.secondary', wordBreak: 'break-all' }}>
                         <Box sx={{ color: 'text.primary', fontWeight: 600 }}>{thumb.tile.fileName || 'photo'}</Box>
                         {[thumb.tile.fileSize, thumb.tile.fileType].filter(Boolean).join(' · ')}
@@ -636,7 +578,7 @@ function NetworkStage({ master, tiles, onOpenPhoto }) {
                         {thumb.tile.hasServerCopy ? ' · server copy' : ''}
                     </Box>
                     <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
-                        <Button size="small" variant="contained" startIcon={<OpenInFullRounded />} disabled={!thumb.tile.img}
+                        <Button size="small" variant="contained" startIcon={<OpenInFullRounded />} disabled={!canOpen(thumb.tile)}
                             onClick={() => onOpenPhoto(thumb.tileKey)} sx={{ textTransform: 'none', flex: 1 }}>
                             Open full size
                         </Button>
@@ -685,6 +627,7 @@ NetworkStage.propTypes = {
     master: PropTypes.object.isRequired,
     tiles: PropTypes.array.isRequired,
     onOpenPhoto: PropTypes.func.isRequired,
+    timeline: PropTypes.object.isRequired,
 };
 
 export default NetworkStage;
