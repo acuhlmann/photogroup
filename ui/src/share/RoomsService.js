@@ -316,11 +316,28 @@ export default class RoomsService {
         return { status: 'stored', size };
     }
 
-    /** Download the server copy of a photo when P2P has stalled. */
-    async fetchServerCopy(infoHash) {
+    /**
+     * Download the server copy of a photo when P2P has stalled, reporting
+     * `onProgress(loaded, total)` as the bytes arrive where the browser
+     * can stream the body.
+     */
+    async fetchServerCopy(infoHash, { onProgress } = {}) {
         const response = await fetch(this.blobUrl(infoHash), { headers: this.sessionHeaders() });
         if (!response.ok) return null;
-        return response.blob();
+        const reader = onProgress && response.body?.getReader?.();
+        if (!reader) return response.blob();
+        const total = Number(response.headers.get('Content-Length')) || undefined;
+        const type = response.headers.get('Content-Type') || '';
+        const parts = [];
+        let loaded = 0;
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            parts.push(value);
+            loaded += value.byteLength;
+            onProgress(loaded, total);
+        }
+        return new Blob(parts, { type });
     }
 
     /** Ask whoever has the photo to leave a server copy. */

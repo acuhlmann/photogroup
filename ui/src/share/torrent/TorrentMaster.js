@@ -15,6 +15,7 @@ import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isCompoundInfoHas
 import { cacheGet, cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 import ServerFallback, { isSharedPhoto } from './ServerFallback';
 import ServerPinning from './ServerPinning';
+import TransferLedger from './TransferLedger';
 import RoomPhotos from './RoomPhotos';
 import TrackerKick from './TrackerKick';
 import { watchPieces } from './pieceEvents';
@@ -85,7 +86,7 @@ export default class TorrentMaster {
 
         // Last tier: when P2P stalls, ask for a server copy and fetch it...
         this.serverFallback = new ServerFallback({
-            fetchCopy: infoHash => this.service.fetchServerCopy ? this.service.fetchServerCopy(infoHash) : Promise.resolve(null),
+            fetchCopy: (infoHash, opts) => this.service.fetchServerCopy ? this.service.fetchServerCopy(infoHash, opts) : Promise.resolve(null),
             requestCopy: async infoHash => {
                 const state = await this.service.requestServerCopy(infoHash);
                 // A copy may have been announced before we were listening
@@ -107,6 +108,8 @@ export default class TorrentMaster {
             findBytes: infoHash => this.findPhotoBytes(infoHash),
             emitter: this.emitter
         });
+        // What each transfer went through, for geek mode.
+        this.ledger = new TransferLedger({ emitter: this.emitter });
         this._serverCopies = new Map();
         this.emitter.on('serverCopyReady', photo => this.handleServerCopyReady(photo));
 

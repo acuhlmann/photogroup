@@ -1,4 +1,5 @@
 import StringUtil from '../util/StringUtil';
+import FileUtil from '../util/FileUtil';
 
 // Turns the app's events into one-line log entries for geek mode: what came
 // over the wire, from the server and the swarm, as it happens.
@@ -17,7 +18,7 @@ function torrentName(torrent) {
 
 /**
  * One log entry for an event, or null for events not worth a line.
- * `kind` is the channel it came on: wire, rx, tx, peer, link, photo, ice, sse.
+ * `kind` is the channel it came on: wire, rx, tx, peer, link, photo, ice, sse, copy.
  */
 export function describeEvent(name, args) {
     const [first, second, third] = args;
@@ -84,6 +85,21 @@ export function describeEvent(name, args) {
         const types = [...new Set(first.map(item => item.typeDetail || item.type).filter(Boolean))];
         return { kind: 'ice', text: `${first.length} candidates · ${types.join(' ')}` };
     }
+    case 'serverCopy': {
+        if (!first?.stage) return null;
+        const arrow = first.direction === 'up' ? '↑ PUT' : '↓ GET';
+        const moving = first.stage === 'uploading' || first.stage === 'downloading';
+        const bytes = moving && first.total
+            ? ` ${FileUtil.formatBytes(first.loaded || 0)}/${FileUtil.formatBytes(first.total)} ${Math.round((first.loaded || 0) / first.total * 100)}%`
+            : '';
+        // The reason is news once per stage; progress lines just count.
+        const why = first.why && !(moving && first.loaded) ? ` · ${first.why}` : '';
+        return {
+            kind: 'copy',
+            key: 'copy' + first.infoHash + first.stage,
+            text: `server copy ${arrow} ${first.stage}${bytes} · ${first.name || short(first.infoHash, 10)}${why}`,
+        };
+    }
     case 'sseReconnected':
         return { kind: 'sse', text: 'event stream reconnected' };
     default:
@@ -93,5 +109,5 @@ export function describeEvent(name, args) {
 
 export const LOGGED_EVENTS = [
     'wire', 'downloadProgress', 'uploadProgress', 'pieceReceived', 'pieceSent', 'peers', 'peerConnections',
-    'photos', 'pcEvent', 'localNetwork', 'sseReconnected',
+    'photos', 'pcEvent', 'localNetwork', 'sseReconnected', 'serverCopy',
 ];

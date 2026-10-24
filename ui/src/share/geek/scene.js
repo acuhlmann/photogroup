@@ -1,5 +1,5 @@
 import StringUtil from '../util/StringUtil';
-import { describeIceServers, summarizeChain, NAT_LABELS } from '../topology/NetworkInsight';
+import { describeIceServers, summarizeChain, forecastPath, verdictFor, NAT_LABELS } from '../topology/NetworkInsight';
 
 // The geek stage draws the room as layers, top to bottom, so where a node
 // sits says what it is:
@@ -107,6 +107,26 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     const netY = height * TIER.net;
     const infraY = height * TIER.infra;
 
+    // What used to be the "This device" panel lives on the nodes: our link's
+    // verdict on ours, the path a transfer is likely to take on everyone else's.
+    const ice = describeIceServers(rtcConfig);
+    const hasTurn = ice.turn.length > 0;
+    const mySummary = summarizeChain(mine?.networkChain || localNetwork);
+    const linkLines = (summary, isMe) => {
+        if (isMe) {
+            return [
+                `link · ${verdictFor(summary, { hasTurn }).text}`,
+                summary.mdnsCount ? `${summary.mdnsCount} host candidate${summary.mdnsCount > 1 ? 's' : ''} masked as mDNS .local` : null,
+                summary.cgnat ? 'CGNAT 100.64/10: your ISP adds a second NAT' : null,
+                summary.transports?.length ? `stack ${summary.transports.join('+').toUpperCase()}${summary.ipv6 ? ' · IPv6' : ' · IPv4 only'}` : null,
+                `stun ${ice.stun.slice(0, 2).join(', ') || 'none'}`,
+                `turn ${ice.turn.slice(0, 2).join(', ') || 'none · the HTTPS server copy is the fallback'}`,
+            ];
+        }
+        const forecast = forecastPath(mySummary, summary, { hasTurn });
+        return [`path from you · ${forecast.label}`, forecast.why];
+    };
+
     ordered.forEach((peer, index) => {
         const chain = peer.networkChain || [];
         const summary = summarizeChain(chain);
@@ -123,6 +143,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
                 StringUtil.slimPlatform(peer.originPlatform || '') || null,
                 peer.connectionSpeedType ? `link ${peer.connectionSpeedType}` : null,
                 `NAT ${NAT_LABELS[summary.nat] || summary.nat}${summary.cgnat ? ' · carrier-grade NAT' : ''}`,
+                ...linkLines(summary, isMe),
                 ...chain.slice(0, 8).map(candidateLine),
             ].filter(Boolean),
         });
@@ -171,7 +192,6 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     // STUN and TURN sit between the servers and the NATs, clear of the tier labels.
     const sideY = compact ? (infraY + netY) / 2 - 10 : infraY + (netY - infraY) * 0.4;
 
-    const ice = describeIceServers(rtcConfig);
     const stun = add({
         id: 'stun', kind: 'stun', x: Math.max(width * 0.07, 48), y: sideY,
         label: 'STUN', sub: ice.stun[0] || 'none configured',

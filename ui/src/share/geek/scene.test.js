@@ -47,6 +47,17 @@ describe('buildScene', () => {
         expect(shared.sub).toBe('Vienna, AT · A1');
     });
 
+    it('puts what the old "This device" panel said on the nodes', () => {
+        const scene = room();
+        const me = scene.byId.get('me').info.join('\n');
+        expect(me).toMatch(/^link · /m);
+        expect(me).toContain('stun stun.l.google.com');
+        expect(me).toContain('turn none · the HTTPS server copy is the fallback');
+        // Same public address: a LAN path; another network: a hole punch.
+        expect(scene.byId.get('ana').info).toContain('path from you · same network, host↔host');
+        expect(scene.byId.get('ben').info.find(line => line.startsWith('path from you'))).toBe('path from you · direct via STUN hole punch');
+    });
+
     it('routes signalling out through each NAT to photogroup.network', () => {
         const scene = room();
         const sse = scene.routes.find(route => route.id === 'sse:ben');

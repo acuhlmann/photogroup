@@ -6,7 +6,6 @@ import EventEmitter from 'eventemitter3';
 
 // The map is drawn on a canvas, which jsdom leaves blank, but the recording it
 // attaches is what the footer logs — so the real stage is rendered here.
-vi.mock('../MeView', () => ({ default: () => <div data-testid="me-view" /> }));
 
 const { default: GeekStage } = await import('./GeekStage');
 
@@ -34,9 +33,10 @@ describe('GeekStage', () => {
         expect(lines[0]).toContain('1 MB/s ← beach.jpg 10%');
         expect(lines[1]).toContain('Ana joined');
 
-        const device = tab(div, 'This device');
-        await act(async () => device.click());
-        expect(div.querySelector('[data-testid="me-view"]')).not.toBeNull();
+        const transfers = tab(div, 'Transfers');
+        await act(async () => transfers.click());
+        expect(div.querySelector('[data-testid="transfers"]')).not.toBeNull();
+        expect(div.textContent).toContain('no transfers yet');
         await act(async () => root.unmount());
     });
 

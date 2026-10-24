@@ -33,6 +33,16 @@ export const HELPER_DELAY_MS = 3000;
 export const HELPER_JITTER_MS = 2000;
 export const RETRY_DELAYS_MS = [5000, 15000, 30000, 60000];
 
+/** Why a copy is being left, in words for geek mode's transfer view. */
+export const UPLOAD_WHY = {
+    asked: "someone's P2P download stalled and they asked for a copy",
+    'going to background': 'this page went to the background while someone still lacks it',
+    'keep copies': 'the room keeps server copies for latecomers',
+    video: 'clips get a backup: often only this phone has them',
+    resuming: 'carrying on an upload a freeze cut off',
+    retrying: 'trying again after an upload was cut off',
+};
+
 export default class ServerPinning {
     /**
      * @param {object} deps
@@ -59,6 +69,17 @@ export default class ServerPinning {
         this.hidden = false;
         emitter?.on?.('photos', event => this.onPhotos(event));
         emitter?.on?.('roomSettings', settings => this.setSettings(settings));
+    }
+
+    /**
+     * Say where an upload stands (`serverCopy` events): queued, uploading
+     * (with bytes), stored, exists, busy, interrupted, failed or too-large.
+     */
+    stage(infoHash, stage, extra = {}) {
+        const photo = this.roomPhotos?.get?.(infoHash);
+        this.emitter?.emit?.('serverCopy', {
+            infoHash, direction: 'up', stage, name: photo?.fileName, ...extra,
+        });
     }
 
     get myPeerId() {
@@ -169,6 +190,7 @@ export default class ServerPinning {
         this.queued.add(infoHash);
         this.queue.push({ infoHash, reason });
         this.track(infoHash);
+        this.stage(infoHash, 'queued', { reason, why: UPLOAD_WHY[reason] || reason });
         this.pump();
         return true;
     }
@@ -193,14 +215,25 @@ export default class ServerPinning {
         const photo = this.roomPhotos.get(infoHash);
         if (photo?.hasServerCopy) return this.settle(infoHash, 'landed');
         const blob = this.localFiles.get(infoHash) || await this.findBytes?.(infoHash);
-        if (!blob) return this.settle(infoHash, 'failed');
+        if (!blob) {
+            this.stage(infoHash, 'failed', { why: 'the bytes are no longer on this device' });
+            return this.settle(infoHash, 'failed');
+        }
         if (blob.size > MAX_PHOTO_BYTES) {
             this.done.add(infoHash);
+            this.stage(infoHash, 'too-large', { total: blob.size, why: `over the ${MAX_PHOTO_MB} MB server limit, so P2P only` });
             Logger.info('ServerPinning: ' + infoHash + ' is too large to leave on the server');
             return this.settle(infoHash, 'failed');
         }
         Logger.info('ServerPinning: leaving a server copy of ' + (photo?.fileName || infoHash) + ' (' + reason + ')');
-        const result = await this.service.uploadServerCopy(infoHash, blob);
+        const why = UPLOAD_WHY[reason] || reason;
+        this.stage(infoHash, 'uploading', { reason, why, loaded: 0, total: blob.size });
+        const result = await this.service.uploadServerCopy(infoHash, blob, {
+            onProgress: (loaded, total) => this.stage(infoHash, 'uploading', { reason, why, loaded, total }),
+        });
+        this.stage(infoHash, result?.status === 'refused' ? 'failed' : (result?.status || 'failed'), {
+            reason, why, loaded: result?.status === 'stored' ? blob.size : result?.received, total: blob.size,
+        });
         // Cut off, or someone else is sending it: still not on the server.
         // Retrying takes over should their upload stall.
         if (result?.status === 'interrupted' || result?.status === 'busy') {
