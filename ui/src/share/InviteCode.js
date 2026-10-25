@@ -10,7 +10,7 @@ import copy from 'clipboard-copy';
 import Logger from 'js-logger';
 
 export function roomUrl(id) {
-    return window.location.origin + '?room=' + id;
+    return window.location.origin + '?room=' + encodeURIComponent(id);
 }
 
 /**
