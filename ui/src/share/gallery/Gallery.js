@@ -5,7 +5,6 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import CloudUploadIcon from '@mui/icons-material/CloudUploadRounded';
-import AddPhotoAlternateRounded from '@mui/icons-material/AddPhotoAlternateRounded';
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import {withSnackbar} from "../compatibility/withSnackbar";
@@ -32,35 +31,6 @@ import { CLIP_SIZE_NOTE } from "../torrent/ServerCopyLimits";
 
 /** A tile's identity across updates; an upload's infoHash changes once it is hashed. */
 const tileKeyOf = tile => tile.tileKey || tile.infoHash;
-
-/** Render the upload input's label, optionally limiting its width for a narrow gallery. */
-function AddPhotosStrip({ narrow }) {
-    return (
-        <Box
-            component="label"
-            htmlFor="contained-button-file"
-            className="drop-target"
-            data-testid="add-photos-strip"
-            sx={{
-                minHeight: '0 !important',
-                flexDirection: 'row !important',
-                gap: 1,
-                py: '10px !important',
-                mb: 2,
-                maxWidth: narrow ? 880 : 'none',
-                mx: narrow ? 'auto' : 0,
-            }}
-        >
-            <AddPhotoAlternateRounded sx={{ fontSize: 20, color: 'primary.main' }} />
-            <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 600 }}>
-                Add photos or clips
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                drop here or tap
-            </Typography>
-        </Box>
-    );
-}
 
 /**
  * Display room tiles, accept dropped uploads, and open the media viewer.
@@ -530,7 +500,6 @@ function Gallery(props) {
                             : "Loading this room's photos…"}
                     </Typography>
                 </Box>
-                {roomSyncTimedOut && <AddPhotosStrip narrow />}
                 </>
             ) : variant === 'simple' ? (
                 <SimpleGrid tiles={tiles} roomId={master.service && master.service.id} onError={showError} />
@@ -543,14 +512,11 @@ function Gallery(props) {
                     sx={{ minHeight: 'min(40vh, 360px) !important' }}
                 >
                     <CloudUploadIcon sx={{ fontSize: 40, mb: 1.5, color: 'primary.main' }} />
-                    <Typography className="tech-text" sx={{ mb: 1, color: 'primary.main' }}>
-                        Drop or choose
-                    </Typography>
                     <Typography variant="h6" sx={{ color: 'text.primary', mb: 0.5, fontWeight: 600 }}>
-                        Share photos and clips
+                        Add photos and clips
                     </Typography>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        Drop photos or clips here, or tap to select them on this device.
+                        Drop them here, or tap to pick them on this device. All people in the room get them.
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary', mt: 1, maxWidth: 420 }}>
                         {CLIP_SIZE_NOTE}
@@ -565,8 +531,7 @@ function Gallery(props) {
                 </>
             ) : (
                 <>
-                {/* The empty-state drop zone, shrunk to one line once there are photos. */}
-                <AddPhotosStrip narrow={tiles.length < 2} />
+                {/* Add more with the header's Add photos button, or drop them anywhere here. */}
                 <AndroidLocationNote narrow={tiles.length < 2} />
                 {tiles.length > 1 && (
                     <GalleryToolbar
@@ -626,7 +591,7 @@ function Gallery(props) {
                 >
                     <CloudUploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
                     <Typography variant="subtitle1" sx={{ color: 'primary.main' }}>
-                        Drop files to share
+                        Drop to add them to the room
                     </Typography>
                 </Box>
             )}

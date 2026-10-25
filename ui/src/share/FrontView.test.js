@@ -81,8 +81,8 @@ describe('FrontView', () => {
       mockMaster.emitter.emit('iceDone');
     });
     expect(document.body.textContent).toContain('Share the pictures');
-    expect(document.body.textContent).toContain('Create Room');
-    expect(document.body.textContent).toContain('Scan QR to Join');
+    expect(document.body.textContent).toContain('Start a room');
+    expect(document.body.textContent).toContain('Scan to join');
     expect(document.body.textContent).toContain('4.2 MB');
     await act(async () => {
       root.unmount();

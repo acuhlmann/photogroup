@@ -80,12 +80,12 @@ test('two browser P2P photo sharing flow', async ({ browser }) => {
   // Step 1: Browser 1 - Navigate to app
   await page1.goto('/', { waitUntil: 'domcontentloaded' });
   
-  // Wait for the app to load - look for the "Create Room" button
-  // The button text is "Create Room" (case sensitive in the code)
-  const startRoomButton = page1.getByRole('button', { name: /Create Room/i });
+  // Wait for the app to load - look for the "Start a room" button
+  // The button text is "Start a room"
+  const startRoomButton = page1.getByRole('button', { name: /Start a room/i });
   await expect(startRoomButton).toBeVisible({ timeout: 30000 });
   
-  // Step 2: Browser 1 - Click "Create Room" button
+  // Step 2: Browser 1 - Click "Start a room" button
   // This triggers openRoom() which calls findExistingContent and createRoom (API call)
   await startRoomButton.click();
   

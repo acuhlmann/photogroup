@@ -9,6 +9,7 @@ import Slide from '@mui/material/Slide';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import { createRoom } from './openRoom';
+import RecentRooms from './RecentRooms';
 
 const frames = [
     {
@@ -177,7 +178,7 @@ function FrontView({ master }) {
                         startIcon={<AddPhotoAlternateRounded />}
                         sx={{ py: 1.25, fontSize: '0.98rem' }}
                     >
-                        Create Room
+                        Start a room
                     </Button>
                     <Button
                         onClick={() => master.emitter.emit('openQr')}
@@ -188,8 +189,11 @@ function FrontView({ master }) {
                         startIcon={<CropFreeRounded />}
                         sx={{ py: 1.15, color: 'text.primary' }}
                     >
-                        Scan QR to Join
+                        Scan to join
                     </Button>
+                    <Box sx={{ pt: 1.5 }}>
+                        <RecentRooms />
+                    </Box>
                 </Stack>
 
                 <Box className="spec-row" aria-hidden="true">

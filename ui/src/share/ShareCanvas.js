@@ -24,7 +24,7 @@ const BACKUP_SNACK = 'serverCopyBackup';
  * keeps the same place in the tree in every mode, so switching modes in a
  * room doesn't remount it and lose the photos it has loaded.
  */
-function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar}) {
+function ShareCanvas({master, mode = 'default', roomName = '', enqueueSnackbar, closeSnackbar}) {
     const simple = mode === 'simple';
     // Only geek mode shows how people connect; default is photos alone.
     const geek = mode === 'geek';
@@ -191,7 +191,7 @@ function ShareCanvas({master, mode = 'default', enqueueSnackbar, closeSnackbar})
                     pt: { xs: 1.5, sm: 2 },
                     pb: 2,
                 }}>
-                    {simple ? <SimpleRoomBar master={master} /> : null}
+                    {simple ? <SimpleRoomBar master={master} roomName={roomName} /> : null}
                     <Gallery master={master} variant={simple ? 'simple' : 'full'}
                         showNetworkReadout={false} onTilesChange={setTiles} />
                 </Box>

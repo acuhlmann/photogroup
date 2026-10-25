@@ -421,6 +421,17 @@ export default class Rooms {
             || (photo.owners || []).some(owner => owner.peerId === peerId && !owner.loading);
     }
 
+    /**
+     * A room name people typed, tidied: one line, spaces collapsed. '' clears
+     * the name; null means it isn't a string or is too long.
+     */
+    static roomName(value) {
+        if (typeof value !== 'string') return null;
+        // eslint-disable-next-line no-control-regex
+        const name = value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+        return name.length > Rooms.ROOM_NAME_MAX ? null : name;
+    }
+
     /** Server-copy fields of a photo, sent to the room as a partial update. */
     static copyState(photo) {
         return {
@@ -603,14 +614,20 @@ export default class Rooms {
             if (!room) return response.status(404).send('Room not found');
             const peer = this.sessionPeer(room, request);
             if (!peer) return response.status(403).send('Join the room first');
-            const keepCopies = request.body?.keepCopies;
-            if (typeof keepCopies !== 'boolean') return response.status(400).send('Expected keepCopies true or false');
-            room.settings = {
-                ...room.settings,
-                keepCopies,
-                changedBy: { peerId: peer.peerId, name: peer.name || '' },
-                changedAt: Date.now(),
-            };
+            const { keepCopies, name } = request.body || {};
+            if (keepCopies === undefined && name === undefined) return response.status(400).send('Expected keepCopies or name');
+            if (keepCopies !== undefined && typeof keepCopies !== 'boolean') return response.status(400).send('Expected keepCopies true or false');
+            const roomName = name === undefined ? undefined : Rooms.roomName(name);
+            if (roomName === null) return response.status(400).send(`Expected a name of ${Rooms.ROOM_NAME_MAX} characters or less`);
+            const settings = { ...room.settings };
+            if (keepCopies !== undefined) {
+                settings.keepCopies = keepCopies;
+                settings.changedBy = { peerId: peer.peerId, name: peer.name || '' };
+                settings.changedAt = Date.now();
+            }
+            if (roomName === '') delete settings.name;
+            else if (roomName !== undefined) settings.name = roomName;
+            room.settings = settings;
             this.updateChannel.send({ event: 'room', data: { settings: room.settings } }, this.allRoomClients(room));
             this.releaseCopiesEveryoneHas(room);
             this.persist(room);
@@ -973,3 +990,4 @@ export default class Rooms {
         });
     }
 };
+Rooms.ROOM_NAME_MAX = 60;

@@ -7,8 +7,6 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-import ShieldOutlined from '@mui/icons-material/ShieldOutlined';
-import IconButton from '@mui/material/IconButton';
 import Logger from 'js-logger';
 
 /** What the server keeps about this room, in plain words, one line each. */
@@ -38,17 +36,16 @@ function readState(master) {
 }
 
 /**
- * A "Privacy" button and the dialog behind it: what the server keeps about
- * this room and for how long, and a way to delete the room now.
+ * The room's privacy dialog, opened from the room menu: what the server
+ * keeps about this room and for how long, and a way to delete the room now.
  */
-export default function RoomPrivacy({ master, buttonSx, compact = false }) {
-    const [open, setOpen] = useState(false);
+export default function RoomPrivacy({ master, open, onClose }) {
     const [confirm, setConfirm] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
 
     const close = () => {
-        setOpen(false);
+        onClose();
         setConfirm(false);
         setError('');
     };
@@ -68,54 +65,42 @@ export default function RoomPrivacy({ master, buttonSx, compact = false }) {
     };
 
     return (
-        <>
-            {compact ? (
-                <IconButton aria-label="Privacy" onClick={() => setOpen(true)} sx={buttonSx}>
-                    <ShieldOutlined />
-                </IconButton>
-            ) : (
-                <Button color="inherit" startIcon={<ShieldOutlined />} onClick={() => setOpen(true)}
-                    sx={{ textTransform: 'none', ...buttonSx }}>
-                    Privacy
-                </Button>
-            )}
-            <Dialog open={open} onClose={close} maxWidth="xs" fullWidth aria-labelledby="room-privacy-title">
-                <DialogTitle id="room-privacy-title">{confirm ? 'Delete the room for everyone?' : 'What the server keeps'}</DialogTitle>
-                <DialogContent>
-                    {confirm ? (
-                        <Typography variant="body2" data-testid="delete-room-warning">
-                            All people leave the room. The server deletes the room, its photo list and its server copies.
-                            The photos stay on the phones that have them.
-                        </Typography>
-                    ) : (
-                        <Box component="ul" data-testid="privacy-lines" sx={{ m: 0, pl: 2.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                            {privacyLines(readState(master)).map(line => (
-                                <Typography component="li" variant="body2" key={line}>{line}</Typography>
-                            ))}
-                        </Box>
-                    )}
-                    {error && <Typography variant="body2" role="alert" sx={{ color: 'error.main', mt: 1.5 }}>{error}</Typography>}
-                </DialogContent>
-                <DialogActions sx={{ justifyContent: 'space-between' }}>
-                    {confirm ? (
-                        <>
-                            <Button onClick={() => setConfirm(false)} disabled={busy}>Cancel</Button>
-                            <Button color="error" variant="contained" onClick={deleteRoom} disabled={busy}>Delete room</Button>
-                        </>
-                    ) : (
-                        <>
-                            <Button color="error" onClick={() => setConfirm(true)}>Delete this room now</Button>
-                            <Button variant="contained" onClick={close}>OK</Button>
-                        </>
-                    )}
-                </DialogActions>
-            </Dialog>
-        </>
+        <Dialog open={open} onClose={close} maxWidth="xs" fullWidth aria-labelledby="room-privacy-title">
+            <DialogTitle id="room-privacy-title">{confirm ? 'Delete the room for everyone?' : 'What the server keeps'}</DialogTitle>
+            <DialogContent>
+                {confirm ? (
+                    <Typography variant="body2" data-testid="delete-room-warning">
+                        All people leave the room. The server deletes the room, its photo list and its server copies.
+                        The photos stay on the phones that have them.
+                    </Typography>
+                ) : (
+                    <Box component="ul" data-testid="privacy-lines" sx={{ m: 0, pl: 2.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {privacyLines(readState(master)).map(line => (
+                            <Typography component="li" variant="body2" key={line}>{line}</Typography>
+                        ))}
+                    </Box>
+                )}
+                {error && <Typography variant="body2" role="alert" sx={{ color: 'error.main', mt: 1.5 }}>{error}</Typography>}
+            </DialogContent>
+            <DialogActions sx={{ justifyContent: 'space-between' }}>
+                {confirm ? (
+                    <>
+                        <Button onClick={() => setConfirm(false)} disabled={busy}>Cancel</Button>
+                        <Button color="error" variant="contained" onClick={deleteRoom} disabled={busy}>Delete room</Button>
+                    </>
+                ) : (
+                    <>
+                        <Button color="error" onClick={() => setConfirm(true)}>Delete this room now</Button>
+                        <Button variant="contained" onClick={close}>OK</Button>
+                    </>
+                )}
+            </DialogActions>
+        </Dialog>
     );
 }
 
 RoomPrivacy.propTypes = {
     master: PropTypes.object.isRequired,
-    buttonSx: PropTypes.object,
-    compact: PropTypes.bool,
+    open: PropTypes.bool.isRequired,
+    onClose: PropTypes.func.isRequired,
 };

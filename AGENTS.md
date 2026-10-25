@@ -178,6 +178,27 @@ App.js (theme, layout)
       └── security/          -- encryption features
 ```
 
+### Room flow: one way to do each thing, in every mode
+
+- **Room menu** (`header/RoomMenu.js`): the room's name at the top left, in
+  every mode. It holds "Name the room", "Privacy" (`RoomPrivacy.js`, a
+  controlled dialog) and "Leave the room". Nothing else leaves a room.
+- **Invite**: `InviteCode.js` (QR plus "Send the link instead") is the only
+  invite UI. Simple shows it in the page (`simple/SimpleRoomBar.js`); default
+  and geek open it from the header's Invite button (`header/AddPeersView.js`,
+  which also holds the front page's "Scan to join" camera dialog).
+- **Add photos**: the header's "Add photos" button (`header/Uploader.js`) in
+  default and geek, the big button in simple. The gallery's empty state is a
+  drop zone; there is no second strip once photos are there. Drops anywhere
+  still work.
+- **Room names** are optional and shared: `PUT /api/rooms/:id/settings` takes
+  `name` (60 characters at most, '' clears) besides `keepCopies`, and the SSE
+  `room` event sends it to everyone. `useRoom.js` puts it in the header and
+  the tab title.
+- **Going back**: `recentRooms.js` keeps the rooms this browser opened in
+  localStorage (`photogroup.rooms`), and `RecentRooms.js` lists them as "Your
+  rooms" on both front pages. A deleted room is taken off the list.
+
 ### State Management
 
 No Redux/Zustand -- state lives in `RoomsService.js` which is a plain class managing room state, peer lists, and photo arrays. Components subscribe via React patterns.

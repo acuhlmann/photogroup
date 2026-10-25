@@ -33,14 +33,14 @@ describe('Gallery room synchronization', () => {
         expect(container.textContent).toContain("Loading this room's photos…");
         act(() => vi.advanceTimersByTime(4000));
         expect(container.textContent).toContain('taking longer to load');
-        expect(container.textContent).not.toContain('Share photos and clips');
+        expect(container.textContent).not.toContain('Add photos and clips');
     });
 
     it('shows the empty-room prompt after a delayed empty snapshot', () => {
         const emitter = setup();
         act(() => vi.advanceTimersByTime(4000));
         act(() => emitter.emit('photos', { type: 'all', item: [] }));
-        expect(container.textContent).toContain('Share photos and clips');
+        expect(container.textContent).toContain('Add photos and clips');
         expect(container.textContent).not.toContain('taking longer to load');
     });
 
@@ -52,16 +52,16 @@ describe('Gallery room synchronization', () => {
             picDateTaken: '10:0 Jan 1 2024',
         }] }));
         expect(container.querySelector('img[alt="photo.jpg"]')).not.toBeNull();
-        expect(container.textContent).not.toContain('Share photos and clips');
+        expect(container.textContent).not.toContain('Add photos and clips');
         expect(container.textContent).not.toContain('taking longer to load');
     });
 
     it('waits for a snapshot rather than treating incremental events as synchronization', () => {
         const emitter = setup();
         act(() => emitter.emit('photos', { type: 'update', item: [] }));
-        expect(container.textContent).not.toContain('Share photos and clips');
+        expect(container.textContent).not.toContain('Add photos and clips');
         act(() => emitter.emit('photos', { type: 'all', item: [] }));
-        expect(container.textContent).toContain('Share photos and clips');
+        expect(container.textContent).toContain('Add photos and clips');
         expect(vi.getTimerCount()).toBe(0);
     });
 });

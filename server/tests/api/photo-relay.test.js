@@ -181,6 +181,22 @@ describe('Photo relay (server copies, pinned when needed)', () => {
         assert.strictEqual((await photoState()).hasServerCopy, false);
     });
 
+    it('names the room for everyone in it, and clears the name', async () => {
+        await request(app).put(`/api/rooms/${roomId}/settings`).send({ name: 'Beach' }).expect(403);
+        await auth(request(app).put(`/api/rooms/${roomId}/settings`), receiver).send({}).expect(400);
+        await auth(request(app).put(`/api/rooms/${roomId}/settings`), receiver).send({ name: 7 }).expect(400);
+        await auth(request(app).put(`/api/rooms/${roomId}/settings`), receiver).send({ name: 'x'.repeat(61) }).expect(400);
+        const set = await auth(request(app).put(`/api/rooms/${roomId}/settings`), receiver)
+            .send({ name: '  Beach\n day  ' }).expect(200);
+        assert.strictEqual(set.body.name, 'Beach day');
+        assert.strictEqual(set.body.keepCopies, false);
+        assert.strictEqual(set.body.changedBy, undefined);
+        assert.strictEqual((await request(app).get(`/api/rooms/${roomId}`).expect(200)).body.settings.name, 'Beach day');
+
+        const cleared = await auth(request(app).put(`/api/rooms/${roomId}/settings`), sharer).send({ name: ' ' }).expect(200);
+        assert.strictEqual(cleared.body.name, undefined);
+    });
+
     it("doesn't let a photo update fake a copy, change hands or swap the fingerprint copies are checked against", async () => {
         await request(app).post(`/api/rooms/${roomId}/photos/`).send({
             sessionId: sharer.sessionId,

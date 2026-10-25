@@ -28,6 +28,8 @@ import AddPeersView from "./share/header/AddPeersView";
 import { clearShareFlag, rememberRoom, SHARE_ERRORS, SHARE_WAITING, takeSharedFiles } from "./share/shareTarget";
 import ModeSwitch from "./share/header/ModeSwitch";
 import { readMode, saveMode } from "./share/uiMode";
+import RoomMenu from "./share/header/RoomMenu";
+import useRoom from "./share/useRoom";
 
 function App({theme: propsTheme, prefersDarkMode}) {
     //Logger.useDefaults();
@@ -55,6 +57,8 @@ function App({theme: propsTheme, prefersDarkMode}) {
         propsTheme || createAppTheme('dark')
     );
     const [networkStatus, setNetworkStatus] = useState({ peers: 0, downSpeed: '', upSpeed: '' });
+    const [inRoom, setInRoom] = useState(() => new URLSearchParams(window.location.search).has('room'));
+    const room = useRoom(masterRef.current, inRoom);
 
     // Photos shared from other apps go into the room once it is ready, the
     // same way as a pick from Share (see share/shareTarget.js).
@@ -118,6 +122,8 @@ function App({theme: propsTheme, prefersDarkMode}) {
         emitterRef.current.on('addPeerDone', handleAddPeerDone);
         emitterRef.current.on('darkMode', handleDarkMode);
         emitterRef.current.on('readyToUpload', deliverSharedFiles);
+        const handleInRoom = () => setInRoom(true);
+        emitterRef.current.on('readyToUpload', handleInRoom);
         emitterRef.current.on('numPeersChange', handleNumPeersChange);
         emitterRef.current.on('downloadProgress', handleDownloadProgress);
         emitterRef.current.on('uploadProgress', handleUploadProgress);
@@ -132,6 +138,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
             emitterRef.current.removeListener('addPeerDone', handleAddPeerDone);
             emitterRef.current.removeListener('darkMode', handleDarkMode);
             emitterRef.current.removeListener('readyToUpload', deliverSharedFiles);
+            emitterRef.current.removeListener('readyToUpload', handleInRoom);
             emitterRef.current.removeListener('numPeersChange', handleNumPeersChange);
             emitterRef.current.removeListener('downloadProgress', handleDownloadProgress);
             emitterRef.current.removeListener('uploadProgress', handleUploadProgress);
@@ -192,12 +199,14 @@ function App({theme: propsTheme, prefersDarkMode}) {
                                     spacing={1.25}
                                     sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}
                                 >
-                                    <Box className="mark" aria-hidden="true" />
-                                    <Stack direction="column" spacing={0}>
+                                    <Box className="mark" aria-hidden="true" sx={{ display: { xs: inRoom ? 'none' : 'grid', sm: 'grid' } }} />
+                                    <Stack direction="column" spacing={0} sx={{ flex: 1, minWidth: 0, alignItems: 'flex-start' }}>
+                                        {/* In a room, a phone shows the room's name alone. */}
                                         <Typography
                                             variant="subtitle1"
                                             component="h1"
                                             sx={{
+                                                display: { xs: inRoom ? 'none' : 'block', sm: 'block' },
                                                 fontWeight: 600,
                                                 lineHeight: 1.15,
                                                 fontSize: { xs: '0.98rem', sm: '1.05rem' },
@@ -206,24 +215,30 @@ function App({theme: propsTheme, prefersDarkMode}) {
                                         >
                                             PhotoGroup
                                         </Typography>
-                                        <Typography
-                                            className="tech-text"
-                                            sx={{
-                                                display: { xs: 'none', sm: 'block' },
-                                                lineHeight: 1.2,
-                                                color: 'text.secondary',
-                                            }}
-                                        >
-                                            Peer to peer · lossless
-                                        </Typography>
+                                        {inRoom ? (
+                                            <RoomMenu master={masterRef.current} name={room.name} label={room.label} />
+                                        ) : (
+                                            <Typography
+                                                className="tech-text"
+                                                sx={{
+                                                    display: { xs: 'none', sm: 'block' },
+                                                    lineHeight: 1.2,
+                                                    color: 'text.secondary',
+                                                }}
+                                            >
+                                                Peer to peer · lossless
+                                            </Typography>
+                                        )}
                                     </Stack>
                                 </Stack>
 
                                 {/* Action buttons */}
                                 <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexShrink: 0 }}>
-                                    <ModeSwitch mode={mode} onChange={changeMode}/>
-                                    {/* Simple mode has its own buttons; these stay mounted for their dialogs. */}
-                                    <AddPeersView master={masterRef.current} showButton={!simple}/>
+                                    <ModeSwitch mode={mode} onChange={changeMode} compact={inRoom && !simple}/>
+                                    {/* One Invite and one Add photos button. Simple mode has big ones in
+                                        the page instead; these stay mounted for their dialogs and file input. */}
+                                    <AddPeersView master={masterRef.current} showButton={!simple}
+                                        inRoom={inRoom} roomName={room.name}/>
                                     <Uploader
                                         model={masterRef.current.torrentAddition}
                                         emitter={masterRef.current.emitter}
@@ -283,7 +298,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
                     </header>
 
                     <main className="App-main">
-                        <ShareCanvas master={masterRef.current} mode={mode} />
+                        <ShareCanvas master={masterRef.current} mode={mode} roomName={room.name} />
                     </main>
                 </div>
             </SnackbarProvider>

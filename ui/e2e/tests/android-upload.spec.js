@@ -25,7 +25,7 @@ test('Android: shares the photos in a zip and explains how to keep locations', a
   await expect(page.locator('input#contained-button-file')).toHaveAttribute('accept', /\.zip/);
 
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Share photos and clips', exact: true }).click();
+  await page.getByRole('button', { name: 'Add photos and clips', exact: true }).click();
   await (await chooser).setFiles(PHOTOS_ZIP);
 
   // The one photo that was blanked before it was zipped is held back.

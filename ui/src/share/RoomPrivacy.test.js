@@ -27,8 +27,8 @@ describe('RoomPrivacy', () => {
         const div = document.createElement('div');
         document.body.appendChild(div);
         const root = createRoot(div);
-        await act(async () => root.render(<RoomPrivacy master={master} />));
-        await act(async () => button('Privacy').click());
+        const onClose = vi.fn();
+        await act(async () => root.render(<RoomPrivacy master={master} open onClose={onClose} />));
         expect(document.body.querySelector('[data-testid="privacy-lines"]').textContent).toContain('1 server copy');
 
         await act(async () => button('Delete this room now').click());

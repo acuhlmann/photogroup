@@ -9,12 +9,16 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import CheckRounded from '@mui/icons-material/CheckRounded';
 import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
+import ViewQuiltRounded from '@mui/icons-material/ViewQuiltRounded';
 
 import { headerButtonSx, headerLabelSx } from './headerButtonSx';
 import { MODES, MODE_INFO } from '../uiMode';
 
-/** Pick between the simple, default and geek views. */
-function ModeSwitch({ mode, onChange }) {
+/**
+ * Pick between the simple, default and geek views. `compact` shows an icon
+ * instead of the name on a phone, to leave room for the room's name.
+ */
+function ModeSwitch({ mode, onChange, compact = false }) {
     const [anchor, setAnchor] = useState(null);
 
     const choose = (next) => {
@@ -31,7 +35,10 @@ function ModeSwitch({ mode, onChange }) {
                 onClick={(event) => setAnchor(event.currentTarget)}
                 sx={headerButtonSx}
             >
-                <Box component="span" sx={headerLabelSx}>{MODE_INFO[mode].label}</Box>
+                {compact && <ViewQuiltRounded sx={{ display: { xs: 'block', sm: 'none' } }} />}
+                <Box component="span" sx={{ ...headerLabelSx, display: compact ? { xs: 'none', sm: 'inline' } : 'inline' }}>
+                    {MODE_INFO[mode].label}
+                </Box>
                 <ExpandMoreRounded />
             </ButtonBase>
             <Menu
@@ -57,6 +64,7 @@ function ModeSwitch({ mode, onChange }) {
 ModeSwitch.propTypes = {
     mode: PropTypes.oneOf(MODES).isRequired,
     onChange: PropTypes.func.isRequired,
+    compact: PropTypes.bool,
 };
 
 export default ModeSwitch;
