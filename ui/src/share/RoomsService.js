@@ -368,6 +368,40 @@ export default class RoomsService {
         return response.json();
     }
 
+    /**
+     * The VAPID key this server sends push with, or null when it sends none:
+     * that is the answer from a server that could not read its key file.
+     */
+    async pushConfig() {
+        const response = await fetch('/api/__pushConfig__');
+        if (!response.ok) throw new Error('Could not read the push setup (' + response.status + ')');
+        return response.json();
+    }
+
+    /** Leave this browser's push endpoint with the room, so it can be told. */
+    async subscribePush(subscription) {
+        const response = await fetch(this.url + '/' + this.id + '/push', {
+            method: 'PUT',
+            headers: { ...this.sessionHeaders(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...subscription, sessionId: this.sessionId, sessionToken: this.sessionToken }),
+        });
+        return response.ok;
+    }
+
+    /**
+     * Take this browser's endpoint off the room. Keepalive: this is sent while
+     * a page is on its way out, when leaving a room or forgetting the device.
+     */
+    async unsubscribePush(endpoint) {
+        const response = await fetch(this.url + '/' + this.id + '/push', {
+            method: 'DELETE',
+            keepalive: true,
+            headers: { ...this.sessionHeaders(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint }),
+        });
+        return response.ok;
+    }
+
     getRtcConfig() {
 
         return fetch('/api/__rtcConfig__')

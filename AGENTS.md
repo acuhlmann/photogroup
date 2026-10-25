@@ -132,6 +132,67 @@ along with `owners` and `peerId`. `torrent/RoomPhotos.js` mirrors it, with
 owners, for the client logic outside React. nginx needs
 `client_max_body_size 10m` for the chunks.
 
+### Notifications and push
+
+Two tiers, one switch (`photogroup.notify` in localStorage, off until the person
+says yes):
+
+- **In-page notice** (`ui/src/share/newPhotoNotices.js`): the SSE `photos` event,
+  shown while the tab is merely in the background. Needs the page to still run.
+- **Web push** (`server/PushService.js` + the `push` handler in
+  `ui/public/share-target-sw.js`): arrives with the browser shut, because the
+  browser's own push service holds the connection, not this app.
+
+`ui/src/share/NotifyPrompt.js` is where the choice gets made: mounted in
+`ShareCanvas` for every mode, it offers a notice as soon as a room is open, since
+the usual plan is to leave for the camera rather than wait. One answer per
+browser (`photogroup.notifyAsked`); the Settings switch is the way to change it
+afterwards, and simple mode -- which has no Settings button -- gets its only
+entry point from that prompt. `syncPush` (`ui/src/share/pushNotices.js`) re-leaves
+the endpoint with the server on every room open: a `sessionId` is made fresh each
+start and the server matches a message against it, so without this a phone
+looking at the room is also sent a push about it.
+
+Server side: `GET /api/__pushConfig__` hands out the VAPID public key (this route
+lives on `PushService`, like `__rtcConfig__` on `IceServers`); `PUT` and
+`DELETE /api/rooms/:id/push` in `Rooms.js` add and drop an endpoint for one room.
+`POST /api/rooms/:id/photos/` calls `push.photosAdded()` with the number of photos
+the room did not already list -- a re-share is not news. A burst of uploads becomes
+one message (`BATCH_MS`), and two kinds of subscription are skipped: the session
+that shared the photos, and any session with an open update stream, which notices
+on its own. `deliver()` drops an endpoint the push service answers with 404/410;
+anything else (429, 500) keeps it.
+
+What to know before changing this:
+
+- **An endpoint is a URL the server POSTs to, so it is an SSRF door.** `PUSH_HOSTS`
+  is the list of push services browsers actually hand out (verified October 2026:
+  `fcm.googleapis.com`, `updates.push.services.mozilla.com`, `*.notify.windows.com`,
+  `*.push.apple.com`), matched exactly or as a subdomain. This is what stops a
+  hostile subscription from pointing the VM at `169.254.169.254` and its metadata.
+  Endpoints are never sent to another peer and are only handed out per room.
+- **Keys must be stable.** `vapid.json` is made on first start (mode 0600) and
+  reloaded; `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` override it for a moved machine.
+  A pair that fails the library's validation leaves `publicKey` null, which makes
+  `__pushConfig__` answer null, which makes the page ask for nothing -- push is off
+  and the rooms are unaffected. Same for a missing room or an unreadable
+  `push.json`: push is a nicety that must never stop `app.js` from listening.
+- **iOS only pushes an installed app.** A plain Safari tab cannot subscribe, so
+  `enablePush` returns false and the in-page notice is all that phone gets. Say so
+  in any copy that promises a message with the browser closed.
+- **The VM sleeps.** With wake proxy auto-stop, nothing is sent while it is down --
+  and a photo can only arrive over HTTP, which wakes it, so the trigger always has
+  a live server. `MESSAGE_TTL_SECONDS` bounds a message that could not be delivered.
+- **The payload says almost nothing.** Count and public room name only; a private
+  room's sealed name never goes out, and its own key is not in the payload -- a tap
+  opens `/?room=<id>` and `restoreRoomKey` reads the key from where the page already
+  keeps it. Room delete and `DELETE /api/rooms` clear the subscriptions with it, and
+  "Forget this device" unsubscribes the browser.
+
+Tests: `server/tests/unit/PushService.test.js` (endpoint guard, batching, who is
+skipped, restart, keys), `server/tests/api/push.test.js` (routes and the share
+trigger), `ui/src/share/pushNotices.test.js`, `ui/src/share/NotifyPrompt.test.js`.
+
 ### Important: what survives a restart
 
 Room *identity* and *content* are persisted; live presence is not. `Rooms.start()`
@@ -150,11 +211,16 @@ Not persisted, on purpose:
   scratch directory at startup, so a restored room must not point at bytes that
   were deleted. Clients re-request a copy if they still need one.
 
-`server/data/` is gitignored: it holds photo names and magnets. `deploy-docker.sh`
+`server/data/` is gitignored: it holds photo names and magnets, and since push the
+VAPID key pair (`vapid.json`, mode 0600) and the push subscriptions
+(`push.json`) too. `deploy-docker.sh`
 and `docker-compose.yml` mount the `photogroup-data` volume at `/app/data`, so the
 rooms outlive a redeploy as well as a restart; the `Dockerfile` creates that
 directory before `USER nodejs`, because Docker fills an empty named volume from
-the image's ownership and a path it has never seen comes back root-owned.
+the image's ownership and a path it has never seen comes back root-owned. The same
+mount is what keeps push working across an idle stop: new keys every start would
+invalidate every subscription the browser made against the old ones, and lost
+subscriptions are exactly the people who are not here to re-make them.
 
 On the client, the mirror rule is in `torrent/TorrentDeletion.js`
 (`holdsRoomSnapshot`): a room that lists *no* photos is treated as a server that
@@ -211,8 +277,9 @@ App.js (theme, layout)
   peer an owner and starts the server-copy watch; peers carry `dataSaver`,
   and `wantsPhoto` in `RoomPhotos.js` keeps ServerPinning and the screen lock
   from counting them as waiting), "Tell me about new photos"
-  (`newPhotoNotices.js`, browser notifications while the page runs in the
-  background; no server push); colors (`colors.js`: same as device, light or dark,
+  (`newPhotoNotices.js` for the notice while the page runs in the background,
+  `pushNotices.js` for the push message that reaches a closed browser -- see
+  *Notifications and push* below); colors (`colors.js`: same as device, light or dark,
   localStorage `photogroup.colors`), logs (show, copy) and "Forget this
   device" (`forgetDevice.js`: clears localStorage, sessionStorage and the
   IndexedDB stores, then opens the front page). Room choices do not go here.

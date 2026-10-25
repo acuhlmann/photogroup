@@ -25,11 +25,16 @@ export const ROOM_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 // Photos change in bursts (one PUT per render); one write per burst is enough.
 export const WRITE_DEBOUNCE_MS = 500;
 
+/** The directory a container mounts as a volume. */
+export function defaultStoreDir() {
+    return process.env.ROOM_STORE_DIR || path.join(process.cwd(), 'data');
+}
+
 /** Where the file lives. Overridable so a container can mount a volume. */
 export function defaultStorePath() {
     if (process.env.ROOM_STORE_PATH) return process.env.ROOM_STORE_PATH;
     const name = process.env.NODE_ENV === 'test' ? 'photogroup-rooms-test-' + process.pid + '.json' : 'rooms.json';
-    return path.join(process.env.ROOM_STORE_DIR || path.join(process.cwd(), 'data'), name);
+    return path.join(defaultStoreDir(), name);
 }
 
 /**

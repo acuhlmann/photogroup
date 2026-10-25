@@ -29,6 +29,7 @@ import { readColors, saveColors } from '../colors';
 import { forgetDevice } from '../forgetDevice';
 import { readPreference, savePreference } from '../preferences';
 import { askToNotify } from '../newPhotoNotices';
+import { enablePush, disablePush } from '../pushNotices';
 import PreferenceSwitch from './PreferenceSwitch';
 
 /* global __APP_VERSION__ */
@@ -77,7 +78,8 @@ const COLOR_CHOICES = [
 
 export const REMOVE_LOCATION_TEXT = 'Takes the place where a photo or clip was taken out of it on this phone, before anyone gets it.';
 export const DATA_SAVER_TEXT = 'You get small previews first. A photo or clip comes only when you tap it. Use this on mobile data.';
-export const NOTIFY_TEXT = 'Shows a notification when someone adds photos while PhotoGroup is open in the background.';
+export const NOTIFY_TEXT = 'Shows a notification when someone adds photos, and a push message when this browser is closed. '
+    + 'An iPhone only gets the push after PhotoGroup is added to its Home Screen.';
 
 export const FORGET_TEXT = 'Deletes your rooms list, your name and the saved photos from this browser. '
     + 'You cannot open private rooms again without their link. Rooms and photos on other phones stay.';
@@ -196,6 +198,11 @@ function SettingsView(props) {
         }
         savePreference('notify', value);
         setNotify(value);
+        // The permission alone only reaches a phone whose page is still open.
+        // This is where the endpoint goes to the server, or comes off it.
+        const service = masterRef.current.service;
+        if (value) await enablePush({ service });
+        else await disablePush({ service });
     }, [enqueueSnackbar]);
 
     const copyLogs = useCallback(async () => {

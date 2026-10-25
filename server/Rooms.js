@@ -30,7 +30,7 @@ const RELAY_SWEEP_MS = 5 * 60 * 1000;
 
 export default class Rooms {
 
-    constructor(updateChannel, remoteLog, app, emitter, ice, tracker, store) {
+    constructor(updateChannel, remoteLog, app, emitter, ice, tracker, store, push) {
         this.updateChannel = updateChannel;
         this.remoteLog = remoteLog;
         this.app = app;
@@ -43,6 +43,9 @@ export default class Rooms {
         // Rooms outlive the process: an idle stop or a crash used to empty
         // every room, and a refresh then lost the photos they named.
         this.store = store || new RoomStore();
+        // Push may be absent: app.js carries on without it when the keys or
+        // the saved subscription list cannot be read.
+        this.push = push || null;
         //this.dht = new MyDht();
         //this.dht.start();
 
@@ -67,6 +70,7 @@ export default class Rooms {
         this.registerOwnerRoutes(this.app);
         this.registerConnectionRoutes(this.app);
         this.registerPhotoRelayRoutes(this.app);
+        this.registerPushRoutes(this.app);
         this.sweepTimer = setInterval(() => this.sweepCopies(), RELAY_SWEEP_MS);
         this.sweepTimer.unref?.();
     }
@@ -77,6 +81,8 @@ export default class Rooms {
         });
         this.rooms.clear();
         this.relay.clear();
+        // Every room is gone, so every endpoint kept for one is gone with it.
+        if (this.push) this.push.reset();
         // Dropping every room by hand means dropping the record of them too.
         this.store.clear().catch(() => {});
     }
@@ -246,6 +252,9 @@ export default class Rooms {
                 });
 
                 const responsePhotos = [];
+                // How many of these the room did not already list: the news a
+                // push message is about. Re-shares of a known photo are not.
+                let added = 0;
 
                 for (const requestPhoto of request.body.photos) {
                     const infoHash = requestPhoto.infoHash;
@@ -272,6 +281,7 @@ export default class Rooms {
 
                         room.photos.unshift(photo);
                         this.addToPhotoIndex(room, photo);
+                        added++;
                     }
                     responsePhotos.push(photo);
                 }
@@ -285,6 +295,13 @@ export default class Rooms {
                         loading: false
                     }
                 }));
+                // Only news: a room re-announcing photos it already lists is
+                // nobody's news, so a count of 0 sends nothing.
+                if (added && this.push) {
+                    this.push.photosAdded(room, { count: added, sessionId }).catch(err => {
+                        this.remoteLog('[Push] ' + (err?.message || err));
+                    });
+                }
                 this.persist(room);
                 response.send(responsePhotos);
             }
@@ -662,6 +679,9 @@ export default class Rooms {
             this.updateChannel.send({ event: 'room', data: { deleted: { peerId: peer.peerId, name: peer.name || '' } } },
                 this.allRoomClients(room));
             this.relay.deleteRoom(room.id);
+            // Nobody is in this room to be told about, and an endpoint left
+            // behind would be told about a room that no longer exists.
+            if (this.push) this.push.forgetRoom(room.id);
             room.photoIndex?.clear();
             this.rooms.delete(room.id);
             this.store.schedule([...this.rooms.values()]);
@@ -892,6 +912,49 @@ export default class Rooms {
 
                 response.send(true)
             }
+        });
+    }
+
+    /**
+     * Web push subscriptions, one per browser per room. A browser that means
+     * it will still be told when a photo arrives after its tab was closed.
+     *
+     * Registering needs proof of being in the room: the endpoint is a URL this
+     * server will POST to, so it cannot be taken from someone who is not in it.
+     * PushService checks the endpoint against the push services browsers
+     * actually use before anything is ever sent to it.
+     */
+    registerPushRoutes(app) {
+
+        app.put('/api/rooms/:id/push', (request, response) => {
+
+            const room = this.rooms.get(request.params.id);
+            if(!room) return response.status(404).send('Room not found');
+            if(!this.push) return response.status(503).send('This server sends no push messages');
+            if(!this.sessionPeer(room, request)) return response.status(403).send('Join the room first');
+
+            const body = request.body || {};
+            const subscription = body.subscription || body;
+            const stored = this.push.add(room.id, {
+                endpoint: subscription.endpoint,
+                keys: subscription.keys,
+                sessionId: body.sessionId || request.get('X-Session-Id'),
+            });
+            if (!stored) return response.status(400).send('Not a push subscription this server can use');
+            return response.send({ subscribed: true });
+        });
+
+        app.delete('/api/rooms/:id/push', (request, response) => {
+
+            const room = this.rooms.get(request.params.id);
+            if(!room) return response.status(404).send('Room not found');
+            if(!this.push) return response.status(503).send('This server sends no push messages');
+
+            // The endpoint is a long unguessable URL its own browser is the
+            // only holder of, so quoting it is the proof: that is also how a
+            // page that already left the room takes itself off the list.
+            const endpoint = request.body?.endpoint || request.query.endpoint;
+            return response.send({ removed: this.push.remove(room.id, endpoint) });
         });
     }
 
