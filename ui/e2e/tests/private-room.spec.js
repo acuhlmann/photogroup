@@ -2,17 +2,17 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 const { waitForImage } = require('../helpers/test-helpers');
 
-// With "Private rooms" on, a new room gets a key in its link. Photos are
+// With "Private room" on, a new room gets a key in its link. Photos are
 // encrypted on the phone, so the server only knows sealed names, and someone
 // with the full link still sees the photo under its real name.
 test('a private room shares a photo the server cannot read', async ({ browser }) => {
   const context1 = await browser.newContext();
-  await context1.addInitScript(() => localStorage.setItem('encrypt', 'true'));
   const page1 = await context1.newPage();
   const context2 = await browser.newContext();
   const page2 = await context2.newPage();
 
   await page1.goto('/', { waitUntil: 'domcontentloaded' });
+  await page1.getByLabel(/^Private room/).check();
   await page1.getByRole('button', { name: /Start a room/i }).click();
   await expect(page1).toHaveURL(/\?room=[^#]+#k=[A-Za-z0-9_-]{43}$/, { timeout: 30000 });
   const roomUrl = page1.url();

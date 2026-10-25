@@ -11,6 +11,7 @@ import QrCodeScannerRounded from '@mui/icons-material/QrCodeScannerRounded';
 import { createRoom } from '../openRoom';
 import SimpleHowItWorks from './SimpleHowItWorks';
 import RecentRooms from '../RecentRooms';
+import PrivateRoomSwitch from '../PrivateRoomSwitch';
 
 const STEPS = [
     'One person starts a room.',
@@ -69,6 +70,7 @@ function SimpleFront({ master }) {
                     >
                         {ready ? 'Start a room' : 'Getting ready…'}
                     </Button>
+                    <PrivateRoomSwitch />
                     <Button
                         variant="outlined"
                         size="large"

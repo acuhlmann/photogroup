@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -7,6 +7,8 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import Switch from '@mui/material/Switch';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Logger from 'js-logger';
 import { isPrivateRoom } from './privateRoom';
 
@@ -48,12 +50,34 @@ function readState(master) {
 
 /**
  * The room's privacy dialog, opened from the room menu: what the server
- * keeps about this room and for how long, and a way to delete the room now.
+ * keeps about this room and for how long, the room's "Keep copies" switch,
+ * and a way to delete the room now.
  */
 export default function RoomPrivacy({ master, open, onClose }) {
     const [confirm, setConfirm] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [keepCopies, setKeepCopies] = useState(() => !!master?.serverPinning?.keepCopies);
+
+    // Room-wide, so it follows the room rather than this browser.
+    useEffect(() => {
+        const handleRoomSettings = settings => setKeepCopies(!!settings?.keepCopies);
+        master.emitter?.on('roomSettings', handleRoomSettings);
+        return () => master.emitter?.removeListener('roomSettings', handleRoomSettings);
+    }, [master.emitter]);
+
+    const changeKeepCopies = async (value) => {
+        setKeepCopies(value);
+        setError('');
+        try {
+            const settings = await master.service.updateRoomSettings({ keepCopies: value });
+            setKeepCopies(!!settings?.keepCopies);
+        } catch (err) {
+            Logger.warn('keepCopies: ' + err);
+            setKeepCopies(!value);
+            setError('Could not change the room. Try again.');
+        }
+    };
 
     const close = () => {
         onClose();
@@ -86,10 +110,17 @@ export default function RoomPrivacy({ master, open, onClose }) {
                     </Typography>
                 ) : (
                     <Box component="ul" data-testid="privacy-lines" sx={{ m: 0, pl: 2.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        {privacyLines(readState(master)).map(line => (
+                        {privacyLines({ ...readState(master), keepCopies }).map(line => (
                             <Typography component="li" variant="body2" key={line}>{line}</Typography>
                         ))}
                     </Box>
+                )}
+                {!confirm && (
+                    <FormControlLabel
+                        control={<Switch checked={keepCopies} onChange={event => changeKeepCopies(event.target.checked)} />}
+                        label="Keep copies for people who join later"
+                        sx={{ mt: 1.5, mx: 0 }}
+                    />
                 )}
                 {error && <Typography variant="body2" role="alert" sx={{ color: 'error.main', mt: 1.5 }}>{error}</Typography>}
             </DialogContent>

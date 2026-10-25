@@ -54,12 +54,20 @@ export function restoreRoomKey(win = window) {
     if (key) setKeyInAddress(key, win);
 }
 
-/** The Settings switch: rooms started while it is on are private. */
+/** The "Private room" switch next to "Start a room"; it stays as the person left it. */
 export function wantsPrivateRooms() {
     try {
         return localStorage.getItem(PREFERENCE) === 'true';
     } catch {
         return false;
+    }
+}
+
+export function setWantsPrivateRooms(value) {
+    try {
+        localStorage.setItem(PREFERENCE, String(!!value));
+    } catch {
+        // Storage blocked: the switch resets when the page reloads.
     }
 }
 

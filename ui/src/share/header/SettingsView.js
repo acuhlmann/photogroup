@@ -17,14 +17,16 @@ import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Collapse from '@mui/material/Collapse';
 
-import Switch from '@mui/material/Switch';
-import FormControlLabel from '@mui/material/FormControlLabel';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 
 import {format} from 'date-fns';
 import Typography from "@mui/material/Typography";
 import {withSnackbar} from "../compatibility/withSnackbar";
 import update from "immutability-helper";
 import Slide from '@mui/material/Slide';
+import { readColors, saveColors } from '../colors';
+import { forgetDevice } from '../forgetDevice';
 
 /* global __APP_VERSION__ */
 
@@ -58,58 +60,31 @@ function SectionHeader({ label }) {
     );
 }
 
-function SettingToggle({ checked, onChange, label, description }) {
-    return (
-        <Box sx={{ py: 0.5 }}>
-            <FormControlLabel
-                control={
-                    <Switch
-                        checked={checked}
-                        onChange={(event) => onChange(event.target.checked)}
-                        color="primary"
-                    />
-                }
-                label={
-                    <Box>
-                        <Typography variant="body2">{label}</Typography>
-                        {description && (
-                            <Typography variant="caption" color="text.secondary">
-                                {description}
-                            </Typography>
-                        )}
-                    </Box>
-                }
-                sx={{ alignItems: 'flex-start', ml: 0 }}
-            />
-        </Box>
-    );
-}
-
 function getLogColor(level) {
     if (level === 'ERROR') return 'error.main';
     if (level === 'WARN') return 'warning.main';
     return 'text.secondary';
 }
 
-export const PRIVATE_ROOMS_TEXT = 'When this is on, rooms that you start are private. Each phone encrypts the photos, '
-    + 'their file names and the room name with a key in the room link. The server cannot read them. '
-    + 'In a private room you cannot share titles, ratings or places, and people need the full link or code to see the photos. '
-    + 'Rooms that you started before stay as they are.';
+const COLOR_CHOICES = [
+    { value: 'device', label: 'Same as device' },
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
+];
+
+export const FORGET_TEXT = 'Deletes your rooms list, your name and the saved photos from this browser. '
+    + 'You cannot open private rooms again without their link. Rooms and photos on other phones stay.';
 
 function SettingsView(props) {
-    const {master, enqueueSnackbar, closeSnackbar, prefersDarkMode, showButton = true} = props;
+    const {master, enqueueSnackbar, showButton = true} = props;
     const masterRef = useRef(master);
     masterRef.current = master;
 
     const [messages, setMessages] = useState([]);
     const [open, setOpen] = useState(false);
     const [peerId, setPeerId] = useState('');
-    const [showTopology, setShowTopology] = useState(true);
-    const [showMe, setShowMe] = useState(true);
-    const [encrypt, setEncrypt] = useState(false);
-    const [strategyPreference, setStrategyPreference] = useState(false);
-    const [darkMode, setDarkMode] = useState(prefersDarkMode);
-    const [keepCopies, setKeepCopies] = useState(false);
+    const [colors, setColors] = useState(readColors);
+    const [confirmForget, setConfirmForget] = useState(false);
     const [logsExpanded, setLogsExpanded] = useState(false);
     const logsBeforeMountRef = useRef([]);
     const mountedRef = useRef(false);
@@ -143,22 +118,6 @@ function SettingsView(props) {
         Logger.info('platform ' + navigator.platform + ' cpu ' + navigator.oscpu);
 
         const handleAddPeerDone = () => {
-            const showMeValue = localStorage.getItem('showMe') || showMe;
-            handleShowMeChange(String(showMeValue) == 'true');
-
-            const showTopologyValue = localStorage.getItem('showTopology');
-            const showTopologyVal = showTopologyValue !== null ? showTopologyValue === 'true' : showTopology;
-            handleTopologyChange(showTopologyVal);
-
-            const encryptValue = localStorage.getItem('encrypt') || encrypt;
-            handleEncryptChange(String(encryptValue) == 'true');
-
-            const strategyPreferenceValue = localStorage.getItem('strategyPreference') || strategyPreference;
-            handleStrategyPreferenceChange(String(strategyPreferenceValue) == 'true');
-
-            const darkModeValue = localStorage.getItem('darkMode') || darkMode;
-            handleDarkModeChange(String(darkModeValue) == 'true');
-
             setPeerId(masterRef.current.client.peerId);
             checkConnection();
         };
@@ -168,7 +127,7 @@ function SettingsView(props) {
         return () => {
             master.emitter.removeListener('addPeerDone', handleAddPeerDone);
         };
-    }, [showMe, showTopology, encrypt, strategyPreference, darkMode, log]);
+    }, [log]);
 
     const checkConnection = useCallback(() => {
         const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -192,25 +151,6 @@ function SettingsView(props) {
         }
     }, []);
 
-    // Room-wide, so it follows the room rather than this browser.
-    useEffect(() => {
-        const handleRoomSettings = settings => setKeepCopies(!!settings?.keepCopies);
-        master.emitter.on('roomSettings', handleRoomSettings);
-        return () => master.emitter.removeListener?.('roomSettings', handleRoomSettings);
-    }, [master.emitter]);
-
-    const handleKeepCopiesChange = useCallback(async (value) => {
-        setKeepCopies(value);
-        try {
-            const settings = await masterRef.current.service.updateRoomSettings({ keepCopies: value });
-            setKeepCopies(!!settings?.keepCopies);
-        } catch (err) {
-            Logger.warn('keepCopies: ' + err);
-            setKeepCopies(!value);
-            enqueueSnackbar?.("Couldn't change the room: " + (err?.message || err), { variant: 'error' });
-        }
-    }, [enqueueSnackbar]);
-
     useEffect(() => {
         mountedRef.current = true;
         logsBeforeMountRef.current.forEach(missedMessage => log(missedMessage.message, missedMessage.level));
@@ -221,42 +161,31 @@ function SettingsView(props) {
         setOpen(true);
     }, []);
 
+    const handleColorsChange = useCallback((event, value) => {
+        if (!value) return;
+        saveColors(value);
+        setColors(value);
+    }, []);
+
+    const copyLogs = useCallback(async () => {
+        const text = messages.map(entry => entry.level + ': ' + entry.message).join('\n');
+        try {
+            await navigator.clipboard.writeText(`PhotoGroup v${getAppVersionString()} ${peerId}\n${text}`);
+            enqueueSnackbar?.('Logs copied', { variant: 'success' });
+        } catch (err) {
+            Logger.warn('copyLogs: ' + err);
+            enqueueSnackbar?.("Couldn't copy the logs", { variant: 'error' });
+        }
+    }, [messages, peerId, enqueueSnackbar]);
+
     const handleClose = useCallback(() => {
         setOpen(false);
-    }, []);
-
-    const handleTopologyChange = useCallback((value) => {
-        localStorage.setItem('showTopology', String(value));
-        masterRef.current.emitter.emit('showTopology', value);
-        setShowTopology(value);
-    }, []);
-
-    const handleShowMeChange = useCallback((value) => {
-        localStorage.setItem('showMe', value);
-        masterRef.current.emitter.emit('showMe', value);
-        setShowMe(value);
-    }, []);
-
-    const handleEncryptChange = useCallback((value) => {
-        localStorage.setItem('encrypt', value);
-        setEncrypt(value);
-    }, []);
-
-    const handleStrategyPreferenceChange = useCallback((value) => {
-        localStorage.setItem('strategyPreference', value);
-        masterRef.current.emitter.emit('strategyPreference', value);
-        setStrategyPreference(value);
-    }, []);
-
-    const handleDarkModeChange = useCallback((value) => {
-        localStorage.setItem('darkMode', value);
-        masterRef.current.emitter.emit('darkMode', value);
-        setDarkMode(value);
+        setConfirmForget(false);
     }, []);
 
     return (
         <div>
-            {/* Hidden in simple mode; it stays mounted for the log and stored settings. */}
+            {/* Hidden in simple mode; it stays mounted to collect the log. */}
             {showButton && (
                 <IconButton
                     aria-label="Settings"
@@ -282,73 +211,31 @@ function SettingsView(props) {
                     <SectionHeader label="You" />
                     <PeerNameField master={master} />
 
-                    {/* Privacy */}
-                    <SectionHeader label="Privacy" />
-                    <SettingToggle
-                        checked={encrypt}
-                        onChange={handleEncryptChange}
-                        label="Private rooms"
-                        description={PRIVATE_ROOMS_TEXT}
-                    />
-
-                    {/* Sharing */}
-                    <SectionHeader label="Sharing (this room)" />
-                    <SettingToggle
-                        checked={keepCopies}
-                        onChange={handleKeepCopiesChange}
-                        label="Keep Copies for Latecomers"
-                        description="Photos go from phone to phone. Sometimes the server keeps a copy for 24 hours at most: when a phone cannot get a photo directly, for clips, or when a phone goes to the background before all people have a photo. Turn this on to keep a copy of each photo for 24 hours. Then people who join later still get the photos."
-                    />
-
-                    {/* Display */}
-                    <SectionHeader label="Display" />
-                    <SettingToggle
-                        checked={showTopology}
-                        onChange={handleTopologyChange}
-                        label="Topology View"
-                        description="Shows a map of the connected devices."
-                    />
-                    <SettingToggle
-                        checked={showMe}
-                        onChange={handleShowMeChange}
-                        label="Me View"
-                        description="Highlights your device on the network map."
-                    />
-                    <SettingToggle
-                        checked={darkMode}
-                        onChange={handleDarkModeChange}
-                        label="Dark Theme"
-                        description="Changes between light and dark colors."
-                    />
-
-                    {/* Advanced */}
-                    <SectionHeader label="Advanced" />
-                    <SettingToggle
-                        checked={strategyPreference}
-                        onChange={handleStrategyPreferenceChange}
-                        label="Prefer Sequential Download"
-                        description="Downloads pieces in order, not rarest first. Sharing between many people can be slower."
-                    />
-                    <Box sx={{ py: 0.5, pl: 1 }}>
-                        <Button
-                            onClick={() => masterRef.current.restartTrackers()}
-                            color="secondary"
-                            variant="outlined"
-                            size="small"
-                        >
-                            Restart Trackers
-                        </Button>
-                    </Box>
+                    <SectionHeader label="Colors" />
+                    <ToggleButtonGroup
+                        value={colors}
+                        exclusive
+                        onChange={handleColorsChange}
+                        size="small"
+                        aria-label="Colors"
+                    >
+                        {COLOR_CHOICES.map(choice => (
+                            <ToggleButton key={choice.value} value={choice.value} sx={{ textTransform: 'none', px: 1.5 }}>
+                                {choice.label}
+                            </ToggleButton>
+                        ))}
+                    </ToggleButtonGroup>
 
                     {/* Logs */}
                     <SectionHeader label="Logs" />
-                    <Box sx={{ py: 0.5 }}>
+                    <Box sx={{ py: 0.5, display: 'flex', gap: 1 }}>
                         <Button
                             size="small"
                             onClick={() => setLogsExpanded(prev => !prev)}
                         >
-                            {logsExpanded ? 'Hide Logs' : 'Show Logs'}
+                            {logsExpanded ? 'Hide logs' : 'Show logs'}
                         </Button>
+                        <Button size="small" onClick={copyLogs}>Copy logs</Button>
                     </Box>
                     <Collapse in={logsExpanded}>
                         <Box
@@ -380,6 +267,23 @@ function SettingsView(props) {
                             <div ref={logsEndRef} />
                         </Box>
                     </Collapse>
+
+                    <SectionHeader label="This device" />
+                    <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mb: 1 }}>
+                        {FORGET_TEXT}
+                    </Typography>
+                    {confirmForget ? (
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Button size="small" onClick={() => setConfirmForget(false)}>Cancel</Button>
+                            <Button size="small" color="error" variant="contained" onClick={() => forgetDevice()}>
+                                Delete my data
+                            </Button>
+                        </Box>
+                    ) : (
+                        <Button size="small" color="error" variant="outlined" onClick={() => setConfirmForget(true)}>
+                            Forget this device
+                        </Button>
+                    )}
                 </DialogContent>
 
                 <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 2 }}>
@@ -402,9 +306,8 @@ function SettingsView(props) {
 }
 
 SettingsView.propTypes = {
-    emitter: PropTypes.object.isRequired,
+    emitter: PropTypes.object,
     master: PropTypes.object.isRequired,
-    prefersDarkMode: PropTypes.bool.isRequired,
     showButton: PropTypes.bool,
 };
 

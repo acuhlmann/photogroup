@@ -31,7 +31,7 @@ import { readMode, saveMode } from "./share/uiMode";
 import RoomMenu from "./share/header/RoomMenu";
 import useRoom from "./share/useRoom";
 
-function App({theme: propsTheme, prefersDarkMode}) {
+function App({theme: propsTheme}) {
     //Logger.useDefaults();
     Logger.setLevel(Logger.INFO);
 
@@ -53,9 +53,6 @@ function App({theme: propsTheme, prefersDarkMode}) {
         masterRef.current.service.master = masterRef.current;
     }
 
-    const [theme, setTheme] = useState(() =>
-        propsTheme || createAppTheme('dark')
-    );
     const [networkStatus, setNetworkStatus] = useState({ peers: 0, downSpeed: '', upSpeed: '' });
     const [inRoom, setInRoom] = useState(() => new URLSearchParams(window.location.search).has('room'));
     const room = useRoom(masterRef.current, inRoom);
@@ -84,27 +81,10 @@ function App({theme: propsTheme, prefersDarkMode}) {
         }
     }, []);
 
-    useEffect(() => {
-        // Ensure theme is set from props if available
-        if (propsTheme && !theme) {
-            setTheme(propsTheme);
-        }
-    }, [propsTheme, theme]);
-
-    useEffect(() => {
-        // Update theme if props.theme changes
-        if (propsTheme && propsTheme !== theme) {
-            setTheme(propsTheme);
-        }
-    }, [propsTheme, theme]);
 
     useEffect(() => {
         const handleAddPeerDone = () => {
             reactToTouchInOut();
-        };
-
-        const handleDarkMode = (isDark) => {
-            setTheme(createAppTheme(isDark ? 'dark' : 'light'));
         };
 
         const handleNumPeersChange = (numPeers) => {
@@ -120,7 +100,6 @@ function App({theme: propsTheme, prefersDarkMode}) {
         };
 
         emitterRef.current.on('addPeerDone', handleAddPeerDone);
-        emitterRef.current.on('darkMode', handleDarkMode);
         emitterRef.current.on('readyToUpload', deliverSharedFiles);
         const handleInRoom = () => setInRoom(true);
         emitterRef.current.on('readyToUpload', handleInRoom);
@@ -136,7 +115,6 @@ function App({theme: propsTheme, prefersDarkMode}) {
 
         return () => {
             emitterRef.current.removeListener('addPeerDone', handleAddPeerDone);
-            emitterRef.current.removeListener('darkMode', handleDarkMode);
             emitterRef.current.removeListener('readyToUpload', deliverSharedFiles);
             emitterRef.current.removeListener('readyToUpload', handleInRoom);
             emitterRef.current.removeListener('numPeersChange', handleNumPeersChange);
@@ -165,10 +143,7 @@ function App({theme: propsTheme, prefersDarkMode}) {
         });
     };
 
-    // Use state theme if available, otherwise fall back to props theme or default
-    const currentTheme = useMemo(() => {
-        return theme || propsTheme || createAppTheme('dark');
-    }, [theme, propsTheme]);
+    const currentTheme = useMemo(() => propsTheme || createAppTheme('dark'), [propsTheme]);
 
     const hasActivity = networkStatus.downSpeed || networkStatus.upSpeed;
     const simple = mode === 'simple';
@@ -248,7 +223,6 @@ function App({theme: propsTheme, prefersDarkMode}) {
                                     <SettingsView
                                         master={masterRef.current}
                                         emitter={masterRef.current.emitter}
-                                        prefersDarkMode={prefersDarkMode}
                                         showButton={!simple}
                                     />
                                 </Stack>
@@ -308,7 +282,6 @@ function App({theme: propsTheme, prefersDarkMode}) {
 }
 
 App.propTypes = {
-    prefersDarkMode: PropTypes.bool.isRequired,
     theme: PropTypes.object,
 };
 
