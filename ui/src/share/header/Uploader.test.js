@@ -185,6 +185,33 @@ describe('Uploader on Android', () => {
     expect(model.seed.mock.calls[0][0]).toEqual([bad]);
   });
 
+  describe('with "Remove location when I share" on', () => {
+    let previous;
+    afterEach(() => vi.stubGlobal('localStorage', previous));
+    beforeEach(() => {
+      previous = globalThis.localStorage;
+      const items = new Map([['photogroup.removeLocation', 'true']]);
+      vi.stubGlobal('localStorage', {
+        getItem: key => (items.has(key) ? items.get(key) : null),
+        setItem: (key, value) => items.set(key, String(value)),
+        removeItem: key => items.delete(key),
+      });
+    });
+
+    it('shares photos without their location and holds nothing back', async () => {
+      const { hasLocation } = await import('../gallery/metadata/removeLocation');
+      const heic = new File([fixture('gps.heic')], 'PXL_gps.heic', { type: 'image/heic' });
+      expect(await hasLocation(heic)).toBe(true);
+      await choose([heic, stripped()]);
+
+      await vi.waitFor(() => expect(model.seed).toHaveBeenCalledTimes(1));
+      const shared = model.seed.mock.calls[0][0];
+      expect(shared.map(file => file.name)).toEqual(['PXL_gps.heic', 'PXL_stripped.jpg']);
+      expect(await hasLocation(shared[0])).toBe(false);
+      expect(heldList()).toBeNull();
+    });
+  });
+
   it('shares the photos inside a zip, holding back any that were blanked before zipping', async () => {
     await choose([photosZip()]);
 

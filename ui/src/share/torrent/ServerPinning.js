@@ -23,7 +23,7 @@
  * moment it is safe to lock the phone.
  */
 import Logger from 'js-logger';
-import { holds } from './RoomPhotos';
+import { holds, wantsPhoto } from './RoomPhotos';
 import { MAX_PHOTO_BYTES, MAX_PHOTO_MB } from './ServerCopyLimits';
 
 /** Whether a seeded file is a clip, which is worth a copy whatever the room keeps. */
@@ -133,10 +133,10 @@ export default class ServerPinning {
         });
     }
 
-    /** Someone in the room, other than us, doesn't have the whole photo. */
+    /** Someone in the room, other than us, wants the whole photo and doesn't have it. */
     someoneLacks(photo) {
         const me = this.myPeerId;
-        return (this.getPeers?.() || []).some(peer => peer.peerId !== me && !holds(photo, peer.peerId));
+        return (this.getPeers?.() || []).some(peer => peer.peerId !== me && !holds(photo, peer.peerId) && wantsPhoto(photo, peer));
     }
 
     answerRequest(infoHash) {

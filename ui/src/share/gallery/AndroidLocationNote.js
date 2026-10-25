@@ -6,6 +6,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import LocationOnRounded from '@mui/icons-material/LocationOnRounded';
 import { KEEP_LOCATION_STEPS, MATERIAL_FILES_URL, onAndroid } from '../header/androidUpload';
+import { readPreference } from '../preferences';
 
 const DISMISSED = 'photogroup.androidLocationNote';
 
@@ -23,7 +24,7 @@ function dismissedBefore() {
  * dismiss it; elsewhere it renders nothing.
  */
 function AndroidLocationNote({ narrow }) {
-    const [hidden, setHidden] = useState(() => !onAndroid() || dismissedBefore());
+    const [hidden, setHidden] = useState(() => !onAndroid() || dismissedBefore() || readPreference('removeLocation'));
     if (hidden) return null;
 
     const dismiss = () => {

@@ -30,6 +30,8 @@ import ModeSwitch from "./share/header/ModeSwitch";
 import { readMode, saveMode } from "./share/uiMode";
 import RoomMenu from "./share/header/RoomMenu";
 import useRoom from "./share/useRoom";
+import ScreenAwake from "./share/screenAwake";
+import { watchNewPhotos } from "./share/newPhotoNotices";
 
 function App({theme: propsTheme}) {
     //Logger.useDefaults();
@@ -81,6 +83,17 @@ function App({theme: propsTheme}) {
         }
     }, []);
 
+
+    // While photos move, keep the screen on; in the background, say when new ones come.
+    useEffect(() => {
+        const master = masterRef.current;
+        const awake = new ScreenAwake({ master }).start();
+        const stopNotices = watchNewPhotos({ emitter: master.emitter, getMyPeerId: () => master.client?.peerId });
+        return () => {
+            awake.stop();
+            stopNotices();
+        };
+    }, []);
 
     useEffect(() => {
         const handleAddPeerDone = () => {

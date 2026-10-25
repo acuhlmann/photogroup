@@ -208,6 +208,11 @@ function Gallery(props) {
         } else {
             const photoPromises = photos.map(photo => {
                 return new Promise(async (resolve, reject) => {
+                    // "Data saver": only the preview until the person asks for the photo.
+                    if (photo.previewOnly) {
+                        reject('preview only');
+                        return;
+                    }
                     // Cache-first: if this photo was resurrected from a previous session,
                     // try to serve the blob directly from IndexedDB without touching the
                     // WebTorrent peer/tracker layer (which can hang when offline or after

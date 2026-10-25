@@ -135,6 +135,14 @@ export default class RoomPhotos {
     }
 }
 
+/**
+ * Whether a peer wants the whole photo now. With "Data saver" on, a peer
+ * gets only the preview until it asks for the photo, which makes it an owner.
+ */
+export function wantsPhoto(photo, peer) {
+    return !peer?.dataSaver || (photo?.owners || []).some(owner => owner.peerId === peer.peerId);
+}
+
 /** Whether `peerId` has all of a photo: its sharer, or an owner done loading. */
 export function holds(photo, peerId) {
     return !!photo && (photo.peerId === peerId

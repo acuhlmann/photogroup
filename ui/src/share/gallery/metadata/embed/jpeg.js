@@ -47,6 +47,12 @@ export async function readExif(blob) {
     return exif ? exif.payload.subarray(EXIF_HEADER.length) : null;
 }
 
+/** The photo's XMP packet as text, or null when it has none. */
+export async function readXmp(blob) {
+    const { existing } = await readSegments(blob);
+    return existing ? existing.xml : null;
+}
+
 export async function embed(blob, details) {
     const { segments, existing, exif } = await readSegments(blob);
     const payload = utf8(XMP_HEADER + applyDetailsToXmp(existing && existing.xml, details));

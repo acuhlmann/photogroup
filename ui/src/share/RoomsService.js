@@ -3,6 +3,7 @@ import shortid  from 'shortid';
 import cryptoRandomString from "crypto-random-string";
 import { backoffDelay } from './util/ConnectionRecovery';
 import { CHUNK_BYTES, FIRST_CHUNK_BYTES } from './torrent/ServerCopyLimits';
+import { readPreference } from './preferences';
 
 const SESSION_KEY = 'pgSessionId';
 
@@ -413,7 +414,9 @@ export default class RoomsService {
             networkChain: this.networkChain,
             // Rejoining while another app is in front (the stream came back
             // in the background) doesn't make us present again.
-            away: typeof document !== 'undefined' && document.visibilityState === 'hidden'
+            away: typeof document !== 'undefined' && document.visibilityState === 'hidden',
+            // "Data saver": this phone takes only the photos it asks for.
+            dataSaver: readPreference('dataSaver'),
         };
     }
 

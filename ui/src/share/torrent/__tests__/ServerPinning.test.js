@@ -136,6 +136,14 @@ describe('ServerPinning', () => {
         expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob, expect.anything());
     });
 
+    it('leaves no copy for someone on Data saver until they ask for the photo', () => {
+        const { pinning, emit } = setup({ peers: [{ peerId: 'me' }, { peerId: 'saver', dataSaver: true }], bytes: { a: blob } });
+        emit({ type: 'all', item: [photo('a', 'me')] });
+        expect(pinning.onHide()).toBe(0);
+        emit({ type: 'all', item: [photo('a', 'me', [{ peerId: 'saver', loading: true }])] });
+        expect(pinning.onHide()).toBe(1);
+    });
+
     it('on the way into the background, takes over a stalled upload too', async () => {
         let clock = 0;
         const { pinning, service, emit, settle } = setup({ bytes: { a: blob }, now: () => clock });
