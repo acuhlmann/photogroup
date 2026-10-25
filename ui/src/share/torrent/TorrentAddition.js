@@ -864,13 +864,18 @@ export default class TorrentAddition {
                 // WebTorrent 3 replaced getBlob(cb) with blob(); with only the old
                 // call, receivers never cached anything and every reload showed
                 // their photos loading again.
-                if (file.type && !shouldCacheBlob(file.type)) return;
+                const key = files.length > 1
+                    ? torrent.infoHash + '-' + file.path
+                    : torrent.infoHash;
+                // A private room's file is sealed under a neutral name, so
+                // only the room's photo list knows its type.
+                const photo = this.master.roomPhotos?.get?.(key);
+                const roomType = photo?.secure ? photo.fileType : null;
+                if (!shouldCacheBlob(roomType || file.type || 'image/')) return;
                 readFileBlob(file).then(blob => {
-                    if (!blob || !shouldCacheBlob(blob.type)) return;
-                    const key = files.length > 1
-                        ? torrent.infoHash + '-' + file.path
-                        : torrent.infoHash;
-                    return cachePut(key, blob, blob.type);
+                    const type = roomType || blob?.type;
+                    if (!blob || !shouldCacheBlob(type)) return;
+                    return cachePut(key, blob, type);
                 }).catch(() => {});
             });
         }

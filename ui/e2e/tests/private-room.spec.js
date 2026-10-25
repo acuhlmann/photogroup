@@ -36,6 +36,12 @@ test('a private room shares a photo the server cannot read', async ({ browser })
     expect(JSON.stringify(photo)).not.toContain('test-image');
   });
 
+  // After a reload, the photo comes back from this browser's cache, opened.
+  await page2.waitForTimeout(1500);
+  await page2.reload({ waitUntil: 'domcontentloaded' });
+  expect(await waitForImage(page2, 30000)).toBe(true);
+  await expect(page2.getByText('test-image.jpg').first()).toBeVisible({ timeout: 15000 });
+
   // Without the key, the room says so and shows no photo.
   const context3 = await browser.newContext();
   const page3 = await context3.newPage();
