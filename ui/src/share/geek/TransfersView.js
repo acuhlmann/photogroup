@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 import FileUtil from '../util/FileUtil';
 import { readTransfers, totals, describeSplit, formatDuration, readServerCopies } from './transfers';
 import { describeIceServers, summarizeChain, verdictFor } from '../topology/NetworkInsight';
+import PieceGrid from './PieceGrid';
 import { ROUTE_STYLE } from './NetworkStage';
 
 const mono = 'var(--font-mono)';
@@ -106,7 +107,7 @@ function serverNote(stage) {
         .filter(Boolean).join(' · ');
 }
 
-function TransferRow({ row, onReplay }) {
+function TransferRow({ row, onReplay, at }) {
     const [open, setOpen] = useState(false);
     const arrow = row.direction === 'down' ? '↓' : '↑';
     const percent = Math.round(row.progress * 100);
@@ -146,6 +147,8 @@ function TransferRow({ row, onReplay }) {
                 <Lane name={row.server.direction === 'up' ? 'SERVER ↑' : 'SERVER ↓'} steps={row.serverSteps} rgb={ROUTE_STYLE.copies.rgb} note={serverNote(row.server)} />
             )}
             <SourceBar sources={row.sources} total={row.split.total} />
+            <PieceGrid log={row.pieceLog || []} direction={row.direction} at={at}
+                names={Object.fromEntries(row.sources.filter(source => source.peerId).map(source => [source.peerId, source.label]))} />
             {row.sources.length > 0 && (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 1.5, fontSize: '0.6rem', color: 'text.secondary' }}>
                     <Box component="span" sx={{ color: 'text.disabled' }}>{row.direction === 'down' ? 'from' : 'to'}</Box>
@@ -197,7 +200,7 @@ function TransferRow({ row, onReplay }) {
     );
 }
 
-TransferRow.propTypes = { row: PropTypes.object.isRequired, onReplay: PropTypes.func };
+TransferRow.propTypes = { row: PropTypes.object.isRequired, onReplay: PropTypes.func, at: PropTypes.number };
 
 const clockTime = at => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 // An expiry is often tomorrow: say which day when it is not today.
@@ -258,16 +261,20 @@ ServerCopies.propTypes = { copies: PropTypes.array.isRequired };
  * Every photo this device sent or received, as stages, sources and the share
  * that went browser to browser — and, when it didn't, why.
  */
-function TransfersView({ master, onReplay }) {
+function TransfersView({ master, onReplay, timeline }) {
     const [, bump] = useReducer(value => value + 1, 0);
     useEffect(() => {
         const timer = setInterval(bump, REFRESH_MS);
         const unsubscribe = master.ledger?.subscribe?.(bump);
+        // Held, stepped or scrubbed: the piece grids show that moment.
+        const unclock = timeline?.subscribeClock?.(bump);
         return () => {
             clearInterval(timer);
             unsubscribe?.();
+            unclock?.();
         };
-    }, [master]);
+    }, [master, timeline]);
+    const at = timeline && !timeline.playing ? timeline.clock() : undefined;
 
     const input = readInput(master);
     const rows = readTransfers(input);
@@ -309,7 +316,7 @@ function TransfersView({ master, onReplay }) {
             <ServerCopies copies={readServerCopies(input)} />
             {rows.length ? (
                 <Box component="ol" sx={{ m: 0, p: 0, listStyle: 'none' }}>
-                    {rows.map(row => <TransferRow key={row.infoHash} row={row} onReplay={onReplay} />)}
+                    {rows.map(row => <TransferRow key={row.infoHash} row={row} onReplay={onReplay} at={at} />)}
                 </Box>
             ) : (
                 <Typography sx={{ display: 'block', p: 1.5, fontFamily: mono, fontSize: '0.68rem', color: 'text.disabled' }}>
@@ -323,6 +330,7 @@ function TransfersView({ master, onReplay }) {
 TransfersView.propTypes = {
     master: PropTypes.object.isRequired,
     onReplay: PropTypes.func,
+    timeline: PropTypes.object,
 };
 
 export default TransfersView;

@@ -72,6 +72,7 @@ function TrafficStrip({ timeline, from, to, at }) {
         const span = Math.max(1, to - from);
         const bins = Array.from({ length: BINS }, () => ({ rx: 0, tx: 0, other: 0 }));
         timeline.entries.forEach(entry => {
+            if (entry.seen === false) return;
             const index = Math.floor((entry.at - from) / span * BINS);
             if (index < 0 || index >= BINS) return;
             const bin = bins[index];

@@ -104,6 +104,12 @@ export default class TransferLedger {
         const item = this.entry(torrent?.infoHash, torrent?.name);
         if (!item) return;
         const id = String(peerId || '');
+        // Every piece, in order, for the grid: which one, from or to whom, when.
+        // Kept per torrent, since a photo and its thumbnail have their own pieces.
+        if (!item.pieceLog) item.pieceLog = [];
+        item.pieceLog.push({
+            torrent: torrent?.infoHash, name: torrent?.name, total: total || 0, index, peerId: id, kind, at: this.now(),
+        });
         const tally = item.peers.get(id) || { rx: 0, tx: 0, pieces: 0 };
         tally[kind] += size || 0;
         tally.pieces++;

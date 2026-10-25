@@ -7,7 +7,8 @@
 export const FLIGHT_MS = 1400;
 // Traffic kept for scrubbing back.
 export const HISTORY_MS = 120000;
-export const MAX_ENTRIES = 400;
+// Link stats add an entry per peer each second; this keeps two minutes of a busy room.
+export const MAX_ENTRIES = 1500;
 // Transfer progress fires many times a second; one log line per key this often.
 export const SAME_TEXT_MS = 1500;
 // Replay speeds, slowest first. 1 is real time.
@@ -58,6 +59,7 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
     };
 
     const newest = () => (entries.length ? entries[entries.length - 1] : null);
+    const visible = () => entries.filter(entry => entry.seen);
     const oldest = () => (entries.length ? entries[0] : null);
 
     /** The event crossing under this moment, if the playhead is on one. */
@@ -74,7 +76,7 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
      * `key` only writes a line this often, so a busy route stays readable
      * while every one of its packets still flies.
      */
-    const push = ({ kind, text = '', key = '', flights = [], route, count, speed, note, sticky, bytes, at = now() }) => {
+    const push = ({ kind, text = '', key = '', flights = [], route, count, speed, note, sticky, bytes, stats, at = now() }) => {
         // A key never written is not throttled; `|| 0` would eat the first line.
         if (text && key && at - (lastText.get(key) ?? -Infinity) < SAME_TEXT_MS) text = '';
         if (text && key) lastText.set(key, at);
@@ -94,6 +96,8 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
             sticky,
             // Bytes this event put on the wire, where the app knows them.
             bytes: bytes || 0,
+            // What WebRTC reported for `route` at this moment (rtt, rates, path).
+            stats,
             flights: flights.filter(Boolean).map(flight => ({
                 routeId: flight.routeId,
                 rgb: flight.rgb,
@@ -107,6 +111,8 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
         // with no packet (a peer joining, say) still needs a span to be found by.
         entry.span = entry.flights.reduce((max, item) => Math.max(max, item.dur), 0) || FLIGHT_MS;
         entry.mid = entry.at + entry.span / 2;
+        // Seen on screen: a log line or a packet. Others only feed labels.
+        entry.seen = !!(entry.text || entry.flights.length);
         entries.push(entry);
         prune();
         emit();
@@ -222,6 +228,8 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
      * half-way across. Stepping past the newest event returns to the live edge.
      */
     const step = direction => {
+        // A step goes to something you can see, not a stats reading.
+        const entries = visible();
         if (!entries.length) return playhead;
         // Stepping holds a replay where it is, then walks from there.
         if (playhead !== null && rate) {
@@ -306,7 +314,7 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
     const missed = () => {
         if (playhead === null) return 0;
         const at = clock();
-        return entries.filter(entry => entry.at > at).length;
+        return entries.filter(entry => entry.seen && entry.at > at).length;
     };
 
     /**
@@ -320,7 +328,7 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
             const entry = entries[index];
             if (entry.at > at) continue;
             if (entry.at <= at - window) break;
-            sum.events++;
+            if (entry.seen) sum.events++;
             if (entry.kind === 'rx') sum.rx += entry.bytes;
             else if (entry.kind === 'tx') sum.tx += entry.bytes;
         }

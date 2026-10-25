@@ -235,6 +235,12 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     nodes.filter(node => node.kind === 'nat').forEach(nat => {
         routes.push({ id: 'stun:' + nat.id, kind: 'stun', path: [nat.id, stun.id] });
     });
+    // This device asks STUN even when no NAT is known yet (STUN may not have
+    // answered), and asks TURN for a relay address when one is configured.
+    if (byId.has(myPeerId)) {
+        if (!natOf.has(myPeerId)) routes.push({ id: 'stun:' + myPeerId, kind: 'stun', path: [myPeerId, stun.id], peerId: myPeerId });
+        if (turnHere) routes.push({ id: 'turnctl:' + myPeerId, kind: 'turnctl', path: [...via(myPeerId), turn.id], peerId: myPeerId });
+    }
 
     // Transfers, by the path ICE settled on.
     const seen = new Set();

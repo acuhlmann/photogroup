@@ -230,6 +230,7 @@ export function readTransfers({ items = [], torrents = [], photos = [], peers = 
             serverSteps: serverSteps(item.serverStage?.direction, item.serverStage, photo),
             sources,
             split,
+            pieceLog: item.pieceLog || [],
             stages: withDurations,
             startedAt: item.startedAt,
             lastAt: lastStage ? lastStage.until || lastStage.at : item.startedAt,

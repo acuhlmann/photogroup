@@ -237,12 +237,27 @@ describe('timeline', () => {
 
     it('meters the bytes and events of the second up to a moment', () => {
         const { timeline } = make(10000);
-        timeline.push({ at: 8200, kind: 'rx', bytes: 16384, flights: [] });
-        timeline.push({ at: 8700, kind: 'rx', bytes: 16384, flights: [] });
-        timeline.push({ at: 8900, kind: 'tx', bytes: 1000, flights: [] });
-        timeline.push({ at: 8950, kind: 'sse', flights: [] });
+        timeline.push({ at: 8200, kind: 'rx', bytes: 16384, text: 'piece 1', flights: [] });
+        timeline.push({ at: 8700, kind: 'rx', bytes: 16384, text: 'piece 2', flights: [] });
+        timeline.push({ at: 8900, kind: 'tx', bytes: 1000, text: 'piece 1', flights: [] });
+        timeline.push({ at: 8950, kind: 'sse', text: 'snapshot', flights: [] });
+        // A stats reading is not an event anyone sees.
+        timeline.push({ at: 8960, kind: 'linkStats', stats: { rtt: 12 }, flights: [] });
         expect(timeline.meter(9000)).toEqual({ events: 4, rx: 32768, tx: 1000 });
         // Only what had happened by then counts.
         expect(timeline.meter(8800)).toEqual({ events: 2, rx: 32768, tx: 0 });
+    });
+
+    it('steps over stats readings and does not count them as new', () => {
+        const { timeline } = make(5000);
+        timeline.push(flight(1000));
+        timeline.push({ at: 2000, kind: 'linkStats', stats: { rtt: 9 }, flights: [] });
+        timeline.push(flight(3000));
+        timeline.step(-1);
+        expect(timeline.clock()).toBe(3500);
+        timeline.step(-1);
+        expect(timeline.clock()).toBe(1500);
+        timeline.push({ at: 4000, kind: 'linkStats', stats: { rtt: 9 }, flights: [] });
+        expect(timeline.missed()).toBe(1);
     });
 });

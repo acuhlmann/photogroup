@@ -155,6 +155,43 @@ describe('attachTraffic', () => {
         expect(timeline.entries).toHaveLength(2);
     });
 
+    it('asks TURN for a relay address, and draws the answer only when it comes', () => {
+        const emitter = new EventEmitter();
+        const timeline = createTimeline();
+        const withTurn = () => ({ routes: [
+            { id: 'stun:me', kind: 'stun', path: ['me', 'stun'], peerId: 'me' },
+            { id: 'turnctl:me', kind: 'turnctl', path: ['me', 'turn'], peerId: 'me' },
+        ] });
+        attachTraffic({ timeline, emitter, getScene: withTurn, getMyId: () => 'me' });
+        emitter.emit('pcEvent', 'icegatheringstatechange', 'gathering');
+        // No NAT known yet: the request goes from the device itself.
+        expect(timeline.entries.at(-1).flights.map(f => [f.routeId, f.label]))
+            .toEqual([['stun:me', 'Binding Request'], ['turnctl:me', 'Allocate Request']]);
+        emitter.emit('pcEvent', 'icecandidate', 'relay 192.0.2.9:49152');
+        expect(timeline.entries.at(-1).flights.map(f => [f.routeId, f.label, f.reverse]))
+            .toEqual([['turnctl:me', 'Allocate Success 192.0.2.9:49152', true]]);
+    });
+
+    it('puts WebRTC stats on the path, and its STUN checks as packets', () => {
+        const { emitter, timeline } = setup();
+        const stat = {
+            peerId: 'them', rtt: 23.4, rx: 40000, tx: 1000, checks: 1, answers: 1,
+            local: 'srflx', remote: 'host', protocol: 'udp', relayProtocol: '', localAddress: 'a:1', remoteAddress: 'b:2',
+        };
+        emitter.emit('linkStats', stat);
+        const first = timeline.entries.at(-1);
+        expect(first.route).toBe('p2p:me|them');
+        expect(first.stats).toMatchObject({ rtt: 23.4, rx: 40000, local: 'srflx' });
+        expect(first.flights.map(f => [f.label, f.reverse])).toEqual([['STUN check', false], ['check OK 23 ms', true]]);
+        // A new path writes a line; the same path again does not.
+        expect(first.text).toContain('path peer them · srflx ⇄ host udp · rtt 23 ms');
+        emitter.emit('linkStats', { ...stat, checks: 0, answers: 0 });
+        const second = timeline.entries.at(-1);
+        expect(second.text).toBe('');
+        expect(second.flights).toEqual([]);
+        expect(flowAt(timeline.entries, 'p2p:me|them', second.at).stats.rtt).toBe(23.4);
+    });
+
     it('draws no packets when motion is reduced, but still writes the log', () => {
         const { emitter, timeline } = setup({ animate: () => false });
         emitter.emit('photos', { type: 'add', item: [{ fileName: 'beach.jpg', peerId: 'them' }] });

@@ -15,6 +15,7 @@ import FileUtil from '../util/FileUtil';
 import { captureDroppedHandles } from '../gallery/replaceOriginal';
 import { buildScene, routePoints, pointAlong, TIER } from './scene';
 import { attachTraffic, flowAt, FLOW_MS, RX, TX } from './traffic';
+import { watchLinks } from '../torrent/linkStats';
 import { demoInputs, withDemoRoutes } from './tour';
 import { posterFor, mediaUrlFor } from './videoPoster';
 import PeerNameField from '../header/PeerNameField';
@@ -30,6 +31,7 @@ export const ROUTE_STYLE = {
     lan: { rgb: '61,222,139', label: 'P2P same LAN', dash: [], width: 3 },
     punch: { rgb: '45,212,191', label: 'P2P via NAT', dash: [], width: 2.5 },
     relay: { rgb: '255,93,115', label: 'TURN relay', dash: [], width: 2.5 },
+    turnctl: { rgb: '255,93,115', label: 'TURN allocate', dash: [1, 4], width: 1, hidden: true },
 };
 
 const NODE_RGB = {
@@ -98,6 +100,13 @@ export function routeLabel(route, state, now = Date.now(), base = route.label) {
     if (state?.note) return [base, state.note].filter(Boolean).join(' · ');
     if (!state || now - (state.at || 0) > FLOW_MS) return base;
     const parts = [base];
+    // What WebRTC measured on this path: round-trip time, and the bytes per
+    // second when no piece count says it already.
+    const stats = state.stats;
+    if (stats && Number.isFinite(stats.rtt)) parts.push(`${Math.round(stats.rtt)} ms`);
+    if (stats && !state.rx && !state.tx && (stats.rx >= 1 || stats.tx >= 1)) {
+        parts.push(`↓ ${FileUtil.formatBytes(Math.round(stats.rx))}/s ↑ ${FileUtil.formatBytes(Math.round(stats.tx))}/s`);
+    }
     if (state.rx) parts.push(`↓ ${state.rx} pieces` + (state.rxSpeed ? ` ${state.rxSpeed}` : ''));
     if (state.tx) parts.push(`↑ ${state.tx} pieces` + (state.txSpeed ? ` ${state.txSpeed}` : ''));
     return parts.join(' · ');
@@ -263,6 +272,10 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
         getMyId: () => master.client?.peerId,
     }), [master, timeline]);
 
+    // WebRTC's own numbers for each peer connection, while the map is open.
+    useEffect(() => (master.client ? watchLinks({ client: master.client, emitter: master.emitter }) : undefined),
+        [master.client, master.emitter]);
+
     const image = useCallback((url) => {
         if (!url) return null;
         const cache = imagesRef.current;
@@ -369,7 +382,9 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                 ctx.beginPath();
                 points.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
                 ctx.setLineDash(style.dash);
-                ctx.lineWidth = lit ? style.width + 1.5 : style.width;
+                // A busy path is drawn thicker: +1 px per doubling above 16 KB/s.
+                const busy = flow?.stats ? Math.min(5, Math.log2(1 + ((flow.stats.rx || 0) + (flow.stats.tx || 0)) / 16384)) : 0;
+                ctx.lineWidth = (lit ? style.width + 1.5 : style.width) + busy;
                 const strength = lit ? 1 : transfer || style.hidden ? 0.75 : 0.28;
                 ctx.strokeStyle = `rgba(${style.rgb},${spotlight && !spot ? strength * 0.25 : strength})`;
                 ctx.stroke();

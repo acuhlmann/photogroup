@@ -31,6 +31,8 @@ const DEFAULT_HEIGHT = { desktop: 220, mobile: 260 };
 
 const KIND_COLOR = {
     wire: 'primary.main',
+    trk: 'primary.main',
+    path: 'success.main',
     rx: 'success.main',
     tx: 'info.main',
     peer: 'warning.main',
@@ -411,7 +413,7 @@ function GeekStage({ master, tiles, isMobile }) {
                 </Box>
                 {open && (
                     <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                        {tab === 0 ? <PacketLog timeline={timeline} /> : <TransfersView master={master} onReplay={startReplay} />}
+                        {tab === 0 ? <PacketLog timeline={timeline} /> : <TransfersView master={master} onReplay={startReplay} timeline={timeline} />}
                     </Box>
                 )}
             </Box>

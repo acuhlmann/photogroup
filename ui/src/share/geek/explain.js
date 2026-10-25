@@ -23,6 +23,11 @@ const EXPLAIN = {
         body: 'Your browser told the tracker which photos it has. This is an announce. The tracker sent back peers that want the same photos, with their WebRTC offers.',
         sees: 'The tracker: your IP address and the infohash of each photo. It never sees the photo.',
     },
+    path: {
+        title: 'The path to a peer',
+        body: 'WebRTC tells which candidate pair it uses: host (same network), srflx (through the NATs) or relay (through TURN). Every few seconds each browser sends a STUN check on this path. The answer proves the path works and gives the round-trip time.',
+        sees: 'Only the two browsers, or the TURN relay when the path is relay. The data is encrypted.',
+    },
     peer: {
         title: 'Someone joined, left or changed',
         body: 'The server keeps the list of people in the room. It sends each change to all devices over Server-Sent Events.',
@@ -65,6 +70,7 @@ const ALIAS = {
     localNetwork: 'ice',
     sseReconnected: 'sse',
     trackerAnnounce: 'trk',
+    linkStats: 'path',
     serverCopy: 'copy',
 };
 
