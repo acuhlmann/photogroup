@@ -24,6 +24,7 @@ import ConnectionRecovery, { freezesWhenHidden } from '../util/ConnectionRecover
 import { requestPersistentStorage } from '../util/PersistentStorage';
 import { leaveRoomNotice } from '../roomNotice';
 import { forgetRoom } from '../recentRooms';
+import { openSealedPhoto } from '../gallery/openSealed';
 
 export default class TorrentMaster {
 
@@ -336,13 +337,19 @@ export default class TorrentMaster {
             if (!cached) {
                 const blob = await cacheGet(photo.infoHash);
                 if (!blob) return;
-                const file = new File([blob], photo.fileName || 'image', {
-                    type: photo.fileType || blob.type
-                });
+                // A private room's photo is cached sealed: open it first.
+                const file = photo.secure
+                    ? await openSealedPhoto(photo, blob)
+                    : new File([blob], photo.fileName || 'image', { type: photo.fileType || blob.type });
                 cached = { file, img: URL.createObjectURL(file) };
                 this._cachedPhotos.set(photo.infoHash, cached);
             }
             const file = cached.file;
+            if (photo.secure) {
+                photo.fileName = file.name;
+                photo.fileType = file.type || photo.fileType;
+                photo.isDecrypted = true;
+            }
             photo.fromCache = true;
             photo.cachedFile = file;
             photo.img = cached.img;

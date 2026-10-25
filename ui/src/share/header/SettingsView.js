@@ -91,6 +91,11 @@ function getLogColor(level) {
     return 'text.secondary';
 }
 
+export const PRIVATE_ROOMS_TEXT = 'When this is on, rooms that you start are private. Each phone encrypts the photos, '
+    + 'their file names and the room name with a key in the room link. The server cannot read them. '
+    + 'In a private room you cannot share titles, ratings or places, and people need the full link or code to see the photos. '
+    + 'Rooms that you started before stay as they are.';
+
 function SettingsView(props) {
     const {master, enqueueSnackbar, closeSnackbar, prefersDarkMode, showButton = true} = props;
     const masterRef = useRef(master);
@@ -234,7 +239,6 @@ function SettingsView(props) {
 
     const handleEncryptChange = useCallback((value) => {
         localStorage.setItem('encrypt', value);
-        masterRef.current.emitter.emit('encrypt', value);
         setEncrypt(value);
     }, []);
 
@@ -283,8 +287,8 @@ function SettingsView(props) {
                     <SettingToggle
                         checked={encrypt}
                         onChange={handleEncryptChange}
-                        label="Encrypt End-to-End"
-                        description="Encrypts the photo files. Only the people in the room can open them. File names and details are not encrypted."
+                        label="Private rooms"
+                        description={PRIVATE_ROOMS_TEXT}
                     />
 
                     {/* Sharing */}

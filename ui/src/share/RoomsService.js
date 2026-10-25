@@ -112,7 +112,8 @@ export default class RoomsService {
         const location = window.location;
         const params = new URLSearchParams(location.search);
         params.set(name, value);
-        window.history.replaceState({}, '', decodeURIComponent(`${location.pathname}?${params}`));
+        // Keep "#k=…": a private room's key.
+        window.history.replaceState({}, '', decodeURIComponent(`${location.pathname}?${params}`) + location.hash);
     }
 
     closeUpdates() {

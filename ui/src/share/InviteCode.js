@@ -8,9 +8,11 @@ import ShareRounded from '@mui/icons-material/ShareRounded';
 import { QRCodeSVG } from 'qrcode.react';
 import copy from 'clipboard-copy';
 import Logger from 'js-logger';
+import { keyHash, roomKeyText } from './privateRoom';
 
+/** The room's link, with a private room's key after "#". */
 export function roomUrl(id) {
-    return window.location.origin + '?room=' + encodeURIComponent(id);
+    return window.location.origin + '?room=' + encodeURIComponent(id) + keyHash(roomKeyText());
 }
 
 /**

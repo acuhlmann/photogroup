@@ -32,11 +32,11 @@ export function findRoom(id) {
     return read().find(entry => entry.id === id) || null;
 }
 
-/** Note that this browser is in the room now. */
-export function visitRoom(id, now = Date.now()) {
+/** Note that this browser is in the room now, with a private room's key. */
+export function visitRoom(id, now = Date.now(), key = null) {
     if (!id) return;
     const entry = findRoom(id) || { id, firstSeen: now };
-    write([{ ...entry, lastSeen: now }, ...read().filter(item => item.id !== id)]);
+    write([{ ...entry, ...(key ? { key } : {}), lastSeen: now }, ...read().filter(item => item.id !== id)]);
 }
 
 /** Keep the room's name, as the room has it; '' or none clears it. */

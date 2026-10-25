@@ -19,9 +19,12 @@ import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
 import EditRounded from '@mui/icons-material/EditRounded';
 import ShieldOutlined from '@mui/icons-material/ShieldOutlined';
 import LogoutRounded from '@mui/icons-material/LogoutRounded';
+import LockRounded from '@mui/icons-material/LockRounded';
 
 import RoomPrivacy from '../RoomPrivacy';
 import { leaveRoomNotice } from '../roomNotice';
+import { roomCryptoKey } from '../privateRoom';
+import { sealText } from '../security/roomKey';
 
 export const ROOM_NAME_MAX = 60;
 const GO_BACK = 'To go back, open it under Your rooms.';
@@ -38,7 +41,11 @@ function RoomNameDialog({ master, open, name, onClose }) {
         setBusy(true);
         setError('');
         try {
-            const settings = await master.service.updateRoomSettings({ name: value.trim() });
+            // A private room's name is sealed, so the server can't read it.
+            const key = await roomCryptoKey();
+            const plain = value.trim();
+            const sealed = key && plain ? await sealText(key, plain) : plain;
+            const settings = await master.service.updateRoomSettings({ name: sealed });
             master.emitter.emit('roomSettings', settings);
             onClose();
         } catch (err) {
@@ -89,7 +96,7 @@ RoomNameDialog.propTypes = {
  * things you do to the room itself: name it, see what the server keeps,
  * and leave it.
  */
-export default function RoomMenu({ master, name, label }) {
+export default function RoomMenu({ master, name, label, isPrivate = false, missingKey = false }) {
     const [anchor, setAnchor] = useState(null);
     const [naming, setNaming] = useState(false);
     const [privacy, setPrivacy] = useState(false);
@@ -130,10 +137,11 @@ export default function RoomMenu({ master, name, label }) {
                 }}>
                     {label}
                 </Box>
+                {isPrivate && <LockRounded aria-label="Private room" sx={{ fontSize: 15, flexShrink: 0, ml: 0.25 }} />}
                 <ExpandMoreRounded sx={{ fontSize: 18, flexShrink: 0 }} />
             </ButtonBase>
             <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
-                <MenuItem onClick={pick(() => setNaming(true))}>
+                <MenuItem onClick={pick(() => setNaming(true))} disabled={missingKey}>
                     <ListItemIcon><EditRounded fontSize="small" /></ListItemIcon>
                     <ListItemText primary={name ? 'Change the name' : 'Name the room'} />
                 </MenuItem>
@@ -157,4 +165,6 @@ RoomMenu.propTypes = {
     master: PropTypes.object.isRequired,
     name: PropTypes.string.isRequired,
     label: PropTypes.string.isRequired,
+    isPrivate: PropTypes.bool,
+    missingKey: PropTypes.bool,
 };

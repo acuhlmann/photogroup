@@ -197,6 +197,25 @@ describe('Photo relay (server copies, pinned when needed)', () => {
         assert.strictEqual(cleared.body.name, undefined);
     });
 
+    it('makes a room private for good, and keeps its sealed name as it is', async () => {
+        // A room is made private when it starts, before any photo.
+        roomId = 'private-room-' + Date.now() + '-' + roomNumber++;
+        sharer = await join(newPeer('sharer'));
+        const put = body => auth(request(app).put(`/api/rooms/${roomId}/settings`), sharer).send(body);
+        await put({ private: false }).expect(400);
+        assert.strictEqual((await put({ private: true }).expect(200)).body.private, true);
+        await put({ name: 'sealed:not base64!' }).expect(400);
+        const sealed = 'sealed:' + 'A'.repeat(120);
+        const named = await put({ name: sealed }).expect(200);
+        assert.strictEqual(named.body.name, sealed);
+        assert.strictEqual(named.body.private, true);
+        await put({ name: 'Beach day' }).expect(400);
+    });
+
+    it('keeps a room open once photos are shared in clear', async () => {
+        await auth(request(app).put(`/api/rooms/${roomId}/settings`), sharer).send({ private: true }).expect(400);
+    });
+
     it("doesn't let a photo update fake a copy, change hands or swap the fingerprint copies are checked against", async () => {
         await request(app).post(`/api/rooms/${roomId}/photos/`).send({
             sessionId: sharer.sessionId,

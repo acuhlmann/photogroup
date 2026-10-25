@@ -8,14 +8,24 @@ import DialogActions from '@mui/material/DialogActions';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Logger from 'js-logger';
+import { isPrivateRoom } from './privateRoom';
 
 /** What the server keeps about this room, in plain words, one line each. */
-export function privacyLines({ keepCopies = false, copies = 0 } = {}) {
+export function privacyLines({ keepCopies = false, copies = 0, isPrivate = false } = {}) {
     return [
         'Photos usually go directly from phone to phone.',
-        'The server keeps the room: its link and, for each photo, the magnet link, name, type, size, date and fingerprint, '
-            + 'and the details people add (title, description, rating, keywords, location). '
-            + 'It deletes the room when nobody uses it for 30 days.',
+        isPrivate
+            ? 'This room is private. Each phone encrypts the photos, their file names and the room name with a key in the room link. '
+                + 'The server never gets the key, so it cannot read them, and server copies are encrypted too. '
+                + 'It sees only the type, size and time of each photo. '
+                + 'Anyone with the full link can open the photos. People cannot add titles, ratings or places here.'
+            : null,
+        isPrivate
+            ? 'The server keeps the room: its ID and, for each photo, the magnet link and the encrypted name. '
+                + 'It deletes the room when nobody uses it for 30 days.'
+            : 'The server keeps the room: its link and, for each photo, the magnet link, name, type, size, date and fingerprint, '
+                + 'and the details people add (title, description, rating, keywords, location). '
+                + 'It deletes the room when nobody uses it for 30 days.',
         'The server knows who is in the room now: names, device types and network addresses. '
             + 'It forgets a person soon after they leave.',
         keepCopies
@@ -31,6 +41,7 @@ function readState(master) {
     const photos = master?.roomPhotos?.all?.() || [];
     return {
         keepCopies: !!master?.serverPinning?.keepCopies,
+        isPrivate: isPrivateRoom(),
         copies: photos.filter(photo => photo.hasServerCopy || photo.serverCopyReceived > 0).length,
     };
 }

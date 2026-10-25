@@ -216,7 +216,8 @@ function App({theme: propsTheme, prefersDarkMode}) {
                                             PhotoGroup
                                         </Typography>
                                         {inRoom ? (
-                                            <RoomMenu master={masterRef.current} name={room.name} label={room.label} />
+                                            <RoomMenu master={masterRef.current} name={room.name} label={room.label}
+                                                isPrivate={room.isPrivate} missingKey={room.missingKey} />
                                         ) : (
                                             <Typography
                                                 className="tech-text"

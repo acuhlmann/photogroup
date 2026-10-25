@@ -1,5 +1,6 @@
 import { format, parse } from 'date-fns'
 import update from "immutability-helper";
+import { withOpenedName } from "./openSealed";
 
 export default class GalleryPhotoHandler {
 
@@ -33,6 +34,7 @@ export default class GalleryPhotoHandler {
                     const photos = event.item.map(item => {
                         const existing = state.find(tile => tile.infoHash === item.infoHash);
                         if (existing && existing !== item) {
+                            item = withOpenedName(existing, item);
                             // Resuming re-syncs the room and may hand us a fresh
                             // blob URL for a photo already on screen; swapping
                             // the src re-decodes the image and flashes the tile.
@@ -110,7 +112,7 @@ export default class GalleryPhotoHandler {
                         const index = tiles.findIndex(item => item.infoHash === photo.infoHash
                             || (photo.tileKey && item.tileKey === photo.tileKey));
                         if(index > -1) {
-                            const newTile = update(tiles[index], {$merge: photo});
+                            const newTile = update(tiles[index], {$merge: withOpenedName(tiles[index], photo)});
                             tiles = update(tiles, {$splice: [[index, 1, newTile]]});
                         }
                     });

@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { createTheme } from '@mui/material/styles';
 import { vi } from 'vitest';
 import Uploader from './Uploader';
-import WebCrypto from '../security/WebCrypto';
+import { PRIVATE_NO_KEY } from '../privateRoom';
+import { markPrivate } from '../privateRoom';
+import { importRoomKey, newRoomKey, openFile } from '../security/roomKey';
 
 // Mock dependencies
 const mockModel = {
@@ -214,55 +216,33 @@ describe('Uploader on Android', () => {
     expect(model.seed.mock.calls[0][0].map(file => file.name)).toEqual(['PXL_original.jpg']);
   });
 
-  describe('with encryption on', () => {
-    let encryptFile;
+  describe('in a private room', () => {
+    afterEach(() => markPrivate(false));
 
-    beforeEach(async () => {
-      encryptFile = vi.spyOn(WebCrypto.prototype, 'encryptFile').mockResolvedValue({ blob: new Blob(['ciphertext']) });
-      await act(async () => model.emitter.emit('encrypt', true));
-    });
-
-    afterEach(() => encryptFile.mockRestore());
-
-    it('asks for the password once, for the files that were fine and the ones shared without location', async () => {
+    it('seals each photo with the room key, under a name that says nothing', async () => {
+      const key = newRoomKey();
+      window.location.hash = '#k=' + key;
       const good = original();
-      const bad = stripped();
-      await choose([good, bad]);
-      await vi.waitFor(() => expect(dialogButton('Share without location')).toBeTruthy());
-
-      await act(async () => dialogButton('Share without location').click());
-      await act(async () => dialogButton('Encrypt').click());
+      await choose([good]);
 
       await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
-      expect(encryptFile.mock.calls[0][0]).toEqual([good, bad]);
-      expect(model.seed.mock.calls[0][1]).toBe(true);
-      expect(model.seed.mock.calls[0][2]).toEqual([good, bad]);
+      const [sealed, secure, originals] = model.seed.mock.calls[0];
+      expect(secure).toBe(true);
+      expect(originals).toEqual([good]);
+      expect(sealed[0].name).toMatch(/^photo-/);
+      const opened = await openFile(await importRoomKey(key), sealed[0]);
+      expect(opened.name).toBe('PXL_original.jpg');
+      expect(opened.size).toBe(good.size);
     });
 
-    it('lets the files that were fine go ahead when the dialog is closed', async () => {
-      const good = original();
-      await choose([good, stripped()]);
-      await vi.waitFor(() => expect(dialogButton('Pick again')).toBeTruthy());
+    it('adds nothing without the key, so no photo goes up unencrypted', async () => {
+      markPrivate(true);
+      const errors = vi.fn();
+      model.emitter.on('showError', errors);
+      await choose([original()]);
 
-      const held = document.body.querySelector('[aria-labelledby="location-held-title"]');
-      await act(async () => held.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
-      await act(async () => dialogButton('Encrypt').click());
-
-      await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
-      expect(encryptFile.mock.calls[0][0]).toEqual([good]);
-    });
-
-    it('lets them go ahead when the picker is closed after Pick again', async () => {
-      const good = original();
-      await choose([good, stripped()]);
-      await vi.waitFor(() => expect(dialogButton('Pick again')).toBeTruthy());
-      await act(async () => dialogButton('Pick again').click());
-
-      await act(async () => input().dispatchEvent(new Event('cancel')));
-      await act(async () => dialogButton('Encrypt').click());
-
-      await vi.waitFor(() => expect(model.seed).toHaveBeenCalled());
-      expect(encryptFile.mock.calls[0][0]).toEqual([good]);
+      await vi.waitFor(() => expect(errors).toHaveBeenCalledWith(PRIVATE_NO_KEY));
+      expect(model.seed).not.toHaveBeenCalled();
     });
   });
 

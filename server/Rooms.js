@@ -427,6 +427,10 @@ export default class Rooms {
      */
     static roomName(value) {
         if (typeof value !== 'string') return null;
+        // A private room's name, sealed in the browser: kept as it is.
+        if (value.startsWith('sealed:')) {
+            return value.length <= Rooms.SEALED_NAME_MAX && /^sealed:[A-Za-z0-9_-]+$/.test(value) ? value : null;
+        }
         // eslint-disable-next-line no-control-regex
         const name = value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
         return name.length > Rooms.ROOM_NAME_MAX ? null : name;
@@ -615,8 +619,17 @@ export default class Rooms {
             const peer = this.sessionPeer(room, request);
             if (!peer) return response.status(403).send('Join the room first');
             const { keepCopies, name } = request.body || {};
-            if (keepCopies === undefined && name === undefined) return response.status(400).send('Expected keepCopies or name');
+            const makePrivate = request.body?.private;
+            if (keepCopies === undefined && name === undefined && makePrivate === undefined) {
+                return response.status(400).send('Expected keepCopies, name or private');
+            }
             if (keepCopies !== undefined && typeof keepCopies !== 'boolean') return response.status(400).send('Expected keepCopies true or false');
+            // A private room stays private: its photos are sealed with a key the server never sees.
+            if (makePrivate !== undefined && makePrivate !== true) return response.status(400).send('A room can only be made private');
+            // Photos already shared in clear can't become private.
+            if (makePrivate && !room.settings?.private && room.photos.length) {
+                return response.status(400).send('A room can only be made private before photos are added');
+            }
             const roomName = name === undefined ? undefined : Rooms.roomName(name);
             if (roomName === null) return response.status(400).send(`Expected a name of ${Rooms.ROOM_NAME_MAX} characters or less`);
             const settings = { ...room.settings };
@@ -627,6 +640,11 @@ export default class Rooms {
             }
             if (roomName === '') delete settings.name;
             else if (roomName !== undefined) settings.name = roomName;
+            if (makePrivate) settings.private = true;
+            // A private room's name is sealed with its key, or there is none.
+            if (settings.private && settings.name && !settings.name.startsWith('sealed:')) {
+                return response.status(400).send('A private room name must be sealed');
+            }
             room.settings = settings;
             this.updateChannel.send({ event: 'room', data: { settings: room.settings } }, this.allRoomClients(room));
             this.releaseCopiesEveryoneHas(room);
@@ -991,3 +1009,5 @@ export default class Rooms {
     }
 };
 Rooms.ROOM_NAME_MAX = 60;
+// 60 characters of UTF-8 (up to 240 bytes), sealed: header, IV and tag, in base64url.
+Rooms.SEALED_NAME_MAX = 400;

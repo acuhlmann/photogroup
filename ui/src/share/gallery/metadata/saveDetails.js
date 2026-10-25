@@ -1,6 +1,12 @@
-/** Whether this client can change the room's shared photo details. */
+import { isPrivateRoom } from '../../privateRoom';
+
+/**
+ * Whether this client can change the room's shared photo details. Not in a
+ * private room: the server would get the titles and places in clear.
+ */
 export function canSaveDetails(master) {
-    return !!(master && master.service && typeof master.service.updateDetails === 'function');
+    return !isPrivateRoom()
+        && !!(master && master.service && typeof master.service.updateDetails === 'function');
 }
 
 /** What to tell someone whose change to a photo did not save. */

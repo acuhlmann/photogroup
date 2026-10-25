@@ -12,9 +12,9 @@ function memoryStorage() {
 }
 
 /** Just enough of window for the address helpers. */
-function fakeWindow(search) {
+function fakeWindow(search, hash = '') {
     const win = {
-        location: { pathname: '/', search },
+        location: { pathname: '/', search, hash },
         history: {
             replaceState: vi.fn((state, title, url) => {
                 win.location.search = url.includes('?') ? url.slice(url.indexOf('?')) : '';
@@ -65,6 +65,10 @@ describe('shareTarget', () => {
         const bare = fakeWindow('?shared=missed');
         clearShareFlag(bare);
         expect(bare.history.replaceState).toHaveBeenCalledWith({}, '', '/');
+        // A private room's key stays.
+        const keyed = fakeWindow('?shared=1&room=trip', '#k=abc');
+        clearShareFlag(keyed);
+        expect(keyed.history.replaceState).toHaveBeenCalledWith({}, '', '/?room=trip#k=abc');
     });
 
     it('registers the share worker for the whole site, and copes without one', async () => {
