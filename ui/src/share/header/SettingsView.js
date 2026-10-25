@@ -27,6 +27,9 @@ import update from "immutability-helper";
 import Slide from '@mui/material/Slide';
 import { readColors, saveColors } from '../colors';
 import { forgetDevice } from '../forgetDevice';
+import { readPreference, savePreference } from '../preferences';
+import { askToNotify } from '../newPhotoNotices';
+import PreferenceSwitch from './PreferenceSwitch';
 
 /* global __APP_VERSION__ */
 
@@ -72,6 +75,10 @@ const COLOR_CHOICES = [
     { value: 'dark', label: 'Dark' },
 ];
 
+export const REMOVE_LOCATION_TEXT = 'Takes the place where a photo or clip was taken out of it on this phone, before anyone gets it.';
+export const DATA_SAVER_TEXT = 'You get small previews first. A photo or clip comes only when you tap it. Use this on mobile data.';
+export const NOTIFY_TEXT = 'Shows a notification when someone adds photos while PhotoGroup is open in the background.';
+
 export const FORGET_TEXT = 'Deletes your rooms list, your name and the saved photos from this browser. '
     + 'You cannot open private rooms again without their link. Rooms and photos on other phones stay.';
 
@@ -85,6 +92,9 @@ function SettingsView(props) {
     const [peerId, setPeerId] = useState('');
     const [colors, setColors] = useState(readColors);
     const [confirmForget, setConfirmForget] = useState(false);
+    const [removeLocation, setRemoveLocation] = useState(() => readPreference('removeLocation'));
+    const [notify, setNotify] = useState(() => readPreference('notify'));
+    const [dataSaver, setDataSaver] = useState(() => readPreference('dataSaver'));
     const [logsExpanded, setLogsExpanded] = useState(false);
     const logsBeforeMountRef = useRef([]);
     const mountedRef = useRef(false);
@@ -167,6 +177,27 @@ function SettingsView(props) {
         setColors(value);
     }, []);
 
+    const handleRemoveLocationChange = useCallback((value) => {
+        savePreference('removeLocation', value);
+        setRemoveLocation(value);
+    }, []);
+
+    // The room knows, so nobody sends this phone photos it did not ask for.
+    const handleDataSaverChange = useCallback((value) => {
+        savePreference('dataSaver', value);
+        setDataSaver(value);
+        masterRef.current.service?.updatePeer?.({ dataSaver: value });
+    }, []);
+
+    const handleNotifyChange = useCallback(async (value) => {
+        if (value && !(await askToNotify())) {
+            enqueueSnackbar?.('The browser does not allow notifications. Allow them in the browser settings first.', { variant: 'warning' });
+            value = false;
+        }
+        savePreference('notify', value);
+        setNotify(value);
+    }, [enqueueSnackbar]);
+
     const copyLogs = useCallback(async () => {
         const text = messages.map(entry => entry.level + ': ' + entry.message).join('\n');
         try {
@@ -210,6 +241,26 @@ function SettingsView(props) {
                     {/* Who you are to everyone else. */}
                     <SectionHeader label="You" />
                     <PeerNameField master={master} />
+
+                    <SectionHeader label="Sharing" />
+                    <PreferenceSwitch
+                        checked={removeLocation}
+                        onChange={handleRemoveLocationChange}
+                        label="Remove location when I share"
+                        description={REMOVE_LOCATION_TEXT}
+                    />
+                    <PreferenceSwitch
+                        checked={dataSaver}
+                        onChange={handleDataSaverChange}
+                        label="Data saver"
+                        description={DATA_SAVER_TEXT}
+                    />
+                    <PreferenceSwitch
+                        checked={notify}
+                        onChange={handleNotifyChange}
+                        label="Tell me about new photos"
+                        description={NOTIFY_TEXT}
+                    />
 
                     <SectionHeader label="Colors" />
                     <ToggleButtonGroup

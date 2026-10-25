@@ -195,10 +195,24 @@ App.js (theme, layout)
   `name` (60 characters at most, '' clears) besides `keepCopies`, and the SSE
   `room` event sends it to everyone. `useRoom.js` puts it in the header and
   the tab title.
+- **Screen on** (`screenAwake.js`, automatic): a Wake Lock while this phone
+  still gets or still sends a photo someone present wants; let go after.
 - **Keep copies**: the room menu's Privacy dialog (`RoomPrivacy.js`) holds
   the room's "Keep copies for people who join later" switch.
 - **Settings** (header, default and geek only) holds only things about this
-  browser: your name, colors (`colors.js`: same as device, light or dark,
+  browser: your name, Sharing switches (all off by default, `preferences.js`,
+  localStorage `photogroup.*`): "Remove location when I share"
+  (`gallery/metadata/removeLocation.js`: EXIF GPS blanked in place, HEIC Exif
+  item too, XMP GPS and video location records dropped, then read back; a
+  file that keeps a location is not shared; on Android it also skips the
+  held-back dialog), "Data saver" (receivers add torrents with
+  `deselect: true` and select only the `Thumbnail` files; tiles are
+  `previewOnly` until `photo.loadFull()`, which selects the file, makes the
+  peer an owner and starts the server-copy watch; peers carry `dataSaver`,
+  and `wantsPhoto` in `RoomPhotos.js` keeps ServerPinning and the screen lock
+  from counting them as waiting), "Tell me about new photos"
+  (`newPhotoNotices.js`, browser notifications while the page runs in the
+  background; no server push); colors (`colors.js`: same as device, light or dark,
   localStorage `photogroup.colors`), logs (show, copy) and "Forget this
   device" (`forgetDevice.js`: clears localStorage, sessionStorage and the
   IndexedDB stores, then opens the front page). Room choices do not go here.

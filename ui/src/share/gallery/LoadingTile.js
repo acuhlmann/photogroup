@@ -35,7 +35,7 @@ function LoadingTile({tile, master, name}) {
     // A spinner that never moves helps nobody: if no bytes have arrived for
     // a while, say so and offer a way out instead of spinning forever.
     useEffect(() => {
-        if (!tile.loading) return undefined;
+        if (!tile.loading || tile.previewOnly) return undefined;
         const id = setInterval(() => {
             const p = tile.torrentFile ? tile.torrentFile.progress : (progress != null ? progress / 100 : 0);
             const track = progressTrackRef.current;
@@ -47,7 +47,7 @@ function LoadingTile({tile, master, name}) {
             }) && Date.now() - stallSnoozedAt > 30000);
         }, 1000);
         return () => clearInterval(id);
-    }, [tile.loading, tile.torrentFile, progress, stallSnoozedAt]);
+    }, [tile.loading, tile.previewOnly, tile.torrentFile, progress, stallSnoozedAt]);
 
     const handleUseServerCopy = useCallback(() => {
         master.emitter.emit('fetchServerCopyNow', tile);
@@ -68,6 +68,11 @@ function LoadingTile({tile, master, name}) {
             loadPreviewUrl(tile).then(url => url && setPreviewThumbnail(url));
         }
     }, [tile]);
+
+    // The preview file can reach the tile after torrentReady (with "Data saver" nothing else follows).
+    useEffect(() => {
+        listenToPreview();
+    }, [tile.torrentFileThumb, listenToPreview]);
 
     useEffect(() => {
         const emitter = master.emitter;
@@ -132,7 +137,8 @@ function LoadingTile({tile, master, name}) {
     const copyStatus = have ? null : serverCopyStatus(tile, master.peers?.items, master.client.peerId,
         infoHash => !!master.roomPhotos?.uploadStalled(infoHash));
     let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
-    if (stalled && !have) loadingText = 'Connection stalled';
+    if (tile.previewOnly) loadingText = 'Preview only (Data saver)';
+    else if (stalled && !have) loadingText = 'Connection stalled';
     else if (!have && tile.fromServerCopy) loadingText = 'Received from the server copy (P2P did not work)';
     else if (copyStatus && !isLoading && !tile.rendering) loadingText = copyStatus.text;
     const isRendering = loadingText === 'Rendering';
@@ -158,6 +164,7 @@ function LoadingTile({tile, master, name}) {
         previewUrlOf(tile);
     }
     const displayPreviewThumbnail = previewThumbnail || tile.previewUrl;
+    const fullSize = tile.torrentFile?.length ? FileUtil.formatBytes(tile.torrentFile.length) : null;
 
     return (
         <Paper
@@ -187,7 +194,7 @@ function LoadingTile({tile, master, name}) {
                         }}
                     />
                     {/* Progress overlay on thumbnail */}
-                    {!have && (
+                    {!have && !tile.previewOnly && (
                         <Box
                             sx={{
                                 position: 'absolute',
@@ -241,7 +248,7 @@ function LoadingTile({tile, master, name}) {
                     {/* Status icon */}
                     {have ? (
                         <CheckRounded sx={{ color: 'success.main', fontSize: 20 }} />
-                    ) : !displayPreviewThumbnail ? (
+                    ) : !displayPreviewThumbnail && !tile.previewOnly ? (
                         <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
                             <CircularProgress
                                 variant={isLoading ? 'determinate' : 'indeterminate'}
@@ -291,7 +298,7 @@ function LoadingTile({tile, master, name}) {
                         </Typography>
 
                         {/* Speed info */}
-                        {isLoading && (
+                        {isLoading && !tile.previewOnly && (
                             <Stack direction="row" spacing={1} sx={{ mt: 0.25 }}>
                                 {downSpeed && (
                                     <Typography
@@ -343,6 +350,12 @@ function LoadingTile({tile, master, name}) {
                     </IconButton>
                 </Stack>
 
+                {tile.previewOnly && (
+                    <Button size="small" variant="contained" sx={{ mt: 1.5 }} onClick={() => tile.loadFull?.()}>
+                        {fullSize ? `Get the full photo (${fullSize})` : 'Get the full photo'}
+                    </Button>
+                )}
+
                 {stalled && !have && !hasError && (
                     <Box sx={{ mt: 1.5 }}>
                         <Typography variant="caption" sx={{ display: 'block', color: 'warning.main', lineHeight: 1.4 }}>
@@ -373,7 +386,7 @@ function LoadingTile({tile, master, name}) {
                 )}
 
                 {/* Live P2P telemetry while we wait */}
-                {!have && !hasError && !isRendering && tile.infoHash && master.client && (
+                {!have && !hasError && !isRendering && !tile.previewOnly && tile.infoHash && master.client && (
                     <TransferConsole master={master} tile={tile} />
                 )}
 

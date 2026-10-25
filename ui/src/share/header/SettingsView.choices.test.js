@@ -47,7 +47,28 @@ function memoryStorage() {
 describe('SettingsView', () => {
     beforeEach(() => vi.stubGlobal('localStorage', memoryStorage()));
 
-    it('has only name, colors, logs and this device', async () => {
+    it('turns on "Remove location when I share" for this browser', async () => {
+        const unmount = await render();
+        const input = [...document.body.querySelectorAll('label')]
+            .find(label => label.textContent.startsWith('Remove location when I share')).querySelector('input');
+        expect(input.checked).toBe(false);
+        await act(async () => input.click());
+        expect(localStorage.getItem('photogroup.removeLocation')).toBe('true');
+        await unmount();
+    });
+
+    it('keeps "Tell me about new photos" off when the browser says no', async () => {
+        vi.stubGlobal('Notification', { permission: 'denied', requestPermission: vi.fn() });
+        const unmount = await render();
+        const input = [...document.body.querySelectorAll('label')]
+            .find(label => label.textContent.startsWith('Tell me about new photos')).querySelector('input');
+        await act(async () => input.click());
+        expect(input.checked).toBe(false);
+        expect(localStorage.getItem('photogroup.notify')).toBe('false');
+        await unmount();
+    });
+
+    it('has only name, sharing, colors, logs and this device', async () => {
         const unmount = await render();
         const text = document.body.textContent;
         for (const gone of ['Topology', 'Me View', 'Sequential', 'Restart Trackers', 'Private rooms', 'Keep Copies']) {

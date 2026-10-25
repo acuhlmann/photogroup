@@ -21,10 +21,26 @@ import CircularProgress from "@mui/material/CircularProgress";
 import { missingRoomKey, PRIVATE_NO_KEY, roomCryptoKey } from "../privateRoom";
 import { sealFile } from "../security/roomKey";
 import { partitionStripped } from "../gallery/metadata/strippedLocation";
+import { withoutLocation } from "../gallery/metadata/removeLocation";
+import { readPreference } from "../preferences";
 import { ACCEPT, ANDROID_ACCEPT, KEEP_LOCATION_STEPS, onAndroid } from "./androidUpload";
 import { isZip, unpackZips } from "./unzipMedia";
 
 const SHOWN_HELD = 5;
+
+/** "Remove location when I share" is on: a file that keeps its location is not shared. */
+async function removeLocations(files, emitter) {
+    const clean = [];
+    for (const file of files) {
+        try {
+            clean.push(await withoutLocation(file));
+        } catch(err) {
+            Logger.warn('removeLocation: ' + (err && err.message ? err.message : err));
+            emitter.emit('showError', `Could not remove the location from ${file.name}, so PhotoGroup did not share it.`);
+        }
+    }
+    return clean;
+}
 
 
 const styles = theme => ({
@@ -69,11 +85,13 @@ function Uploader({classes, model, emitter, showButton = true}) {
      * In a private room every file is sealed with the room's key first; the
      * names in the torrent and on the server say nothing about the photos.
      */
-    const proceed = useCallback(async (chosen) => {
+    const proceed = useCallback(async (picked) => {
         if(missingRoomKey()) {
             emitter.emit('showError', PRIVATE_NO_KEY);
             return;
         }
+        const chosen = readPreference('removeLocation') ? await removeLocations(picked, emitter) : picked;
+        if(!chosen.length) return;
         const key = await roomCryptoKey();
         if(!key) {
             share(chosen);
@@ -111,6 +129,11 @@ function Uploader({classes, model, emitter, showButton = true}) {
             setUnpacking(false);
             problems.forEach(message => emitter.emit('showError', message));
             chosen = files;
+        }
+        // Nothing to hold back when the person shares without locations anyway.
+        if(readPreference('removeLocation')) {
+            if(chosen.length) proceed(chosen);
+            return;
         }
         const { intact, stripped } = await partitionStripped(chosen);
         if(stripped.length) {

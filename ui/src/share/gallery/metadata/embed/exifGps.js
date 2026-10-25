@@ -103,3 +103,8 @@ export function gpsBlanked(tiff) {
         return zero(offset, offset + 24);
     }) && [LAT_REF, LONG_REF].every(tag => zero(gps[tag].at + 8, gps[tag].at + 12));
 }
+
+/** True when the block holds a real GPS position: the fields exist and are not blanked. */
+export function gpsPresent(tiff) {
+    return !!gpsFields(tiff) && !gpsBlanked(tiff);
+}

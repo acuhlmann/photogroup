@@ -548,9 +548,9 @@ export default class TorrentMaster {
         });
     }
 
-    addSeedOrGetTorrent(addOrSeed, input, callback) {
+    addSeedOrGetTorrent(addOrSeed, input, callback, extraOpts) {
 
-        const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true};
+        const opts = {'announce': window.WEBTORRENT_ANNOUNCE, private: true, ...extraOpts};
         opts.store = idb;
         let validInput = input;
         

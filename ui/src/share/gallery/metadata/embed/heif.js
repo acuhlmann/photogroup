@@ -1,6 +1,7 @@
 import { ascii, concat, decodeUtf8, latin1, readBytes, readUint, uint, utf8 } from './binary';
 import { box, brands, parseBoxes, scanBoxes } from './isobmff';
 import { applyDetailsToXmp } from './xmpPacket';
+import { patchGps } from './exifGps';
 
 // HEIC/AVIF keep Exif and XMP as items in the top-level meta box, XMP as
 // an item of type "mime". When writing, the new packet is appended at the
@@ -229,4 +230,39 @@ export async function embed(blob, details) {
     const newMeta = build(sized.length - (meta.end - meta.start));
     return new Blob([blob.slice(0, meta.start), newMeta, blob.slice(meta.end), box('mdat', xmp)],
         { type: blob.type || 'image/heic' });
+}
+
+/**
+ * A copy with the GPS position in the Exif item blanked in place, or null
+ * when there is no Exif item with GPS fields in one piece to rewrite.
+ * Only values change, so every offset in the file stays valid.
+ */
+export async function blankExifGps(blob) {
+    const top = await scanBoxes(blob);
+    const meta = top.find(item => item.type === 'meta');
+    if (!meta) return null;
+    const bytes = await readBytes(blob, meta.start, meta.end);
+    const kids = parseBoxes(bytes, meta.header + 4);
+    const iinf = kids.find(kid => kid.type === 'iinf');
+    const iloc = kids.find(kid => kid.type === 'iloc');
+    if (!iinf || !iloc) return null;
+    const info = parseItemInfo(bytes, iinf).find(item => item.type === 'Exif');
+    const location = info && parseLocations(bytes, iloc).items.find(item => item.id === info.id);
+    if (!location || location.dataRef !== 0 || location.extents.length !== 1) return null;
+
+    let at = location.base + location.extents[0].offset;
+    if (location.method === 1) {
+        const idat = kids.find(kid => kid.type === 'idat');
+        if (!idat) return null;
+        at += meta.start + idat.start + idat.header;
+    } else if (location.method !== 0) {
+        return null;
+    }
+    const data = await readBytes(blob, at, at + location.extents[0].length);
+    if (data.length <= 8) return null;
+    const start = 4 + readUint(data, 0, 4);
+    if (start >= data.length) return null;
+    const tiff = patchGps(data.subarray(start), null);
+    if (!tiff) return null;
+    return new Blob([blob.slice(0, at + start), tiff, blob.slice(at + start + tiff.length)], { type: blob.type || 'image/heic' });
 }

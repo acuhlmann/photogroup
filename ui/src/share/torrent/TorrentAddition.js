@@ -11,6 +11,7 @@ import { cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 import { fingerprintFile } from '../gallery/fingerprint';
 import { rememberHave } from '../gallery/alreadyHave';
 import parseTorrent from 'parse-torrent';
+import { readPreference } from '../preferences';
 
 /** Read a torrent file into a Blob with either WebTorrent API; null when neither exists. */
 export function readFileBlob(file) {
@@ -114,18 +115,17 @@ export default class TorrentAddition {
         Logger.info('add ' + torrentId + ' len ' + photos.length);
 
 
+        // "Data saver": start with nothing selected and fetch only the
+        // previews; each photo comes when the person asks for it. Private
+        // rooms have no previews, and a reload uses what this phone kept.
+        const saveData = !fromCache && readPreference('dataSaver') && !photos.some(photo => photo.secure);
         const torrent = this.master.addSeedOrGetTorrent('add', torrentId, torrent => {
             Logger.info('_add done ' + torrent.name);
-        });
+        }, saveData ? { deselect: true } : undefined);
 
         // If P2P stalls, ServerFallback asks for a server copy and delivers it.
-        if (torrent && this.master.serverFallback) {
-            photos.forEach(photo => {
-                this.master.serverFallback.watch(photo, () => ({
-                    progress: torrent.progress, received: torrent.received, done: torrent.done,
-                    ...this.master.copyState?.(photo.infoHash)
-                }));
-            });
+        if (torrent && !saveData) {
+            photos.forEach(photo => this.watchFallback(photo, torrent));
         }
 
         const self = this;
@@ -202,6 +202,16 @@ export default class TorrentAddition {
                     photo.rendering = false;
                     photo.torrent = torrent;
                     photo.url = torrent.magnetURI;
+                    if (saveData) {
+                        if (photo.torrentFileThumb && !photo.torrentFile?.done) {
+                            photo.previewOnly = true;
+                            photo.loadFull = () => this.loadFull(photo);
+                            photo.torrentFileThumb.select();
+                        } else {
+                            photo.torrentFile?.select();
+                            this.watchFallback(photo, torrent, true);
+                        }
+                    }
                     this.emitter.emit('thumbsReady', photo.torrentFileThumb);
                     return photo;
                 });
@@ -209,7 +219,7 @@ export default class TorrentAddition {
                 this.defineStrategy(torrent.files, torrent);
                 this.storeTorrent(torrent).then(torrent => {
                     this.addTorrent(torrent, photos, fromCache, paths);
-                    this.master.service.addOwner(photos.map(photo => {
+                    this.master.service.addOwner(photos.filter(photo => !photo.previewOnly).map(photo => {
                         return {
                             infoHash: photo.infoHash,
                             peerId: this.master.client.peerId,
@@ -236,6 +246,30 @@ export default class TorrentAddition {
                 //resolve(torrent);
             });
         });
+    }
+
+    /** If P2P stalls, ServerFallback asks for a server copy and delivers it. */
+    watchFallback(photo, torrent, byFile = false) {
+        if (!this.master.serverFallback) return;
+        // With "Data saver" the torrent may never be whole, so follow this photo's file.
+        const file = () => (byFile ? photo.torrentFile : null);
+        this.master.serverFallback.watch(photo, () => ({
+            progress: file() ? file().progress : torrent.progress,
+            received: torrent.received,
+            done: file() ? file().done : torrent.done,
+            ...this.master.copyState?.(photo.infoHash)
+        }));
+    }
+
+    /** "Data saver": the person asked for a photo they only had the preview of. */
+    loadFull(photo) {
+        if (!photo.previewOnly) return;
+        photo.previewOnly = false;
+        photo.torrentFile?.select();
+        this.watchFallback(photo, photo.torrent, true);
+        this.master.service.addOwner([{ infoHash: photo.infoHash, peerId: this.master.client.peerId, loading: true }]);
+        this.emitter.emit('photos', { type: 'update', item: [photo] });
+        this.emitter.emit('torrentReady', [photo]);
     }
 
     addTorrent(torrent, photos) {
@@ -734,6 +768,7 @@ export default class TorrentAddition {
             delete serverPhoto.elem;
             delete serverPhoto.img;
             delete serverPhoto.previewUrl;
+            delete serverPhoto.previewOnly;
             delete serverPhoto.sharedAt;
             delete serverPhoto.tileKey;
             return serverPhoto;

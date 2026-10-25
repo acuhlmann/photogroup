@@ -121,15 +121,17 @@ function SimpleTile({ tile, roomId, onOpen, onError }) {
     const percent = useArriving(tile);
     const poster = usePreview(tile);
     const showImage = !tile.loading && tile.img;
-    const canOpen = viewable(tile);
-    const picture = showImage ? tile.img : (tile.isVideo ? poster : null);
+    // "Data saver": only the preview is here; a tap gets the photo.
+    const previewOnly = !!tile.previewOnly;
+    const canOpen = viewable(tile) || previewOnly;
+    const picture = showImage ? tile.img : (tile.isVideo || previewOnly ? poster : null);
     const Icon = tile.isAudio ? AudiotrackRounded : PlayCircleRounded;
     return (
         <Stack spacing={1} data-testid="simple-tile">
             <ButtonBase
-                onClick={onOpen}
+                onClick={previewOnly ? () => tile.loadFull?.() : onOpen}
                 disabled={!canOpen}
-                aria-label={canOpen ? (tile.isVideo ? 'Play this clip' : 'Look at this photo') : undefined}
+                aria-label={previewOnly ? 'Get the full photo' : canOpen ? (tile.isVideo ? 'Play this clip' : 'Look at this photo') : undefined}
                 sx={{
                     position: 'relative',
                     width: '100%',
@@ -152,7 +154,11 @@ function SimpleTile({ tile, roomId, onOpen, onError }) {
                             filter: tile.loading ? 'brightness(0.55)' : 'none',
                         }} />
                 )}
-                {tile.loading ? (
+                {previewOnly ? (
+                    <Typography variant="body2" sx={{ position: 'relative', color: picture ? '#fff' : 'text.secondary', fontWeight: 600 }}>
+                        Tap to get the photo
+                    </Typography>
+                ) : tile.loading ? (
                     <>
                         <CircularProgress variant={percent > 0 ? 'determinate' : 'indeterminate'} value={percent} size={40}
                             sx={{ position: 'relative', color: picture ? '#fff' : undefined }} />
