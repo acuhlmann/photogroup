@@ -58,6 +58,9 @@ export function useTimeline(timeline, { idle = 1000 } = {}) {
  */
 function TrafficStrip({ timeline, from, to, at }) {
     const ref = useRef(null);
+    // What the last drawing showed: a burst of pieces re-renders the bar
+    // many times a second, but the strip is drawn at most four times a second.
+    const drawn = useRef('');
     useEffect(() => {
         const canvas = ref.current;
         const ctx = canvas?.getContext?.('2d');
@@ -65,11 +68,19 @@ function TrafficStrip({ timeline, from, to, at }) {
         const width = canvas.clientWidth || 120;
         const height = canvas.clientHeight || 20;
         const dpr = window.devicePixelRatio || 1;
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
+        const span = Math.max(1, to - from);
+        // New traffic shows within a quarter second; the bar re-renders at
+        // least once a second, so the last of a burst is drawn too.
+        const key = [width, height, dpr, Math.floor(from / (span / BINS)), Math.floor((at - from) / span * width),
+            Math.floor(Date.now() / 250)].join('|');
+        if (key === drawn.current) return;
+        drawn.current = key;
+        if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+            canvas.width = Math.round(width * dpr);
+            canvas.height = Math.round(height * dpr);
+        }
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, width, height);
-        const span = Math.max(1, to - from);
         const bins = Array.from({ length: BINS }, () => ({ rx: 0, tx: 0, other: 0 }));
         timeline.entries.forEach(entry => {
             if (entry.seen === false) return;

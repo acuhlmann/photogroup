@@ -76,6 +76,10 @@ export default class NetworkTopologyFinder {
                 scope.emitter.emit('pcEvent', 'icecandidate', cand.type + ' ' + cand.ip + ':' + cand.port);
                 if (!candidates[cand.relatedPort]) candidates[cand.relatedPort] = [];
                 candidates[cand.relatedPort].push(cand.port);
+            } else if (e.candidate && e.candidate.candidate.indexOf(' relay ') !== -1) {
+                // TURN just answered the Allocate: this is the relay address.
+                const cand = parseCandidate(e.candidate.candidate);
+                scope.emitter.emit('pcEvent', 'icecandidate', cand.type + ' ' + cand.ip + ':' + cand.port);
             } else if (!e.candidate) {
                 Logger.debug('candidates ' + JSON.stringify(candidates));
                 if (Object.keys(candidates).length >= 1) {

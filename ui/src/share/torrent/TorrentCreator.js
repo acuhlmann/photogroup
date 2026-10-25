@@ -225,14 +225,6 @@ export default class TorrentCreator {
                                 self.peers.set(key, true);
 
                                 const pc = peer._pc;
-                                // A server-reflexive candidate is STUN's answer:
-                                // the public address it saw.
-                                pc.addEventListener('icecandidate', event => {
-                                    const candidate = event.candidate;
-                                    if (candidate && (candidate.type === 'srflx' || candidate.type === 'relay') && candidate.address) {
-                                        self.emitter.emit('pcEvent', 'icecandidate', `${candidate.type} ${candidate.address}:${candidate.port}`);
-                                    }
-                                });
                                 pc.addEventListener('icegatheringstatechange', event => {
                                     const state = event.target.iceGatheringState;
                                     //Logger.info(announceUrl + ' ' + event.type + ' ' + state);
