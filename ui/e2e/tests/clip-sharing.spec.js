@@ -14,7 +14,7 @@ test('a shared clip arrives with its poster frame and plays in simple mode', asy
   const senderContext = await browser.newContext();
   const sender = await senderContext.newPage();
   const roomUrl = await createRoom(sender);
-  await expect(sender.getByRole('button', { name: 'Share photos and clips', exact: true })).toBeEnabled({ timeout: 30000 });
+  await expect(sender.getByRole('button', { name: 'Add photos and clips', exact: true })).toBeEnabled({ timeout: 30000 });
 
   const receiverContext = await browser.newContext();
   await receiverContext.addInitScript(() => localStorage.setItem('photogroup.uiMode', 'simple'));

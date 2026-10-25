@@ -27,7 +27,7 @@ describe('SimpleRoomBar', () => {
         expect(div.textContent).toContain('Just you so far');
         expect(div.textContent).toContain('Let the people next to you scan this');
         expect(div.querySelector('svg')).not.toBeNull();
-        expect(div.querySelector('label[for="contained-button-file"]').textContent).toContain('Share photos or clips');
+        expect(div.querySelector('label[for="contained-button-file"]').textContent).toContain('Add photos and clips');
         await act(async () => root.unmount());
     });
 
@@ -35,18 +35,16 @@ describe('SimpleRoomBar', () => {
         const { div, root, master } = await render([{ peerId: 'me' }]);
         await act(async () => master.emitter.emit('numPeersChange', 3));
         expect(div.textContent).toContain('3 people here');
-        const addPeople = Array.from(div.querySelectorAll('button')).find(button => button.textContent === 'Add people');
-        expect(addPeople).toBeTruthy();
-        await act(async () => addPeople.click());
+        const invite = Array.from(div.querySelectorAll('button')).find(button => button.textContent === 'Invite');
+        expect(invite).toBeTruthy();
+        await act(async () => invite.click());
         expect(div.textContent).toContain('Hide code');
         await act(async () => root.unmount());
     });
 
-    it('leaves the room', async () => {
-        const { div, root, master } = await render([]);
-        const leave = Array.from(div.querySelectorAll('button')).find(button => button.textContent === 'Leave');
-        await act(async () => leave.click());
-        expect(master.leaveRoomAndReload).toHaveBeenCalled();
+    it('leaves leaving to the room menu, so there is one way to do it', async () => {
+        const { div, root } = await render([]);
+        expect(Array.from(div.querySelectorAll('button')).map(button => button.textContent)).not.toContain('Leave');
         await act(async () => root.unmount());
     });
 

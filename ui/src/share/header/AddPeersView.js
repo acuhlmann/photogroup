@@ -2,55 +2,50 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 import CloseRounded from '@mui/icons-material/CloseRounded';
-import ExitToAppOutlined from '@mui/icons-material/ExitToAppOutlined';
 import IconButton from '@mui/material/IconButton';
-import IosShareRounded from '@mui/icons-material/IosShareRounded';
+import PersonAddAlt1Rounded from '@mui/icons-material/PersonAddAlt1Rounded';
 import ButtonBase from '@mui/material/ButtonBase';
 import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
-import { QRCodeSVG } from "qrcode.react";
 import Typography from "@mui/material/Typography";
-import ShareRounded from '@mui/icons-material/ShareRounded';
-import ContentCopyRounded from '@mui/icons-material/ContentCopyRounded';
-import copy from "clipboard-copy";
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import Logger from 'js-logger';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import Fade from '@mui/material/Fade';
 import { headerButtonSx, headerLabelSx } from './headerButtonSx';
-import RoomPrivacy from '../RoomPrivacy';
+import InviteCode from '../InviteCode';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Fade ref={ref} {...props} />;
 });
 
-function AddPeersView({ master, showButton = true }) {
+function DialogClose({ onClose }) {
+    return (
+        <IconButton aria-label="Close" onClick={onClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
+            <CloseRounded />
+        </IconButton>
+    );
+}
+
+DialogClose.propTypes = { onClose: PropTypes.func.isRequired };
+
+/**
+ * Two dialogs about people and rooms. In a room, the header's Invite button
+ * opens the code to scan and the link to send (simple mode shows the same
+ * code in the page instead). On the front page, "Scan to join" opens the
+ * camera to read someone else's code.
+ */
+function AddPeersView({ master, showButton = true, inRoom = false, roomName = '' }) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-    const [visible, setVisible] = useState(false);
-    const [open, setOpen] = useState(false);
-    const [createdRoom, setCreatedRoom] = useState(false);
-    const [openQr, setOpenQr] = useState(false);
-    const [scannerResult, setScannerResult] = useState('');
+    const [invite, setInvite] = useState(false);
+    const [scan, setScan] = useState(false);
     const [numPeers, setNumPeers] = useState(0);
-    const [copiedLink, setCopiedLink] = useState(false);
     const scannerRef = useRef(null);
-
-    const getFullUrl = useCallback((id) => {
-        return window.location.origin + '?room=' + id;
-    }, []);
-
-    const show = useCallback((open) => {
-        setOpen(open);
-        setOpenQr(prev => !open ? false : prev);
-        setVisible(open);
-    }, []);
 
     const handleScan = useCallback(async (data) => {
         if(!data) return;
@@ -67,8 +62,6 @@ function AddPeersView({ master, showButton = true }) {
         }
 
         if(urlParams.has('room')) {
-            setScannerResult(data);
-
             master.service.id = urlParams.get('room');
             master.service.hasRoom = true;
             Logger.info('handleScan id ' + master.service.id);
@@ -77,13 +70,13 @@ function AddPeersView({ master, showButton = true }) {
             master.emitter.emit('hideFrontView');
             master.emitter.emit('readyToUpload');
 
-            show(false);
+            setScan(false);
         }
-    }, [master, show]);
+    }, [master]);
 
-    // Initialize QR scanner when openQr changes
+    // Start the camera when the scan dialog opens, stop it when it closes.
     useEffect(() => {
-        if (openQr && !scannerRef.current) {
+        if (scan && !scannerRef.current) {
             // Small delay to ensure DOM element exists
             const timer = setTimeout(() => {
                 try {
@@ -105,7 +98,7 @@ function AddPeersView({ master, showButton = true }) {
                             scanner.clear().catch(err => Logger.error('Failed to clear scanner:', err));
                             scannerRef.current = null;
                         },
-                        (errorMessage) => {
+                        () => {
                             // Ignore scan failures - they happen constantly while scanning
                         }
                     );
@@ -119,12 +112,11 @@ function AddPeersView({ master, showButton = true }) {
             return () => clearTimeout(timer);
         }
 
-        // Cleanup when openQr becomes false
-        if (!openQr && scannerRef.current) {
+        if (!scan && scannerRef.current) {
             scannerRef.current.clear().catch(err => Logger.error('Failed to clear scanner:', err));
             scannerRef.current = null;
         }
-    }, [openQr, handleScan]);
+    }, [scan, handleScan]);
 
     // Cleanup scanner on unmount
     useEffect(() => {
@@ -138,91 +130,28 @@ function AddPeersView({ master, showButton = true }) {
 
     useEffect(() => {
         const emitter = master.emitter;
+        const handleOpenQr = () => setScan(true);
+        const handleOpenShare = () => setInvite(true);
+        const handleNumPeersChange = (count) => setNumPeers(count);
 
-        const handleOpenRoomStart = () => {
-            setVisible(true);
-        };
-
-        const handleOpenRoomEnd = () => {
-            setCreatedRoom(true);
-        };
-
-        const handleOpenQr = () => {
-            setVisible(true);
-            setOpen(true);
-            setOpenQr(true);
-        };
-
-        const handleOpenShare = () => {
-            setVisible(true);
-            setOpen(true);
-            setOpenQr(false);
-        };
-
-        const handleNumPeersChange = (numPeers) => {
-            setNumPeers(numPeers);
-        };
-
-        emitter.on('openRoomStart', handleOpenRoomStart);
-        emitter.on('openRoomEnd', handleOpenRoomEnd);
         emitter.on('openQr', handleOpenQr);
         emitter.on('openShare', handleOpenShare);
         emitter.on('numPeersChange', handleNumPeersChange);
 
         return () => {
-            emitter.removeListener('openRoomStart', handleOpenRoomStart);
-            emitter.removeListener('openRoomEnd', handleOpenRoomEnd);
             emitter.removeListener('openQr', handleOpenQr);
             emitter.removeListener('openShare', handleOpenShare);
             emitter.removeListener('numPeersChange', handleNumPeersChange);
         };
     }, [master.emitter]);
 
-    const copyLink = useCallback(async (url) => {
-        try {
-            await copy(url);
-            Logger.info('copy ' + url);
-            setCopiedLink(true);
-            setTimeout(() => {
-                setCopiedLink(false);
-            }, 4000);
-        } catch(e) {
-            Logger.error('Failure on copying link ' + e);
-        }
-    }, []);
-
-    const shareLink = useCallback(async (shareData) => {
-        try {
-            await navigator.share(shareData)
-        } catch(e) {
-            Logger.error('navigator.share failed ' + e);
-        }
-    }, []);
-
-    const hasRoom = useCallback(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.has('room');
-    }, []);
-
-    const url = getFullUrl(master.service.id);
-    const hasRoomValue = hasRoom();
-
-    const shareData = {
-        title: 'PhotoGroup',
-        text: 'Get this picture',
-        url: url
-    };
-    const canShare = (navigator.canShare
-        && navigator.share
-        && typeof navigator.share === 'function') ? navigator.canShare(shareData) : false;
-
     return (
-        visible || hasRoomValue ? <div>
-            {showButton && <ButtonBase
-                aria-label={`Invite peers (${numPeers} in room)`}
-                onClick={() => show(true)}
+        <div>
+            {showButton && inRoom && <ButtonBase
+                aria-label={`Invite people (${numPeers || 1} in the room)`}
+                onClick={() => setInvite(true)}
                 sx={headerButtonSx}>
-                <IosShareRounded />
+                <PersonAddAlt1Rounded />
                 <Box component="span" sx={{ ...headerLabelSx, display: { xs: 'none', sm: 'inline' } }}>
                     Invite
                 </Box>
@@ -243,192 +172,67 @@ function AddPeersView({ master, showButton = true }) {
             </ButtonBase>}
 
             <Dialog
-                open={open}
-                onClose={() => show(false)}
+                open={invite && inRoom}
+                onClose={() => setInvite(false)}
                 slots={{ transition: Transition }}
-                keepMounted
+                maxWidth="xs"
+                fullWidth
+                aria-labelledby="invite-title"
+            >
+                <DialogTitle id="invite-title" sx={{ textAlign: 'center', pr: 6, pl: 6 }}>
+                    Invite people{roomName ? ` to ${roomName}` : ''}
+                </DialogTitle>
+                <DialogClose onClose={() => setInvite(false)} />
+                <DialogContent sx={{ pb: 3 }}>
+                    <InviteCode master={master} roomName={roomName} size={200} />
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={scan}
+                onClose={() => setScan(false)}
+                slots={{ transition: Transition }}
                 fullScreen={isMobile}
                 maxWidth="sm"
                 fullWidth
+                aria-labelledby="scan-title"
             >
-                <DialogContent
-                    sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        textAlign: 'center',
-                        gap: 3,
-                        py: 3,
-                    }}
-                >
-                    {/* Share Room Section */}
-                    {(hasRoomValue || createdRoom) && (
-                        <Stack spacing={2.5} sx={{ alignItems: 'center', width: '100%' }}>
-                            <Typography variant="subtitle1" fontWeight={600}>
-                                Share Room
-                            </Typography>
-
-                            {/* QR Code on dark background */}
-                            <Box
-                                sx={{
-                                    bgcolor: '#10141c',
-                                    p: 2.5,
-                                    borderRadius: 2,
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    display: 'inline-flex',
-                                }}
-                            >
-                                <QRCodeSVG
-                                    value={url}
-                                    bgColor="#10141c"
-                                    fgColor="#e8eef6"
-                                    size={180}
-                                />
-                            </Box>
-
-                            {/* Room ID with copy */}
-                            <Stack
-                                direction="row"
-                                spacing={1}
-                                sx={{
-                                    alignItems: 'center',
-                                    bgcolor: 'action.hover',
-                                    borderRadius: 1,
-                                    px: 2,
-                                    py: 0.5,
-                                }}
-                            >
-                                <Typography
-                                    variant="caption"
-                                    sx={{
-                                        fontFamily: 'var(--font-mono)',
-                                        fontSize: '0.75rem',
-                                        color: 'text.secondary',
-                                        wordBreak: 'break-all',
-                                    }}
-                                >
-                                    {master.service.id}
-                                </Typography>
-                                <IconButton
-                                    size="small"
-                                    onClick={() => copyLink(url)}
-                                    color="primary"
-                                >
-                                    <ContentCopyRounded fontSize="small" />
-                                </IconButton>
-                            </Stack>
-
-                            {/* Share buttons row */}
-                            <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'center' }}>
-                                {canShare && (
-                                    <Button
-                                        variant="outlined"
-                                        size="small"
-                                        startIcon={<ShareRounded />}
-                                        onClick={() => shareLink(shareData)}
-                                    >
-                                        Share
-                                    </Button>
-                                )}
-                            </Stack>
-
-                            {/* Copied feedback */}
-                            {copiedLink && (
-                                <Typography
-                                    variant="caption"
-                                    sx={{ color: 'success.main', fontWeight: 600 }}
-                                >
-                                    Copied!
-                                </Typography>
-                            )}
-                        </Stack>
-                    )}
-
-                    {/* QR Scanner Section */}
-                    {openQr && (
-                        <Box
-                            sx={{
-                                width: '100%',
-                                maxWidth: 400,
-                                mx: 'auto',
-                                '& #qr-reader': {
-                                    border: 'none !important',
-                                },
-                                '& #qr-reader__scan_region': {
-                                    minHeight: 250,
-                                },
-                            }}
-                        >
-                            <Typography
-                                variant="subtitle1"
-                                fontWeight={600}
-                                sx={{ mb: 1.5 }}
-                            >
-                                Scan to Join
-                            </Typography>
-                            <Box
-                                sx={{
-                                    borderRadius: 2,
-                                    overflow: 'hidden',
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                }}
-                            >
-                                <div id="qr-reader"></div>
-                            </Box>
-                            {scannerResult && (
-                                <Typography
-                                    variant="caption"
-                                    sx={{ mt: 1, color: 'success.main' }}
-                                >
-                                    Scanned: {scannerResult}
-                                </Typography>
-                            )}
-                        </Box>
-                    )}
+                <DialogTitle id="scan-title" sx={{ textAlign: 'center', pr: 6, pl: 6 }}>Scan to join</DialogTitle>
+                <DialogClose onClose={() => setScan(false)} />
+                <DialogContent>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mb: 1.5 }}>
+                        Point the camera at the code on the other phone.
+                    </Typography>
+                    <Box
+                        sx={{
+                            width: '100%',
+                            maxWidth: 400,
+                            mx: 'auto',
+                            borderRadius: 2,
+                            overflow: 'hidden',
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            '& #qr-reader': {
+                                border: 'none !important',
+                            },
+                            '& #qr-reader__scan_region': {
+                                minHeight: 250,
+                            },
+                        }}
+                    >
+                        <div id="qr-reader"></div>
+                    </Box>
                 </DialogContent>
-
-                <DialogActions
-                    sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        px: 2,
-                        py: 1.5,
-                        borderTop: '1px solid',
-                        borderColor: 'divider',
-                    }}
-                >
-                    {hasRoomValue ? (
-                        <Stack direction="row" spacing={1}>
-                            <Button
-                                variant="outlined"
-                                color="error"
-                                size="small"
-                                startIcon={<ExitToAppOutlined />}
-                                onClick={() => master.leaveRoomAndReload()}
-                            >
-                                Leave Room
-                            </Button>
-                            <RoomPrivacy master={master} buttonSx={{ color: 'text.secondary' }} />
-                        </Stack>
-                    ) : (
-                        <Box />
-                    )}
-
-                    <IconButton onClick={() => show(false)}>
-                        <CloseRounded />
-                    </IconButton>
-                </DialogActions>
             </Dialog>
-        </div> : <div></div>
+        </div>
     );
 }
 
 AddPeersView.propTypes = {
     master: PropTypes.object.isRequired,
     showButton: PropTypes.bool,
+    inRoom: PropTypes.bool,
+    roomName: PropTypes.string,
 };
 
 export default AddPeersView;

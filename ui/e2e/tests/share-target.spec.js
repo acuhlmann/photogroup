@@ -27,7 +27,7 @@ async function androidContext(browser) {
 /** Open a room and wait until it is ready and the share worker controls the page. */
 async function readyRoom(page) {
   const roomUrl = await createRoom(page);
-  await expect(page.getByRole('button', { name: 'Share photos and clips', exact: true })).toBeEnabled({ timeout: 30000 });
+  await expect(page.getByRole('button', { name: 'Add photos and clips', exact: true })).toBeEnabled({ timeout: 30000 });
   await page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller, null, { timeout: 15000 });
   return new URL(roomUrl).searchParams.get('room');
 }

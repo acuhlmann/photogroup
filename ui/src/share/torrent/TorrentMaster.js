@@ -23,6 +23,7 @@ import { holdersOf, activeHolders } from '../topology/presence';
 import ConnectionRecovery, { freezesWhenHidden } from '../util/ConnectionRecovery';
 import { requestPersistentStorage } from '../util/PersistentStorage';
 import { leaveRoomNotice } from '../roomNotice';
+import { forgetRoom } from '../recentRooms';
 
 export default class TorrentMaster {
 
@@ -791,6 +792,8 @@ export default class TorrentMaster {
         const byMe = deleted?.peerId && deleted.peerId === this.client?.peerId;
         const note = byMe ? 'You deleted the room.' : `${deleted?.name || 'Someone'} deleted the room.`;
         leaveRoomNotice(note + ' The photos stay on the phones that have them.');
+        // There is no room to go back to.
+        forgetRoom(this.service?.id);
         this.leaveRoomAndReload();
     }
 

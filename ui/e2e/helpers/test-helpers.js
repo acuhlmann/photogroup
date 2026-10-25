@@ -94,12 +94,12 @@ async function stopBackendServer() {
 }
 
 /**
- * Dismiss any open MUI dialog that might be blocking interaction (e.g. Share Room dialog).
+ * Dismiss any open MUI dialog that might be blocking interaction (e.g. the Invite dialog).
  * @param {Page} page - Playwright page object
  */
 async function dismissDialogs(page) {
   // Try closing via the CloseRounded icon button inside dialogs
-  const closeBtn = page.locator('button:has(svg[data-testid="CloseRoundedIcon"])');
+  const closeBtn = page.locator('[role="dialog"] button:has(svg[data-testid="CloseRoundedIcon"])');
   if (await closeBtn.first().isVisible().catch(() => false)) {
     await closeBtn.first().click().catch(() => {});
     await page.waitForTimeout(300);
@@ -179,7 +179,7 @@ async function waitForLoadingIndicator(page, timeout = 60000) {
  */
 async function createRoom(page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  const startRoomButton = page.getByRole('button', { name: /Create Room/i });
+  const startRoomButton = page.getByRole('button', { name: /Start a room/i });
   await startRoomButton.waitFor({ timeout: 30000 });
   await startRoomButton.click();
   await page.waitForURL(new RegExp('\\?room='), { timeout: 30000 });

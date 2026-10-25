@@ -10,14 +10,15 @@ import QrCodeScannerRounded from '@mui/icons-material/QrCodeScannerRounded';
 
 import { createRoom } from '../openRoom';
 import SimpleHowItWorks from './SimpleHowItWorks';
+import RecentRooms from '../RecentRooms';
 
 const STEPS = [
-    'One person taps Start.',
+    'One person starts a room.',
     'Everyone else scans the code on that phone.',
     'Each photo that someone adds goes to all phones.',
 ];
 
-/** The simple landing page: start a group or join one, nothing else. */
+/** The simple landing page: start a room, join one, or go back to one. */
 function SimpleFront({ master }) {
     // master.me is set once the connection setup is done; until then a room can't be made.
     const [ready, setReady] = useState(() => !!master.me);
@@ -66,7 +67,7 @@ function SimpleFront({ master }) {
                         startIcon={starting || !ready ? <CircularProgress size={20} color="inherit" /> : <PhotoCameraRounded />}
                         sx={{ py: 2, fontSize: '1.2rem', fontWeight: 700, textTransform: 'none', borderRadius: 3 }}
                     >
-                        {ready ? 'Start' : 'Getting ready…'}
+                        {ready ? 'Start a room' : 'Getting ready…'}
                     </Button>
                     <Button
                         variant="outlined"
@@ -79,6 +80,8 @@ function SimpleFront({ master }) {
                         Scan to join
                     </Button>
                 </Stack>
+
+                <RecentRooms />
 
                 <Box component="ol" sx={{ m: 0, p: 0, listStyle: 'none', textAlign: 'left' }}>
                     {STEPS.map((step, index) => (

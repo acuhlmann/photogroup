@@ -10,7 +10,7 @@ import IconButton from "@mui/material/IconButton";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import { headerLabelSx } from "./headerButtonSx";
-import CloudUploadRounded from '@mui/icons-material/CloudUploadRounded';
+import AddPhotoAlternateRounded from '@mui/icons-material/AddPhotoAlternateRounded';
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
@@ -209,12 +209,12 @@ function Uploader({classes, model, emitter, showButton = true}) {
                 onChange={handleUpload}
                 ref={uploaderDomRef}
             />
-            {/* Simple mode hides this and opens the input from its own button. */}
+            {/* The one Add photos button in default and geek; simple mode has a big one in the page. */}
             {showButton && (
                 <label htmlFor="contained-button-file" style={{cursor: disabled ? 'not-allowed' : 'pointer'}}>
                     <Button
                         aria-haspopup="true"
-                        aria-label="Share photos and clips"
+                        aria-label="Add photos and clips"
                         variant="contained"
                         component="span"
                         disabled={disabled || unpacking}
@@ -228,9 +228,9 @@ function Uploader({classes, model, emitter, showButton = true}) {
                             '& .MuiSvgIcon-root': { fontSize: 18 },
                         }}
                     >
-                        {unpacking ? <CircularProgress size={16} color="inherit" /> : <CloudUploadRounded />}
+                        {unpacking ? <CircularProgress size={16} color="inherit" /> : <AddPhotoAlternateRounded />}
                         <Box component="span" sx={{ ...headerLabelSx, display: { xs: 'none', sm: 'inline' } }}>
-                            {unpacking ? 'Unpacking…' : 'Share'}
+                            {unpacking ? 'Unpacking…' : 'Add photos'}
                         </Box>
                     </Button>
                 </label>
