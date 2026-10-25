@@ -169,9 +169,16 @@ export default class RoomsService {
             }
         }, false);
 
+        // Each message as it came off the stream, for geek mode's map: which
+        // channel, and how many bytes the server sent.
+        const heard = (channel, event, data) => scope.emitter.emit('sse', {
+            channel, type: data && !Array.isArray(data) ? data.type : undefined, bytes: event.data ? event.data.length : 0,
+        });
+
         source.addEventListener('photos', event => {
 
             const data = JSON.parse(event.data);
+            heard('photos', event, data);
 
             if(data.item) {
                 if(data.type === 'add' || data.type === 'update') {
@@ -192,6 +199,7 @@ export default class RoomsService {
         source.addEventListener('peers', event => {
 
             const data = JSON.parse(event.data);
+            heard('peers', event, data);
 
             //Logger.info(`peers: ${data.type} ${JSON.stringify(data.item, null, ' ')}`);
             Logger.info(`peers: ${data.type} ${data.item.name} ${data.item.sessionId}`);
@@ -226,6 +234,7 @@ export default class RoomsService {
 
         source.addEventListener('room', event => {
             const data = JSON.parse(event.data);
+            heard('room', event, data);
             if (data?.settings) scope.emitter.emit('roomSettings', data.settings);
             if (data?.deleted) scope.emitter.emit('roomDeleted', data.deleted);
         }, false);
@@ -233,6 +242,7 @@ export default class RoomsService {
         source.addEventListener('peerConnections', event => {
 
             const data = JSON.parse(event.data);
+            heard('peerConnections', event, data);
 
             //Logger.info(`peerConnections: ${data.length} ${JSON.stringify(data, null, ' ')}`);
 

@@ -2,6 +2,8 @@
 // nothing when we finish sending one. The wires know: watch their blocks and
 // emit one event per whole piece, naming the peer it moved to or from.
 //   pieceReceived / pieceSent: { torrent, index, size, total, peerId }
+// The tracker's answers to this torrent's announces are passed on too:
+//   trackerAnnounce: { torrent }
 
 /** Bytes in piece `index`; the last piece is usually shorter. */
 function pieceSize(torrent, index) {
@@ -35,6 +37,8 @@ export function watchPieces(torrent, emitter) {
             emitter.emit('pieceSent', details(index, peerId));
         });
     });
+
+    torrent.on('trackerAnnounce', () => emitter.emit('trackerAnnounce', { torrent }));
 
     // Seeding verifies our own pieces too; only those a wire brought count.
     torrent.on('verified', index => {

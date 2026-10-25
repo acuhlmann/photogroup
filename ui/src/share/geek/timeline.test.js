@@ -165,4 +165,84 @@ describe('timeline', () => {
         timeline.push(flight(4600));
         expect(timeline.bounds).toEqual({ from: 4000, to: 5000 });
     });
+
+    it('replays the recording from a held moment in real time, then is live again', () => {
+        const { timeline, clock } = make(10000);
+        timeline.seek(4000);
+        expect(timeline.replaying).toBe(false);
+        timeline.play();
+        expect(timeline.replaying).toBe(true);
+        expect(timeline.playing).toBe(false);
+        clock.value = 11000;
+        // One second later, one second further on: real time.
+        expect(timeline.clock()).toBe(5000);
+        // Holding keeps the moment the replay had reached.
+        timeline.pause();
+        clock.value = 15000;
+        expect(timeline.clock()).toBe(5000);
+        expect(timeline.replaying).toBe(false);
+        // Played on at 4x, it catches up with the live edge and is live.
+        timeline.play(4);
+        expect(timeline.speed).toBe(4);
+        clock.value = 18000;
+        expect(timeline.clock()).toBe(17000);
+        expect(timeline.tick()).toBe(false);
+        clock.value = 18400;
+        expect(timeline.tick()).toBe(true);
+        expect(timeline.playing).toBe(true);
+        expect(timeline.replaying).toBe(false);
+    });
+
+    it('changes speed mid-replay from where the replay is', () => {
+        const { timeline, clock } = make(10000);
+        timeline.seek(2000);
+        timeline.play(1);
+        clock.value = 11000;
+        timeline.setSpeed(16);
+        clock.value = 11100;
+        expect(timeline.clock()).toBe(3000 + 1600);
+        // A speed the bar does not offer is real time.
+        timeline.setSpeed(3);
+        expect(timeline.speed).toBe(1);
+    });
+
+    it('steps from where a replay is, and holds it', () => {
+        const { timeline, clock } = make(10000);
+        timeline.push(flight(1000));
+        timeline.push(flight(3000));
+        timeline.push(flight(6000));
+        timeline.seek(2000);
+        timeline.play();
+        clock.value = 12000;
+        // The replay is at 4000, between the second and the third event.
+        timeline.step(1);
+        expect(timeline.replaying).toBe(false);
+        expect(timeline.clock()).toBe(6500);
+        // Between two crossings, back is the one just before.
+        timeline.seek(4500);
+        timeline.step(-1);
+        expect(timeline.clock()).toBe(3500);
+    });
+
+    it('counts the events after the moment a replay has reached', () => {
+        const { timeline, clock } = make(10000);
+        timeline.push(flight(1000));
+        timeline.push(flight(5000));
+        timeline.seek(500);
+        expect(timeline.missed()).toBe(2);
+        timeline.play(1);
+        clock.value = 11000;
+        expect(timeline.missed()).toBe(1);
+    });
+
+    it('meters the bytes and events of the second up to a moment', () => {
+        const { timeline } = make(10000);
+        timeline.push({ at: 8200, kind: 'rx', bytes: 16384, flights: [] });
+        timeline.push({ at: 8700, kind: 'rx', bytes: 16384, flights: [] });
+        timeline.push({ at: 8900, kind: 'tx', bytes: 1000, flights: [] });
+        timeline.push({ at: 8950, kind: 'sse', flights: [] });
+        expect(timeline.meter(9000)).toEqual({ events: 4, rx: 32768, tx: 1000 });
+        // Only what had happened by then counts.
+        expect(timeline.meter(8800)).toEqual({ events: 2, rx: 32768, tx: 0 });
+    });
 });

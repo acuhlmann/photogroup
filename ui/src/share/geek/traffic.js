@@ -64,7 +64,7 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
     };
 
     /** Write one event: its log line, plus what crossed and what to count. */
-    const record = (name, args, { flights = [], routeId, count, speed, note, sticky } = {}) => {
+    const record = (name, args, { flights = [], routeId, count, speed, note, sticky, bytes } = {}) => {
         const line = describeEvent(name, args) || {};
         timeline.push({
             kind: line.kind || name,
@@ -76,22 +76,34 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
             speed,
             note,
             sticky,
+            bytes,
         });
     };
 
-    // The server pushes every room change to everyone at once.
-    const broadcast = name => (event) => {
-        const type = event && event.type ? ':' + event.type : '';
-        if (throttled('sse' + name + type, 400)) return;
+    // The server pushes every room change to everyone at once, on each
+    // device's event stream. One dot per real SSE message, sized as it came.
+    const onSse = (event = {}) => {
+        const type = event.type ? ':' + event.type : '';
+        if (throttled('sse' + event.channel + type, 150)) return;
         const myId = getMyId();
-        const added = name === 'photos' && event?.type === 'add'
-            ? [].concat(event.item || []).some(photo => photo?.peerId === myId) : false;
-        const flights = byKind('sse').map(route => flight(route, {
-            reverse: true,
-            label: route.peerId === myId ? `SSE ${name}${type}` : '',
-        }));
-        if (added) flights.push(flight(mine('sse'), { label: 'POST magnet' }));
-        record(name, [event], { flights: flights.filter(f => f && (f.label || !f.reverse)) });
+        const size = event.bytes ? ` ${FileUtil.formatBytes(event.bytes)}` : '';
+        record('sse', [event], {
+            bytes: event.bytes,
+            flights: byKind('sse').map(route => flight(route, {
+                reverse: true,
+                label: route.peerId === myId ? `SSE ${event.channel}${type}${size}` : '',
+            })),
+        });
+    };
+
+    // A photo this device adds goes up to the room as its magnet link.
+    const onPhotos = event => {
+        const myId = getMyId();
+        const added = event?.type === 'add'
+            && [].concat(event.item || []).some(photo => photo?.peerId === myId && photo?.isFake);
+        // A photo's details changing on this device is not traffic.
+        if (!added && !describeEvent('photos', [event])) return;
+        record('photos', [event], { flights: added ? [flight(mine('sse'), { label: 'POST magnet' })] : [] });
     };
 
     // Pieces are real WebTorrent transfers: one entry each, so the route label
@@ -110,6 +122,7 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
         record(kind === 'rx' ? 'pieceReceived' : 'pieceSent', [event], {
             routeId: route.id,
             count: 1,
+            bytes: size,
             flights: drawn ? [flight(route, {
                 reverse: kind === 'rx' ? !towardsMe : towardsMe,
                 rgb: kind === 'rx' ? RX : TX,
@@ -131,12 +144,30 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
         wired.forEach(route => record(name, [event], { routeId: route.id, speed: event?.speed }));
     };
 
+    // A wire is a peer connection that just opened: the tracker carried the
+    // offer and the answer, then the two browsers swap the BitTorrent
+    // handshake on the new data channel.
     const onWire = (event, address, torrent) => {
         if (throttled('wire', 500)) return;
+        const direct = transferRoutesFor(routes(), getMyId(), { wires: [{ peerId: event?.peerId }] })[0];
         record('wire', [event, address, torrent], {
             flights: [
+                flight(mine('tracker'), { label: 'offer' }),
+                flight(mine('tracker'), { reverse: true, label: 'answer', speed: SPEEDS.answer }),
+                direct && flight(direct, { label: 'handshake' }),
+                direct && flight(direct, { reverse: true, label: 'bitfield', speed: SPEEDS.answer }),
+            ],
+        });
+    };
+
+    // The tracker answered an announce: which photos this device has, and
+    // back come peers that want them.
+    const onTracker = (event = {}) => {
+        if (throttled('announce' + (event.torrent?.infoHash || ''), 1000)) return;
+        record('trackerAnnounce', [event], {
+            flights: [
                 flight(mine('tracker'), { label: 'announce' }),
-                flight(mine('tracker'), { reverse: true, label: 'offer/answer', speed: SPEEDS.answer }),
+                flight(mine('tracker'), { reverse: true, label: 'peers', speed: SPEEDS.answer }),
             ],
         });
     };
@@ -168,21 +199,27 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
     const onLocalNetwork = chain => record('localNetwork', [chain]);
     const onReconnected = () => record('sseReconnected', []);
 
-    // Only our own NAT asks STUN; the others gather on their own devices.
+    // STUN, as it really goes: gathering sends a Binding Request out through
+    // our NAT, and a server-reflexive candidate is the answer, naming the
+    // public address STUN saw. No answer, no packet back. Only our own NAT
+    // asks STUN; the others gather on their own devices.
     const onIce = (type, value) => {
-        if (type !== 'icegatheringstatechange' || value !== 'gathering') return;
+        const state = String(value || '');
+        // A state change with no state says nothing.
+        if (!state) return;
+        const asking = type === 'icegatheringstatechange' && state === 'gathering';
+        const answered = type === 'icecandidate' && state.startsWith('srflx');
         const nat = (mine('sse')?.path || [])[1];
-        const flights = byKind('stun')
-            .filter(route => route.path[0] === nat)
-            .flatMap(route => [
-                flight(route, { label: 'binding request' }),
-                flight(route, { reverse: true, label: 'binding response', speed: SPEEDS.binding }),
-            ]);
+        const stun = asking || answered ? byKind('stun').filter(route => route.path[0] === nat) : [];
+        const flights = stun.map(route => (asking
+            ? flight(route, { label: 'Binding Request' })
+            : flight(route, { reverse: true, label: `Binding Success ${state.slice('srflx'.length).trim()}`, speed: SPEEDS.binding })));
         record('pcEvent', [type, value], { flights });
     };
 
     const handlers = [
-        ['photos', broadcast('photos')],
+        ['sse', onSse],
+        ['photos', onPhotos],
         ['peers', onPeers],
         ['peerConnections', onConnections],
         ['downloadProgress', onSpeed('rx')],
@@ -190,6 +227,7 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
         ['pieceReceived', onPiece('rx')],
         ['pieceSent', onPiece('tx')],
         ['wire', onWire],
+        ['trackerAnnounce', onTracker],
         ['serverCopy', onServerCopy],
         ['pcEvent', onIce],
         ['localNetwork', onLocalNetwork],

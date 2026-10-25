@@ -72,6 +72,8 @@ export default class NetworkTopologyFinder {
                     +cand.type + ' ' + cand.ip + ':' + cand.port;
                 Logger.debug('route ' + route);
                 scope.emitter.emit('topStateMessage', route);
+                // STUN just answered: this is the public address it saw.
+                scope.emitter.emit('pcEvent', 'icecandidate', cand.type + ' ' + cand.ip + ':' + cand.port);
                 if (!candidates[cand.relatedPort]) candidates[cand.relatedPort] = [];
                 candidates[cand.relatedPort].push(cand.port);
             } else if (!e.candidate) {

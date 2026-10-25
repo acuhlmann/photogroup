@@ -10,15 +10,11 @@ import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
 import ExpandLessRounded from '@mui/icons-material/ExpandLessRounded';
 import OpenInFullRounded from '@mui/icons-material/OpenInFullRounded';
 import CloseFullscreenRounded from '@mui/icons-material/CloseFullscreenRounded';
-import PauseRounded from '@mui/icons-material/PauseRounded';
-import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
-import SkipPreviousRounded from '@mui/icons-material/SkipPreviousRounded';
-import SkipNextRounded from '@mui/icons-material/SkipNextRounded';
-import RadioRounded from '@mui/icons-material/RadioRounded';
 import SchoolRounded from '@mui/icons-material/SchoolRounded';
 
 import NetworkStage from './NetworkStage';
 import TransfersView from './TransfersView';
+import Transport, { clock, useTimeline } from './Transport';
 import { createTimeline } from './timeline';
 import { tourSteps } from './tour';
 import { replaySteps } from './replay';
@@ -45,101 +41,16 @@ const KIND_COLOR = {
     copy: 'secondary.main',
 };
 
-function clock(at) {
-    const date = new Date(at);
-    const pad = (value, length = 2) => String(value).padStart(length, '0');
-    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
-}
-
-/** Re-render with the recording: every packet and every playhead move. */
-function useTimeline(timeline) {
-    const [, bump] = useReducer(value => value + 1, 0);
-    useEffect(() => timeline.subscribe(bump), [timeline]);
-}
-
-/**
- * Hold the traffic and walk through it. Pause keeps every label on screen to
- * be read; the arrows step one event at a time; the bar scrubs the last two
- * minutes of what the room actually did.
- */
-function Transport({ timeline }) {
-    useTimeline(timeline);
-    const playing = timeline.playing;
-    const bounds = timeline.bounds;
-    const at = timeline.clock();
-    const missed = timeline.missed();
-    const shown = timeline.shown();
-    const span = Math.max(1, bounds.to - bounds.from);
-
-    return (
-        <Box
-            data-testid="transport"
-            sx={{
-                display: 'flex', alignItems: 'center', gap: 0.5, px: 0.5, flex: 'none',
-                borderRight: 1, borderColor: 'divider',
-            }}
-        >
-            <IconButton
-                size="small"
-                onClick={() => (playing ? timeline.pause() : timeline.resume())}
-                aria-label={playing ? 'Hold the traffic' : 'Let the traffic run'}
-                aria-pressed={!playing}
-            >
-                {playing ? <PauseRounded fontSize="small" /> : <PlayArrowRounded fontSize="small" />}
-            </IconButton>
-            <IconButton size="small" onClick={() => timeline.step(-1)} aria-label="Previous event"
-                sx={{ visibility: timeline.entries.length ? 'visible' : 'hidden' }}>
-                <SkipPreviousRounded fontSize="small" />
-            </IconButton>
-            <IconButton size="small" onClick={() => timeline.step(1)} aria-label="Next event"
-                sx={{ visibility: timeline.entries.length ? 'visible' : 'hidden' }}>
-                <SkipNextRounded fontSize="small" />
-            </IconButton>
-            <Box
-                component="input"
-                type="range"
-                aria-label="Rewind through the room's traffic"
-                value={Math.round(at)}
-                min={Math.round(bounds.from)}
-                max={Math.round(bounds.to)}
-                step={10}
-                onChange={event => timeline.seek(Number(event.target.value))}
-                onMouseUp={() => { if (playing) timeline.resume(); }}
-                onTouchEnd={() => { if (playing) timeline.resume(); }}
-                sx={{
-                    width: { xs: 90, sm: 180 }, height: 20, flex: '1 1 90px', minWidth: 70,
-                    accentColor: 'var(--accent)', cursor: 'pointer',
-                }}
-            />
-            <Typography sx={{
-                fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: playing ? 'text.disabled' : 'warning.main',
-                whiteSpace: 'nowrap', minWidth: '6.2rem',
-            }}>
-                {playing ? `${Math.round(span / 1000)}s held live` : `held ${clock(at).slice(0, 8)}`}
-            </Typography>
-            {!playing && missed > 0 && (
-                <Button
-                    size="small"
-                    variant={shown ? 'text' : 'text'}
-                    startIcon={<RadioRounded />}
-                    onClick={() => timeline.resume()}
-                    sx={{ textTransform: 'none', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', flex: 'none' }}
-                >
-                    {missed} new
-                </Button>
-            )}
-        </Box>
-    );
-}
-
 /**
  * The recording as a list. Each line is the same event the map is drawing, so
  * tapping one holds the map on that crossing and lights the route it took.
  */
 function PacketLog({ timeline }) {
-    useTimeline(timeline);
+    useTimeline(timeline, { idle: 0 });
     const lines = timeline.recent();
     const shown = timeline.shown();
+    // Held or replayed: what the room did after that moment is not on the map yet.
+    const at = timeline.playing ? Infinity : timeline.clock();
 
     if (!lines.length) {
         return (
@@ -152,12 +63,14 @@ function PacketLog({ timeline }) {
         <Box component="ol" role="log" aria-label="Network events" sx={{ m: 0, px: 0.5, py: 0.5, listStyle: 'none' }}>
             {lines.map(line => {
                 const active = shown?.id === line.id;
+                const later = line.at > at;
                 return (
                     <Box
                         key={line.id}
                         component="li"
                         data-parked={active ? 'true' : undefined}
-                        onClick={() => (active && timeline.playing === false ? timeline.resume() : timeline.focus(line.id))}
+                        data-later={later ? 'true' : undefined}
+                        onClick={() => (active && !timeline.playing ? timeline.resume() : timeline.focus(line.id))}
                         title={line.flights.length ? 'Hold the map on this crossing' : undefined}
                         sx={{
                             display: 'grid',
@@ -171,6 +84,7 @@ function PacketLog({ timeline }) {
                             fontSize: '0.68rem',
                             lineHeight: 1.6,
                             bgcolor: active ? 'action.selected' : 'transparent',
+                            opacity: later ? 0.4 : 1,
                             borderLeft: '2px solid',
                             borderLeftColor: active ? 'warning.main' : 'transparent',
                             '&:hover': { bgcolor: 'action.hover' },
@@ -254,8 +168,9 @@ function GeekStage({ master, tiles, isMobile }) {
         tourTimeline.clear();
     }, [player, tourTimeline]);
 
-    // Space holds and releases the traffic; the arrows walk through it. In
-    // the tour they walk its steps instead.
+    // Space holds the traffic and plays it on from there; the arrows walk
+    // through it one event at a time; L goes back to live. In the tour they
+    // walk its steps instead.
     useEffect(() => {
         const onKey = event => {
             const field = event.target;
@@ -273,7 +188,9 @@ function GeekStage({ master, tiles, isMobile }) {
             }
             if (event.key === ' ' || event.key === 'k') {
                 event.preventDefault();
-                timeline.playing ? timeline.pause() : timeline.resume();
+                // Live or replaying: hold. Held: play on from there.
+                if (timeline.playing || timeline.replaying) timeline.pause();
+                else timeline.play();
             } else if (event.key === 'ArrowLeft') {
                 event.preventDefault();
                 timeline.step(-1);
@@ -414,7 +331,7 @@ function GeekStage({ master, tiles, isMobile }) {
                 // The tour tells its own story; the live log waits underneath.
                 display: touring ? 'none' : 'flex',
                 position: 'relative',
-                height: open ? height : COLLAPSED,
+                height: open ? height : 'auto',
                 flex: 'none',
                 flexDirection: 'column',
                 borderTop: 1,
@@ -462,13 +379,13 @@ function GeekStage({ master, tiles, isMobile }) {
                         '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
                     }} />
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: open ? 1 : 0, borderColor: 'divider' }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', borderBottom: open ? 1 : 0, borderColor: 'divider' }}>
                     <Transport timeline={timeline} />
                     <Tabs
                         value={tab}
                         onChange={(event, value) => { setTab(value); setOpen(true); }}
                         sx={{
-                            flex: 1,
+                            flex: '1 0 auto',
                             minHeight: 32,
                             '& .MuiTab-root': {
                                 minHeight: 32,

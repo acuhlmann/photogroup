@@ -11,6 +11,7 @@ import OpenInFullRounded from '@mui/icons-material/OpenInFullRounded';
 import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 
+import FileUtil from '../util/FileUtil';
 import { captureDroppedHandles } from '../gallery/replaceOriginal';
 import { buildScene, routePoints, pointAlong, TIER } from './scene';
 import { attachTraffic, flowAt, FLOW_MS, RX, TX } from './traffic';
@@ -83,6 +84,9 @@ function polygon(ctx, x, y, r, sides, rotation) {
 // One empty list, so a stage given no tiles doesn't rebuild its scene every render.
 const NO_TILES = [];
 
+// The last part of a crossing, when the receiving node shows it arriving.
+const ARRIVE = 0.8;
+
 const prefersReducedMotion = () => typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -139,6 +143,47 @@ export function canOpen(tile) {
  * The traffic it draws comes from `timeline`, which the footer logs the same
  * recording of — so pausing holds every label in place to be read.
  */
+/** Re-render on a timer, for chrome that reads the moving clock. */
+function useTicker(ms) {
+    const [, bump] = useState(0);
+    useEffect(() => {
+        const timer = setInterval(() => bump(value => value + 1), ms);
+        return () => clearInterval(timer);
+    }, [ms]);
+}
+
+const perSecond = bytes => `${FileUtil.formatBytes(Math.round(bytes))}/s`;
+
+/**
+ * On the map, while it is not live: the moment it shows, and what crossed
+ * the wire in the second up to it. The bar above the map meters live traffic;
+ * this meters the held or replayed moment.
+ */
+function PausedMark({ timeline, replaying }) {
+    useTicker(replaying ? 200 : 1000);
+    const rate = timeline.meter ? timeline.meter() : null;
+    return (
+        <Typography data-testid="paused-mark" sx={{
+            position: 'absolute', left: 8, bottom: 8, pointerEvents: 'none',
+            fontFamily: mono, fontSize: '0.62rem', letterSpacing: '0.08em',
+            px: 0.75, py: 0.25, borderRadius: 1, border: 1, borderColor: 'warning.main', color: 'warning.main',
+            bgcolor: 'background.paper',
+        }}>
+            {replaying ? `replay ${timeline.speed}×` : 'held'} · {new Date(timeline.clock()).toLocaleTimeString()}
+            {rate && (
+                <Box component="span" data-testid="wire-meter" sx={{ color: 'text.secondary', ml: 0.75, display: { xs: 'none', sm: 'inline' } }}>
+                    <Box component="span" sx={{ color: `rgb(${RX})` }}>{`▼ ${perSecond(rate.rx)}`}</Box>
+                    {' '}
+                    <Box component="span" sx={{ color: `rgb(${TX})` }}>{`▲ ${perSecond(rate.tx)}`}</Box>
+                    {` · ${Math.round(rate.events)} ev/s`}
+                </Box>
+            )}
+        </Typography>
+    );
+}
+
+PausedMark.propTypes = { timeline: PropTypes.object.isRequired, replaying: PropTypes.bool };
+
 /**
  * `timeline` records the room's traffic; `playback` is what is drawn (the
  * tour plays its own), and `tour` — the step on screen — switches to the
@@ -158,10 +203,15 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
     // The drawing reads the playhead every frame, so only the chrome that says
     // "held" needs re-rendering when it moves — not the canvas.
     const [paused, setPaused] = useState(!shown.playing);
+    const [replaying, setReplaying] = useState(!!shown.replaying);
 
     useEffect(() => {
-        setPaused(!shown.playing);
-        return shown.subscribeClock(() => setPaused(!shown.playing));
+        const read = () => {
+            setPaused(!shown.playing);
+            setReplaying(!!shown.replaying);
+        };
+        read();
+        return shown.subscribeClock(read);
     }, [shown]);
 
     // Rebuild whenever the room changes shape.
@@ -254,6 +304,8 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
         const draw = () => {
             if (!running) return;
             ctx.clearRect(0, 0, width, height);
+            // A replay that has caught up with the room is live from here on.
+            shown.tick?.();
             // The moment on screen: the live edge, or wherever the playhead sits.
             const at = shown.clock();
             const moving = !prefersReducedMotion() || !shown.playing;
@@ -361,6 +413,16 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                     ctx.arc(here.x, here.y, 3.5, 0, Math.PI * 2);
                     ctx.fillStyle = `rgba(${rgb},${alpha})`;
                     ctx.fill();
+                    // Arriving: a ring opens on the node that receives it.
+                    if (packet.progress > ARRIVE) {
+                        const end = points[points.length - 1];
+                        const k = (packet.progress - ARRIVE) / (1 - ARRIVE);
+                        ctx.beginPath();
+                        ctx.arc(end.x, end.y, 6 + k * 16, 0, Math.PI * 2);
+                        ctx.strokeStyle = `rgba(${rgb},${(1 - k) * 0.6})`;
+                        ctx.lineWidth = 1.5;
+                        ctx.stroke();
+                    }
                     if (packet.label) {
                         ctx.font = `9px ${mono}`;
                         ctx.fillStyle = `rgba(${rgb},${alpha})`;
@@ -646,15 +708,9 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
             )}
 
             {paused && (
-                <Typography data-testid="paused-mark" sx={{
-                    position: 'absolute', left: 8, bottom: 8, pointerEvents: 'none',
-                    fontFamily: mono, fontSize: '0.62rem', letterSpacing: '0.08em',
-                    px: 0.75, py: 0.25, borderRadius: 1, border: 1, borderColor: 'warning.main', color: 'warning.main',
-                    bgcolor: 'background.paper',
-                }}>
-                    held · {new Date(shown.clock()).toLocaleTimeString()}
-                </Typography>
+                <PausedMark timeline={shown} replaying={replaying} />
             )}
+
 
             {/* An enlarged photo, next to where it sits. */}
             {thumb && (

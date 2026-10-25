@@ -10,6 +10,8 @@ export const HISTORY_MS = 120000;
 export const MAX_ENTRIES = 400;
 // Transfer progress fires many times a second; one log line per key this often.
 export const SAME_TEXT_MS = 1500;
+// Replay speeds, slowest first. 1 is real time.
+export const RATES = [0.25, 1, 4, 16];
 
 // Frame-based speeds in the old animation loop became durations; this is the
 // one place that converts, so a caller can still say "fast" or "slow".
@@ -29,6 +31,12 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
     let seq = 0;
     // null follows the live edge; a time pins the view there.
     let playhead = null;
+    // Replay: the playhead moves on from `playhead` at `rate` times real time,
+    // counted from `since`. 0 holds it still.
+    let rate = 0;
+    let since = 0;
+    // The speed a replay starts at; kept across holds.
+    let speed = 1;
     // The event the playhead is parked on, so stepping carries on from it.
     let anchorId = null;
     const listeners = new Set();
@@ -66,7 +74,7 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
      * `key` only writes a line this often, so a busy route stays readable
      * while every one of its packets still flies.
      */
-    const push = ({ kind, text = '', key = '', flights = [], route, count, speed, note, sticky, at = now() }) => {
+    const push = ({ kind, text = '', key = '', flights = [], route, count, speed, note, sticky, bytes, at = now() }) => {
         // A key never written is not throttled; `|| 0` would eat the first line.
         if (text && key && at - (lastText.get(key) ?? -Infinity) < SAME_TEXT_MS) text = '';
         if (text && key) lastText.set(key, at);
@@ -84,6 +92,8 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
             // progress); sticky while it is still under way.
             note,
             sticky,
+            // Bytes this event put on the wire, where the app knows them.
+            bytes: bytes || 0,
             flights: flights.filter(Boolean).map(flight => ({
                 routeId: flight.routeId,
                 rgb: flight.rgb,
@@ -103,8 +113,38 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
         return entry;
     };
 
-    /** Where the view is: the live edge, or the pinned moment. */
-    const clock = () => (playhead === null ? now() : playhead);
+    /** Where a replay has got to by now, before it is checked against the live edge. */
+    const moved = () => playhead + (now() - since) * rate;
+
+    /** Where the view is: the live edge, the pinned moment, or the replay's moment. */
+    const clock = () => {
+        if (playhead === null) return now();
+        if (!rate) return playhead;
+        return Math.min(moved(), now());
+    };
+
+    /** Fix the replay's moment in `playhead`, so a new rate counts from here. */
+    const settle = () => {
+        if (playhead !== null && rate) {
+            playhead = clock();
+            since = now();
+        }
+    };
+
+    /**
+     * Move a replay on. It is caught up when it reaches the live edge, and from
+     * then on it is live. Returns true when that happened. The map and the bar
+     * call it as they redraw.
+     */
+    const tick = () => {
+        if (playhead === null || !rate) return false;
+        if (moved() < now()) return false;
+        playhead = null;
+        rate = 0;
+        anchorId = null;
+        emitClock();
+        return true;
+    };
 
     const pause = () => {
         if (playhead === null) {
@@ -113,25 +153,60 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
             // shows, so the first step back means the event before it.
             anchorId = entryAt(playhead)?.id ?? null;
             emitClock();
+        } else if (rate) {
+            settle();
+            rate = 0;
+            anchorId = entryAt(playhead)?.id ?? null;
+            emitClock();
         }
         return playhead;
     };
 
+    /** Go to the live edge. */
     const resume = () => {
         if (playhead !== null) {
             playhead = null;
+            rate = 0;
             anchorId = null;
             emitClock();
         }
+    };
+
+    /**
+     * Play the recording on from the moment on screen, at `speed` times real
+     * time (the last speed when none is given). At the live edge it is live.
+     */
+    const play = (value = speed) => {
+        if (playhead === null) return;
+        speed = RATES.includes(value) ? value : 1;
+        settle();
+        rate = speed;
+        since = now();
+        // A replay follows the clock, not a parked event.
+        anchorId = null;
+        emitClock();
+    };
+
+    /** Change the replay speed; a replay under way carries on at the new one. */
+    const setSpeed = value => {
+        speed = RATES.includes(value) ? value : 1;
+        if (playhead !== null && rate) {
+            settle();
+            rate = speed;
+        }
+        emitClock();
     };
 
     /** Pin the view to a moment, or pass null to follow the live edge again. */
     const seek = time => {
         if (time === null || time === undefined) {
             playhead = null;
+            rate = 0;
             anchorId = null;
         } else {
             playhead = Math.min(time, now());
+            // A replay carries on from where it was dropped.
+            since = now();
             // Remember which event that moment belongs to, so the next step
             // carries on from it instead of jumping back to the live edge.
             anchorId = entryAt(playhead)?.id ?? null;
@@ -148,10 +223,24 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
      */
     const step = direction => {
         if (!entries.length) return playhead;
+        // Stepping holds a replay where it is, then walks from there.
+        if (playhead !== null && rate) {
+            settle();
+            rate = 0;
+        }
+        // Not parked on an event (a replay, or a scrub between two): the
+        // newest event before the moment on screen is where a step starts.
+        const before = () => {
+            for (let index = entries.length - 1; index >= 0; index--) {
+                if (entries[index].at <= playhead) return index;
+            }
+            return -1;
+        };
+        const current = () => (anchorId !== null ? entries.findIndex(entry => entry.id === anchorId) : before());
         if (direction > 0) {
             // Nothing newer than the live edge to step on to.
-            if (anchorId === null) return playhead;
-            const index = entries.findIndex(entry => entry.id === anchorId);
+            if (playhead === null) return playhead;
+            const index = current();
             const next = entries[index + 1];
             if (next) {
                 anchorId = next.id;
@@ -161,9 +250,11 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
                 playhead = null;
             }
         } else {
-            const index = anchorId === null
-                ? entries.length - 1
-                : entries.findIndex(entry => entry.id === anchorId) - 1;
+            let index;
+            if (playhead === null) index = entries.length - 1;
+            else if (anchorId !== null) index = current() - 1;
+            // Between two events, back means the one just before.
+            else index = before();
             const target = entries[Math.max(0, index)];
             anchorId = target.id;
             playhead = target.mid;
@@ -185,6 +276,7 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
     const focus = id => {
         const entry = entries.find(item => item.id === id);
         if (!entry) return playhead;
+        rate = 0;
         anchorId = entry.id;
         playhead = entry.mid;
         emitClock();
@@ -210,8 +302,31 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
         return drawn;
     };
 
-    /** Events the room sent while the view was pinned behind the live edge. */
-    const missed = () => (playhead === null ? 0 : entries.filter(entry => entry.at > playhead).length);
+    /** Events the room sent after the moment on screen. */
+    const missed = () => {
+        if (playhead === null) return 0;
+        const at = clock();
+        return entries.filter(entry => entry.at > at).length;
+    };
+
+    /**
+     * What crossed the wire in the `window` ms up to a moment: events, and
+     * bytes in and out per second. Read from the recording, so a held or
+     * replayed view meters its own moment.
+     */
+    const meter = (at = clock(), window = 1000) => {
+        const sum = { events: 0, rx: 0, tx: 0 };
+        for (let index = entries.length - 1; index >= 0; index--) {
+            const entry = entries[index];
+            if (entry.at > at) continue;
+            if (entry.at <= at - window) break;
+            sum.events++;
+            if (entry.kind === 'rx') sum.rx += entry.bytes;
+            else if (entry.kind === 'tx') sum.tx += entry.bytes;
+        }
+        const scale = 1000 / window;
+        return { events: sum.events * scale, rx: sum.rx * scale, tx: sum.tx * scale };
+    };
 
     /** Log lines, newest first. Events without a line stay out of the list. */
     const recent = (count = limit) => entries.filter(entry => entry.text).slice(-count).reverse();
@@ -236,13 +351,22 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
         clock,
         pause,
         resume,
+        play,
+        setSpeed,
+        tick,
         seek,
         step,
         shown,
         focus,
         missed,
+        meter,
         find: id => entries.find(entry => entry.id === id),
+        /** True at the live edge. A replay is not live: it is behind it. */
         get playing() { return playhead === null; },
+        /** Behind the live edge and moving on (a replay). */
+        get replaying() { return playhead !== null && rate > 0; },
+        /** The replay speed: the one in use, or the next replay's. */
+        get speed() { return speed; },
         get head() { return newest() ? newest().at : null; },
         get floor() { return oldest() ? oldest().at : null; },
         /** Range the scrubber spans; one point when nothing is recorded. */

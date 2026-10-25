@@ -40,20 +40,33 @@ describe('attachTraffic', () => {
         expect(entry.kind).toBe('peer');
     });
 
-    it('sends a labelled SSE packet down every device route on a room change', () => {
+    it('sends one SSE packet down every device route per real stream message', () => {
+        const { emitter, timeline } = setup();
+        emitter.emit('sse', { channel: 'photos', type: 'add', bytes: 412 });
+
+        const entry = timeline.entries[timeline.entries.length - 1];
+        expect(entry.kind).toBe('sse');
+        expect(entry.bytes).toBe(412);
+        // The server sends it to everyone; ours is named, with its size.
+        expect(entry.flights.map(f => f.routeId)).toEqual(['sse:me', 'sse:them']);
+        expect(entry.flights[0].label).toBe('SSE photos:add 412 B');
+        expect(entry.flights[1].label).toBe('');
+        expect(entry.flights.every(f => f.reverse)).toBe(true);
+    });
+
+    it('draws no SSE packet for a room change made on this device', () => {
         const { emitter, timeline } = setup();
         emitter.emit('photos', { type: 'add', item: [{ fileName: 'beach.jpg', peerId: 'them' }] });
-
-        const flights = timeline.entries[timeline.entries.length - 1].flights;
-        // Ours is named; the other device only shows that its stream moved.
-        expect(flights.map(f => f.routeId)).toEqual(['sse:me']);
-        expect(flights[0].label).toContain('SSE photos:add');
-        expect(flights[0].reverse).toBe(true);
+        expect(timeline.recent()[0].text).toContain('beach.jpg');
+        expect(timeline.entries.at(-1).flights).toEqual([]);
+        // A detail changing here is not traffic at all.
+        emitter.emit('photos', { type: 'update', item: [{ fileName: 'beach.jpg' }] });
+        expect(timeline.entries).toHaveLength(1);
     });
 
     it('names our own upload as a magnet POST on the way out', () => {
         const { emitter, timeline } = setup();
-        emitter.emit('photos', { type: 'add', item: [{ fileName: 'beach.jpg', peerId: 'me' }] });
+        emitter.emit('photos', { type: 'add', item: [{ fileName: 'beach.jpg', peerId: 'me', isFake: true }] });
         const flights = timeline.entries[timeline.entries.length - 1].flights;
         expect(flights.some(f => f.label === 'POST magnet' && !f.reverse)).toBe(true);
     });
@@ -65,6 +78,8 @@ describe('attachTraffic', () => {
         }
         const pieces = timeline.entries.filter(entry => entry.count);
         expect(pieces).toHaveLength(4);
+        // Each knows its bytes, for the wire meter.
+        expect(pieces.every(entry => entry.bytes === 1024)).toBe(true);
         expect(pieces.every(entry => entry.route === 'p2p:me|them')).toBe(true);
         // The last piece always earns its dot, and is named.
         const last = pieces[pieces.length - 1];
@@ -93,21 +108,51 @@ describe('attachTraffic', () => {
         expect(state.rxSpeed).toBe('1 MB/s');
     });
 
-    it('announces and swaps offers on the tracker socket', () => {
+    it('opens a wire: offer and answer on the tracker, then the handshake on the direct path', () => {
         const { emitter, timeline } = setup();
-        emitter.emit('wire', { peerId: 'x', type: 'webrtc' }, 'peer them', torrent);
+        emitter.emit('wire', { peerId: 'them', type: 'webrtc' }, 'peer them', torrent);
         const flights = timeline.entries[timeline.entries.length - 1].flights;
-        expect(flights.map(f => [f.routeId, f.label, f.reverse]))
-            .toEqual([['tracker:me', 'announce', false], ['tracker:me', 'offer/answer', true]]);
+        expect(flights.map(f => [f.routeId, f.label, f.reverse])).toEqual([
+            ['tracker:me', 'offer', false], ['tracker:me', 'answer', true],
+            ['p2p:me|them', 'handshake', false], ['p2p:me|them', 'bitfield', true],
+        ]);
     });
 
-    it('shows a STUN binding only for our own NAT', () => {
+    it('draws a tracker announce and its answer', () => {
         const { emitter, timeline } = setup();
-        emitter.emit('pcEvent', 'icegatheringstatechange', 'gathering');
+        emitter.emit('trackerAnnounce', { torrent });
+        const entry = timeline.entries.at(-1);
+        expect(entry.kind).toBe('trk');
+        expect(entry.text).toContain('announce beach.jpg');
+        expect(entry.flights.map(f => [f.label, f.reverse])).toEqual([['announce', false], ['peers', true]]);
+    });
+
+    it('shows the STUN binding when the public address comes back, only for our own NAT', () => {
+        const { emitter, timeline } = setup();
+        emitter.emit('pcEvent', 'icecandidate', 'srflx 203.0.113.7:51234');
         const entry = timeline.entries[timeline.entries.length - 1];
-        // Our SSE path goes out through no NAT node here, so nothing is gathered on it.
+        // Our SSE path goes out through no NAT node here, so nothing flies.
         expect(entry.flights).toHaveLength(0);
-        expect(entry.text).toContain('gathering');
+        expect(entry.text).toContain('srflx 203.0.113.7:51234');
+    });
+
+    it('flies the binding request and the address STUN saw', () => {
+        const emitter = new EventEmitter();
+        const timeline = createTimeline();
+        const natted = () => ({ routes: [
+            { id: 'sse:me', kind: 'sse', path: ['me', 'nat:1', 'edge', 'api'], peerId: 'me' },
+            { id: 'stun:nat:1', kind: 'stun', path: ['nat:1', 'stun'] },
+        ] });
+        attachTraffic({ timeline, emitter, getScene: natted, getMyId: () => 'me' });
+        emitter.emit('pcEvent', 'icegatheringstatechange', 'gathering');
+        expect(timeline.entries.at(-1).flights.map(f => [f.routeId, f.label, f.reverse]))
+            .toEqual([['stun:nat:1', 'Binding Request', false]]);
+        emitter.emit('pcEvent', 'icecandidate', 'srflx 203.0.113.7:51234');
+        expect(timeline.entries.at(-1).flights.map(f => [f.routeId, f.label, f.reverse]))
+            .toEqual([['stun:nat:1', 'Binding Success 203.0.113.7:51234', true]]);
+        // A state change with no value says nothing and is not recorded.
+        emitter.emit('pcEvent', 'icegatheringstatechange', '');
+        expect(timeline.entries).toHaveLength(2);
     });
 
     it('draws no packets when motion is reduced, but still writes the log', () => {
