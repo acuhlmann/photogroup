@@ -55,6 +55,19 @@ describe('new photo notices', () => {
         expect(shown).toEqual([]);
     });
 
+    it('uses the service worker where the browser has no Notification constructor', async () => {
+        const { emitter, win, flush } = setup();
+        const showNotification = vi.fn().mockResolvedValue();
+        const Throwing = function () { throw new TypeError('Illegal constructor'); };
+        Throwing.permission = 'granted';
+        win.Notification = Throwing;
+        win.navigator = { serviceWorker: { ready: Promise.resolve({ showNotification }) } };
+        emitter.emit('photos', { type: 'add', item: [{ peerId: 'friend' }] });
+        flush();
+        await vi.waitFor(() => expect(showNotification).toHaveBeenCalledWith('Beach day · PhotoGroup',
+            { body: 'Someone added a photo.', tag: 'photogroup-new-photos' }));
+    });
+
     it('asks the browser once', async () => {
         const { win } = setup({ permission: 'default' });
         expect(await askToNotify(win)).toBe(true);

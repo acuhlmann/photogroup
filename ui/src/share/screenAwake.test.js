@@ -53,6 +53,15 @@ describe('ScreenAwake', () => {
         expect(lock.release).toHaveBeenCalled();
     });
 
+    it('lets go of a lock granted after it stopped', async () => {
+        const { awake, lock } = setup(true);
+        const pending = awake.check();
+        awake.stop();
+        await pending;
+        expect(lock.release).toHaveBeenCalled();
+        expect(awake.lock).toBeNull();
+    });
+
     it('does not ask in the background', async () => {
         const { awake, nav, doc } = setup(true);
         doc.hidden = true;

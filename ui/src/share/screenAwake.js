@@ -41,6 +41,7 @@ export default class ScreenAwake {
     }
 
     stop() {
+        this.stopped = true;
         clearInterval(this.timer);
         this.doc.removeEventListener?.('visibilitychange', this.check);
         this.release();
@@ -62,6 +63,11 @@ export default class ScreenAwake {
             this.asking = true;
             try {
                 const lock = await this.nav.wakeLock.request('screen');
+                // Stopped while the browser was still deciding: let go at once.
+                if (this.stopped) {
+                    lock.release?.().catch?.(() => {});
+                    return;
+                }
                 lock.addEventListener?.('release', () => {
                     if (this.lock === lock) this.lock = null;
                 });

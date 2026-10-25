@@ -37,11 +37,20 @@ export function watchNewPhotos({ emitter, getMyPeerId, win = window, doc = docum
         pending = 0;
         const api = notificationApi(win);
         if (!count || !api || api.permission !== 'granted' || !doc.hidden || !readPreference('notify')) return;
-        const notice = new api(doc.title || 'PhotoGroup', { body: noticeText(count), tag: 'photogroup-new-photos' });
-        notice.onclick = () => {
-            win.focus?.();
-            notice.close();
-        };
+        const title = doc.title || 'PhotoGroup';
+        const options = { body: noticeText(count), tag: 'photogroup-new-photos' };
+        try {
+            const notice = new api(title, options);
+            notice.onclick = () => {
+                win.focus?.();
+                notice.close();
+            };
+        } catch {
+            // Chrome on Android has no Notification constructor: the service worker shows it.
+            win.navigator?.serviceWorker?.ready
+                ?.then(registration => registration.showNotification(title, options))
+                .catch(() => {});
+        }
     };
 
     const handle = event => {

@@ -768,6 +768,7 @@ export default class TorrentAddition {
             delete serverPhoto.elem;
             delete serverPhoto.img;
             delete serverPhoto.previewUrl;
+            delete serverPhoto.previewOnly;
             delete serverPhoto.sharedAt;
             delete serverPhoto.tileKey;
             return serverPhoto;
