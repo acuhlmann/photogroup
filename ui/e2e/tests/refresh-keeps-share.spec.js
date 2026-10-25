@@ -41,11 +41,12 @@ test('a clip this browser lost comes back from the server copy after a refresh',
   const roomId = await shareClip(page);
 
   await dismissDialogs(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
-  const toggle = page.getByLabel(/Keep Copies for Latecomers/);
+  await page.getByRole('button', { name: /Room menu/ }).click();
+  await page.getByRole('menuitem', { name: 'Privacy' }).click();
+  const toggle = page.getByLabel('Keep copies for people who join later');
   await toggle.check();
   await expect(toggle).toBeChecked();
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'OK' }).click();
 
   await expect.poll(async () => {
     const room = await (await page.request.get(`/api/rooms/${roomId}`)).json();

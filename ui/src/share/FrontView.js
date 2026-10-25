@@ -10,6 +10,7 @@ import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import { createRoom } from './openRoom';
 import RecentRooms from './RecentRooms';
+import PrivateRoomSwitch from './PrivateRoomSwitch';
 
 const frames = [
     {
@@ -180,6 +181,7 @@ function FrontView({ master }) {
                     >
                         Start a room
                     </Button>
+                    <PrivateRoomSwitch />
                     <Button
                         onClick={() => master.emitter.emit('openQr')}
                         variant="outlined"

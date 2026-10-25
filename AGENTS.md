@@ -195,11 +195,19 @@ App.js (theme, layout)
   `name` (60 characters at most, '' clears) besides `keepCopies`, and the SSE
   `room` event sends it to everyone. `useRoom.js` puts it in the header and
   the tab title.
+- **Keep copies**: the room menu's Privacy dialog (`RoomPrivacy.js`) holds
+  the room's "Keep copies for people who join later" switch.
+- **Settings** (header, default and geek only) holds only things about this
+  browser: your name, colors (`colors.js`: same as device, light or dark,
+  localStorage `photogroup.colors`), logs (show, copy) and "Forget this
+  device" (`forgetDevice.js`: clears localStorage, sessionStorage and the
+  IndexedDB stores, then opens the front page). Room choices do not go here.
 - **Going back**: `recentRooms.js` keeps the rooms this browser opened in
   localStorage (`photogroup.rooms`), and `RecentRooms.js` lists them as "Your
   rooms" on both front pages. A deleted room is taken off the list.
-- **Private rooms** (opt in: the "Private rooms" switch in Settings, stored
-  as localStorage `encrypt`). A room started with it on gets a random AES-GCM
+- **Private rooms** (opt in: the "Private room" switch under "Start a room"
+  on both front pages, `PrivateRoomSwitch.js`, stored as localStorage
+  `encrypt`, off by default). A room started with it on gets a random AES-GCM
   key in its link after `#k=` (`privateRoom.js`, `security/roomKey.js`); the
   browser never sends that part to the server. The room's settings get
   `private: true` (one way). Each file is sealed before it is seeded, under a

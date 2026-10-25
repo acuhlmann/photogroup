@@ -52,8 +52,8 @@ graph TD
 The server copy is a last resort, not the default. It is uploaded only
 when someone is stuck waiting for a photo, or when a phone that has it
 switches to another app while someone still lacks it. It is deleted once
-everyone in the room has the photo. Turning on **Keep Copies for
-Latecomers** in Settings keeps every photo for 24 hours instead, for
+everyone in the room has the photo. Turning on **Keep copies for
+people who join later** in the room's Privacy dialog keeps every photo for 24 hours instead, for
 people who join after everyone else has left. A phone that switches apps
 counts as *away*, not gone, for 10 minutes. When it comes back it
 reconnects to the trackers at once instead of after the tracker

@@ -746,8 +746,7 @@ export default class TorrentAddition {
             const ext = file.name.split('.').pop().toLowerCase();
             return !this.master.STREAMING_FORMATS.includes(ext);
         })) {
-            opts.strategy = this.master.strategyPreference ? 'sequential' : 'rarest';
-            //opts.strategy = 'rarest';
+            opts.strategy = 'rarest';
         }
     }
 

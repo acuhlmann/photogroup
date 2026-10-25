@@ -32,11 +32,12 @@ async function roomPhoto(page, roomId) {
 
 async function keepCopiesForLatecomers(page) {
   await dismissDialogs(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
-  const toggle = page.getByLabel(/Keep Copies for Latecomers/);
+  await page.getByRole('button', { name: /Room menu/ }).click();
+  await page.getByRole('menuitem', { name: 'Privacy' }).click();
+  const toggle = page.getByLabel('Keep copies for people who join later');
   await toggle.check();
   await expect(toggle).toBeChecked();
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'OK' }).click();
 }
 
 test.describe('server-copy fallback', () => {

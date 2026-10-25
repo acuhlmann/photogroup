@@ -3,20 +3,22 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { ThemeProvider } from '@mui/material/styles';
 import App from "./App";
 import { createAppTheme } from './theme';
+import { isDark, onColorsChange, readColors } from './share/colors';
 
 export default function AppWrapper() {
-    const systemPrefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-    // Default to dark mode unless system explicitly prefers light
-    const prefersDarkMode = systemPrefersDark !== false;
+    const deviceIsDark = useMediaQuery('(prefers-color-scheme: dark)');
+    const [colors, setColors] = React.useState(readColors);
+    React.useEffect(() => onColorsChange(setColors), []);
+    const dark = isDark(colors, deviceIsDark);
 
     const theme = React.useMemo(
-        () => createAppTheme(prefersDarkMode ? 'dark' : 'light'),
-        [prefersDarkMode],
+        () => createAppTheme(dark ? 'dark' : 'light'),
+        [dark],
     );
 
     return (
         <ThemeProvider theme={theme}>
-            <App prefersDarkMode={prefersDarkMode}/>
+            <App theme={theme}/>
         </ThemeProvider>
     );
 }

@@ -2,7 +2,7 @@ import { keyForNewRoom, markPrivate, setKeyInAddress } from './privateRoom';
 
 /**
  * Create a room, put it in the address bar, and tell the page it is ready
- * for photos. With "Private rooms" on, the room gets a key in the address.
+ * for photos. With "Private room" on, the room gets a key in the address.
  */
 export async function createRoom(master) {
     master.emitter.emit('openRoomStart');

@@ -74,10 +74,6 @@ export default class TorrentMaster {
 
         this.syncWithPhotoEvents();
 
-        this.emitter.on('strategyPreference', value => {
-            this.strategyPreference = value;
-        });
-
         // The network panel mounts whenever it is opened, long after these
         // fire once, so keep the latest values for it to start from.
         this.emitter.on('localNetwork', chain => {
@@ -602,8 +598,7 @@ export default class TorrentMaster {
                     // Check if file has type property and it's not a video
                     return file.type && !file.type.includes('video/');
                 })) {
-                    opts.strategy = this.strategyPreference ? 'sequential' : 'rarest';
-                    //opts.strategy = 'rarest';
+                    opts.strategy = 'rarest';
                 }
             } else if(validInput && (validInput instanceof File || validInput instanceof Blob)) {
                 // Single File or Blob is valid
