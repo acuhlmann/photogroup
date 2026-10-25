@@ -26,6 +26,7 @@ import AndroidLocationNote from "./AndroidLocationNote";
 import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { captureDroppedHandles } from "./replaceOriginal";
+import { openSealedPhoto } from "./openSealed";
 import SimpleGrid from "../simple/SimpleGrid";
 import { CLIP_SIZE_NOTE } from "../torrent/ServerCopyLimits";
 
@@ -164,6 +165,19 @@ function Gallery(props) {
         });
     }, [master]);
 
+    /** A received file: a private room's photo is opened with the room key first. */
+    const finish = useCallback((photo, file) => {
+        if (!photo.secure || photo.isDecrypted) return mergePostloadMetadata(photo, file);
+        return openSealedPhoto(photo, file)
+            .then(plain => mergePostloadMetadata(photo, plain))
+            .catch(err => {
+                Logger.warn('Cannot open ' + (photo.fileName || photo.infoHash) + ': ' + err.message);
+                photo.sealedError = err.message;
+                photo.loading = false;
+                return photo;
+            });
+    }, [mergePostloadMetadata]);
+
     const addMediaToDom = useCallback((photos) => {
         const isSeeding = photos[0].seed;
         if(isSeeding) {
@@ -204,7 +218,7 @@ function Gallery(props) {
                             if (cachedBlob) {
                                 Logger.info('addMediaToDom: serving from blob cache for ' + (photo.fileName || photo.infoHash));
                                 const file = new File([cachedBlob], photo.fileName || 'image', { type: photo.fileType || cachedBlob.type });
-                                resolve(mergePostloadMetadata(photo, file));
+                                resolve(finish(photo, file));
                                 return;
                             }
                         } catch (cacheErr) {
@@ -215,7 +229,7 @@ function Gallery(props) {
                     // Fetched from the server copy (clips aren't in the image
                     // cache): the file is here, even with no torrent behind it.
                     if (photo.fromServerCopy && photo.cachedFile) {
-                        resolve(mergePostloadMetadata(photo, photo.cachedFile));
+                        resolve(finish(photo, photo.cachedFile));
                         return;
                     }
 
@@ -243,7 +257,7 @@ function Gallery(props) {
                                 stream.on('end', () => {
                                     const blob = new Blob(chunks, { type: photo.fileType || 'application/octet-stream' });
                                     const file = new File([blob], photo.fileName, { type: photo.fileType });
-                                    resolve(mergePostloadMetadata(photo, file));
+                                    resolve(finish(photo, file));
                                 });
                                 stream.on('error', err => {
                                     Logger.error('createReadStream error: ' + err.message);
@@ -281,7 +295,7 @@ function Gallery(props) {
                                     .then(response => response.blob())
                                     .then(blob => {
                                         const file = new File([blob], photo.fileName, { type: photo.fileType });
-                                        resolve(mergePostloadMetadata(photo, file));
+                                        resolve(finish(photo, file));
                                     })
                                     .catch(fetchErr => {
                                         Logger.error('fetch blob error: ' + fetchErr.message);
@@ -305,7 +319,7 @@ function Gallery(props) {
                                 reject(err.message);
                             } else {
                                 const file = new File([elem], photo.fileName, { type: photo.fileType });
-                                resolve(mergePostloadMetadata(photo, file));
+                                resolve(finish(photo, file));
                             }
                         });
                     } else {
@@ -325,7 +339,7 @@ function Gallery(props) {
                 }
             });
         }
-    }, [master, getBlob, mergePreloadMetadata, mergePostloadMetadata, renderTile, mergeStreamingMetadata]);
+    }, [master, getBlob, mergePreloadMetadata, mergePostloadMetadata, finish, renderTile, mergeStreamingMetadata]);
 
     const updateGalleryState = useCallback(() => {
         const hasImages = tiles && tiles.find(tile => !tile.isLoading && tile.img);

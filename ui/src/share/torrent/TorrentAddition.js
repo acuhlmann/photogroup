@@ -329,7 +329,8 @@ export default class TorrentAddition {
                 seed: true, rendering: true,
                 peerId: this.master.client.peerId, owners: [],
                 file: origFile, origFile: secure ? file : file, secure: secure,
-                picDateTaken: secure ? format(origFile.lastModified, formatToken) : format(file.lastModified, formatToken),
+                // A private room's photo shows its date once it is opened.
+                picDateTaken: format(secure ? Date.now() : file.lastModified, formatToken),
                 fileType: origFile.type, fileName: origFile.name, thumbnailFiles: []
             };
         });
@@ -467,7 +468,8 @@ export default class TorrentAddition {
                 const addedInfoHash = photos.map(photo => {
                     photo.infoHash = torrent.infoHash;
                     if(withoutThumbs.length > 1) {
-                        const matchingFile = withoutThumbs.find(file => file.name === photo.file.name);
+                        // The seeded file: sealed, under its neutral name, in a private room.
+                        const matchingFile = withoutThumbs.find(file => file.name === (photo.origFile || photo.file).name);
                         if(matchingFile) {
                             photo.infoHash += '-' + matchingFile.path;
                         }
@@ -528,8 +530,10 @@ export default class TorrentAddition {
                     // needing tracker/peer connectivity on resurrection.
                     withoutThumbs.forEach((file, index) => {
                         const photo = photos[index];
-                        if (photo.file && photo.infoHash && shouldCacheBlob(photo.fileType || photo.file.type)) {
-                            cachePut(photo.infoHash, photo.file, photo.fileType || photo.file.type).catch(err => {
+                        // A private room's photo is cached sealed, as everyone else gets it.
+                        const cached = photo.secure ? photo.origFile : photo.file;
+                        if (cached && photo.infoHash && shouldCacheBlob(photo.fileType || photo.file.type)) {
+                            cachePut(photo.infoHash, cached, photo.fileType || photo.file.type).catch(err => {
                                 Logger.warn('Failed to cache image blob for ' + photo.infoHash + ': ' + err);
                             });
                         }
@@ -708,6 +712,10 @@ export default class TorrentAddition {
     stripClientOnlyPhotoFields(photos) {
         const toBeShared = photos.map(photo => {
             const serverPhoto = {...photo};
+            // A private room's photo goes by its sealed file's neutral name.
+            if (photo.secure && photo.origFile) {
+                serverPhoto.fileName = photo.origFile.name;
+            }
             delete serverPhoto.isFake;
             delete serverPhoto.file;
             delete serverPhoto.origFile;

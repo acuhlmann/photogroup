@@ -9,14 +9,13 @@ import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
 import SaveRounded from "@mui/icons-material/SaveRounded";
 import IosShare from "@mui/icons-material/IosShare";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
+import LockRounded from "@mui/icons-material/LockRounded";
 import Logger from "js-logger";
 import update from "immutability-helper";
 import Button from "@mui/material/Button";
 import { withSnackbar } from '../compatibility/withSnackbar';
 import FileUtil from "../util/FileUtil";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
-import PasswordInput from "../security/PasswordInput";
-import WebCrypto from "../security/WebCrypto";
 import RenderContent from "./RenderContent";
 import { saveLabel, savePhoto } from "./savePhoto";
 import { primePhotoCopy, replaceFailureMessage, replaceKind, replaceLabel, replaceOriginal } from "./replaceOriginal";
@@ -42,8 +41,6 @@ function ContentTile(props) {
     const [downSpeed, setDownSpeed] = useState('');
     const [upSpeed, setUpSpeed] = useState('');
     const [timeRemaining, setTimeRemaining] = useState('');
-    const [password, setPassword] = useState('');
-    const [isDecrypted, setIsDecrypted] = useState(false);
     const [previewThumbnail, setPreviewThumbnail] = useState(null);
 
     const handleDisconnectNode = useCallback((photo) => {
@@ -158,29 +155,6 @@ function ContentTile(props) {
             .finally(() => setReplacing(false));
     }, [snack]);
 
-    const decrypt = useCallback(async (tile, password) => {
-        const elem = tile.elem;
-
-        const crypto = new WebCrypto();
-        let result;
-        try {
-            result = await crypto.decryptFile([elem], password, tile.fileName);
-        } catch(e) {
-            Logger.error('Error decrypting ' + e);
-            snack('Cannot Decrypt', 'error', false, 'bottom');
-            return;
-        }
-
-        tile.isDecrypted = true;
-
-        const file = new File([result.blob], tile.fileName, { type: tile.fileType });
-        tile.elem = file;
-        tile.file = file;
-        tile.img = URL.createObjectURL(file);
-
-        setIsDecrypted(true);
-    }, [snack]);
-
     const grouped = useMemo(() => {
         // Shared details show even before this browser has read the file.
         const summary = tile.metadata && master.metadata
@@ -221,30 +195,14 @@ function ContentTile(props) {
         return null;
     }
 
-    // Encrypted content that needs decryption
-    if(tile.secure && !tile.seed && !isDecrypted) {
+    // A private room's photo this page could not open: no key, or a wrong one.
+    if(tile.secure && tile.sealedError) {
         return (
-            <Paper
-                sx={{
-                    p: 2,
-                    borderRadius: 2,
-                    bgcolor: 'background.paper',
-                }}
-            >
-                <Typography variant="body2" sx={{ mb: 1.5 }}>
-                    Decrypt with
-                </Typography>
+            <Paper sx={{ p: 2, borderRadius: 2, bgcolor: 'background.paper' }}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                    <PasswordInput onChange={value => setPassword(value)} />
-                    <Button
-                        onClick={() => decrypt(tile, password)}
-                        color="primary"
-                        size="small"
-                        variant="contained"
-                    >
-                        Submit
-                    </Button>
-                    <IconButton onClick={() => handleDelete(tile)} size="small">
+                    <LockRounded fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="body2" sx={{ flex: 1 }}>{tile.sealedError}</Typography>
+                    <IconButton aria-label="Delete" onClick={() => handleDelete(tile)} size="small">
                         <DeleteRounded fontSize="small" />
                     </IconButton>
                 </Stack>

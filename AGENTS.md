@@ -198,6 +198,17 @@ App.js (theme, layout)
 - **Going back**: `recentRooms.js` keeps the rooms this browser opened in
   localStorage (`photogroup.rooms`), and `RecentRooms.js` lists them as "Your
   rooms" on both front pages. A deleted room is taken off the list.
+- **Private rooms** (opt in: the "Private rooms" switch in Settings, stored
+  as localStorage `encrypt`). A room started with it on gets a random AES-GCM
+  key in its link after `#k=` (`privateRoom.js`, `security/roomKey.js`); the
+  browser never sends that part to the server. The room's settings get
+  `private: true` (one way). Each file is sealed before it is seeded, under a
+  neutral name (`photo-<stamp>-<i>`); its real name, type and date are inside.
+  Receivers open it in `Gallery.finish` (`gallery/openSealed.js`). The room
+  name is sealed too (`sealed:…`). Shared details (titles, ratings, places,
+  renames) are off in a private room, since they would reach the server in
+  clear. The key is kept in "Your rooms" so the room opens again without it
+  in the link; a page without the key gets a notice and cannot add photos.
 
 ### State Management
 

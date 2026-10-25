@@ -1,10 +1,21 @@
-/** Create a room, put it in the address bar, and tell the page it is ready for photos. */
+import { keyForNewRoom, markPrivate, setKeyInAddress } from './privateRoom';
+
+/**
+ * Create a room, put it in the address bar, and tell the page it is ready
+ * for photos. With "Private rooms" on, the room gets a key in the address.
+ */
 export async function createRoom(master) {
     master.emitter.emit('openRoomStart');
 
     try {
+        const key = keyForNewRoom();
         await master.findExistingContent(master.service.createRoom, true);
         master.service.changeUrl('room', master.service.id);
+        if (key) {
+            setKeyInAddress(key);
+            markPrivate(true);
+            master.emitter.emit('roomSettings', await master.service.updateRoomSettings({ private: true }));
+        }
 
         master.emitter.emit('openRoomEnd');
         master.emitter.emit('readyToUpload');

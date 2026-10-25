@@ -23,6 +23,7 @@ import RenderContent from './RenderContent';
 import { saveLabel, savePhoto } from './savePhoto';
 import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
 import { canSaveDetails, saveDetails } from './metadata/saveDetails';
+import { isPrivateRoom } from '../privateRoom';
 import { canReadTorrentFile } from './saveRoom';
 
 /** Display the selected media in a dialog with navigation, saving, and shared metadata editing. */
@@ -303,7 +304,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                         summary={summary}
                         tile={tile}
                         fileName={fileName}
-                        onFileNameChange={handleFileNameChange}
+                        onFileNameChange={isPrivateRoom() ? undefined : handleFileNameChange}
                         onSaveDetails={canSaveDetails(master) ? handleSaveDetails : undefined}
                         myPeerId={master.client && master.client.peerId}
                     />

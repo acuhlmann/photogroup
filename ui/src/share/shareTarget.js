@@ -59,7 +59,7 @@ export function clearShareFlag(win = window) {
     if (!params.has('shared')) return;
     params.delete('shared');
     const query = params.toString();
-    win.history.replaceState({}, '', win.location.pathname + (query ? `?${query}` : ''));
+    win.history.replaceState({}, '', win.location.pathname + (query ? `?${query}` : '') + win.location.hash);
 }
 
 function openDb(idb) {

@@ -9,9 +9,10 @@ import IconButton from '@mui/material/IconButton';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import { forgetRoom, listRooms, roomLabel } from './recentRooms';
+import { keyHash } from './privateRoom';
 
-export function openRoomLink(id) {
-    return window.location.pathname + '?room=' + encodeURIComponent(id);
+export function openRoomLink(room) {
+    return window.location.pathname + '?room=' + encodeURIComponent(room.id) + keyHash(room.key);
 }
 
 /**
@@ -44,7 +45,7 @@ export default function RecentRooms({ now = Date.now() }) {
                     }}>
                         <ButtonBase
                             component="a"
-                            href={openRoomLink(room.id)}
+                            href={openRoomLink(room)}
                             sx={{ flex: 1, minWidth: 0, justifyContent: 'flex-start', gap: 1, px: 1.75, py: 1.25, textAlign: 'left' }}
                         >
                             <Box sx={{ flex: 1, minWidth: 0 }}>

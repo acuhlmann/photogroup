@@ -55,8 +55,7 @@
     "vis-react": "^0.5.1",
     "visibilityjs": "^2.0.2",
     "webamp": "^2.3.1",
-    "webtorrent": "^3.0.21",
-    "zxcvbn": "^4.4.2"
+    "webtorrent": "^3.0.21"
   },
   "scripts": {
     "dev": "vite",

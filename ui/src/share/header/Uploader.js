@@ -6,7 +6,6 @@ import { withStyles } from '@mui/styles';
 
 import LoaderView from './LoaderView';
 
-import IconButton from "@mui/material/IconButton";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import { headerLabelSx } from "./headerButtonSx";
@@ -16,12 +15,11 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import DialogTitle from "@mui/material/DialogTitle";
 import Typography from "@mui/material/Typography";
-import CloseRounded from "@mui/icons-material/CloseRounded";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 
-import PasswordInput from "../security/PasswordInput";
-import WebCrypto from "../security/WebCrypto";
+import { missingRoomKey, PRIVATE_NO_KEY, roomCryptoKey } from "../privateRoom";
+import { sealFile } from "../security/roomKey";
 import { partitionStripped } from "../gallery/metadata/strippedLocation";
 import { ACCEPT, ANDROID_ACCEPT, KEEP_LOCATION_STEPS, onAndroid } from "./androidUpload";
 import { isZip, unpackZips } from "./unzipMedia";
@@ -41,17 +39,10 @@ const styles = theme => ({
 
 function Uploader({classes, model, emitter, showButton = true}) {
     const [visible, setVisible] = useState(false);
-    const [open, setOpen] = useState(false);
     const [disabled, setDisabled] = useState(true);
-    const [password, setPassword] = useState('');
-    const [files, setFiles] = useState(null);
-    const [secure, setSecure] = useState(false);
     const [held, setHeld] = useState([]);
     const [unpacking, setUnpacking] = useState(false);
     const uploaderDomRef = useRef(null);
-    // With encryption on, files that were fine wait here while the held ones
-    // are settled, so the password dialog opens once, for all of them.
-    const waitingRef = useRef([]);
 
     useEffect(() => {
         const handleReadyToUpload = () => {
@@ -59,17 +50,10 @@ function Uploader({classes, model, emitter, showButton = true}) {
             setDisabled(false);
         };
 
-
-        const handleEncrypt = (value) => {
-            setSecure(value);
-        };
-
         model.emitter.on('readyToUpload', handleReadyToUpload);
-        model.emitter.on('encrypt', handleEncrypt);
 
         return () => {
             model.emitter.removeListener('readyToUpload', handleReadyToUpload);
-            model.emitter.removeListener('encrypt', handleEncrypt);
         };
     }, [model.emitter]);
 
@@ -81,24 +65,29 @@ function Uploader({classes, model, emitter, showButton = true}) {
         });
     }, [model]);
 
-    const secureShare = useCallback(async () => {
-        const crypto = new WebCrypto();
-        const result = await crypto.encryptFile(files, password);
-        //const text = await result.blob.text();
-
-        Logger.info('secureShare ' + result);
-        share([result].map((item, index) => item.blob), true, files);
-        setOpen(false);
-    }, [files, password, share]);
-
-    const proceed = useCallback((chosen) => {
-        if(secure) {
-            setFiles(chosen);
-            setOpen(true);
-        } else {
-            share(chosen);
+    /**
+     * In a private room every file is sealed with the room's key first; the
+     * names in the torrent and on the server say nothing about the photos.
+     */
+    const proceed = useCallback(async (chosen) => {
+        if(missingRoomKey()) {
+            emitter.emit('showError', PRIVATE_NO_KEY);
+            return;
         }
-    }, [secure, share]);
+        const key = await roomCryptoKey();
+        if(!key) {
+            share(chosen);
+            return;
+        }
+        try {
+            const stamp = Date.now().toString(36);
+            const sealed = await Promise.all(chosen.map((file, index) => sealFile(key, file, `photo-${stamp}-${index}`)));
+            share(sealed, true, chosen);
+        } catch(err) {
+            Logger.error('sealing failed: ' + (err && err.message ? err.message : err));
+            emitter.emit('showError', 'Could not encrypt the photos. Try again.');
+        }
+    }, [emitter, share]);
 
     /**
      * Share what was picked. On Android, zips are unpacked into the photos in
@@ -126,18 +115,11 @@ function Uploader({classes, model, emitter, showButton = true}) {
             if(!intact.length && uploaderDomRef.current) {
                 uploaderDomRef.current.value = '';
             }
-            if(secure) {
-                waitingRef.current = [...waitingRef.current, ...intact];
-                return;
-            }
         }
-        // An empty pick (the picker closed after Pick again) still lets waiting files go ahead.
-        const ready = [...waitingRef.current, ...intact];
-        waitingRef.current = [];
-        if(ready.length) {
-            proceed(ready);
+        if(intact.length) {
+            proceed(intact);
         }
-    }, [emitter, proceed, secure]);
+    }, [emitter, proceed]);
 
     const handleUpload = useCallback((event) => {
         uploaderDomRef.current = event.target || event.srcElement;
@@ -168,21 +150,13 @@ function Uploader({classes, model, emitter, showButton = true}) {
     }, []);
 
     const shareWithoutLocation = useCallback(() => {
-        const files = [...waitingRef.current, ...held];
-        waitingRef.current = [];
+        const files = held;
         setHeld([]);
         proceed(files);
     }, [held, proceed]);
 
-    // Closing leaves the held files out; anything waiting goes ahead.
-    const closeHeld = useCallback(() => {
-        const files = waitingRef.current;
-        waitingRef.current = [];
-        setHeld([]);
-        if(files.length) {
-            proceed(files);
-        }
-    }, [proceed]);
+    // Closing leaves the held files out.
+    const closeHeld = useCallback(() => setHeld([]), []);
 
     const hasRoom = () => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -235,26 +209,6 @@ function Uploader({classes, model, emitter, showButton = true}) {
                     </Button>
                 </label>
             )}
-
-            <Dialog
-                open={open}
-                onClose={() => setOpen(false)}
-                keepMounted
-            >
-                <DialogContent>
-                    <span style={{display: 'flex'}}>
-                        <PasswordInput onChange={setPassword} />
-                        <Button onClick={secureShare} color="primary">
-                            Encrypt
-                        </Button>
-                    </span>
-                </DialogContent>
-                <DialogActions>
-                    <IconButton onClick={() => setOpen(false)}>
-                        <CloseRounded />
-                    </IconButton>
-                </DialogActions>
-            </Dialog>
 
             <Dialog
                 open={held.length > 0}

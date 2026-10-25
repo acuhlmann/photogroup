@@ -10,6 +10,7 @@ global.Buffer = Buffer;
 globalThis.Buffer = Buffer;
 
 import { prepareShareLaunch, registerShareTarget } from './share/shareTarget';
+import { restoreRoomKey } from './share/privateRoom';
 
 import 'core-js';
 import React from 'react';
@@ -24,6 +25,8 @@ window.EventSource =  global.EventSource =  NativeEventSource || EventSourcePoly
 
 // Photos shared from other apps open "/?shared=1"; send them to the last room before it is read.
 prepareShareLaunch();
+// A private room opened without "#k=…" gets the key this browser kept for it.
+restoreRoomKey();
 
 const container = document.getElementById('root');
 const root = createRoot(container);

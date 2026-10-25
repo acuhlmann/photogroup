@@ -17,6 +17,8 @@ import { useTheme } from '@mui/material/styles';
 import Fade from '@mui/material/Fade';
 import { headerButtonSx, headerLabelSx } from './headerButtonSx';
 import InviteCode from '../InviteCode';
+import { setKeyInAddress } from '../privateRoom';
+import { keyFromHash } from '../security/roomKey';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Fade ref={ref} {...props} />;
@@ -52,10 +54,11 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
 
         Logger.info('handleScan data ' + data);
 
-        let urlParams;
+        let urlParams, key;
         try {
             const url = new URL(data);
             urlParams = new URLSearchParams(url.search);
+            key = keyFromHash(url.hash);
         } catch(e) {
             Logger.error('handleScan error ' + e.message);
             return;
@@ -64,6 +67,8 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
         if(urlParams.has('room')) {
             master.service.id = urlParams.get('room');
             master.service.hasRoom = true;
+            // A private room's key, before the room's photos arrive.
+            setKeyInAddress(key);
             Logger.info('handleScan id ' + master.service.id);
             await master.findExistingContent(master.service.joinRoom);
             master.service.changeUrl('room', master.service.id);

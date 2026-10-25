@@ -17,6 +17,13 @@ describe('RoomPrivacy', () => {
         expect(privacyLines({ keepCopies: true }).join(' ')).toContain('keeps a server copy of each photo for 24 hours');
     });
 
+    it('says what a private room hides from the server', () => {
+        const text = privacyLines({ isPrivate: true }).join(' ');
+        expect(text).toContain('This room is private.');
+        expect(text).toContain('cannot read them');
+        expect(text).not.toContain('fingerprint');
+    });
+
     it('deletes the room for everyone after asking once', async () => {
         const master = {
             client: { peerId: 'me' },
