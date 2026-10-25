@@ -626,6 +626,10 @@ export default class Rooms {
             if (keepCopies !== undefined && typeof keepCopies !== 'boolean') return response.status(400).send('Expected keepCopies true or false');
             // A private room stays private: its photos are sealed with a key the server never sees.
             if (makePrivate !== undefined && makePrivate !== true) return response.status(400).send('A room can only be made private');
+            // Photos already shared in clear can't become private.
+            if (makePrivate && !room.settings?.private && room.photos.length) {
+                return response.status(400).send('A room can only be made private before photos are added');
+            }
             const roomName = name === undefined ? undefined : Rooms.roomName(name);
             if (roomName === null) return response.status(400).send(`Expected a name of ${Rooms.ROOM_NAME_MAX} characters or less`);
             const settings = { ...room.settings };
@@ -637,6 +641,10 @@ export default class Rooms {
             if (roomName === '') delete settings.name;
             else if (roomName !== undefined) settings.name = roomName;
             if (makePrivate) settings.private = true;
+            // A private room's name is sealed with its key, or there is none.
+            if (settings.private && settings.name && !settings.name.startsWith('sealed:')) {
+                return response.status(400).send('A private room name must be sealed');
+            }
             room.settings = settings;
             this.updateChannel.send({ event: 'room', data: { settings: room.settings } }, this.allRoomClients(room));
             this.releaseCopiesEveryoneHas(room);

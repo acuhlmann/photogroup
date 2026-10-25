@@ -11,8 +11,9 @@ export async function createRoom(master) {
         const key = keyForNewRoom();
         await master.findExistingContent(master.service.createRoom, true);
         master.service.changeUrl('room', master.service.id);
+        // Also drops a key left over from another room.
+        setKeyInAddress(key);
         if (key) {
-            setKeyInAddress(key);
             markPrivate(true);
             master.emitter.emit('roomSettings', await master.service.updateRoomSettings({ private: true }));
         }

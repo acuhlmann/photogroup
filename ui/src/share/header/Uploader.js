@@ -81,7 +81,11 @@ function Uploader({classes, model, emitter, showButton = true}) {
         }
         try {
             const stamp = Date.now().toString(36);
-            const sealed = await Promise.all(chosen.map((file, index) => sealFile(key, file, `photo-${stamp}-${index}`)));
+            // One at a time: each file is in memory twice while it is sealed.
+            const sealed = [];
+            for (const [index, file] of chosen.entries()) {
+                sealed.push(await sealFile(key, file, `photo-${stamp}-${index}`));
+            }
             share(sealed, true, chosen);
         } catch(err) {
             Logger.error('sealing failed: ' + (err && err.message ? err.message : err));

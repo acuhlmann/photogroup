@@ -21,7 +21,7 @@ export function privacyLines({ keepCopies = false, copies = 0, isPrivate = false
                 + 'Anyone with the full link can open the photos. People cannot add titles, ratings or places here.'
             : null,
         isPrivate
-            ? 'The server keeps the room: its link and, for each photo, the magnet link and the encrypted name. '
+            ? 'The server keeps the room: its ID and, for each photo, the magnet link and the encrypted name. '
                 + 'It deletes the room when nobody uses it for 30 days.'
             : 'The server keeps the room: its link and, for each photo, the magnet link, name, type, size, date and fingerprint, '
                 + 'and the details people add (title, description, rating, keywords, location). '

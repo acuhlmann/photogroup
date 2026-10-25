@@ -91,7 +91,7 @@ function getLogColor(level) {
     return 'text.secondary';
 }
 
-export const PRIVATE_ROOMS_TEXT = 'Rooms that you start are private. Each phone encrypts the photos, '
+export const PRIVATE_ROOMS_TEXT = 'When this is on, rooms that you start are private. Each phone encrypts the photos, '
     + 'their file names and the room name with a key in the room link. The server cannot read them. '
     + 'In a private room you cannot share titles, ratings or places, and people need the full link or code to see the photos. '
     + 'Rooms that you started before stay as they are.';

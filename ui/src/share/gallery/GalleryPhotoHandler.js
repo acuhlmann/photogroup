@@ -34,6 +34,7 @@ export default class GalleryPhotoHandler {
                     const photos = event.item.map(item => {
                         const existing = state.find(tile => tile.infoHash === item.infoHash);
                         if (existing && existing !== item) {
+                            item = withOpenedName(existing, item);
                             // Resuming re-syncs the room and may hand us a fresh
                             // blob URL for a photo already on screen; swapping
                             // the src re-decodes the image and flashes the tile.
