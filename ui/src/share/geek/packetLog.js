@@ -18,7 +18,7 @@ function torrentName(torrent) {
 
 /**
  * One log entry for an event, or null for events not worth a line.
- * `kind` is the channel it came on: wire, rx, tx, peer, link, photo, ice, sse, copy.
+ * `kind` is the channel it came on: wire, trk, path, rx, tx, peer, link, photo, ice, sse, copy.
  */
 export function describeEvent(name, args) {
     const [first, second, third] = args;
@@ -100,6 +100,22 @@ export function describeEvent(name, args) {
             text: `server copy ${arrow} ${first.stage}${bytes} · ${first.name || short(first.infoHash, 10)}${why}`,
         };
     }
+    case 'trackerAnnounce':
+        if (!first) return null;
+        return { kind: 'trk', key: 'announce' + (first.torrent?.infoHash || ''), text: `announce ${torrentName(first.torrent)} · tracker answered` };
+    case 'linkStats': {
+        // One line when a path is new or changes; the label carries the rest.
+        if (!first?.changed || !first.local) return null;
+        const relay = first.relayProtocol ? ` via TURN/${first.relayProtocol}` : '';
+        const rtt = Number.isFinite(first.rtt) ? ` · rtt ${Math.round(first.rtt)} ms` : '';
+        return {
+            kind: 'path',
+            // Chrome hides a host address behind mDNS; it reports none then.
+            text: `path peer ${short(first.peerId)} · ${first.local} ⇄ ${first.remote} ${first.protocol || ''}${relay}${rtt}`
+                + (first.localAddress || first.remoteAddress
+                    ? ` · ${first.localAddress || 'mDNS'} ⇄ ${first.remoteAddress || 'mDNS'}` : ''),
+        };
+    }
     case 'sseReconnected':
         return { kind: 'sse', text: 'event stream reconnected' };
     default:
@@ -109,5 +125,5 @@ export function describeEvent(name, args) {
 
 export const LOGGED_EVENTS = [
     'wire', 'downloadProgress', 'uploadProgress', 'pieceReceived', 'pieceSent', 'peers', 'peerConnections',
-    'photos', 'pcEvent', 'localNetwork', 'sseReconnected', 'serverCopy',
+    'photos', 'pcEvent', 'localNetwork', 'sseReconnected', 'serverCopy', 'trackerAnnounce', 'linkStats',
 ];

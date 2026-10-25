@@ -172,7 +172,7 @@ export function ExplainCard({ timeline }) {
                 {explained.sees}
             </Typography>
             <Typography sx={{ fontFamily: mono, fontSize: '0.58rem', color: 'text.disabled', mt: 0.75 }}>
-                ← → previous / next event · space lets the traffic run
+                ← → previous / next event · Space plays from here · L goes live
             </Typography>
         </Box>
     );

@@ -80,17 +80,40 @@ describe('GeekStage', () => {
         const hold = div.querySelector('[aria-label="Hold the traffic"]');
         expect(hold).not.toBeNull();
 
+        expect(div.querySelector('[data-testid="transport-mode"]').textContent).toBe('LIVE');
+
         await act(async () => hold.click());
         expect(div.querySelector('[data-testid="paused-mark"]')).not.toBeNull();
-        expect(div.querySelector('[aria-label="Let the traffic run"]')).not.toBeNull();
+        expect(div.querySelector('[data-testid="transport-mode"]').textContent).toBe('HELD');
+        expect(div.querySelector('[aria-label="Play from here"]')).not.toBeNull();
 
         // While held, traffic the room sends is not lost: it waits behind the playhead.
         await act(async () => {
             master.emitter.emit('peers', { type: 'add', item: { name: 'Ana', peerId: 'p1' } });
         });
-        expect(div.textContent).toContain('1 new');
-        await act(async () => Array.from(div.querySelectorAll('button')).find(b => b.textContent.includes('new')).click());
+        expect(div.querySelector('[data-testid="go-live"]').textContent).toBe('Live +1');
+        await act(async () => div.querySelector('[data-testid="go-live"]').click());
         expect(div.querySelector('[data-testid="paused-mark"]')).toBeNull();
+        expect(div.querySelector('[data-testid="go-live"]')).toBeNull();
+        await act(async () => root.unmount());
+    });
+
+    it('plays the held traffic on from there, at the speed picked', async () => {
+        const master = { emitter: new EventEmitter(), client: { peerId: 'me' } };
+        const div = document.createElement('div');
+        const root = createRoot(div);
+        await act(async () => root.render(<GeekStage master={master} tiles={[]} />));
+        await act(async () => div.querySelector('[aria-label="Hold the traffic"]').click());
+        await act(async () => div.querySelector('[aria-label="Play from here"]').click());
+        const mode = () => div.querySelector('[data-testid="transport-mode"]').textContent;
+        expect(mode()).toBe('REPLAY 1×');
+        expect(div.querySelector('[data-testid="paused-mark"]').textContent).toContain('replay 1×');
+        await act(async () => div.querySelector('[aria-label="Replay speed 1×"]').click());
+        expect(mode()).toBe('REPLAY 4×');
+        await act(async () => div.querySelector('[aria-label="Hold the replay"]').click());
+        expect(mode()).toBe('HELD');
+        await act(async () => div.querySelector('[data-testid="go-live"]').click());
+        expect(mode()).toBe('LIVE');
         await act(async () => root.unmount());
     });
 

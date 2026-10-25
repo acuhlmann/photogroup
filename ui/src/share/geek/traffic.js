@@ -64,7 +64,7 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
     };
 
     /** Write one event: its log line, plus what crossed and what to count. */
-    const record = (name, args, { flights = [], routeId, count, speed, note, sticky } = {}) => {
+    const record = (name, args, { flights = [], routeId, count, speed, note, sticky, bytes, stats } = {}) => {
         const line = describeEvent(name, args) || {};
         timeline.push({
             kind: line.kind || name,
@@ -76,22 +76,35 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
             speed,
             note,
             sticky,
+            bytes,
+            stats,
         });
     };
 
-    // The server pushes every room change to everyone at once.
-    const broadcast = name => (event) => {
-        const type = event && event.type ? ':' + event.type : '';
-        if (throttled('sse' + name + type, 400)) return;
+    // The server pushes every room change to everyone at once, on each
+    // device's event stream. One dot per real SSE message, sized as it came.
+    const onSse = (event = {}) => {
+        const type = event.type ? ':' + event.type : '';
+        if (throttled('sse' + event.channel + type, 150)) return;
         const myId = getMyId();
-        const added = name === 'photos' && event?.type === 'add'
-            ? [].concat(event.item || []).some(photo => photo?.peerId === myId) : false;
-        const flights = byKind('sse').map(route => flight(route, {
-            reverse: true,
-            label: route.peerId === myId ? `SSE ${name}${type}` : '',
-        }));
-        if (added) flights.push(flight(mine('sse'), { label: 'POST magnet' }));
-        record(name, [event], { flights: flights.filter(f => f && (f.label || !f.reverse)) });
+        const size = event.bytes ? ` ${FileUtil.formatBytes(event.bytes)}` : '';
+        record('sse', [event], {
+            bytes: event.bytes,
+            flights: byKind('sse').map(route => flight(route, {
+                reverse: true,
+                label: route.peerId === myId ? `SSE ${event.channel}${type}${size}` : '',
+            })),
+        });
+    };
+
+    // A photo this device adds goes up to the room as its magnet link.
+    const onPhotos = event => {
+        const myId = getMyId();
+        const added = event?.type === 'add'
+            && [].concat(event.item || []).some(photo => photo?.peerId === myId && photo?.isFake);
+        // A photo's details changing on this device is not traffic.
+        if (!added && !describeEvent('photos', [event])) return;
+        record('photos', [event], { flights: added ? [flight(mine('sse'), { label: 'POST magnet' })] : [] });
     };
 
     // Pieces are real WebTorrent transfers: one entry each, so the route label
@@ -110,6 +123,7 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
         record(kind === 'rx' ? 'pieceReceived' : 'pieceSent', [event], {
             routeId: route.id,
             count: 1,
+            bytes: size,
             flights: drawn ? [flight(route, {
                 reverse: kind === 'rx' ? !towardsMe : towardsMe,
                 rgb: kind === 'rx' ? RX : TX,
@@ -131,12 +145,30 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
         wired.forEach(route => record(name, [event], { routeId: route.id, speed: event?.speed }));
     };
 
+    // A wire is a peer connection that just opened: the tracker carried the
+    // offer and the answer, then the two browsers swap the BitTorrent
+    // handshake on the new data channel.
     const onWire = (event, address, torrent) => {
         if (throttled('wire', 500)) return;
+        const direct = transferRoutesFor(routes(), getMyId(), { wires: [{ peerId: event?.peerId }] })[0];
         record('wire', [event, address, torrent], {
             flights: [
+                flight(mine('tracker'), { label: 'offer' }),
+                flight(mine('tracker'), { reverse: true, label: 'answer', speed: SPEEDS.answer }),
+                direct && flight(direct, { label: 'handshake' }),
+                direct && flight(direct, { reverse: true, label: 'bitfield', speed: SPEEDS.answer }),
+            ],
+        });
+    };
+
+    // The tracker answered an announce: which photos this device has, and
+    // back come peers that want them.
+    const onTracker = (event = {}) => {
+        if (throttled('announce' + (event.torrent?.infoHash || ''), 1000)) return;
+        record('trackerAnnounce', [event], {
+            flights: [
                 flight(mine('tracker'), { label: 'announce' }),
-                flight(mine('tracker'), { reverse: true, label: 'offer/answer', speed: SPEEDS.answer }),
+                flight(mine('tracker'), { reverse: true, label: 'peers', speed: SPEEDS.answer }),
             ],
         });
     };
@@ -168,21 +200,65 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
     const onLocalNetwork = chain => record('localNetwork', [chain]);
     const onReconnected = () => record('sseReconnected', []);
 
-    // Only our own NAT asks STUN; the others gather on their own devices.
-    const onIce = (type, value) => {
-        if (type !== 'icegatheringstatechange' || value !== 'gathering') return;
+    // STUN and TURN, as they really go: gathering sends a Binding Request to
+    // STUN (and an Allocate Request to TURN, when there is one) out through
+    // our NAT. A server-reflexive candidate is STUN's answer, naming the
+    // public address it saw; a relay candidate is TURN's, naming the relay
+    // address. No answer, no packet back. Only our own requests are drawn;
+    // the others gather on their own devices.
+    const stunRoutes = () => {
         const nat = (mine('sse')?.path || [])[1];
-        const flights = byKind('stun')
-            .filter(route => route.path[0] === nat)
-            .flatMap(route => [
-                flight(route, { label: 'binding request' }),
-                flight(route, { reverse: true, label: 'binding response', speed: SPEEDS.binding }),
-            ]);
+        const viaNat = nat ? byKind('stun').filter(route => route.path[0] === nat) : [];
+        return viaNat.length ? viaNat : byKind('stun').filter(route => route.peerId === getMyId());
+    };
+    const onIce = (type, value) => {
+        const state = String(value || '');
+        // A state change with no state says nothing.
+        if (!state) return;
+        const flights = [];
+        if (type === 'icegatheringstatechange' && state === 'gathering') {
+            stunRoutes().forEach(route => flights.push(flight(route, { label: 'Binding Request' })));
+            const turn = mine('turnctl');
+            if (turn) flights.push(flight(turn, { label: 'Allocate Request' }));
+        } else if (type === 'icecandidate' && state.startsWith('srflx')) {
+            const seen = state.slice('srflx'.length).trim();
+            stunRoutes().forEach(route => flights.push(flight(route, {
+                reverse: true, label: `Binding Success ${seen}`, speed: SPEEDS.binding,
+            })));
+        } else if (type === 'icecandidate' && state.startsWith('relay')) {
+            const relayed = state.slice('relay'.length).trim();
+            const turn = mine('turnctl');
+            if (turn) flights.push(flight(turn, { reverse: true, label: `Allocate Success ${relayed}`, speed: SPEEDS.binding }));
+        }
         record('pcEvent', [type, value], { flights });
     };
 
+    // What WebRTC reports for each peer connection, once a second: the
+    // route's round-trip time and speed, and the STUN checks that keep the
+    // path open, drawn on the path itself (through TURN when relayed).
+    const pathOf = new Map();
+    const onLinkStats = (stat = {}) => {
+        const route = transferRoutesFor(routes(), getMyId(), { wires: [{ peerId: stat.peerId }] })[0];
+        const path = [stat.local, stat.remote, stat.protocol, stat.relayProtocol].join('|');
+        // A line when the path is new or changes; the rest only feeds the label.
+        const changed = pathOf.get(stat.peerId) !== path;
+        pathOf.set(stat.peerId, path);
+        const rtt = stat.rtt === null || stat.rtt === undefined ? '' : `${Math.round(stat.rtt)} ms`;
+        const flights = [];
+        if (route && stat.checks) flights.push(flight(route, { label: 'STUN check' }));
+        if (route && stat.answers) {
+            flights.push(flight(route, { reverse: true, label: rtt ? `check OK ${rtt}` : 'check OK', speed: SPEEDS.binding }));
+        }
+        record('linkStats', [{ ...stat, changed }], {
+            routeId: route?.id,
+            flights,
+            stats: { rtt: stat.rtt, rx: stat.rx, tx: stat.tx, local: stat.local, remote: stat.remote, relay: stat.relayProtocol },
+        });
+    };
+
     const handlers = [
-        ['photos', broadcast('photos')],
+        ['sse', onSse],
+        ['photos', onPhotos],
         ['peers', onPeers],
         ['peerConnections', onConnections],
         ['downloadProgress', onSpeed('rx')],
@@ -190,8 +266,10 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
         ['pieceReceived', onPiece('rx')],
         ['pieceSent', onPiece('tx')],
         ['wire', onWire],
+        ['trackerAnnounce', onTracker],
         ['serverCopy', onServerCopy],
         ['pcEvent', onIce],
+        ['linkStats', onLinkStats],
         ['localNetwork', onLocalNetwork],
         ['sseReconnected', onReconnected],
     ];
@@ -228,10 +306,14 @@ export function flowAt(entries, routeId, clock = Date.now(), window = FLOW_MS) {
             // Walking newest first, so the first hit is the most recent.
             if (!state.at) state.at = entry.at;
         }
+        if (entry.stats && !state.stats) {
+            state.stats = entry.stats;
+            if (!state.at) state.at = entry.at;
+        }
         if (entry.speed && !state[entry.kind + 'Speed']) {
             state[entry.kind + 'Speed'] = entry.speed;
             if (!state.at) state.at = entry.at;
         }
     }
-    return state.rx || state.tx || state.rxSpeed || state.txSpeed || state.note ? state : null;
+    return state.rx || state.tx || state.rxSpeed || state.txSpeed || state.note || state.stats ? state : null;
 }
