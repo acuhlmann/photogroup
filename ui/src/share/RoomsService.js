@@ -454,6 +454,7 @@ export default class RoomsService {
             sessionId: this.sessionId,
             peerId: this.master.client.peerId,
             originPlatform: this.master.originPlatform,
+            device: this.master.device,
             name: localStorage.getItem('nickname'),
             networkChain: this.networkChain,
             // Rejoining while another app is in front (the stream came back

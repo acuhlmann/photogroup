@@ -98,7 +98,7 @@ function OwnersList(props) {
             name = _.truncate(name, {length: 10});
             const peer = peers.items.find(item => item.peerId === owner.peerId);
             if(peer) {
-                name = peer.name || _.truncate(peer.originPlatform, {length: 10});
+                name = peer.name || peer.device || _.truncate(peer.originPlatform, {length: 10});
             }
             return name;
         }).join(', ');

@@ -370,7 +370,7 @@ export function shortPlatform(platform) {
 /** Prefer "you" for the local editor, then a nickname, platform name, or "someone". */
 function editorName(editedBy, myPeerId) {
     if (myPeerId && editedBy.peerId === myPeerId) return 'you';
-    return editedBy.name || shortPlatform(editedBy.platform) || 'someone';
+    return editedBy.name || editedBy.device || shortPlatform(editedBy.platform) || 'someone';
 }
 
 /** Show editor attribution with a relative timestamp when valid; omit absent editors. */
