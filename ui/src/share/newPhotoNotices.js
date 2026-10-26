@@ -1,8 +1,9 @@
 import { readPreference } from './preferences';
 
 // "Tell me about new photos": while this page is in the background, show a
-// notification when someone else adds photos. Only while the browser still
-// runs the page; there are no push messages from the server.
+// notification when someone else adds photos. This needs the page to still be
+// running; pushNotices.js covers the case where the browser was closed. Both
+// share one tag per room, so a phone is told about a burst of photos once.
 
 export const BATCH_MS = 2000;
 
@@ -24,10 +25,19 @@ export function noticeText(count) {
 }
 
 /**
+ * One notice per room, so a photo in the beach room does not replace the news
+ * that the birthday room has photos. Matches photosTag() on the server: a phone
+ * whose page is still open and one that is closed get the same grouping.
+ */
+export function photosTag(roomId) {
+    return roomId ? 'photogroup-new-photos-' + roomId : 'photogroup-new-photos';
+}
+
+/**
  * Listen for photos from other people and show one notification for each
  * burst of them. Returns a function that stops listening.
  */
-export function watchNewPhotos({ emitter, getMyPeerId, win = window, doc = document, setTimer = setTimeout } = {}) {
+export function watchNewPhotos({ emitter, getMyPeerId, getRoomId, win = window, doc = document, setTimer = setTimeout } = {}) {
     let pending = 0;
     let timer = null;
 
@@ -38,7 +48,7 @@ export function watchNewPhotos({ emitter, getMyPeerId, win = window, doc = docum
         const api = notificationApi(win);
         if (!count || !api || api.permission !== 'granted' || !doc.hidden || !readPreference('notify')) return;
         const title = doc.title || 'PhotoGroup';
-        const options = { body: noticeText(count), tag: 'photogroup-new-photos' };
+        const options = { body: noticeText(count), tag: photosTag(getRoomId?.()) };
         try {
             const notice = new api(title, options);
             notice.onclick = () => {

@@ -32,6 +32,7 @@ import RoomMenu from "./share/header/RoomMenu";
 import useRoom from "./share/useRoom";
 import ScreenAwake from "./share/screenAwake";
 import { watchNewPhotos } from "./share/newPhotoNotices";
+import { syncPush } from "./share/pushNotices";
 
 function App({theme: propsTheme}) {
     //Logger.useDefaults();
@@ -88,10 +89,22 @@ function App({theme: propsTheme}) {
     useEffect(() => {
         const master = masterRef.current;
         const awake = new ScreenAwake({ master }).start();
-        const stopNotices = watchNewPhotos({ emitter: master.emitter, getMyPeerId: () => master.client?.peerId });
+        const stopNotices = watchNewPhotos({
+            emitter: master.emitter,
+            getMyPeerId: () => master.client?.peerId,
+            getRoomId: () => master.service?.id,
+        });
+        // Every room open re-leaves this browser's push endpoint with the
+        // server: the session the server matches a message against is new each
+        // start, so without this a phone looking at the room would also be
+        // sent a push about it.
+        const sync = () => { syncPush({ service: master.service }).catch(() => {}); };
+        master.emitter.on('readyToUpload', sync);
+        if (master.me) sync();
         return () => {
             awake.stop();
             stopNotices();
+            master.emitter.removeListener('readyToUpload', sync);
         };
     }, []);
 

@@ -8,6 +8,7 @@ import EventEmitter from 'eventemitter3';
 import IceServers from './IceServers.js';
 import IpTranslator from './IpTranslator.js';
 import Tracker from './Tracker.js';
+import PushService from './PushService.js';
 import Rooms from './Rooms.js';
 
 // Helper for immediate logging with file backup (for PowerShell buffering issues)
@@ -52,7 +53,28 @@ async function init() {
     await tracker.start();
     logImmediate('[App] Tracker started');
 
-    const rooms = new Rooms(updateChannel, remoteLog, app, emitter, ice, tracker);
+    // Push is a nicety: a broken key file or an unreadable subscription list
+    // must not keep the rooms from starting, so a failure here is logged and
+    // the app carries on without push.
+    let push = null;
+    try {
+        push = new PushService({
+            app,
+            remoteLog,
+            // Tests must never reach a real push service, and a two second
+            // batch would only slow them down.
+            ...(process.env.NODE_ENV === 'test'
+                ? { send: () => Promise.resolve({ statusCode: 201 }), batchMs: 0 }
+                : {}),
+        });
+        push.start();
+        logImmediate(push.publicKey ? '[App] Push started' : '[App] Push has no usable keys, sending none');
+    } catch (err) {
+        logImmediate('[App] Push unavailable: ' + (err && err.message ? err.message : err));
+        push = null;
+    }
+
+    const rooms = new Rooms(updateChannel, remoteLog, app, emitter, ice, tracker, undefined, push);
     rooms.start();
     logImmediate('[App] Rooms started');
     logImmediate('[App] Initialization complete - server ready');

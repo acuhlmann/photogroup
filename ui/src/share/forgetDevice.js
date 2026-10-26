@@ -11,7 +11,25 @@ function deleteDatabase(idb, name) {
     });
 }
 
+/**
+ * Take this browser off the push list before its session data goes, so a
+ * forgotten device is not being told about rooms it no longer knows the way
+ * into. The browser subscription itself is dropped, which stops every room at
+ * once: the rooms left holding this endpoint on the server are cleaned up when
+ * the push service answers a later attempt with a gone.
+ */
+async function forgetPush(win) {
+    const worker = win?.navigator?.serviceWorker;
+    if (!worker || !('PushManager' in win)) return;
+    try {
+        const registration = await worker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) await subscription.unsubscribe();
+    } catch { /* a browser that will not hand one over is one that will not be told */ }
+}
+
 export async function forgetDevice({ win = window, idb = win.indexedDB } = {}) {
+    await forgetPush(win);
     try { win.localStorage.clear(); } catch { /* storage blocked */ }
     try { win.sessionStorage.clear(); } catch { /* storage blocked */ }
     if (idb) {

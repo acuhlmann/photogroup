@@ -16,6 +16,7 @@ import SimpleFront from "./simple/SimpleFront";
 import SimpleRoomBar from "./simple/SimpleRoomBar";
 import WebTorrent from 'webtorrent';
 import { takeRoomNotice } from "./roomNotice";
+import NotifyPrompt from './NotifyPrompt';
 
 const BACKUP_SNACK = 'serverCopyBackup';
 
@@ -192,6 +193,8 @@ function ShareCanvas({master, mode = 'default', roomName = '', enqueueSnackbar, 
                     pb: 2,
                 }}>
                     {simple ? <SimpleRoomBar master={master} roomName={roomName} /> : null}
+                    {/* The one offer of a notice, seen as soon as there is a room to be told about. */}
+                    <NotifyPrompt master={master} />
                     <Gallery master={master} variant={simple ? 'simple' : 'full'}
                         showNetworkReadout={false} onTilesChange={setTiles} />
                 </Box>

@@ -23,6 +23,7 @@ import LockRounded from '@mui/icons-material/LockRounded';
 
 import RoomPrivacy from '../RoomPrivacy';
 import { leaveRoomNotice } from '../roomNotice';
+import { dropRoomSubscription } from '../pushNotices';
 import { roomCryptoKey } from '../privateRoom';
 import { sealText } from '../security/roomKey';
 
@@ -106,8 +107,12 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
         action();
     };
 
-    const leave = () => {
+    const leave = async () => {
         leaveRoomNotice(LEFT_ROOM);
+        // Off this room's list first: a person who left should not be told
+        // about the photos others go on adding to it. Awaited, because the
+        // reload that follows would otherwise cut the request off.
+        await dropRoomSubscription({ service: master.service });
         master.leaveRoomAndReload();
     };
 
