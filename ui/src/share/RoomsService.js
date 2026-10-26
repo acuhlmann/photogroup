@@ -727,6 +727,23 @@ export default class RoomsService {
         return response.json();
     }
 
+    /**
+     * Give a clip that came without a poster frame the one this device made,
+     * so devices that can't decode the clip still see what it is.
+     */
+    async sharePoster(infoHash, poster) {
+        const response = await fetch(this.url + '/' + this.id + '/photos/poster', {
+            method: 'PUT',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ infoHash, poster, sessionId: this.sessionId, sessionToken: this.sessionToken }),
+        });
+        if (!response.ok) throw new Error('Could not share the poster (' + response.status + ')');
+        return response.json();
+    }
+
     delete(infoHash) {
 
         return fetch(this.url + '/' + this.id + '/photos/', {

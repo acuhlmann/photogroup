@@ -17,7 +17,8 @@ import { withSnackbar } from '../compatibility/withSnackbar';
 import FileUtil from "../util/FileUtil";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
 import RenderContent from "./RenderContent";
-import { saveLabel, savePhoto } from "./savePhoto";
+import { saveLabel } from "./savePhoto";
+import { saveToDevice } from "./saveToDevice";
 import { primePhotoCopy, replaceFailureMessage, replaceKind, replaceLabel, replaceOriginal } from "./replaceOriginal";
 import { groupMetadataForDisplay } from "./metadata/groupPhotoMetadata";
 import { RatingStars, ColorLabel, StarPicker } from "./metadata/MediaMetadataPanel";
@@ -104,8 +105,10 @@ function ContentTile(props) {
     const downloadFromServer = useCallback((tile) => {
         Logger.info('downloadFromServer ' + tile.fileName);
         setLocalDownloading(prev => update(prev, {$push: [tile.infoHash]}));
-        savePhoto(tile)
-            .then(() => {
+        // The share sheet on an iPhone, so "Save Image" puts it in Photos.
+        saveToDevice([tile])
+            .then(result => {
+                if (result === 'cancelled') return;
                 setLocalDownloaded(prev => update(prev, {$push: [tile.infoHash]}));
             })
             .catch(err => {

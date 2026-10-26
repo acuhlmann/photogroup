@@ -76,6 +76,8 @@ function showFirstFrame(tile, elem) {
     });
 }
 
+export const CAN_NOT_PLAY = 'This browser cannot play this clip. Save it and open it in another app.';
+
 // WebTorrent 2+ dropped File#appendTo. Play the local copy when we have one
 // (the uploader always does), otherwise wait for the download and play its blob.
 // A clip shows its poster frame meanwhile, so nobody stares at an empty box.
@@ -96,6 +98,19 @@ export function renderMedia(tile, file, node, opts, callback) {
     elem.playsInline = true;
     if (tile.isVideo) {
         elem.preload = 'metadata';
+    }
+    if (tile.isVideo) {
+        // This browser can't decode the clip (an iPhone's HEVC clip on Linux,
+        // say). Keep the box with its poster and say why it does not play.
+        elem.addEventListener('error', () => {
+            if (!node.isConnected || node.querySelector('[data-can-not-play]')) return;
+            const note = document.createElement('div');
+            note.dataset.canNotPlay = 'true';
+            note.style.cssText = 'padding:8px 12px;font-size:0.8rem;text-align:center;opacity:0.8';
+            note.textContent = CAN_NOT_PLAY;
+            node.appendChild(note);
+            if (!elem.poster) elem.style.minHeight = '120px';
+        }, { once: true });
     }
     const local = tile.elem || tile.file;
     if (!local) node.appendChild(elem);
@@ -574,6 +589,12 @@ function RenderContent(props) {
             }
         };
     }, [tile.infoHash]); // Only depend on infoHash - when it changes, it's a new tile
+
+    // A poster the room sent later (another device grabbed a frame this one could not).
+    useEffect(() => {
+        const video = tile.poster && mediaContainerRef.current && mediaContainerRef.current.querySelector('video');
+        if (video && !video.poster) video.poster = tile.poster;
+    }, [tile.poster]);
 
     /** Render the current image with its preview during decoding, or an audio/video container. */
     const renderMediaDom = () => {

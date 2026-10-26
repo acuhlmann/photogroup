@@ -3,9 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 
-vi.mock('./saveToDevice', () => ({ saveToDevice: vi.fn().mockResolvedValue('saved') }));
+vi.mock('../gallery/saveToDevice', () => ({
+    saveToDevice: vi.fn().mockResolvedValue('saved'),
+    savedWhereText: () => 'It goes to your gallery app.',
+    saveWay: () => 'each',
+}));
 
-const { saveToDevice } = await import('./saveToDevice');
+const { saveToDevice } = await import('../gallery/saveToDevice');
 const { default: SimpleGrid } = await import('./SimpleGrid');
 const { clearHave, rememberHave } = await import('../gallery/alreadyHave');
 
@@ -93,6 +97,39 @@ describe('SimpleGrid', () => {
         expect(div.textContent).toContain('Arriving · 50%');
         expect(div.querySelector('img')).not.toBeNull();
         expect(div.querySelector('[aria-label="Play this clip"]')).toBeNull();
+        await act(async () => root.unmount());
+    });
+
+    it('puts photos from other people first', async () => {
+        const { div, root } = await render([ready('mine', { seed: true }), ready('theirs')]);
+        const pictures = Array.from(div.querySelectorAll('[data-testid="simple-tile"] img')).map(img => img.getAttribute('src'));
+        expect(pictures).toEqual(['blob:theirs', 'blob:mine']);
+        await act(async () => root.unmount());
+    });
+
+    it('goes through the new photos to keep or skip each, then saves the kept ones', async () => {
+        const tiles = [ready('a'), ready('b'), ready('c'), ready('mine', { seed: true })];
+        const { div, root } = await render(tiles);
+        const choose = Array.from(div.querySelectorAll('button')).find(button => button.textContent.startsWith('Choose what to save'));
+        expect(choose.textContent).toBe('Choose what to save (3)');
+        await act(async () => choose.click());
+
+        const dialog = () => document.querySelector('[role="dialog"]');
+        const press = async label => {
+            const button = Array.from(dialog().querySelectorAll('button')).find(item => item.textContent === label);
+            await act(async () => button.click());
+        };
+        expect(dialog().textContent).toContain('1 of 3');
+        expect(dialog().querySelector('[data-testid="media-stage"] img').getAttribute('src')).toBe('blob:a');
+        await press('Keep');
+        expect(dialog().textContent).toContain('2 of 3');
+        await press('Skip');
+        await press('Keep');
+        expect(dialog().textContent).toContain('You kept 2 of 3');
+        expect(dialog().textContent).toContain('It goes to your gallery app.');
+        await press('Save 2 photos to your phone');
+        expect(saveToDevice).toHaveBeenCalledWith([tiles[0], tiles[2]], expect.objectContaining({ roomId: 'r1' }));
+        expect(dialog().textContent).toContain('Saved 2 photos');
         await act(async () => root.unmount());
     });
 });
