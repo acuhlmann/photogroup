@@ -20,8 +20,9 @@ export function usePreview(tile) {
             loadPreviewUrl(tile).then(url => live && url && setFetched({ key, url }));
         }
         return () => { live = false; };
+    // A streamed clip can stop "loading" before its file is done: try again once it is.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [key, ready, tile && tile.torrentFileThumb, tile && tile.loading]);
+    }, [key, ready, tile && tile.torrentFileThumb, tile && tile.loading, !!(tile && tile.torrentFile && tile.torrentFile.done)]);
     return ready || (fetched.key === key ? fetched.url : null);
 }
 
@@ -68,7 +69,9 @@ export function useSwipe(onSwipe) {
     const start = useRef(null);
     return {
         onTouchStart: event => {
-            start.current = event.touches.length === 1
+            // A drag on a clip's controls scrubs the clip; it is not a swipe.
+            const onClip = event.target && event.target.tagName === 'VIDEO';
+            start.current = event.touches.length === 1 && !onClip
                 ? { x: event.touches[0].clientX, y: event.touches[0].clientY }
                 : null;
         },

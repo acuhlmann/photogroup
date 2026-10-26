@@ -25,7 +25,8 @@ function MediaStage({ tile, onStep, hasPrev, hasNext, children }) {
     useEffect(() => {
         const onKey = event => {
             const tag = event.target && event.target.tagName;
-            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+            // A focused clip seeks with the arrow keys; leave them to it.
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'VIDEO') return;
             if (event.key === 'ArrowLeft' && hasPrev) onStep(-1);
             if (event.key === 'ArrowRight' && hasNext) onStep(1);
         };

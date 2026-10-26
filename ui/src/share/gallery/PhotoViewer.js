@@ -177,7 +177,10 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
             open
             onClose={onClose}
             fullScreen
-            aria-labelledby="photo-viewer-title"
+            // The title sits in the details panel; without it, name the dialog by the file.
+            {...(showDetails
+                ? { 'aria-labelledby': 'photo-viewer-title' }
+                : { 'aria-label': tile.fileName || 'Photo viewer' })}
             slotProps={{
                 paper: {
                     sx: {

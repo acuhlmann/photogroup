@@ -28,6 +28,7 @@ const COPY_TIMES = ['serverCopyStartedAt', 'serverCopyStoredAt', 'serverCopyExpi
 // devices that can't (an iPhone's HEVC clip on a Linux laptop, say).
 const MAX_POSTER_LENGTH = 64 * 1024;
 const POSTER_PREFIX = 'data:image/jpeg;base64,';
+const JPEG_START = Buffer.from([0xff, 0xd8, 0xff]);
 const SERVER_MANAGED_FIELDS = ['poster', 'owners', 'hasServerCopy', 'serverCopySize', 'serverCopyReceived',
     'serverCopyRequestedAt', 'serverCopyUploader', ...COPY_TIMES];
 const RELAY_SWEEP_MS = 5 * 60 * 1000;
@@ -404,6 +405,10 @@ export default class Rooms {
             const poster = body.poster;
             if(typeof poster !== 'string' || !poster.startsWith(POSTER_PREFIX)
                 || poster.length > MAX_POSTER_LENGTH || !/^[A-Za-z0-9+/=]+$/.test(poster.slice(POSTER_PREFIX.length))) {
+                return response.status(400).send('Expected a small JPEG data URL');
+            }
+            // Only a real JPEG: the first poster stays, so junk would block a good one.
+            if(!Buffer.from(poster.slice(POSTER_PREFIX.length), 'base64').subarray(0, 3).equals(JPEG_START)) {
                 return response.status(400).send('Expected a small JPEG data URL');
             }
             const photo = typeof body.infoHash === 'string' && this.findPhoto(room, body.infoHash);

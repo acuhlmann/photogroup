@@ -11,7 +11,8 @@ describe('Clip posters from the room', () => {
     let alice;
     let bob;
     const infoHash = 'posterhash123';
-    const jpeg = 'data:image/jpeg;base64,' + Buffer.from('jpeg bytes').toString('base64');
+    const jpegOf = text => 'data:image/jpeg;base64,' + Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from(text)]).toString('base64');
+    const jpeg = jpegOf('jpeg bytes');
 
     async function join(name) {
         const peer = { peerId: name + '-peer-' + Date.now(), sessionId: name + '-session-' + Date.now(), originPlatform: 'test', name };
@@ -38,7 +39,7 @@ describe('Clip posters from the room', () => {
         assert.strictEqual(room.body.photos[0].poster, undefined, 'an upload cannot bring its own');
 
         await send(bob, { poster: jpeg }).expect(200);
-        const other = 'data:image/jpeg;base64,' + Buffer.from('other').toString('base64');
+        const other = jpegOf('other');
         const second = await send(alice, { poster: other }).expect(200);
         assert.strictEqual(second.body.poster, jpeg);
         const after = await request(app).get(`/api/rooms/${roomId}`).expect(200);
@@ -48,6 +49,7 @@ describe('Clip posters from the room', () => {
     it('takes posters only from members, only small JPEG data URLs, and not through the generic update', async () => {
         await send({ sessionId: 'nobody', sessionToken: 'x' }, { poster: jpeg }).expect(403);
         await send(bob, { poster: 'https://example.com/a.jpg' }).expect(400);
+        await send(bob, { poster: 'data:image/jpeg;base64,' + Buffer.from('not a jpeg').toString('base64') }).expect(400);
         await send(bob, { poster: 'data:image/jpeg;base64,' + 'A'.repeat(70 * 1024) }).expect(400);
         await send(bob, { poster: jpeg, infoHash: 'missing' }).expect(404);
         await request(app).put(`/api/rooms/${roomId}/photos/`).send([{ infoHash, poster: jpeg }]).expect(200);

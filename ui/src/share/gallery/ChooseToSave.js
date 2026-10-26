@@ -50,6 +50,9 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
     const [error, setError] = useState('');
     // On a share sheet, the files must be ready at the tap; make them as photos are kept.
     const files = useRef(new Map()).current;
+    // Files that could not be made ahead; saveToDevice makes them again at the tap.
+    const failed = useRef(new Set()).current;
+    const [result, setResult] = useState(null);
     const [, setMade] = useState(0);
     const sharing = saveWay() === 'share';
 
@@ -71,7 +74,8 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
                     setMade(count => count + 1);
                 })
                 .catch(err => {
-                    files.delete(key);
+                    failed.add(key);
+                    setMade(count => count + 1);
                     Logger.warn('Could not read ' + item.fileName + ': ' + (err && err.message ? err.message : err));
                 });
         });
@@ -91,7 +95,7 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
         step(1);
     };
 
-    const readyCount = keptTiles.filter(item => hereInFull(item) && (!sharing || files.get(keyOf(item)))).length;
+    const readyCount = keptTiles.filter(item => hereInFull(item) && (!sharing || files.get(keyOf(item)) || failed.has(keyOf(item)))).length;
     const allReady = keptTiles.length > 0 && readyCount === keptTiles.length;
 
     const save = () => {
@@ -99,7 +103,10 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
         setError('');
         const made = new Map(Array.from(files).filter(([, file]) => file));
         saveToDevice(keptTiles, { roomId, files: made })
-            .then(result => setState(result === 'cancelled' ? 'choosing' : 'saved'))
+            .then(outcome => {
+                setResult(outcome);
+                setState(outcome === 'cancelled' ? 'choosing' : 'saved');
+            })
             .catch(err => {
                 Logger.error('Save kept photos: ' + (err && err.message ? err.message : err));
                 setError("Couldn't save that. Try again in a moment.");
@@ -173,7 +180,11 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
                                 Saved {itemWord(keptTiles.length, words)}
                             </Typography>
                             <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.8)' }}>
-                                {savedWhereText(keptTiles.length, { done: true })}
+                                {savedWhereText(keptTiles.length, {
+                                    done: true,
+                                    // The share sheet was refused, so they were downloaded instead.
+                                    ...(sharing && result === 'saved' ? { way: 'download' } : {}),
+                                })}
                             </Typography>
                             <Button variant="contained" size="large" onClick={onClose} sx={{ textTransform: 'none', fontWeight: 600, minWidth: 200 }}>
                                 Close

@@ -74,6 +74,7 @@ describe('where saving goes', () => {
     const matchMedia = window.matchMedia;
     const agent = Object.getOwnPropertyDescriptor(window.navigator, 'userAgent');
     const setAgent = value => Object.defineProperty(window.navigator, 'userAgent', { value, configurable: true });
+    beforeEach(() => saveRoom.mockClear());
     afterEach(() => {
         if (agent) Object.defineProperty(window.navigator, 'userAgent', agent);
         else delete window.navigator.userAgent;
