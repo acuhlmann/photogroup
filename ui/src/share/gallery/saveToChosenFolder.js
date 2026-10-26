@@ -103,15 +103,20 @@ FolderWalk.propTypes = {
  * surfaces outside the keep-or-skip chooser.
  */
 export default function ChooseFolderButton({ tiles, device = 'device', size = 'small', variant = 'outlined', onDone }) {
-    const [open, setOpen] = useState(false);
+    // The photos the walk opened with, frozen. The caller's own list shrinks as
+    // photos are saved - a saved one stops being "new" - and a walk that read
+    // the live list would collapse into the single-photo button and unmount
+    // itself, taking its progress and the open dialog with it.
+    const [walk, setWalk] = useState(null);
     const [saved, setSaved] = useState(() => new Set());
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState('');
-    if (!canChooseFolder() || tiles.length === 0) return null;
+    if (!canChooseFolder() || (!walk && tiles.length === 0)) return null;
+    const list = walk || tiles;
     // Photos this browser has never written still need a folder, even on a reopen.
-    const left = tiles.filter(tile => !saved.has(keyOf(tile)));
-    const done = tiles.length - left.length;
-    const one = tiles.length === 1 ? tiles[0] : null;
+    const left = list.filter(tile => !saved.has(keyOf(tile)));
+    const done = list.length - left.length;
+    const one = !walk && tiles.length === 1 ? tiles[0] : null;
 
     const saveOne = () => {
         setBusy(true);
@@ -149,16 +154,16 @@ export default function ChooseFolderButton({ tiles, device = 'device', size = 's
     return (
         <>
             <Button size={size} variant={variant} startIcon={<DriveFolderUploadRounded fontSize="small" />}
-                onClick={() => setOpen(true)}
+                onClick={() => setWalk(tiles)}
                 title="Opens the save dialog for each photo, so you choose the folder. On a phone, DCIM/Camera is the gallery."
                 sx={{ textTransform: 'none', whiteSpace: 'nowrap', fontWeight: 600 }}>
                 {done && left.length ? `Choose where each one goes (${left.length} left)` : 'Choose where each one goes'}
             </Button>
-            {open && (
-                <Dialog open fullScreen onClose={() => setOpen(false)}
+            {walk && (
+                <Dialog open fullScreen onClose={() => setWalk(null)}
                     slotProps={{ paper: { 'aria-label': 'Choose where to save', sx: { bgcolor: '#000', color: '#fff', display: 'flex', flexDirection: 'column' } } }}>
                     <Stack direction="row" sx={{ justifyContent: 'flex-end', px: 1.5, py: 1, minHeight: 56 }}>
-                        <IconButton aria-label="Close" onClick={() => setOpen(false)} sx={{ color: '#fff' }}>
+                        <IconButton aria-label="Close" onClick={() => setWalk(null)} sx={{ color: '#fff' }}>
                             <CloseRounded />
                         </IconButton>
                     </Stack>
@@ -166,24 +171,24 @@ export default function ChooseFolderButton({ tiles, device = 'device', size = 's
                         {left.length ? (
                             <FolderWalk
                                 tiles={left}
-                                total={tiles.length}
+                                total={list.length}
                                 device={device}
                                 onSaved={item => {
                                     const key = keyOf(item);
                                     setSaved(previous => new Set(previous).add(key));
                                     if (left.length === 1) {
-                                        setOpen(false);
-                                        onDone?.(tiles.length);
+                                        setWalk(null);
+                                        onDone?.(list.length);
                                     }
                                 }}
-                                onBack={() => setOpen(false)}
+                                onBack={() => setWalk(null)}
                             />
                         ) : (
                             <>
                                 <Typography variant="h5" component="h2" sx={{ fontWeight: 700 }}>
                                     Chose a folder for {done} {done === 1 ? 'photo' : 'photos'}
                                 </Typography>
-                                <Button variant="contained" size="large" onClick={() => setOpen(false)} sx={{ textTransform: 'none', fontWeight: 600, minWidth: 200 }}>
+                                <Button variant="contained" size="large" onClick={() => setWalk(null)} sx={{ textTransform: 'none', fontWeight: 600, minWidth: 200 }}>
                                     Done
                                 </Button>
                             </>

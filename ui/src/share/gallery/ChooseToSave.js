@@ -113,12 +113,18 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
             });
     };
 
-    /** Some went to the folders they chose, some to wherever this device downloads. */
+    /**
+     * Some went to the folders they chose, some to wherever this device
+     * downloads. Counted from the kept photos, not from `chosen`, because a
+     * photo walked into a folder and then skipped on a second look is no
+     * longer a photo this screen is describing.
+     */
     const savedWhereLine = () => {
         const way = sharing && result === 'saved' ? { way: 'download' } : {};
-        if (!chosen.size) return savedWhereText(keptTiles.length, { done: true, ...way });
+        const chosenCount = keptTiles.length - rest.length;
+        if (!chosenCount) return savedWhereText(keptTiles.length, { done: true, ...way });
         if (!rest.length) return savedWhereText(keptTiles.length, { way: 'chosen' });
-        return `${savedWhereText(rest.length, { done: true, ...way })} ${savedWhereText(chosen.size, { way: 'chosen' })}`;
+        return `${savedWhereText(rest.length, { done: true, ...way })} ${savedWhereText(chosenCount, { way: 'chosen' })}`;
     };
 
     const isKept = tile && kept.has(keyOf(tile));

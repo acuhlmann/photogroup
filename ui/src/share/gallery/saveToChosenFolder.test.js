@@ -92,6 +92,24 @@ describe('saveToChosenFolder', () => {
         await act(async () => root.unmount());
     });
 
+    // A toolbar lists only the photos still to choose, so saving one makes the
+    // caller's list shrink while the walk is open. The walk keeps the list it
+    // opened with instead of collapsing into the single-photo button.
+    it('keeps the walk when the caller drops a saved photo from its own list', async () => {
+        const tiles = [tile('a'), tile('b')];
+        const { div, root } = await render(<ChooseFolderButton tiles={tiles} device="phone" />);
+        await press(div, 'Choose where each one goes');
+        await press(document.querySelector('[role="dialog"]'), 'Choose a folder');
+
+        await act(async () => root.render(<ChooseFolderButton tiles={[tiles[1]]} device="phone" />));
+        const dialog = document.querySelector('[role="dialog"]');
+        expect(dialog, 'the walk closed when the list shrank').not.toBeNull();
+        expect(dialog.textContent).toContain('2 of 2');
+        expect(dialog.textContent).toContain('b.jpg');
+        expect(div.textContent).not.toContain('Choose where to save');
+        await act(async () => root.unmount());
+    });
+
     it('counts the folders already chosen when the walk is opened again', async () => {
         const tiles = [tile('a'), tile('b')];
         const { div, root } = await render(<ChooseFolderButton tiles={tiles} device="phone" />);

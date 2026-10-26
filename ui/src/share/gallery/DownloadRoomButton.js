@@ -9,9 +9,9 @@ import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import FolderZipRounded from '@mui/icons-material/FolderZipRounded';
 import MoreVertRounded from '@mui/icons-material/MoreVertRounded';
-import { isReadyToSave, saveRoom } from './saveRoom';
+import { isReadyToSave, saveRoom, zipName } from './saveRoom';
 import { alreadyHave, useHaveChanges } from './alreadyHave';
-import { canChooseFolder, replaceFailureMessage, saveBlobToChosenFolder } from './replaceOriginal';
+import { canChooseFolder, chooseFileToSave, writeChosenFile } from './replaceOriginal';
 import { canFindOnDevice, findOnDevice, pickFolder } from './findOnDevice';
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -36,22 +36,40 @@ function DownloadRoomButton({ tiles, roomId }) {
     const readyFresh = fresh.filter(isReadyToSave).length;
     const readyAll = tiles.filter(isReadyToSave).length;
 
-    /** `toFolder` asks the browser's save dialog where the zip goes, instead of Downloads. */
+    /** `toFolder` puts the zip where the person says, instead of in Downloads. */
     const download = (chosen, leftOut, toFolder = false) => {
         setMenu(null);
         setStatus('');
-        setProgress(`Zipping 0 of ${chosen.filter(isReadyToSave).length}…`);
-        saveRoom(chosen, {
+        const ready = chosen.filter(isReadyToSave).length;
+        const zipInto = save => saveRoom(chosen, {
             roomId,
             onProgress: (done, total) => setProgress(`Zipping ${done} of ${total}…`),
-            save: toFolder ? saveBlobToChosenFolder : undefined,
-        })
+            save,
+        });
+
+        // The folder is chosen before the zip is made, not after. Building it
+        // reads and rewrites a photo at a time, which can take longer than the
+        // browser counts this tap as fresh, and a stale tap loses the dialog.
+        let start;
+        if (toFolder) {
+            setProgress('Choosing a folder…');
+            start = chooseFileToSave(zipName(roomId), 'application/zip')
+                .then(handle => {
+                    setProgress(`Zipping 0 of ${ready}…`);
+                    return zipInto(blob => writeChosenFile(handle, blob));
+                });
+        } else {
+            setProgress(`Zipping 0 of ${ready}…`);
+            start = zipInto(undefined);
+        }
+
+        start
             .then(({ saved, skipped }) => setStatus([
                 toFolder ? `Saved ${plural(saved, 'photo')} where you chose` : `Saved ${plural(saved, 'photo')}`,
                 leftOut ? `${leftOut} you have, not included` : '',
                 skipped ? `${skipped} not ready, not included` : '',
             ].filter(Boolean).join(' · ')))
-            // Closing the save dialog is not a failure worth a message.
+            // A dialog closed without choosing is not a failure worth a message.
             .catch(err => setStatus(err && err.cancelled ? 'Nothing was saved' : 'Could not make the zip: ' + message(err)))
             .finally(() => setProgress(null));
     };

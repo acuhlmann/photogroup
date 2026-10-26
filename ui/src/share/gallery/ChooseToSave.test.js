@@ -123,6 +123,29 @@ describe('Choose what to save: picking the folder', () => {
         await act(async () => view.root.unmount());
     });
 
+    // A photo given a folder and then skipped on a second look is no longer a
+    // kept photo, so the done screen must not count it among the chosen ones.
+    it('leaves a skipped photo out of the folders it chose', async () => {
+        const view = await open(tiles);
+        await keptBoth(view);
+        await press(view.dialog, 'Choose where each one goes');
+        await press(view.dialog, 'Choose a folder');
+        await press(view.dialog, 'Save the rest to your phone');
+
+        await press(view.dialog, 'Look again');
+        await press(view.dialog, 'Skip');
+        // The next photo is the one already kept, so the way back to the summary
+        // is "Done", not another "Keep".
+        await press(view.dialog, 'Done');
+        expect(view.dialog().textContent).toContain('You kept 1 of 2');
+
+        await press(view.dialog, 'Save 1 photo to your phone');
+        expect(view.dialog().textContent).toContain('Saved 1 photo');
+        expect(view.dialog().textContent).toContain('DOWNLOADED');
+        expect(view.dialog().textContent).not.toContain('CHOSEN');
+        await act(async () => view.root.unmount());
+    });
+
     it('stays put when the save dialog is closed without choosing', async () => {
         replaceOriginal.mockRejectedValue(Object.assign(new Error('closed'), { name: 'AbortError', cancelled: true }));
         const view = await open(tiles);

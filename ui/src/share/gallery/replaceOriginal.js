@@ -224,11 +224,25 @@ export function canChooseFolder() {
 }
 
 /**
- * Write bytes the room produced (a photo, the room's zip) to a place the person
- * just named. Needs a tap: the dialog will not open on its own. Throws
- * `SaveCancelled` when the dialog is closed, so a cancelled save never counts
- * as saved.
+ * Ask where a file goes, on the tap that asks. Resolves to the chosen handle;
+ * `writeChosenFile` puts bytes into it later. Throws `SaveCancelled` when the
+ * dialog is closed, so a save nobody finished never counts as saved.
+ *
+ * Two steps because the browser opens this dialog only while the tap is still
+ * fresh, and making the bytes - a room's zip, read and rewritten photo by
+ * photo - can outlast that window and lose the permission. Callers whose bytes
+ * are already in hand can use `saveBlobToChosenFolder`.
  */
+export function chooseFileToSave(fileName, fileType = '') {
+    return openDialog(fileName, fileType);
+}
+
+/** Write into the place `chooseFileToSave` returned. */
+export function writeChosenFile(handle, blob) {
+    return writeHandle(handle, blob);
+}
+
+/** Write bytes that are already made, straight through the save dialog. */
 export async function saveBlobToChosenFolder(blob, fileName, fileType = '') {
     const handle = await openDialog(fileName, fileType);
     await writeHandle(handle, blob);
