@@ -28,6 +28,7 @@ import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { captureDroppedHandles } from "./replaceOriginal";
 import { openSealedPhoto } from "./openSealed";
 import SimpleGrid from "../simple/SimpleGrid";
+import ChooseToSave from "./ChooseToSave";
 import { CLIP_SIZE_NOTE } from "../torrent/ServerCopyLimits";
 
 /** A tile's identity across updates; an upload's infoHash changes once it is hashed. */
@@ -562,7 +563,10 @@ function Gallery(props) {
                         unplaced={arranged.unplaced}
                         shown={visible.length}
                         total={arranged.total}
-                        actions={<DownloadRoomButton tiles={tiles} roomId={master.service && master.service.id} />}
+                        actions={<>
+                            <ChooseToSave tiles={visible} roomId={master.service && master.service.id} />
+                            <DownloadRoomButton tiles={tiles} roomId={master.service && master.service.id} />
+                        </>}
                     />
                 )}
                 {mode === 'map' && tiles.length > 1 && (

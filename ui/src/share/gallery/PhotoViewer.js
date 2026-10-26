@@ -12,6 +12,7 @@ import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
 import SaveRounded from '@mui/icons-material/SaveRounded';
 import IosShare from '@mui/icons-material/IosShare';
+import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import _ from 'lodash';
@@ -20,16 +21,25 @@ import FileUtil from '../util/FileUtil';
 import OwnersList from './OwnersList';
 import MediaMetadataPanel from './metadata/MediaMetadataPanel';
 import RenderContent from './RenderContent';
-import { saveLabel, savePhoto } from './savePhoto';
+import { saveLabel } from './savePhoto';
+import { saveToDevice, savedWhereText } from './saveToDevice';
+import { useSwipe } from './mediaView';
 import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
 import { canSaveDetails, saveDetails } from './metadata/saveDetails';
 import { isPrivateRoom } from '../privateRoom';
 import { canReadTorrentFile } from './saveRoom';
 
-/** Display the selected media in a dialog with navigation, saving, and shared metadata editing. */
+/**
+ * Display the selected media full screen with navigation (swipe, arrows,
+ * keys), saving, and shared metadata editing. The details sit beside the
+ * photo on a wide screen and are hidden until asked for on a narrow one,
+ * so the photo gets the room.
+ */
 function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
     const theme = useTheme();
-    const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
+    const narrow = useMediaQuery(theme.breakpoints.down('md'));
+    const [detailsAsked, setDetailsAsked] = useState(null);
+    const showDetails = detailsAsked == null ? !narrow : detailsAsked;
     const tile = tiles[index];
     const [summary, setSummary] = useState(null);
     const [fileName, setFileName] = useState('');
@@ -116,6 +126,11 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
         return () => window.removeEventListener('keydown', onKey);
     }, [index, tiles.length, onIndexChange]);
 
+    const swipe = useSwipe(step => {
+        const next = index + step;
+        if (next >= 0 && next < tiles.length) onIndexChange(next);
+    });
+
     if (!tile) return null;
 
     const isImage = !!tile.isImage;
@@ -126,8 +141,8 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
 
     const onSave = () => {
         setSaving(true);
-        savePhoto(tile)
-            .then(() => setSaved(true))
+        saveToDevice([tile], { roomId: master.service && master.service.id })
+            .then(result => setSaved(result !== 'cancelled'))
             .catch(() => {})
             .finally(() => setSaving(false));
     };
@@ -161,47 +176,59 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
         <Dialog
             open
             onClose={onClose}
-            fullScreen={fullScreen}
-            maxWidth="lg"
-            fullWidth
+            fullScreen
             aria-labelledby="photo-viewer-title"
             slotProps={{
                 paper: {
                     sx: {
                         bgcolor: 'background.paper',
                         overflow: 'hidden',
-                        height: fullScreen ? '100%' : 'min(90vh, 860px)',
                     },
                 },
             }}
         >
             <Box sx={{
                 display: 'flex',
-                flexDirection: fullScreen ? 'column' : 'row',
+                flexDirection: narrow ? 'column' : 'row',
                 height: '100%',
                 minHeight: 0,
             }}>
                 <Box sx={{
-                    flex: 1.4,
+                    flex: narrow && showDetails ? '0 0 62%' : 1,
                     minWidth: 0,
                     minHeight: 0,
                     display: 'flex',
                     flexDirection: 'column',
                     bgcolor: '#07090d',
                 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5, p: 1 }}>
+                        {tiles.length > 1 && (
+                            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.75)', mr: 'auto', pl: 1 }}>
+                                {index + 1} of {tiles.length}
+                            </Typography>
+                        )}
+                        <Button
+                            size="small"
+                            startIcon={<InfoOutlined fontSize="small" />}
+                            aria-pressed={showDetails}
+                            onClick={() => setDetailsAsked(!showDetails)}
+                            sx={{ color: '#fff', textTransform: 'none' }}
+                        >
+                            {showDetails ? 'Hide details' : 'Details'}
+                        </Button>
                         <IconButton aria-label="Close photo" onClick={onClose} sx={{ color: '#fff' }}>
                             <CloseRounded />
                         </IconButton>
                     </Box>
-                    <Box sx={{
+                    <Box {...swipe} data-testid="viewer-media" sx={{
                         flex: 1,
                         minHeight: 0,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        px: 2,
+                        px: narrow ? 0 : 2,
                         overflow: 'hidden',
+                        touchAction: 'pan-y pinch-zoom',
                     }}>
                         {mediaPreview}
                     </Box>
@@ -261,6 +288,13 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                                 {replaceLabel(tile, { replacing, replaced })}
                             </Button>
                         )}
+                        <Typography
+                            variant="caption"
+                            data-testid="saved-where"
+                            sx={{ display: 'block', textAlign: 'center', color: 'rgba(232,238,246,0.72)', px: 1 }}
+                        >
+                            {savedWhereText(1)}
+                        </Typography>
                         {(replaceError || hint) && replaceMode && (
                             <Typography
                                 variant="caption"
@@ -278,9 +312,9 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                     </Stack>
                 </Box>
 
-                <Box sx={{
+                {showDetails && <Box data-testid="viewer-details" sx={{
                     flex: 1,
-                    maxWidth: fullScreen ? 'none' : 420,
+                    maxWidth: narrow ? 'none' : 420,
                     overflow: 'auto',
                     p: 2.5,
                     minHeight: 0,
@@ -320,7 +354,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                             />
                         </Box>
                     )}
-                </Box>
+                </Box>}
             </Box>
         </Dialog>
     );
