@@ -25,7 +25,7 @@ function readState(master) {
         servers: describeIceServers(rtc),
         others: items.filter(p => p.peerId !== myPeerId).map(p => ({
             peerId: p.peerId,
-            name: p.name || StringUtil.slimPlatform(p.originPlatform || '') || 'peer',
+            name: p.name || StringUtil.peerDevice(p) || 'peer',
             summary: summarizeChain(p.networkChain),
         })),
     };

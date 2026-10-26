@@ -25,6 +25,7 @@ import { requestPersistentStorage } from '../util/PersistentStorage';
 import { leaveRoomNotice } from '../roomNotice';
 import { forgetRoom } from '../recentRooms';
 import { openSealedPhoto } from '../gallery/openSealed';
+import { describeDevice, detectDevice } from '../util/deviceLabel';
 
 export default class TorrentMaster {
 
@@ -59,12 +60,18 @@ export default class TorrentMaster {
         this.creator = new TorrentCreator(service, emitter, this, this.torrentAddition);
         this.creator.start();
 
+        // A name for this device when there is no nickname. The model comes
+        // later from client hints; ICE gathering takes longer than that.
+        this.device = describeDevice(typeof navigator === 'undefined' ? {} : navigator);
+        detectDevice().then(device => { if (device) this.device = device; }).catch(() => {});
+
         this.emitter.on('iceDone', () => {
 
             const peer = {};
             peer.originPlatform = self.originPlatform = (platform.description
                 + (navigator.platform ? ' ' + navigator.platform + ' ' : '' )
                 + (navigator.oscpu ? navigator.oscpu : ''));
+            peer.device = self.device;
             peer.name = localStorage.getItem('nickname');
             self.me = peer;
 

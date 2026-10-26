@@ -24,5 +24,5 @@ export function activeHolders(photo, peers, myPeerId) {
 }
 
 export function peerLabel(peer) {
-    return peer?.name || peer?.originPlatform || 'someone';
+    return peer?.name || peer?.device || peer?.originPlatform || 'someone';
 }

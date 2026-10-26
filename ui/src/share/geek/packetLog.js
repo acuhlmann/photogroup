@@ -8,7 +8,7 @@ const short = (value, length = 8) => (value ? String(value).slice(0, length) : '
 
 function peerName(peer) {
     if (!peer) return 'peer';
-    return peer.name || StringUtil.slimPlatform(peer.originPlatform || '') || short(peer.peerId);
+    return peer.name || StringUtil.peerDevice(peer) || short(peer.peerId);
 }
 
 function torrentName(torrent) {

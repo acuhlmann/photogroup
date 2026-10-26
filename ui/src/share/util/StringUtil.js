@@ -26,6 +26,11 @@ export default class StringUtil {
         return slimmed;
     }
 
+    /** The device name a peer sent, else one made from its platform text. */
+    static peerDevice(peer) {
+        return (peer && (peer.device || StringUtil.slimPlatform(peer.originPlatform || ''))) || '';
+    }
+
     static stripSrflx(label) {
         return label.replace(/srflx/, '');
     }

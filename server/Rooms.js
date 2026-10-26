@@ -384,6 +384,7 @@ export default class Rooms {
                 peerId: editor.peerId,
                 name: editor.name || '',
                 platform: editor.originPlatform || '',
+                ...(editor.device ? { device: editor.device } : {}),
             });
             const item = { infoHash: photo.infoHash, details };
             this.sendPhotos(room, this.allRoomClients(room), 'update', [item]);

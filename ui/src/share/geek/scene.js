@@ -26,7 +26,7 @@ export function hostOf(url) {
 }
 
 function deviceName(peer) {
-    return peer.name || StringUtil.slimPlatform(peer.originPlatform || '') || String(peer.peerId || '').slice(0, 8);
+    return peer.name || StringUtil.peerDevice(peer) || String(peer.peerId || '').slice(0, 8);
 }
 
 function candidateLine(item) {
@@ -147,6 +147,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
             peer, summary,
             info: [
                 `peer ${String(peer.peerId).slice(0, 16)}`,
+                peer.device || null,
                 StringUtil.slimPlatform(peer.originPlatform || '') || null,
                 peer.connectionSpeedType ? `link ${peer.connectionSpeedType}` : null,
                 `NAT ${NAT_LABELS[summary.nat] || summary.nat}${summary.cgnat ? ' · carrier-grade NAT' : ''}`,
