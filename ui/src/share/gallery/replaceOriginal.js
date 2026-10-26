@@ -1,7 +1,7 @@
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import { fileForSave } from './savePhoto';
-import { rememberHave } from './alreadyHave';
+import { alreadyHave, rememberHave } from './alreadyHave';
 
 const HANDLE = Symbol('originalHandle');
 const handles = new Map();
@@ -179,15 +179,26 @@ export function replaceKind() {
     }
 }
 
+/**
+ * Whether this file came off this device, so writing it back lands on the
+ * photo the person actually has. A photo received from someone else has no
+ * original here: the save dialog is choosing a destination, not replacing.
+ */
+export function ownOriginal(tile) {
+    return originalReady(tile) || alreadyHave(tile) === 'shared';
+}
+
 export function replaceLabel(tile, state = {}) {
     const { replacing, replaced } = state;
-    if (replaced === 'replaced') return 'Replaced';
-    if (replaced === 'shared') return 'Saved';
     const kind = replaceKind();
-    if (replacing) return kind === 'share' ? 'Saving…' : 'Replacing…';
+    const mine = ownOriginal(tile);
+    if (replaced === 'replaced') return mine ? 'Replaced' : 'Saved';
+    if (replaced === 'shared') return 'Saved';
+    if (replacing) return kind === 'share' || !mine ? 'Saving…' : 'Replacing…';
     if (kind === 'share') return 'Save to Files';
+    if (kind !== 'file') return '';
     if (originalReady(tile)) return 'Replace original';
-    return 'Replace original…';
+    return mine ? 'Replace original…' : 'Choose where to save…';
 }
 
 export function replaceHint(tile) {
@@ -198,10 +209,30 @@ export function replaceHint(tile) {
     if (kind === 'file' && originalReady(tile)) {
         return 'Writes this photo, including your edits, over the file you chose.';
     }
-    if (kind === 'file') {
+    if (kind === 'file' && ownOriginal(tile)) {
         return 'Pick the original file and confirm replace. Your edits are written into it.';
     }
+    if (kind === 'file') {
+        return 'Pick the folder this goes into. On a phone, DCIM/Camera is your gallery.';
+    }
     return '';
+}
+
+/** True where the save dialog exists: the person can name the folder a file lands in. */
+export function canChooseFolder() {
+    return replaceKind() === 'file';
+}
+
+/**
+ * Write bytes the room produced (a photo, the room's zip) to a place the person
+ * just named. Needs a tap: the dialog will not open on its own. Throws
+ * `SaveCancelled` when the dialog is closed, so a cancelled save never counts
+ * as saved.
+ */
+export async function saveBlobToChosenFolder(blob, fileName, fileType = '') {
+    const handle = await openDialog(fileName, fileType);
+    await writeHandle(handle, blob);
+    return handle;
 }
 
 export function replaceFailureMessage(err) {
@@ -219,24 +250,48 @@ function baseName(name) {
     return trimmed || 'photo';
 }
 
-function pickerOptions(tile) {
-    const suggestedName = baseName(tile.fileName);
+const START_IN = { video: 'videos', audio: 'music', zip: 'downloads', other: 'pictures' };
+
+/** What the save dialog offers for this name: a sane folder to open in and the right extension. */
+function pickerOptionsFor(suggestedName, mimeGiven) {
     const suffix = FileUtil.getFileSuffix(suggestedName);
     const ext = suffix ? suffix.toLowerCase() : '';
-    const mime = (ext && MIME_BY_EXT[ext.slice(1)]) || tile.fileType || '';
+    const mime = MIME_BY_EXT[ext.slice(1)] || mimeGiven || '';
+    const kind = mime.startsWith('video/') ? 'video'
+        : mime.startsWith('audio/') ? 'audio'
+            : mime === 'application/zip' ? 'zip' : 'other';
     const options = {
         suggestedName,
+        // One id for every save, so the folder chosen for the first photo is
+        // where the dialog opens for the second.
         id: 'photogroup-replace',
-        startIn: mime.startsWith('video/') ? 'videos' : mime.startsWith('audio/') ? 'music' : 'pictures',
+        startIn: START_IN[kind],
     };
     if (ext && mime) {
         const extensions = ext === suffix ? [ext] : [ext, suffix];
+        const description = kind === 'video' ? 'Video' : kind === 'audio' ? 'Audio' : kind === 'zip' ? 'Zip archive' : 'Photo';
         options.types = [{
-            description: 'Photo',
+            description,
             accept: { [mime]: extensions },
         }];
     }
     return options;
+}
+
+/**
+ * Open the browser's save dialog. It must be reached from a tap, and once per
+ * file: the dialog takes one file, so a batch needs one tap each.
+ */
+async function openDialog(fileName, fileType) {
+    if (typeof window === 'undefined' || typeof window.showSaveFilePicker !== 'function') {
+        throw new Error('This browser cannot choose a folder.');
+    }
+    try {
+        return await window.showSaveFilePicker(pickerOptionsFor(baseName(fileName), fileType));
+    } catch (err) {
+        if (err && err.name === 'AbortError') throw new SaveCancelled();
+        throw err;
+    }
 }
 
 async function permissionGranted(handle) {
@@ -340,10 +395,9 @@ async function writeOriginal(tile) {
         const prepared = bytesForReplace(tile);
         let handle;
         try {
-            handle = await window.showSaveFilePicker(pickerOptions(tile));
+            handle = await openDialog(tile.fileName, tile.fileType);
         } catch (err) {
             prepared.catch(() => {});
-            if (err && err.name === 'AbortError') throw new SaveCancelled();
             throw err;
         }
         const blob = await prepared;

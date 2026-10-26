@@ -106,4 +106,29 @@ describe('DownloadRoomButton', () => {
             await act(async () => root.unmount());
         });
     });
+
+    describe('where the zip goes', () => {
+        const menuItem = text => Array.from(document.body.querySelectorAll('[role="menuitem"]'))
+            .find(item => item.textContent.startsWith(text));
+        const openMenu = div => act(async () => div.querySelector('button[aria-label="More download options"]').click());
+
+        it('asks the browser where to put the zip, instead of only Downloads', async () => {
+            window.showSaveFilePicker = vi.fn();
+            saveRoom.mockResolvedValueOnce({ saved: 1, skipped: 0 });
+            const { div, root } = await render([ready]);
+            await openMenu(div);
+            await act(async () => menuItem('Save the zip where I choose').click());
+            expect(saveRoom).toHaveBeenLastCalledWith([ready], expect.objectContaining({ save: expect.any(Function) }));
+            expect(div.querySelector('[role="status"]').textContent).toBe('Saved 1 photo where you chose');
+            delete window.showSaveFilePicker;
+            await act(async () => root.unmount());
+        });
+
+        it('offers it only where that dialog exists', async () => {
+            const { div, root } = await render([ready]);
+            await openMenu(div);
+            expect(menuItem('Save the zip where I choose')).toBeUndefined();
+            await act(async () => root.unmount());
+        });
+    });
 });

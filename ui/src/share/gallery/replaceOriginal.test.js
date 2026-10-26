@@ -88,7 +88,7 @@ describe('replaceOriginal', () => {
             details: { title: 'Dock' },
         };
 
-        expect(replaceLabel(tile)).toBe('Replace original…');
+        expect(replaceLabel(tile)).toBe('Choose where to save…');
         await replaceOriginal(tile);
 
         expect(window.showSaveFilePicker).toHaveBeenCalledWith(expect.objectContaining({
@@ -107,6 +107,22 @@ describe('replaceOriginal', () => {
         window.showSaveFilePicker.mockClear();
         await replaceOriginal(tile);
         expect(window.showSaveFilePicker).not.toHaveBeenCalled();
+    });
+
+    // The same dialog, named for what it is: a photo from someone else has no
+    // original on this device, so the person is choosing a destination.
+    it('names the choice by whose file it is', async () => {
+        window.showSaveFilePicker = vi.fn();
+        const received = { elem: blob, fileName: 'dock.jpg', fileType: 'image/jpeg', tileKey: 'theirs' };
+        const shared = { elem: blob, fileName: 'dock.jpg', fileType: 'image/jpeg', tileKey: 'mine', seed: true };
+
+        expect(replaceLabel(shared)).toBe('Replace original…');
+        expect(replaceLabel(received)).toBe('Choose where to save…');
+        expect(replaceHint(received)).toContain('DCIM/Camera');
+
+        // Once it has been written, that file is theirs to replace from here on.
+        expect(replaceLabel(received, { replaced: 'replaced' })).toBe('Saved');
+        expect(replaceLabel(shared, { replaced: 'replaced' })).toBe('Replaced');
     });
 
     it('starts reading a torrent file before the save dialog returns', async () => {

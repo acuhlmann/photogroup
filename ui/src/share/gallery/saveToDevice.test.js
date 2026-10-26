@@ -121,4 +121,9 @@ describe('where saving goes', () => {
         expect(savedWhereText(1, { way: 'download' })).toBe('It goes to the Downloads folder of this computer.');
         expect(savedWhereText(4, { way: 'download' })).toBe('One zip file goes to the Downloads folder of this computer.');
     });
+
+    it('says the folder was the person\'s own choice', () => {
+        expect(savedWhereText(1, { way: 'chosen' })).toBe('It is in the folder you chose.');
+        expect(savedWhereText(2, { way: 'chosen' })).toBe('They are in the folders you chose.');
+    });
 });

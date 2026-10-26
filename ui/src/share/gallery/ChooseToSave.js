@@ -10,30 +10,22 @@ import CircularProgress from '@mui/material/CircularProgress';
 import CheckRounded from '@mui/icons-material/CheckRounded';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
+import DriveFolderUploadRounded from '@mui/icons-material/DriveFolderUploadRounded';
 import PhotoLibraryRounded from '@mui/icons-material/PhotoLibraryRounded';
 import Logger from 'js-logger';
 import MediaStage from './MediaStage';
-import { keyOf, usePreview } from './mediaView';
+import { keyOf } from './mediaView';
 import { alreadyHave, useHaveChanges } from './alreadyHave';
 import { fileForSave } from './savePhoto';
 import { isReadyToSave, zipEntryNames } from './saveRoom';
 import { saveToDevice, savedWhereText, saveWay } from './saveToDevice';
+import { canChooseFolder, FolderWalk, PlaceThumb } from './saveToChosenFolder';
 
 /** The photos and clips to choose from: the ones this person doesn't have yet, so not the ones they shared. */
 export const toChoose = tiles => tiles.filter(tile => !alreadyHave(tile));
 
 const hereInFull = tile => !tile.loading && isReadyToSave(tile);
 const itemWord = (count, words) => (count === 1 ? '1 ' : `${count} `) + (words.clips ? (count === 1 ? 'item' : 'items') : (count === 1 ? 'photo' : 'photos'));
-
-function KeptThumb({ tile }) {
-    const preview = usePreview(tile);
-    const src = (!tile.loading && tile.img) || preview;
-    return (
-        <Box sx={{ width: 64, height: 64, flex: '0 0 auto', borderRadius: 1, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.08)' }}>
-            {src && <Box component="img" src={src} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
-        </Box>
-    );
-}
 
 /**
  * Go through photos one at a time, full screen, and keep or skip each one.
@@ -54,9 +46,16 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
     const failed = useRef(new Set()).current;
     const [result, setResult] = useState(null);
     const [, setMade] = useState(0);
+    // Kept photos written through the save dialog, so they leave the one-tap save.
+    const [chosen, setChosen] = useState(() => new Set());
+    const [pickPlace, setPickPlace] = useState(false);
     const sharing = saveWay() === 'share';
+    // The browser's save dialog is the only way to name the folder, so the
+    // choice to use it appears only where that dialog exists.
+    const canChoosePlace = canChooseFolder();
 
     const keptTiles = list.filter(tile => kept.has(keyOf(tile)));
+    const rest = keptTiles.filter(item => !chosen.has(keyOf(item)));
     const done = index >= list.length;
     const tile = done ? null : list[index];
     const clips = list.some(item => item.isVideo || item.isAudio);
@@ -95,14 +94,14 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
         step(1);
     };
 
-    const readyCount = keptTiles.filter(item => hereInFull(item) && (!sharing || files.get(keyOf(item)) || failed.has(keyOf(item)))).length;
-    const allReady = keptTiles.length > 0 && readyCount === keptTiles.length;
+    const readyCount = rest.filter(item => hereInFull(item) && (!sharing || files.get(keyOf(item)) || failed.has(keyOf(item)))).length;
+    const allReady = rest.length > 0 && readyCount === rest.length;
 
     const save = () => {
         setState('saving');
         setError('');
         const made = new Map(Array.from(files).filter(([, file]) => file));
-        saveToDevice(keptTiles, { roomId, files: made })
+        saveToDevice(rest, { roomId, files: made })
             .then(outcome => {
                 setResult(outcome);
                 setState(outcome === 'cancelled' ? 'choosing' : 'saved');
@@ -112,6 +111,14 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
                 setError("Couldn't save that. Try again in a moment.");
                 setState('choosing');
             });
+    };
+
+    /** Some went to the folders they chose, some to wherever this device downloads. */
+    const savedWhereLine = () => {
+        const way = sharing && result === 'saved' ? { way: 'download' } : {};
+        if (!chosen.size) return savedWhereText(keptTiles.length, { done: true, ...way });
+        if (!rest.length) return savedWhereText(keptTiles.length, { way: 'chosen' });
+        return `${savedWhereText(rest.length, { done: true, ...way })} ${savedWhereText(chosen.size, { way: 'chosen' })}`;
     };
 
     const isKept = tile && kept.has(keyOf(tile));
@@ -180,11 +187,7 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
                                 Saved {itemWord(keptTiles.length, words)}
                             </Typography>
                             <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.8)' }}>
-                                {savedWhereText(keptTiles.length, {
-                                    done: true,
-                                    // The share sheet was refused, so they were downloaded instead.
-                                    ...(sharing && result === 'saved' ? { way: 'download' } : {}),
-                                })}
+                                {savedWhereLine()}
                             </Typography>
                             <Button variant="contained" size="large" onClick={onClose} sx={{ textTransform: 'none', fontWeight: 600, minWidth: 200 }}>
                                 Close
@@ -201,24 +204,50 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
                                 <Button variant="contained" onClick={onClose} sx={{ textTransform: 'none' }}>Close</Button>
                             </Stack>
                         </>
+                    ) : pickPlace && rest.length > 0 ? (
+                        <FolderWalk
+                            tiles={rest}
+                            total={keptTiles.length}
+                            device={device}
+                            onSaved={item => {
+                                const key = keyOf(item);
+                                setChosen(previous => new Set(previous).add(key));
+                                if (rest.length === 1) {
+                                    setResult('chosen');
+                                    setState('saved');
+                                }
+                            }}
+                            onBack={() => setPickPlace(false)}
+                        />
                     ) : (
                         <>
                             <Typography variant="h5" component="h2" sx={{ fontWeight: 700 }}>
                                 You kept {keptTiles.length} of {list.length}
                             </Typography>
                             <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', maxWidth: '100%', pb: 0.5 }}>
-                                {keptTiles.map(item => <KeptThumb key={keyOf(item)} tile={item} />)}
+                                {keptTiles.map(item => <PlaceThumb key={keyOf(item)} tile={item} />)}
                             </Stack>
-                            <Button variant="contained" size="large" fullWidth onClick={save}
-                                disabled={!allReady || state === 'saving'}
-                                startIcon={state === 'saving' || !allReady ? <CircularProgress size={18} color="inherit" /> : <DownloadRounded />}
-                                sx={{ textTransform: 'none', fontWeight: 600, py: 1.5 }}>
-                                {state === 'saving' ? 'Saving…'
-                                    : allReady ? `Save ${itemWord(keptTiles.length, words)} ${where}`
-                                        : `Getting them… ${readyCount} of ${keptTiles.length} here`}
-                            </Button>
+                            {rest.length > 0 && (
+                                <Button variant="contained" size="large" fullWidth onClick={save}
+                                    disabled={!allReady || state === 'saving'}
+                                    startIcon={state === 'saving' || !allReady ? <CircularProgress size={18} color="inherit" /> : <DownloadRounded />}
+                                    sx={{ textTransform: 'none', fontWeight: 600, py: 1.5 }}>
+                                    {state === 'saving' ? 'Saving…'
+                                        : allReady ? `Save ${itemWord(rest.length, words)} ${where}`
+                                            : `Getting them… ${readyCount} of ${rest.length} here`}
+                                </Button>
+                            )}
+                            {canChoosePlace && rest.length > 0 && (
+                                <Button variant="outlined" fullWidth onClick={() => setPickPlace(true)}
+                                    disabled={!allReady}
+                                    startIcon={<DriveFolderUploadRounded />}
+                                    title="Opens the save dialog for each photo, so you choose the folder. On a phone, DCIM/Camera is the gallery."
+                                    sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.4)', textTransform: 'none', fontWeight: 600, py: 1.5 }}>
+                                    Choose where each one goes
+                                </Button>
+                            )}
                             <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.75)' }} data-testid="saved-where">
-                                {savedWhereText(keptTiles.length)}
+                                {savedWhereText(rest.length)}
                             </Typography>
                             {error && <Typography variant="body2" sx={{ color: 'error.light' }}>{error}</Typography>}
                             <Button onClick={() => setIndex(0)} sx={{ color: '#fff', textTransform: 'none' }}>
