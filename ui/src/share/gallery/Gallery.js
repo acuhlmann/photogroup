@@ -29,6 +29,7 @@ import { captureDroppedHandles } from "./replaceOriginal";
 import { openSealedPhoto } from "./openSealed";
 import SimpleGrid from "../simple/SimpleGrid";
 import ChooseToSave from "./ChooseToSave";
+import { setPosterSink } from "./tilePreview";
 import { CLIP_SIZE_NOTE } from "../torrent/ServerCopyLimits";
 
 /** A tile's identity across updates; an upload's infoHash changes once it is hashed. */
@@ -397,6 +398,19 @@ function Gallery(props) {
     useEffect(() => {
         updateGalleryState();
     }, [tiles, updateGalleryState]);
+
+    // Frames this device grabs of clips shared without a preview go to the room.
+    useEffect(() => {
+        setPosterSink((tile, poster) => {
+            const service = master.service;
+            if (!service || typeof service.sharePoster !== 'function') return;
+            if (!tile.infoHash || tile.isFake || tile.secure) return;
+            service.sharePoster(tile.infoHash, poster)
+                .then(saved => saved && master.emitter.emit('photos', { type: 'update', item: [saved] }))
+                .catch(err => Logger.warn(err && err.message ? err.message : String(err)));
+        });
+        return () => setPosterSink(null);
+    }, [master]);
 
     // Geek mode draws the photos on its network map instead of this grid.
     useEffect(() => {

@@ -24,7 +24,11 @@ const COPY_TIMES = ['serverCopyStartedAt', 'serverCopyStoredAt', 'serverCopyExpi
 // Server-copy state is the server's to set: a client PUT carrying a stale
 // view of it (the whole tile is sent after rendering) must not revive a
 // deleted copy, and owners only change through the owner routes.
-const SERVER_MANAGED_FIELDS = ['owners', 'hasServerCopy', 'serverCopySize', 'serverCopyReceived',
+// A clip's poster frame, sent by a device that could decode the clip, for
+// devices that can't (an iPhone's HEVC clip on a Linux laptop, say).
+const MAX_POSTER_LENGTH = 64 * 1024;
+const POSTER_PREFIX = 'data:image/jpeg;base64,';
+const SERVER_MANAGED_FIELDS = ['poster', 'owners', 'hasServerCopy', 'serverCopySize', 'serverCopyReceived',
     'serverCopyRequestedAt', 'serverCopyUploader', ...COPY_TIMES];
 const RELAY_SWEEP_MS = 5 * 60 * 1000;
 
@@ -384,6 +388,37 @@ export default class Rooms {
             this.sendPhotos(room, this.allRoomClients(room), 'update', [item]);
             this.persist(room);
             response.send(item);
+        });
+
+        // A clip shared without a poster frame (its sharer could not decode
+        // it) gets the first one a device in the room manages to make.
+        app.put('/api/rooms/:id/photos/poster', (request, response) => {
+            const room = rooms.get(request.params.id);
+            if(!room) {
+                return response.status(404).send('Room not found');
+            }
+            const body = request.body || {};
+            if(!this.sessionPeer(room, request)) {
+                return response.status(403).send('Join the room to add a poster');
+            }
+            const poster = body.poster;
+            if(typeof poster !== 'string' || !poster.startsWith(POSTER_PREFIX)
+                || poster.length > MAX_POSTER_LENGTH || !/^[A-Za-z0-9+/=]+$/.test(poster.slice(POSTER_PREFIX.length))) {
+                return response.status(400).send('Expected a small JPEG data URL');
+            }
+            const photo = typeof body.infoHash === 'string' && this.findPhoto(room, body.infoHash);
+            if(!photo) {
+                return response.status(404).send('Photo not found');
+            }
+            if(photo.secure) {
+                return response.status(400).send('Private photos carry no poster');
+            }
+            if(!photo.poster) {
+                photo.poster = poster;
+                this.sendPhotos(room, this.allRoomClients(room), 'update', [{ infoHash: photo.infoHash, poster }]);
+                this.persist(room);
+            }
+            response.send({ infoHash: photo.infoHash, poster: photo.poster });
         });
 
         app.delete('/api/rooms/:id/photos/', (request, response) => {

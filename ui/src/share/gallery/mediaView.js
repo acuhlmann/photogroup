@@ -15,12 +15,13 @@ export function usePreview(tile) {
     const key = keyOf(tile);
     useEffect(() => {
         let live = true;
-        if (tile && !ready && tile.torrentFileThumb) {
+        // The thumbnail comes ahead of the file; a clip without one gets a frame once it is here.
+        if (tile && !ready && (tile.torrentFileThumb || (tile.isVideo && !tile.loading))) {
             loadPreviewUrl(tile).then(url => live && url && setFetched({ key, url }));
         }
         return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [key, ready, tile && tile.torrentFileThumb]);
+    }, [key, ready, tile && tile.torrentFileThumb, tile && tile.loading]);
     return ready || (fetched.key === key ? fetched.url : null);
 }
 
