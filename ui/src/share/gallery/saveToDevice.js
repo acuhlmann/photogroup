@@ -9,7 +9,9 @@ import { rememberHave } from './alreadyHave';
 //   "Save Video" puts them in Photos. A download only reaches the Files app.
 // - Android: download them. Downloads land in the shared Download folder,
 //   which gallery apps show as a "Download" album. The share sheet there has
-//   no "save to gallery" choice, only other apps.
+//   no "save to gallery" choice, only other apps. Chrome's save dialog does
+//   let the folder be named (DCIM/Camera), which is what
+//   saveToChosenFolder.js offers alongside this.
 // - Computers: download, one file, or one zip for several.
 
 const userAgent = () => (typeof navigator === 'undefined' ? '' : navigator.userAgent || '');
@@ -56,9 +58,14 @@ export function saveWay() {
 /**
  * Where saved photos go on this device, in one or two short sentences.
  * `done` says it after the save, without the step to take.
+ * `chosen` is the save dialog the person steered themselves, so the answer
+ * is only "where you said" and never mentions a folder this app picked.
  */
 export function savedWhereText(count = 1, { way = saveWay(), done = false } = {}) {
     const them = count === 1 ? 'It goes' : 'They go';
+    if (way === 'chosen') {
+        return count === 1 ? 'It is in the folder you chose.' : 'They are in the folders you chose.';
+    }
     if (way === 'share') {
         if (done) return `${count === 1 ? 'It is' : 'They are'} in your Photos app.`;
         return `Tap "Save" in the list that opens. ${them} to your Photos app.`;

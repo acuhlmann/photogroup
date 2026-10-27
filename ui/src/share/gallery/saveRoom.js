@@ -77,7 +77,9 @@ export async function saveRoom(tiles, { roomId, onProgress = () => {}, save = do
 
     const zip = await downloadZip(entries()).blob();
     if (!saved) throw new Error('None of the photos could be read');
-    save(zip, zipName(roomId), 'application/zip');
+    // Awaited, so a save that can fail or be cancelled (the browser's save
+    // dialog) is finished before these photos count as had.
+    await save(zip, zipName(roomId), 'application/zip');
     rememberHave(fingerprints, 'saved');
     return { saved, skipped: tiles.length - ready.length + failed };
 }

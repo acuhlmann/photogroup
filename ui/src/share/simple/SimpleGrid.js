@@ -18,6 +18,7 @@ import Logger from 'js-logger';
 import { isReadyToSave } from '../gallery/saveRoom';
 import { alreadyHave, useHaveChanges } from '../gallery/alreadyHave';
 import { saveToDevice, savedWhereText } from '../gallery/saveToDevice';
+import ChooseFolderButton, { canChooseFolder } from '../gallery/saveToChosenFolder';
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
 import MediaStage from '../gallery/MediaStage';
 import ChooseToSave from '../gallery/ChooseToSave';
@@ -154,6 +155,13 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
             </MediaStage>
             <Box sx={{ p: 2, pb: 'max(16px, env(safe-area-inset-bottom))', maxWidth: 420, width: '100%', mx: 'auto' }}>
                 <SaveButton tile={tile} roomId={roomId} onError={onError} />
+                {/* One photo, one tap: the save dialog opens and this phone can aim
+                    it at DCIM/Camera instead of the Download folder. */}
+                {canChooseFolder() && !tile.loading && isReadyToSave(tile) && (
+                    <Box sx={{ mt: 1 }}>
+                        <ChooseFolderButton tiles={[tile]} device="phone" />
+                    </Box>
+                )}
                 <Typography variant="caption" component="p" sx={{ mt: 1, textAlign: 'center', color: 'rgba(255,255,255,0.7)' }}>
                     {savedWhereText(1)}
                 </Typography>

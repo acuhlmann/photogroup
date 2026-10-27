@@ -97,6 +97,18 @@ describe('saveRoom', () => {
         expect(tiles.map(tile => alreadyHave(tile))).toEqual(['saved', 'saved', null, null]);
     });
 
+    // The save dialog can be closed without choosing, which is not a save.
+    it('does not count the room as had when the chosen folder is refused', async () => {
+        clearHave();
+        const tile = { elem: photo(), fileName: 'pier.jpg', fingerprint: '6:' + 'e'.repeat(64) };
+        const cancelled = Object.assign(new Error('closed'), { name: 'AbortError', cancelled: true });
+        const save = vi.fn().mockRejectedValue(cancelled);
+
+        await expect(saveRoom([tile], { roomId: 'r1', save })).rejects.toThrow('closed');
+        expect(save).toHaveBeenCalled();
+        expect(alreadyHave(tile)).toBe(null);
+    });
+
     it('says so when nothing is ready yet', async () => {
         await expect(saveRoom([{ fileName: 'a.jpg' }], { save: vi.fn() })).rejects.toThrow('No photos are ready');
     });

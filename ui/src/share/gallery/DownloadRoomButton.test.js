@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 
@@ -103,6 +103,67 @@ describe('DownloadRoomButton', () => {
             const { div, root } = await render([ready]);
             await openMenu(div);
             expect(menuItem('Find the ones on this device').getAttribute('aria-disabled')).toBe('true');
+            await act(async () => root.unmount());
+        });
+    });
+
+    describe('where the zip goes', () => {
+        const menuItem = text => Array.from(document.body.querySelectorAll('[role="menuitem"]'))
+            .find(item => item.textContent.startsWith(text));
+        const openMenu = div => act(async () => div.querySelector('button[aria-label="More download options"]').click());
+        // The picker is a global, cleaned up here so one test's failure cannot
+        // leave the next one seeing a dialog it never asked for.
+        afterEach(() => { delete window.showSaveFilePicker; });
+
+        // The browser opens the save dialog only on a fresh tap, so the ask has
+        // to come before the zip: building it photo by photo can outlast the tap.
+        it('asks where the zip goes before the room is zipped, and writes into that file', async () => {
+            const order = [];
+            const stream = {
+                write: vi.fn().mockResolvedValue(undefined),
+                close: vi.fn().mockResolvedValue(undefined),
+                abort: vi.fn(),
+            };
+            window.showSaveFilePicker = vi.fn(() => {
+                order.push('dialog');
+                return Promise.resolve({ kind: 'file', createWritable: vi.fn().mockResolvedValue(stream) });
+            });
+            const zip = new Blob(['zip']);
+            saveRoom.mockImplementationOnce((tiles, { save }) => {
+                order.push('zip');
+                // The room is zipped only after the folder was chosen, and the
+                // bytes then go into the file the dialog handed back.
+                return Promise.resolve(save(zip, 'photogroup-r1.zip', 'application/zip'))
+                    .then(() => ({ saved: 1, skipped: 0 }));
+            });
+
+            const { div, root } = await render([ready]);
+            await openMenu(div);
+            await act(async () => menuItem('Save the zip where I choose').click());
+
+            await vi.waitFor(() => expect(div.querySelector('[role="status"]').textContent).toBe('Saved 1 photo where you chose'));
+            expect(order).toEqual(['dialog', 'zip']);
+            expect(saveRoom).toHaveBeenLastCalledWith([ready], expect.objectContaining({ save: expect.any(Function) }));
+            expect(stream.write).toHaveBeenCalledWith(zip);
+            expect(stream.close).toHaveBeenCalled();
+            await act(async () => root.unmount());
+        });
+
+        it('does not zip the room when the folder is refused', async () => {
+            window.showSaveFilePicker = vi.fn().mockRejectedValue(Object.assign(new Error('closed'), { name: 'AbortError' }));
+            const { div, root } = await render([ready]);
+            await openMenu(div);
+            await act(async () => menuItem('Save the zip where I choose').click());
+
+            await vi.waitFor(() => expect(div.querySelector('[role="status"]').textContent).toBe('Nothing was saved'));
+            expect(saveRoom).not.toHaveBeenCalled();
+            await act(async () => root.unmount());
+        });
+
+        it('offers it only where that dialog exists', async () => {
+            const { div, root } = await render([ready]);
+            await openMenu(div);
+            expect(menuItem('Save the zip where I choose')).toBeUndefined();
             await act(async () => root.unmount());
         });
     });

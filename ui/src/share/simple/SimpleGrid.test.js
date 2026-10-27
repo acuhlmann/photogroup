@@ -9,7 +9,16 @@ vi.mock('../gallery/saveToDevice', () => ({
     saveWay: () => 'each',
 }));
 
+// The folder walk asks the browser's save dialog for a place; this stands in
+// for that dialog so the wiring, not the dialog, is under test.
+vi.mock('../gallery/replaceOriginal', () => ({
+    canChooseFolder: vi.fn(() => true),
+    replaceOriginal: vi.fn().mockResolvedValue('replaced'),
+    replaceFailureMessage: () => 'Could not write that file.',
+}));
+
 const { saveToDevice } = await import('../gallery/saveToDevice');
+const { replaceOriginal } = await import('../gallery/replaceOriginal');
 const { default: SimpleGrid } = await import('./SimpleGrid');
 const { clearHave, rememberHave } = await import('../gallery/alreadyHave');
 
@@ -70,6 +79,22 @@ describe('SimpleGrid', () => {
         expect(viewer.querySelector('img').getAttribute('src')).toBe('blob:a');
         await act(async () => viewer.querySelector('[aria-label="Next"]').click());
         expect(document.querySelector('[role="dialog"] img').getAttribute('src')).toBe('blob:b');
+        await act(async () => root.unmount());
+    });
+
+    // The phone path: on the big screen a photo gets the save dialog too, so it
+    // can be aimed at DCIM/Camera rather than only the Download folder.
+    it('offers to choose where a looked-at photo goes', async () => {
+        const tiles = [ready('a'), ready('b')];
+        const { div, root } = await render(tiles);
+        expect(div.textContent).not.toContain('Choose where to save');
+        await act(async () => div.querySelector('[aria-label="Look at this photo"]').click());
+
+        const viewer = document.querySelector('[role="dialog"]');
+        const place = Array.from(viewer.querySelectorAll('button')).find(b => b.textContent === 'Choose where to save');
+        await act(async () => place.click());
+        expect(replaceOriginal).toHaveBeenCalledWith(tiles[0]);
+        expect(document.querySelector('[role="dialog"]').textContent).toContain('Saved where you chose');
         await act(async () => root.unmount());
     });
 

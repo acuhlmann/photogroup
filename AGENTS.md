@@ -66,6 +66,28 @@ Location comes from EXIF/XMP GPS, HEIC Exif items and video `udta`/`meta` boxes 
 
 The gallery toolbar (`gallery/GalleryToolbar.js`) sorts and filters tiles through `gallery/arrangeTiles.js` (rating, date taken, place grouped by town and country, text search over titles, descriptions, keywords and places) and switches to `gallery/RoomMap.js`, which pins every located photo on one map; the viewer pages through the tiles the current view shows.
 
+### Where a save lands
+
+By default the app picks the folder. Where the browser has a save dialog -- Chrome on
+Android and Chrome, Edge and Brave on computers, checked by `canChooseFolder()` in
+`gallery/replaceOriginal.js` -- `gallery/saveToChosenFolder.js` offers the person the
+choice instead: "Choose where to save" for one photo, "Choose where each one goes" for a
+batch. The batch is walked one photo per tap because the dialog takes one file and only
+opens on a tap, and a web page cannot name a directory at all. On a phone the point is
+aiming a keeper at `DCIM/Camera` rather than the Download album.
+
+It is offered on the gallery tile and the full-screen viewer (`ContentTile.js`,
+`PhotoViewer.js`), the keep-or-skip chooser's end screen (`gallery/ChooseToSave.js`), the
+gallery toolbar (`Gallery.js`), simple mode's viewer (`simple/SimpleGrid.js`) and the room
+zip's menu (`gallery/DownloadRoomButton.js`). Wording follows the file: a photo received
+from someone else reads "Choose where to save…", never "Replace original…", because there
+is no original of it on this device -- only a photo shared from this browser
+(`alreadyHave` 'shared'), or one whose handle was captured, claims that. The zip asks for its folder
+*before* building the archive: the browser opens the dialog only while the tap is fresh, and zipping
+a room - reading and rewriting a photo at a time - outlasts that window, so asking afterwards is
+refused. `saveRoom` then awaits its `save`, so a refused dialog or a failed write leaves the room's
+photos unmarked.
+
 ### Presence and server copies (fallback when P2P fails)
 
 Peers drop their SSE stream whenever a phone switches apps, so presence has
