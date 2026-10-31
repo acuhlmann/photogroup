@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import Gallery from "./gallery/Gallery";
 
 import Button from '@mui/material/Button';
@@ -11,12 +11,14 @@ import Logger from 'js-logger';
 import { withSnackbar } from './compatibility/withSnackbar';
 
 import FrontView from "./FrontView";
-import GeekStage from "./geek/GeekStage";
 import SimpleFront from "./simple/SimpleFront";
 import SimpleRoomBar from "./simple/SimpleRoomBar";
 import WebTorrent from 'webtorrent';
 import { takeRoomNotice } from "./roomNotice";
 import NotifyPrompt from './NotifyPrompt';
+
+// Geek mode's network map is large and not the start mode: load it on first use.
+const GeekStage = lazy(() => import("./geek/GeekStage"));
 
 const BACKUP_SNACK = 'serverCopyBackup';
 
@@ -182,7 +184,7 @@ function ShareCanvas({master, mode = 'default', roomName = '', enqueueSnackbar, 
                 overflow: 'hidden',
                 position: 'relative',
             }}>
-                {geek ? <GeekStage master={master} tiles={tiles} isMobile={isMobile} /> : null}
+                {geek ? <Suspense fallback={null}><GeekStage master={master} tiles={tiles} isMobile={isMobile} /></Suspense> : null}
                 <Box sx={{
                     display: geek ? 'none' : 'block',
                     flex: 1,

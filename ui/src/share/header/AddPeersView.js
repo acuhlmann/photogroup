@@ -10,7 +10,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import Box from '@mui/material/Box';
 import Typography from "@mui/material/Typography";
-import { Html5QrcodeScanner } from 'html5-qrcode';
 import Logger from 'js-logger';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
@@ -82,9 +81,13 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
     // Start the camera when the scan dialog opens, stop it when it closes.
     useEffect(() => {
         if (scan && !scannerRef.current) {
-            // Small delay to ensure DOM element exists
-            const timer = setTimeout(() => {
+            let cancelled = false;
+            // Small delay to ensure DOM element exists. The scanner code is
+            // large and only loaded when someone scans.
+            const timer = setTimeout(async () => {
                 try {
+                    const { Html5QrcodeScanner } = await import('html5-qrcode');
+                    if (cancelled || scannerRef.current) return;
                     const scanner = new Html5QrcodeScanner(
                         "qr-reader",
                         {
@@ -114,7 +117,10 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
                 }
             }, 100);
 
-            return () => clearTimeout(timer);
+            return () => {
+                cancelled = true;
+                clearTimeout(timer);
+            };
         }
 
         if (!scan && scannerRef.current) {

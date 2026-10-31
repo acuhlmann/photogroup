@@ -5,11 +5,9 @@ import IconButton from "@mui/material/IconButton";
 import Logger from "js-logger";
 import update from "immutability-helper";
 import Button from "@mui/material/Button";
-import Webamp from 'webamp';
 import {Icon} from "@mui/material";
 import { withSnackbar } from '../compatibility/withSnackbar';
 import PropTypes from "prop-types";
-import AudioMotionAnalyzer from 'audiomotion-analyzer';
 import FileUtil from "../util/FileUtil";
 import { imageAspectRatio, rememberImageSize } from "./imageSize";
 import { loadPreviewUrl } from "./tilePreview";
@@ -353,23 +351,27 @@ function RenderContent(props) {
                     if (getBlobAndReadMetadataRef.current) {
                         getBlobAndReadMetadataRef.current(tile);
                     }
-                    const audioMotion = new AudioMotionAnalyzer(
-                        equalizerNodeRef.current,
-                        {
-                            source: elem,
-                            showScale: false,
-                            start: false
-                        }
-                    );
-                    equalizerNodeRef.current.style.display = 'none';
-                    elem.addEventListener('play', () => {
-                        equalizerNodeRef.current.style.display = '';
-                        audioMotion.toggleAnalyzer(true);
-                    });
-                    elem.addEventListener('pause', () => {
+                    // Loaded only when an audio file is shown.
+                    import('audiomotion-analyzer').then(({ default: AudioMotionAnalyzer }) => {
+                        if (!equalizerNodeRef.current) return;
+                        const audioMotion = new AudioMotionAnalyzer(
+                            equalizerNodeRef.current,
+                            {
+                                source: elem,
+                                showScale: false,
+                                start: false
+                            }
+                        );
                         equalizerNodeRef.current.style.display = 'none';
-                        audioMotion.toggleAnalyzer(false);
-                    });
+                        elem.addEventListener('play', () => {
+                            equalizerNodeRef.current.style.display = '';
+                            audioMotion.toggleAnalyzer(true);
+                        });
+                        elem.addEventListener('pause', () => {
+                            equalizerNodeRef.current.style.display = 'none';
+                            audioMotion.toggleAnalyzer(false);
+                        });
+                    }).catch(err => Logger.warn('Cannot load the audio analyzer: ' + err));
                 }
             });
         }
@@ -425,22 +427,30 @@ function RenderContent(props) {
             return;
         }
 
-        if(!Webamp.browserIsSupported()) {
-            Logger.error("Oh no! Webamp does not work!");
-            throw new Error("What's the point of anything?");
+        if(webampNodeRef.current === node) {
+            return;
         }
-        const webamp = new Webamp({
-            initialTracks: [{
-                metaData: {
-                    artist: "DJ Mike Llama",
-                    title: "Llama Whippin' Intro",
-                },
-                url: "llama-2.91.mp3"
-            }],
-            zIndex: 99999,
-        });
-        webampRef.current = webamp;
         webampNodeRef.current = node;
+        // Webamp is large; load it only for audio files.
+        webampRef.current = import('webamp').then(({ default: Webamp }) => {
+            if(!Webamp.browserIsSupported()) {
+                Logger.error("Oh no! Webamp does not work!");
+                return null;
+            }
+            return new Webamp({
+                initialTracks: [{
+                    metaData: {
+                        artist: "DJ Mike Llama",
+                        title: "Llama Whippin' Intro",
+                    },
+                    url: "llama-2.91.mp3"
+                }],
+                zIndex: 99999,
+            });
+        }).catch(err => {
+            Logger.warn('Cannot load Webamp: ' + err);
+            return null;
+        });
     }, [tile]);
 
     const registerEqualizerNode = useCallback((node) => {
@@ -450,8 +460,8 @@ function RenderContent(props) {
         equalizerNodeRef.current = node;
     }, []);
 
-    const openInWebamp = useCallback(() => {
-        const webamp = webampRef.current;
+    const openInWebamp = useCallback(async () => {
+        const webamp = await webampRef.current;
         const elem = tile.elem;
         if(!openedWebampRef.current) {
             if(elem && webamp) {
