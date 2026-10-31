@@ -38,7 +38,7 @@ function blobForSave(tile) {
  * written into the file when the format supports it.
  */
 export function fileForSave(tile) {
-    return blobForSave(tile).then(elem => embedDetails(elem, tile.details).catch(err => {
+    return blobForSave(tile).then(elem => embedDetails(elem, tile.details, { originalFingerprint: tile.fingerprint }).catch(err => {
         Logger.warn('Saving without photo details: ' + (err.message || String(err)));
         return elem;
     }));

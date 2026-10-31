@@ -11,6 +11,7 @@ const NS = {
     exif: 'http://ns.adobe.com/exif/1.0/',
     xmlns: 'http://www.w3.org/2000/xmlns/',
     xml: 'http://www.w3.org/XML/1998/namespace',
+    pg: 'https://photogroup.network/ns/1.0/',
 };
 
 const EMPTY_PACKET = '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>'
@@ -123,6 +124,13 @@ export function applyDetailsToXmp(xml, details) {
         });
         subject.appendChild(bag);
         target.appendChild(subject);
+    }
+    if (details.originalFingerprint) {
+        // Which original this saved copy came from, so a folder check finds it
+        // although the edits changed its bytes.
+        descriptions.forEach(description => description.removeAttributeNS(NS.pg, 'OriginalFingerprint'));
+        declare(target, 'pg');
+        target.setAttributeNS(NS.pg, 'pg:OriginalFingerprint', details.originalFingerprint);
     }
     if (details.location) {
         declare(target, 'exif');

@@ -34,11 +34,13 @@ function sharedChanges(details) {
 /**
  * Return the file with its shared details embedded, or the original file
  * when nothing was edited, the format is not supported, or its layout is
- * one the writer leaves alone.
+ * one the writer leaves alone. With `originalFingerprint`, formats with XMP
+ * also note which original the edited copy came from.
  */
-export async function embedDetails(blob, details) {
-    const changes = sharedChanges(details);
+export async function embedDetails(blob, details, { originalFingerprint } = {}) {
+    let changes = sharedChanges(details);
     if (!changes || !blob || typeof blob.slice !== 'function') return blob;
+    if (originalFingerprint) changes = { ...changes, originalFingerprint };
 
     const head = await readBytes(blob, 0, 64);
     const writer = WRITERS.find(item => item.matches(head));

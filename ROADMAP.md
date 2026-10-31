@@ -6,7 +6,8 @@ the way. Each slice says why it matters, what we already know, where to
 start in the code, and when it's done.
 
 - **Up next:** iPhone originals.
-- **Later:** recognising saved copies, and helpers for adding a location back.
+- **Later:** recognising saved clips and audio, and helpers for adding a
+  location back.
 
 ---
 
@@ -47,22 +48,17 @@ one in its Photos library, or the app explains why it couldn't.
 
 ---
 
-## Recognise PhotoGroup-saved copies in a folder check
+## Recognise saved clips and audio in a folder check
 
-**Why:** Save writes the room's details into the file, so its bytes (and
-fingerprint) no longer match the original. A later *Find the ones on this
-device…* won't recognise photos saved from PhotoGroup. This browser's own
-record still does, but another browser or device won't.
+Saved photos are recognised now (see Done). Clips and audio saved with
+room details are not: MP4, MKV, MP3, FLAC, WAV and Ogg have no XMP here,
+so they don't note the original's fingerprint yet.
 
-**Work:**
+**Work:** write the fingerprint into each format's own tags (`embed/mp4.js`,
+`mkv.js`, `id3.js`, `vorbisComments.js`, `wav.js`) and read it in
+`metadata/embed/originalFingerprint.js`.
 
-- When saving, write the original's fingerprint into the file's metadata
-  (an XMP property, plus the formats `embed/` already writes for video and audio).
-- Folder checks can't pre-filter these by size, because sizes differ. Read the
-  metadata only of files whose name or date taken matches a room photo, and
-  compare the stored fingerprint.
-
-**Done when:** a photo saved with details in one browser is found by a
+**Done when:** a clip saved with details in one browser is found by a
 folder check in another.
 
 ---
@@ -88,6 +84,15 @@ in one or two taps.
 ---
 
 # Done
+
+## Recognise PhotoGroup-saved photos in a folder check
+
+Save writes the room's details into the file, so its bytes and fingerprint
+no longer match the original. Now `fileForSave` also writes the original's
+fingerprint into the XMP (`pg:OriginalFingerprint`, for JPEG, PNG, WebP,
+GIF, HEIF and AVIF). For files whose name matches a room photo (any case,
+and "IMG_1 (2).jpg" too), `findOnDevice` reads the note from both ends of
+the file (`metadata/embed/originalFingerprint.js`).
 
 ## Don't transfer photos people already have
 
