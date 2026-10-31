@@ -20,6 +20,8 @@ PROJECT="${PROJECT:-photogroup-215600}"
 SERVICE="${WAKE_SERVICE:-photogroup-wake}"
 IMAGE="gcr.io/${PROJECT}/${SERVICE}:latest"
 IDLE_MINUTES="${IDLE_MINUTES:-60}"
+# Max per-request time on Cloud Run (SSE reconnects in the app). Was 3600 and leaked origin TCP.
+REQUEST_TIMEOUT_SECONDS="${REQUEST_TIMEOUT_SECONDS:-900}"
 SKIP_IDLE_STOP="${SKIP_IDLE_STOP:-0}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
@@ -86,7 +88,11 @@ if [ -n "${VM_SA:-}" ]; then
 fi
 
 echo "Building and pushing image $IMAGE ..."
-export DOCKER_BUILDKIT=1
+if docker buildx version >/dev/null 2>&1; then
+  export DOCKER_BUILDKIT=1
+else
+  export DOCKER_BUILDKIT=0
+fi
 docker build -t "$IMAGE" "$ROOT/wake-proxy"
 gcloud auth configure-docker --quiet
 docker push "$IMAGE"
@@ -111,6 +117,7 @@ if [ -n "${WAKE_STOP_SECRET:-}" ]; then
 fi
 
 echo "Deploying Cloud Run service $SERVICE ..."
+echo "Request timeout: ${REQUEST_TIMEOUT_SECONDS}s"
 gcloud run deploy "$SERVICE" \
   --project "$PROJECT" \
   --region "$REGION" \
@@ -122,7 +129,7 @@ gcloud run deploy "$SERVICE" \
   --cpu 1 \
   --min-instances 0 \
   --max-instances 3 \
-  --timeout 3600 \
+  --timeout "$REQUEST_TIMEOUT_SECONDS" \
   --concurrency 80 \
   --session-affinity \
   --service-account "$SA_EMAIL" \

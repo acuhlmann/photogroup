@@ -5,8 +5,17 @@ import httpProxy from 'http-proxy';
 import https from 'node:https';
 import http from 'node:http';
 
+/** Outbound sockets to nginx must not linger for an hour when clients drop. */
+const ORIGIN_AGENT_OPTS = {
+  keepAlive: true,
+  keepAliveMsecs: 1000,
+  maxFreeSockets: 4,
+  maxSockets: 64,
+  timeout: 120_000,
+};
+
 const httpsAgentCache = new Map();
-const httpAgent = new http.Agent({ keepAlive: true });
+const httpAgent = new http.Agent(ORIGIN_AGENT_OPTS);
 
 function httpsAgentFor(servername) {
   const key = servername || '_';
@@ -14,12 +23,52 @@ function httpsAgentFor(servername) {
   if (!agent) {
     agent = new https.Agent({
       rejectUnauthorized: false,
-      keepAlive: true,
       servername: servername || undefined,
+      ...ORIGIN_AGENT_OPTS,
     });
     httpsAgentCache.set(key, agent);
   }
   return agent;
+}
+
+/**
+ * Close the origin leg when the browser or Cloud Run gives up on the client
+ * side, so nginx does not accumulate hundreds of idle :80 connections.
+ * @param {import('http-proxy').Server} proxy
+ */
+export function wireOriginTeardown(proxy) {
+  proxy.on('proxyReq', (proxyReq, req, res) => {
+    const destroyUpstream = () => {
+      if (!proxyReq.destroyed) proxyReq.destroy();
+    };
+    req.on('aborted', destroyUpstream);
+    res.on('close', () => {
+      if (!res.writableFinished) destroyUpstream();
+    });
+  });
+
+  proxy.on('open', (proxySocket, _req, socket) => {
+    const destroyBoth = () => {
+      try {
+        if (!proxySocket.destroyed) proxySocket.destroy();
+      } catch {
+        // ignore
+      }
+      try {
+        if (!socket.destroyed) socket.destroy();
+      } catch {
+        // ignore
+      }
+    };
+    socket.on('close', destroyBoth);
+    proxySocket.on('close', () => {
+      try {
+        if (!socket.destroyed) socket.destroy();
+      } catch {
+        // ignore
+      }
+    });
+  });
 }
 
 /**
@@ -31,6 +80,8 @@ export function createOriginProxy() {
     xfwd: true,
     changeOrigin: false,
   });
+
+  wireOriginTeardown(proxy);
 
   proxy.on('error', (err, _req, res) => {
     console.error('[wake-proxy] proxy error:', err.message);

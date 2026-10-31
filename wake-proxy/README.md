@@ -149,3 +149,5 @@ In Cloudflare **Analytics → Traffic / Security**, you should see mitigated bot
 | `READY_TIMEOUT_MS` | `180000` | Max wait for origin |
 | `WAKE_STOP_SECRET` | _(empty)_ | Enables `/__wake__/stop` |
 | `IDLE_MINUTES` | `60` | Hint shown on starting page |
+
+Cloud Run request timeout is set at deploy time (`REQUEST_TIMEOUT_SECONDS`, default **900** in `deploy-wake-proxy.sh`). Long-lived SSE reconnects in the browser; an hour-long platform timeout left orphaned TCP to nginx and blocked VM idle-stop.

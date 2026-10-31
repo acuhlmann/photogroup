@@ -1,8 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { loadConfig } from '../src/config.js';
 import { renderStartingPage } from '../src/starting-page.js';
-import { wantsHtml } from '../src/proxy.js';
+import { wantsHtml, createOriginProxy } from '../src/proxy.js';
 import { waitForHealthy } from '../src/gce.js';
 import {
   evaluateRequest,
@@ -60,6 +61,19 @@ describe('wantsHtml', () => {
     assert.equal(wantsHtml({ headers: { accept: 'application/json' }, url: '/api/rooms/' }), false);
     assert.equal(wantsHtml({ headers: { accept: '*/*' }, url: '/api/__rtcConfig__' }), false);
     assert.equal(wantsHtml({ headers: { accept: '*/*' }, url: '/' }), true);
+  });
+});
+
+describe('createOriginProxy', () => {
+  it('destroys upstream when the client aborts', () => {
+    const proxy = createOriginProxy();
+    const proxyReq = { destroyed: false, destroy() { this.destroyed = true; } };
+    const req = new EventEmitter();
+    const res = new EventEmitter();
+    Object.defineProperty(res, 'writableFinished', { value: false });
+    proxy.emit('proxyReq', proxyReq, req, res);
+    req.emit('aborted');
+    assert.equal(proxyReq.destroyed, true);
   });
 });
 
