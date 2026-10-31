@@ -22,59 +22,108 @@ const DEFAULT_MAX_THUMBNAIL_SIZE = 200;
 const DEFAULT_THUMBNAIL_QUALITY = 0.9;
 
 /**
+ * How many photos are decoded at the same time. A full-size phone photo takes
+ * tens of MB once decoded, so a big batch at once runs a phone out of memory.
+ */
+const DECODE_AT_ONCE = 2;
+
+function fitWithin(width, height, maxSize) {
+    const scale = Math.min(1, maxSize / Math.max(width, height));
+    return {
+        width: Math.max(1, Math.round(width * scale)),
+        height: Math.max(1, Math.round(height * scale))
+    };
+}
+
+function canvasToBlobUrl(canvas, type) {
+    return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+            if (blob) {
+                resolve(URL.createObjectURL(blob));
+            } else {
+                reject(new Error('Failed to create thumbnail blob'));
+            }
+        }, type || 'image/jpeg', DEFAULT_THUMBNAIL_QUALITY);
+    });
+}
+
+/**
+ * Decode with createImageBitmap: the browser decodes on another thread, so
+ * the page keeps scrolling and answering taps while a batch is prepared.
+ * Returns null when the browser can't do it this way.
+ */
+async function bitmapThumbnail(file, maxSize) {
+    if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') {
+        return null;
+    }
+    let bitmap;
+    try {
+        bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch (e) {
+        return null;
+    }
+    try {
+        const { width, height } = fitWithin(bitmap.width, bitmap.height, maxSize);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+        return await canvasToBlobUrl(canvas, file.type);
+    } finally {
+        bitmap.close && bitmap.close();
+    }
+}
+
+/**
+ * Older browsers: decode through an <img>. img.decode() keeps the decode off
+ * the main thread where it can.
+ */
+async function imageElementThumbnail(file, maxSize) {
+    const img = new Image();
+    const src = URL.createObjectURL(file);
+    try {
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = () => reject(new Error('Failed to load image for thumbnail'));
+            img.src = src;
+        });
+        if (img.decode) {
+            await img.decode().catch(() => {});
+        }
+        const { width, height } = fitWithin(img.naturalWidth || img.width, img.naturalHeight || img.height, maxSize);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        return await canvasToBlobUrl(canvas, file.type);
+    } finally {
+        URL.revokeObjectURL(src);
+    }
+}
+
+/**
  * Create a thumbnail from an image file using canvas
- * 
+ *
  * @param {File} file - The image file to create thumbnail from
  * @param {number} maxSize - Maximum thumbnail dimension
  * @returns {Promise<string>} Blob URL of the thumbnail
  */
-async function createCanvasThumbnail(file, maxSize = DEFAULT_MAX_THUMBNAIL_SIZE) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        img.onload = () => {
-            let width = img.width;
-            let height = img.height;
-            
-            // Scale down maintaining aspect ratio
-            if (width > height) {
-                if (width > maxSize) {
-                    height = (height * maxSize) / width;
-                    width = maxSize;
-                }
-            } else {
-                if (height > maxSize) {
-                    width = (width * maxSize) / height;
-                    height = maxSize;
-                }
-            }
-            
-            canvas.width = width;
-            canvas.height = height;
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            canvas.toBlob((blob) => {
-                // Clean up the object URL we created
-                URL.revokeObjectURL(img.src);
-                
-                if (blob) {
-                    const url = URL.createObjectURL(blob);
-                    resolve(url);
-                } else {
-                    reject(new Error('Failed to create thumbnail blob'));
-                }
-            }, file.type || 'image/jpeg', DEFAULT_THUMBNAIL_QUALITY);
-        };
-        
-        img.onerror = () => {
-            URL.revokeObjectURL(img.src);
-            reject(new Error('Failed to load image for thumbnail'));
-        };
-        
-        img.src = URL.createObjectURL(file);
-    });
+export async function createCanvasThumbnail(file, maxSize = DEFAULT_MAX_THUMBNAIL_SIZE) {
+    return (await bitmapThumbnail(file, maxSize)) || imageElementThumbnail(file, maxSize);
+}
+
+/** Run `task` over `items` with at most `limit` running at once, keeping order. */
+async function mapLimited(items, limit, task) {
+    const results = new Array(items.length);
+    let next = 0;
+    const lane = async () => {
+        while (next < items.length) {
+            const index = next++;
+            results[index] = await task(items[index], index);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+    return results;
 }
 
 /**
@@ -108,95 +157,58 @@ function createThumbnailFile(blob, originalFile) {
 
 /**
  * Extract thumbnail previews from image files
- * 
- * Uses EXIF embedded thumbnails when available, falls back to canvas-based
- * resizing for images without EXIF data (like PNGs).
- * 
+ *
+ * Uses the EXIF embedded thumbnail when there is one, else scales the photo
+ * down on a canvas (PNGs, screenshots). Each photo is done start to end before
+ * the next, a few at a time, so the first preview is ready in a moment
+ * instead of after every photo of the batch has been read.
+ *
  * @param {File[]} filesArr - Array of image files
- * @returns {Promise<File[]>} Array of thumbnail File objects
+ * @param {function(File, File)} [onEach] - Called with (thumbnail, original)
+ *   as soon as each thumbnail is ready, so its tile can show it right away.
+ * @returns {Promise<File[]>} Thumbnail Files, in the order of their photos
  */
-export async function getPreviewFromImage(filesArr) {
+export async function getPreviewFromImage(filesArr, onEach) {
     if (!filesArr || filesArr.length === 0) {
         return [];
     }
 
-    // First, try to extract EXIF thumbnails
-    let thumbnailUrls = [];
-    try {
-        const urlPromises = filesArr.map(file => exifr.thumbnailUrl(file));
-        thumbnailUrls = await Promise.all(urlPromises);
-    } catch (e) {
-        Logger.warn('Cannot find thumbnail from EXIF: ' + e + ' Files: ' + filesArr.map(f => f.name).join(', '));
-    }
-
-    // Filter out nulls/undefined
-    thumbnailUrls = thumbnailUrls.map(url => url || null);
-
-    // Create fallback thumbnails for images without EXIF data
-    const needsFallback = thumbnailUrls.filter(url => !url).length > 0;
-    
-    if (needsFallback) {
-        Logger.info('Creating fallback thumbnails for images without EXIF data');
-        
-        const fallbackPromises = filesArr.map(async (file, index) => {
-            // Skip if we already have a thumbnail
-            if (thumbnailUrls[index]) {
-                return null;
-            }
-            
+    const thumbnails = await mapLimited(filesArr, DECODE_AT_ONCE, async (file) => {
+        let url = null;
+        try {
+            url = await exifr.thumbnailUrl(file);
+        } catch (e) {
+            Logger.warn('Cannot find thumbnail from EXIF in ' + file.name + ': ' + e);
+        }
+        if (!url) {
             try {
-                return await createCanvasThumbnail(file);
+                url = await createCanvasThumbnail(file);
             } catch (e) {
                 Logger.warn('Failed to create fallback thumbnail for ' + file.name + ': ' + e);
                 return null;
             }
-        });
-        
-        const fallbackThumbnails = await Promise.all(fallbackPromises);
-        
-        // Merge fallback thumbnails into the array
-        fallbackThumbnails.forEach((thumb, index) => {
-            if (thumb && !thumbnailUrls[index]) {
-                thumbnailUrls[index] = thumb;
-            }
-        });
-    }
-
-    // Filter to only valid thumbnails
-    const validThumbnails = thumbnailUrls.filter(url => url);
-    
-    if (validThumbnails.length === 0) {
-        Logger.warn('No thumbnail found for any image.');
-        return [];
-    }
-
-    // Convert blob URLs to actual blobs
-    const blobPromises = thumbnailUrls
-        .filter(item => item)
-        .map(item => urlToBlob(item));
-    
-    const thumbnailBlobs = await Promise.all(blobPromises);
-
-    // Create File objects with proper naming
-    const thumbnailFiles = thumbnailBlobs.map((blob, index) => {
-        // Find the corresponding original file
-        let originalFileIndex = 0;
-        let validIndex = 0;
-        for (let i = 0; i < thumbnailUrls.length; i++) {
-            if (thumbnailUrls[i]) {
-                if (validIndex === index) {
-                    originalFileIndex = i;
-                    break;
-                }
-                validIndex++;
-            }
         }
-        
-        const originalFile = filesArr[originalFileIndex] || filesArr[index];
-        return createThumbnailFile(blob, originalFile);
+        try {
+            const thumb = createThumbnailFile(await urlToBlob(url), file);
+            if (onEach) {
+                try {
+                    onEach(thumb, file);
+                } catch (e) {
+                    Logger.warn('Cannot show the thumbnail of ' + file.name + ' early: ' + e);
+                }
+            }
+            return thumb;
+        } catch (e) {
+            Logger.warn('Cannot read the thumbnail of ' + file.name + ': ' + e);
+            return null;
+        }
     });
 
-    return thumbnailFiles;
+    const valid = thumbnails.filter(Boolean);
+    if (valid.length === 0) {
+        Logger.warn('No thumbnail found for any image.');
+    }
+    return valid;
 }
 
 /**
@@ -259,7 +271,7 @@ export async function getPreviewFromAudio(filesArr) {
  * @param {File[]} filesArr - Array of video files
  * @returns {Promise<File[]>} Array of thumbnail File objects
  */
-export async function getPreviewFromVideo(filesArr) {
+export async function getPreviewFromVideo(filesArr, onEach) {
     if (!filesArr || filesArr.length === 0) {
         return [];
     }
@@ -269,10 +281,12 @@ export async function getPreviewFromVideo(filesArr) {
         try {
             const blob = await posterFromFile(file);
             if (blob) {
-                thumbnailFiles.push(new File([blob], 'Thumbnail ' + file.name, {
+                const thumb = new File([blob], 'Thumbnail ' + file.name, {
                     type: 'image/jpeg',
                     lastModified: file.lastModified
-                }));
+                });
+                thumbnailFiles.push(thumb);
+                if (onEach) onEach(thumb, file);
             }
         } catch (e) {
             Logger.warn('Failed to grab a video frame for ' + file.name + ': ' + e);
@@ -287,9 +301,11 @@ export async function getPreviewFromVideo(filesArr) {
  * Automatically detects file type and uses appropriate extraction method.
  * 
  * @param {File[]} filesArr - Array of media files
+ * @param {function(File, File)} [onEach] - Called with (thumbnail, original)
+ *   as each photo or clip thumbnail is ready.
  * @returns {Promise<File[]>} Array of thumbnail File objects
  */
-export async function extractThumbnails(filesArr) {
+export async function extractThumbnails(filesArr, onEach) {
     if (!filesArr || filesArr.length === 0) {
         return [];
     }
@@ -307,9 +323,9 @@ export async function extractThumbnails(filesArr) {
     const videoFiles = ofType('video');
 
     const [imageThumbs, audioThumbs, videoThumbs] = await Promise.all([
-        imageFiles.length > 0 ? getPreviewFromImage(imageFiles) : [],
+        imageFiles.length > 0 ? getPreviewFromImage(imageFiles, onEach) : [],
         audioFiles.length > 0 ? getPreviewFromAudio(audioFiles) : [],
-        videoFiles.length > 0 ? getPreviewFromVideo(videoFiles) : []
+        videoFiles.length > 0 ? getPreviewFromVideo(videoFiles, onEach) : []
     ]);
 
     return [...imageThumbs, ...audioThumbs, ...videoThumbs];

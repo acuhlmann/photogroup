@@ -75,7 +75,8 @@ function SimpleTile({ tile, roomId, onOpen, onError }) {
     // Only the preview is here (Data saver, or you have the photo); a tap gets the photo.
     const previewOnly = !!tile.previewOnly;
     const canOpen = viewable(tile) || previewOnly;
-    const picture = showImage ? tile.img : (tile.isVideo || previewOnly ? poster : null);
+    // A photo still being prepared or arriving shows its small preview, dimmed.
+    const picture = showImage ? tile.img : (tile.isVideo || previewOnly || tile.loading ? poster : null);
     const Icon = tile.isAudio ? AudiotrackRounded : PlayCircleRounded;
     return (
         <Stack spacing={1} data-testid="simple-tile">

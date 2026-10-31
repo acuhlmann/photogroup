@@ -1,5 +1,10 @@
 html {
   color-scheme: dark;
+  /* Feel like an app on phones: no grey flash on tap (buttons show their own
+     press), and no wait for a possible double-tap zoom before a tap counts. */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
 }
 
 body {

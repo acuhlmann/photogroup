@@ -10,6 +10,21 @@ import expressRequestId from 'express-request-id';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/**
+ * Built files under /assets/ have a content hash in their name, so a browser
+ * can keep them for a year and open the app again without asking the server.
+ * Everything else (index.html, the manifest, the service worker) is checked
+ * each time so a new version still reaches people.
+ */
+export function setStaticCacheHeaders(response, filePath) {
+    const rel = path.relative(path.join(__dirname, 'ui'), filePath).split(path.sep).join('/');
+    if (rel.startsWith('assets/')) {
+        response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+        response.setHeader('Cache-Control', 'no-cache');
+    }
+}
+
 export default class ServerSetup {
 
     start() {
@@ -54,7 +69,8 @@ export default class ServerSetup {
         app.use(compress());
 
         app.use(express.static(path.join(__dirname, 'ui'), {
-            etag: false
+            etag: false,
+            setHeaders: setStaticCacheHeaders
         }));
 
         // The service worker answers shares from other apps (share_target in the
