@@ -103,7 +103,7 @@ RoomNameDialog.propTypes = {
     onClose: PropTypes.func.isRequired,
 };
 
-/** What the room calls this person. Simple mode has no settings, so it is here. */
+/** What the room calls this person. It is here in every mode, next to the room's name. */
 function YourNameDialog({ master, open, onClose }) {
     const [value, setValue] = useState('');
     const [busy, setBusy] = useState(false);
@@ -162,10 +162,9 @@ YourNameDialog.propTypes = {
 /**
  * The room's name at the top of the page, in every mode. It opens the
  * things you do to the room itself: name it, see what the server keeps,
- * and leave it. In simple mode, which has no settings, it also holds
- * "Your name".
+ * and leave it, and what the room calls you.
  */
-export default function RoomMenu({ master, name, label, isPrivate = false, missingKey = false, showYourName = false }) {
+export default function RoomMenu({ master, name, label, isPrivate = false, missingKey = false }) {
     const [anchor, setAnchor] = useState(null);
     const [naming, setNaming] = useState(false);
     const [namingMe, setNamingMe] = useState(false);
@@ -219,12 +218,10 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
                     <ListItemIcon><EditRounded fontSize="small" /></ListItemIcon>
                     <ListItemText primary={name ? 'Change the name' : 'Name the room'} />
                 </MenuItem>
-                {showYourName && (
-                    <MenuItem onClick={pick(() => setNamingMe(true))}>
-                        <ListItemIcon><PersonOutlineRounded fontSize="small" /></ListItemIcon>
-                        <ListItemText primary="Your name" secondary={savedNickname() || master.device || undefined} />
-                    </MenuItem>
-                )}
+                <MenuItem onClick={pick(() => setNamingMe(true))}>
+                    <ListItemIcon><PersonOutlineRounded fontSize="small" /></ListItemIcon>
+                    <ListItemText primary="Your name" secondary={savedNickname() || master.device || undefined} />
+                </MenuItem>
                 <MenuItem onClick={pick(() => setPrivacy(true))}>
                     <ListItemIcon><ShieldOutlined fontSize="small" /></ListItemIcon>
                     <ListItemText primary="Privacy" />
@@ -236,7 +233,7 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
                 </MenuItem>
             </Menu>
             <RoomNameDialog master={master} open={naming} name={name} onClose={() => setNaming(false)} />
-            {showYourName && <YourNameDialog master={master} open={namingMe} onClose={() => setNamingMe(false)} />}
+            <YourNameDialog master={master} open={namingMe} onClose={() => setNamingMe(false)} />
             <RoomPrivacy master={master} open={privacy} onClose={() => setPrivacy(false)} />
         </>
     );
@@ -248,5 +245,4 @@ RoomMenu.propTypes = {
     label: PropTypes.string.isRequired,
     isPrivate: PropTypes.bool,
     missingKey: PropTypes.bool,
-    showYourName: PropTypes.bool,
 };

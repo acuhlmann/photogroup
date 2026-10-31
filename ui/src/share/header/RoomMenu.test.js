@@ -8,7 +8,7 @@ import RoomMenu, { LEFT_ROOM } from './RoomMenu';
 const byText = text => Array.from(document.body.querySelectorAll('[role="menuitem"], button'))
     .find(item => item.textContent.startsWith(text));
 
-async function render(name = '', props = {}) {
+async function render(name = '') {
     const master = {
         emitter: new EventEmitter(),
         service: {
@@ -26,7 +26,7 @@ async function render(name = '', props = {}) {
     const div = document.createElement('div');
     document.body.appendChild(div);
     const root = createRoot(div);
-    await act(async () => root.render(<RoomMenu master={master} name={name} label={name || 'Room from 25 Oct'} {...props} />));
+    await act(async () => root.render(<RoomMenu master={master} name={name} label={name || 'Room from 25 Oct'} />));
     const unmount = async () => {
         await act(async () => root.unmount());
         div.remove();
@@ -63,16 +63,9 @@ describe('RoomMenu', () => {
         await unmount();
     });
 
-    it('has no Your name item outside simple mode', async () => {
-        const { unmount } = await render();
-        await act(async () => document.querySelector('[aria-label^="Room: Room from 25 Oct"]').click());
-        expect(byText('Your name')).toBeUndefined();
-        await unmount();
-    });
-
-    it('lets a person in simple mode change their name', async () => {
+    it('lets a person change their name', async () => {
         localStorage.getItem.mockReturnValue(null);
-        const { master, unmount } = await render('', { showYourName: true });
+        const { master, unmount } = await render();
         await act(async () => document.querySelector('[aria-label^="Room: Room from 25 Oct"]').click());
         const item = byText('Your name');
         expect(item.textContent).toContain('Chrome on Samsung SM-S911B');

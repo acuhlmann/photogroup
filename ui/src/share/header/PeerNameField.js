@@ -28,10 +28,9 @@ export async function saveMyName(master, raw) {
 }
 
 /**
- * Where a person sets what the room calls them in default and geek mode. It
- * is mounted twice - in settings, and on this device's own node in geek mode -
- * because the name is what everyone else reads on the map and in the packet
- * log. Simple mode has no settings, so there it is "Your name" in the room menu.
+ * The name field on this device's own node in geek mode, where everyone
+ * else reads the name on the map and in the packet log. In every mode the
+ * room menu also has "Your name"; both save through saveMyName().
  */
 function PeerNameField({ master, hint, compact }) {
     const [value, setValue] = useState(() => localStorage.getItem(NICKNAME_KEY) || '');

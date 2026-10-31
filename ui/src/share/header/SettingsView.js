@@ -7,7 +7,6 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import TuneRounded from '@mui/icons-material/TuneRounded';
 import { headerButtonSx } from './headerButtonSx';
-import PeerNameField from './PeerNameField';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
@@ -245,10 +244,7 @@ function SettingsView(props) {
             >
                 <DialogTitle>Settings</DialogTitle>
                 <DialogContent>
-                    {/* Who you are to everyone else. */}
-                    <SectionHeader label="You" />
-                    <PeerNameField master={master} />
-
+                    {/* Your name is in the room menu, next to the room's own name. */}
                     <SectionHeader label="Sharing" />
                     <PreferenceSwitch
                         checked={removeLocation}
