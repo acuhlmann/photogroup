@@ -108,6 +108,17 @@ describe('ServerPinning', () => {
         expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob, expect.anything());
     });
 
+    it('answers an earlier request once its own loading entry is done', async () => {
+        const { service, emit, timers, settle } = setup({ bytes: { a: blob }, peers: [{ peerId: 'me' }, { peerId: 'asker' }] });
+        emit({ type: 'all', item: [{ ...photo('a', 'old-me', [{ peerId: 'me', loading: true }]), serverCopyRequestedAt: 1 }] });
+        emit({ type: 'updateOwner', item: [{ infoHash: 'a', peerId: 'me', progress: 50 }] });
+        expect(timers).toHaveLength(0);
+        emit({ type: 'updateOwner', item: [{ infoHash: 'a', peerId: 'me', loading: false }] });
+        timers[0].fn();
+        await settle();
+        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob, expect.anything());
+    });
+
     it('ignores other people saying they have a photo', () => {
         const { service, emit, timers } = setup({ bytes: { a: blob }, peers: [{ peerId: 'me' }, { peerId: 'asker' }, { peerId: 'friend' }] });
         emit({ type: 'all', item: [{ ...photo('a', 'old-me'), serverCopyRequestedAt: 1 }] });

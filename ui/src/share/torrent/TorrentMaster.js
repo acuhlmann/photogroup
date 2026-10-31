@@ -402,9 +402,16 @@ export default class TorrentMaster {
         // nobody who has the photo, and nobody answers a request for a
         // server copy. Private photos excluded: findPhotoBytes doesn't send
         // them from the cache.
-        const hasCached = !hasTorrent && !!item.cachedFile && !item.secure && !item.previewOnly;
+        // The cache wins over a torrent that is still unfinished.
+        const hasCached = !!item.cachedFile && !item.secure && !item.previewOnly;
         if(hasTorrent || hasCached) {
             const found = item.owners && item.owners.find(owner => owner.peerId === peerId);
+            if(found && found.loading && hasCached) {
+                // Listed as still loading, but the whole photo is here.
+                found.loading = false;
+                this.service.updateOwner?.([{ infoHash: item.infoHash, peerId, loading: false }]);
+                return null;
+            }
             if(!found) {
                 // Metadata alone isn't the photo: others (and the server's
                 // "everyone has it" check) must not count an unfinished download.

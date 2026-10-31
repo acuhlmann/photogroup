@@ -19,6 +19,21 @@ describe('a photo kept only in the cache', () => {
             .toEqual({ infoHash: 'abc', peerId: 'me', loading: false });
     });
 
+    it('prefers the cache over an unfinished torrent', () => {
+        const m = master([{ infoHash: 'abc', files: [{ name: 'a.jpg' }], done: false }]);
+        expect(m.fillMissingOwnersItem({ infoHash: 'abc', owners: [], cachedFile }))
+            .toEqual({ infoHash: 'abc', peerId: 'me', loading: false });
+    });
+
+    it('says it is no longer loading when it was listed as loading', () => {
+        const m = master([{ infoHash: 'abc', files: [{ name: 'a.jpg' }], done: false }]);
+        m.service = { updateOwner: vi.fn() };
+        const owner = { peerId: 'me', loading: true };
+        expect(m.fillMissingOwnersItem({ infoHash: 'abc', owners: [owner], cachedFile })).toBeNull();
+        expect(owner.loading).toBe(false);
+        expect(m.service.updateOwner).toHaveBeenCalledWith([{ infoHash: 'abc', peerId: 'me', loading: false }]);
+    });
+
     it('says so with no torrent at all', () => {
         expect(master().fillMissingOwnersItem({ infoHash: 'abc', owners: [], cachedFile }))
             .toEqual({ infoHash: 'abc', peerId: 'me', loading: false });
