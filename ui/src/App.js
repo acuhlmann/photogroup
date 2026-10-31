@@ -218,7 +218,8 @@ function App({theme: propsTheme}) {
                                         </Typography>
                                         {inRoom ? (
                                             <RoomMenu master={masterRef.current} name={room.name} label={room.label}
-                                                isPrivate={room.isPrivate} missingKey={room.missingKey} />
+                                                isPrivate={room.isPrivate} missingKey={room.missingKey}
+                                                showYourName={simple} />
                                         ) : (
                                             <Typography
                                                 className="tech-text"
