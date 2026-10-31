@@ -72,7 +72,7 @@ function SimpleTile({ tile, roomId, onOpen, onError }) {
     const percent = useArriving(tile);
     const poster = usePreview(tile);
     const showImage = !tile.loading && tile.img;
-    // "Data saver": only the preview is here; a tap gets the photo.
+    // Only the preview is here (Data saver, or you have the photo); a tap gets the photo.
     const previewOnly = !!tile.previewOnly;
     const canOpen = viewable(tile) || previewOnly;
     const picture = showImage ? tile.img : (tile.isVideo || previewOnly ? poster : null);
@@ -107,7 +107,7 @@ function SimpleTile({ tile, roomId, onOpen, onError }) {
                 )}
                 {previewOnly ? (
                     <Typography variant="body2" sx={{ position: 'relative', color: picture ? '#fff' : 'text.secondary', fontWeight: 600 }}>
-                        Tap to get the photo
+                        {alreadyHave(tile) ? 'You have this. Tap to get it again' : 'Tap to get the photo'}
                     </Typography>
                 ) : tile.loading ? (
                     <>

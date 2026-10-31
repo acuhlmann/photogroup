@@ -9,7 +9,7 @@ import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isDuplicateTorren
 import { extractThumbnails } from './ThumbnailExtractor';
 import { cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 import { fingerprintFile } from '../gallery/fingerprint';
-import { rememberHave } from '../gallery/alreadyHave';
+import { alreadyHave, onHaveChange, rememberHave } from '../gallery/alreadyHave';
 import parseTorrent from 'parse-torrent';
 import { readPreference } from '../preferences';
 
@@ -35,7 +35,11 @@ export default class TorrentAddition {
         this.pendingSeeds = new Set();
         this.shareStates = new Map();
 
+        // Photos on their way here, so a folder check that finds one can stop it.
+        this.arriving = new Set();
+
         emitter.on('photoRendered', this.updatePhotoThatRendered, this);
+        onHaveChange(() => this.stopWhatYouHave());
     }
 
     /**
@@ -116,15 +120,19 @@ export default class TorrentAddition {
 
 
         // "Data saver": start with nothing selected and fetch only the
-        // previews; each photo comes when the person asks for it. Private
-        // rooms have no previews, and a reload uses what this phone kept.
-        const saveData = !fromCache && readPreference('dataSaver') && !photos.some(photo => photo.secure);
+        // previews; each photo comes when the person asks for it. Photos the
+        // person already has get only their preview too. Private rooms have
+        // no previews, and a reload uses what this phone kept.
+        const previews = !fromCache && !photos.some(photo => photo.secure);
+        const saveData = previews && readPreference('dataSaver');
+        const previewFirst = photo => saveData || (previews && !!alreadyHave(photo));
+        const deselect = photos.some(previewFirst);
         const torrent = this.master.addSeedOrGetTorrent('add', torrentId, torrent => {
             Logger.info('_add done ' + torrent.name);
-        }, saveData ? { deselect: true } : undefined);
+        }, deselect ? { deselect: true } : undefined);
 
         // If P2P stalls, ServerFallback asks for a server copy and delivers it.
-        if (torrent && !saveData) {
+        if (torrent && !deselect) {
             photos.forEach(photo => this.watchFallback(photo, torrent));
         }
 
@@ -202,8 +210,8 @@ export default class TorrentAddition {
                     photo.rendering = false;
                     photo.torrent = torrent;
                     photo.url = torrent.magnetURI;
-                    if (saveData) {
-                        if (photo.torrentFileThumb && !photo.torrentFile?.done) {
+                    if (deselect) {
+                        if (previewFirst(photo) && photo.torrentFileThumb && !photo.torrentFile?.done) {
                             photo.previewOnly = true;
                             photo.loadFull = () => this.loadFull(photo);
                             photo.torrentFileThumb.select();
@@ -212,6 +220,7 @@ export default class TorrentAddition {
                             this.watchFallback(photo, torrent, true);
                         }
                     }
+                    if (!photo.previewOnly && !photo.secure && !photo.torrentFile?.done) this.arriving.add(photo);
                     this.emitter.emit('thumbsReady', photo.torrentFileThumb);
                     return photo;
                 });
@@ -261,7 +270,29 @@ export default class TorrentAddition {
         }));
     }
 
-    /** "Data saver": the person asked for a photo they only had the preview of. */
+    /**
+     * A folder check found photos that are still on their way: stop them and
+     * keep the preview, with the same way to get the photo anyway.
+     */
+    stopWhatYouHave() {
+        this.arriving.forEach(photo => {
+            if (photo.torrentFile?.done || photo.previewOnly || !photo.torrentFileThumb) {
+                this.arriving.delete(photo);
+                return;
+            }
+            if (!alreadyHave(photo)) return;
+            this.arriving.delete(photo);
+            photo.torrentFile?.deselect();
+            photo.previewOnly = true;
+            photo.loadFull = () => this.loadFull(photo);
+            photo.torrentFileThumb.select();
+            this.master.serverFallback?.unwatch(photo.infoHash);
+            Logger.info('Stopped ' + photo.fileName + ': you have it already');
+            this.emitter.emit('photos', { type: 'update', item: [photo] });
+        });
+    }
+
+    /** The person asked for a photo they only had the preview of. */
     loadFull(photo) {
         if (!photo.previewOnly) return;
         photo.previewOnly = false;

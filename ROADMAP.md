@@ -5,15 +5,14 @@ they don't already have, without losing anything (location, metadata) on
 the way. Each slice says why it matters, what we already know, where to
 start in the code, and when it's done.
 
-- **Up next:** skip the transfer of photos people already have.
-- **Later:** iPhone originals, recognising saved copies, and helpers for
-  adding a location back.
+- **Up next:** iPhone originals.
+- **Later:** recognising saved copies, and helpers for adding a location back.
 
 ---
 
 # Up next
 
-See **Don't transfer photos people already have** below.
+See **Make iPhone uploads originals** below.
 
 ---
 
@@ -45,33 +44,6 @@ purpose.
 
 **Done when:** a photo shared from an iPhone arrives byte-identical to the
 one in its Photos library, or the app explains why it couldn't.
-
----
-
-## Don't transfer photos people already have
-
-**Why:** today, photos someone already has still download over P2P so the
-gallery can show them; only saving skips them. On mobile data or with big
-videos, that's wasted transfer.
-
-**What we know:** WebTorrent 3 can add a torrent with nothing selected
-(`deselect: true`) and select single files. Every photo torrent also
-carries a small `Thumbnail <name>` file. Peers add every room torrent in
-`TorrentAddition.handlePhotoAddEvent` / `_add`, and `ServerFallback.watch`
-asks for (and fetches) a server copy when P2P stalls.
-
-**Work:**
-
-- For photos `alreadyHave()` knows, add the torrent deselected and select
-  only the thumbnail; don't start the server fallback for them.
-- Show those tiles from the thumbnail, with **Download anyway**.
-- When a folder check finds a photo, stop its transfer if it's still arriving.
-- Careful: the tile rendering pipeline (`Gallery.js`, `RenderContent.js`,
-  `LoadingTile.js`) assumes the main file arrives; it needs a
-  "thumbnail only, by choice" state.
-
-**Done when:** in a two-browser test, a photo the receiver already has
-transfers only its thumbnail, and Download anyway still gets the original.
 
 ---
 
@@ -116,6 +88,17 @@ in one or two taps.
 ---
 
 # Done
+
+## Don't transfer photos people already have
+
+A photo this browser already has (shared, saved or found on this device)
+used to download in full anyway. Now `TorrentAddition._add` adds the torrent
+deselected and selects only its `Thumbnail` file, the same way Data saver
+does. There is no server fallback for it, and this browser isn't listed as
+waiting for it. The tile says "You saved this · preview only" and offers
+**Download anyway** (`loadFull`). If a folder check finds a photo that is
+still on its way, `stopWhatYouHave` stops it. Tests:
+`torrent/__tests__/SkipWhatYouHave.test.js`, `e2e/tests/skip-what-you-have.spec.js`.
 
 ## Saving keeps a photo's XMP
 
