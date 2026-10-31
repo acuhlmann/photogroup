@@ -5,6 +5,7 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import Logger from 'js-logger';
@@ -19,6 +20,36 @@ import NotifyPrompt from './NotifyPrompt';
 
 // Geek mode's network map is large and not the start mode: load it on first use.
 const GeekStage = lazy(() => import("./geek/GeekStage"));
+
+/**
+ * When the map's code can't load (no connection, or a new version replaced
+ * it), keep the app and offer a reload. A new try in the same page can't
+ * help: the browser keeps a failed import for the page's life.
+ */
+export class MapLoadBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { failed: false };
+    }
+
+    static getDerivedStateFromError() {
+        return { failed: true };
+    }
+
+    componentDidCatch(error) {
+        Logger.error('Cannot load the map: ' + (error && error.message ? error.message : error));
+    }
+
+    render() {
+        if (!this.state.failed) return this.props.children;
+        return (
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5, p: 3, textAlign: 'center' }}>
+                <Typography variant="body2">Cannot load the map. Check your connection.</Typography>
+                <Button variant="outlined" onClick={() => window.location.reload()}>Reload the page</Button>
+            </Box>
+        );
+    }
+}
 
 const BACKUP_SNACK = 'serverCopyBackup';
 
@@ -184,7 +215,9 @@ function ShareCanvas({master, mode = 'default', roomName = '', enqueueSnackbar, 
                 overflow: 'hidden',
                 position: 'relative',
             }}>
-                {geek ? <Suspense fallback={null}><GeekStage master={master} tiles={tiles} isMobile={isMobile} /></Suspense> : null}
+                {geek ? <MapLoadBoundary>
+                    <Suspense fallback={null}><GeekStage master={master} tiles={tiles} isMobile={isMobile} /></Suspense>
+                </MapLoadBoundary> : null}
                 <Box sx={{
                     display: geek ? 'none' : 'block',
                     flex: 1,

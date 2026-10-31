@@ -9,6 +9,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Typography from "@mui/material/Typography";
 import Logger from 'js-logger';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -45,6 +46,8 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
 
     const [invite, setInvite] = useState(false);
     const [scan, setScan] = useState(false);
+    // The scanner code loads on first use; on a bad connection that can fail.
+    const [scanFailed, setScanFailed] = useState(false);
     const [numPeers, setNumPeers] = useState(0);
     const scannerRef = useRef(null);
 
@@ -114,6 +117,7 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
                     scannerRef.current = scanner;
                 } catch (err) {
                     Logger.error('Failed to initialize QR scanner:', err);
+                    if (!cancelled) setScanFailed(true);
                 }
             }, 100);
 
@@ -127,6 +131,7 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
             scannerRef.current.clear().catch(err => Logger.error('Failed to clear scanner:', err));
             scannerRef.current = null;
         }
+        if (!scan) setScanFailed(false);
     }, [scan, handleScan]);
 
     // Cleanup scanner on unmount
@@ -233,6 +238,15 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
                     >
                         <div id="qr-reader"></div>
                     </Box>
+                    {scanFailed && (
+                        <Box sx={{ textAlign: 'center', mt: 2 }}>
+                            <Typography variant="body2" sx={{ mb: 1 }}>
+                                Cannot start the scanner. Check your connection.
+                            </Typography>
+                            {/* The browser keeps a failed import for the page's life. */}
+                            <Button variant="outlined" onClick={() => window.location.reload()}>Reload the page</Button>
+                        </Box>
+                    )}
                 </DialogContent>
             </Dialog>
         </div>
