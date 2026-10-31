@@ -161,6 +161,14 @@ describe('parseLocationText', () => {
         expect(parseLocationText('geo:47.37,8.54?z=15')).toEqual({ lat: 47.37, long: 8.54 });
     });
 
+    it('reads every link the location card offers', async () => {
+        const { mapLinks, parseLocationText } = await import('./geo');
+        mapLinks(31.2304, 121.4737, 'The Bund').forEach(link => {
+            expect(parseLocationText(link.href)).toEqual({ lat: 31.2304, long: 121.4737 });
+        });
+        expect(parseLocationText('https://www.openstreetmap.org/#map=16/47.3727/8.5409')).toEqual({ lat: 47.3727, long: 8.5409 });
+    });
+
     it('leaves place names and impossible numbers to the search', async () => {
         const { parseLocationText } = await import('./geo');
         expect(parseLocationText('Lindenhof Zurich')).toBeNull();

@@ -78,6 +78,17 @@ describe("photos you have don't download again", () => {
         expect(photos.every(photo => !photo.previewOnly)).toBe(true);
     });
 
+    it('forgets photos once they arrive', async () => {
+        const { torrent, addition, added } = setup();
+        await added;
+        expect(addition.arriving.size).toBe(2);
+        torrent.files[0].done = true;
+        addition.pruneArriving();
+        expect([...addition.arriving].map(photo => photo.fileName)).toEqual(['b.jpg']);
+        await addition.done(torrent);
+        expect(addition.arriving.size).toBe(0);
+    });
+
     it('selects everything as before when you have none of them', async () => {
         const { master, photos, added } = setup();
         await added;

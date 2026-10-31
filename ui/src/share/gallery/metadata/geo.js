@@ -57,21 +57,27 @@ const PASTED = [
     new RegExp(`@(${NUMBER}),(${NUMBER})`),
     // ?q=, ?ll=, ?query= and geo: links.
     new RegExp(`(?:[?&](?:q|ll|query|center)=|geo:)(${NUMBER})(?:,|%2C)\\s*(${NUMBER})`, 'i'),
+    // OpenStreetMap: ?mlat=…&mlon=…, or #map=zoom/lat/long.
+    new RegExp(`[?&]mlat=(${NUMBER})&mlon=(${NUMBER})`),
+    new RegExp(`#map=\\d+/(${NUMBER})/(${NUMBER})`),
+    // Amap: ?position=long,lat (longitude first).
+    { pattern: new RegExp(`[?&]position=(${NUMBER})(?:,|%2C)(${NUMBER})`), longFirst: true },
     // "47.37, 8.54" or "47.37 8.54".
     new RegExp(`^\\s*(${NUMBER})\\s*[,;\\s]\\s*(${NUMBER})\\s*$`),
 ];
 
 /**
- * Coordinates from pasted text: "47.37, 8.54", a Google Maps link, or a
- * geo: link. Null when the text is a place name to search for.
+ * Coordinates from pasted text: "47.37, 8.54", a Google Maps, OpenStreetMap
+ * or Amap link (the ones `mapLinks` makes too), or a geo: link. Null when the text is a place name to search for.
  */
 export function parseLocationText(text) {
     const value = String(text || '').trim();
-    for (const pattern of PASTED) {
+    for (const entry of PASTED) {
+        const { pattern, longFirst } = entry instanceof RegExp ? { pattern: entry } : entry;
         const match = pattern.exec(value);
         if (!match) continue;
-        const lat = Number(match[1]);
-        const long = Number(match[2]);
+        const lat = Number(match[longFirst ? 2 : 1]);
+        const long = Number(match[longFirst ? 1 : 2]);
         if (isValidLocation(lat, long)) return { lat, long };
     }
     return null;

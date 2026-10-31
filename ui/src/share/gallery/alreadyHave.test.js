@@ -40,6 +40,13 @@ describe('alreadyHave', () => {
         expect(alreadyHave({ fingerprint: fp(1) })).toBe('device');
     });
 
+    it('keeps a photo shared from here as shared, even after saving it', () => {
+        rememberHave(fp(1), 'shared');
+        rememberHave(fp(1), 'saved');
+        rememberHave(fp(1), 'device');
+        expect(alreadyHave({ fingerprint: fp(1) })).toBe('shared');
+    });
+
     it('ignores missing fingerprints', () => {
         const listener = vi.fn();
         const stop = onHaveChange(listener);

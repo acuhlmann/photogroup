@@ -230,6 +230,7 @@ export default class TorrentAddition {
                             this.watchFallback(photo, torrent, true);
                         }
                     }
+                    this.pruneArriving();
                     if (!photo.previewOnly && !photo.secure && !photo.torrentFile?.done) this.arriving.add(photo);
                     this.emitter.emit('thumbsReady', photo.torrentFileThumb);
                     return photo;
@@ -285,11 +286,8 @@ export default class TorrentAddition {
      * keep the preview, with the same way to get the photo anyway.
      */
     stopWhatYouHave() {
+        this.pruneArriving();
         this.arriving.forEach(photo => {
-            if (photo.torrentFile?.done || photo.previewOnly || !photo.torrentFileThumb) {
-                this.arriving.delete(photo);
-                return;
-            }
             if (!haveSaved(photo)) return;
             this.arriving.delete(photo);
             photo.torrentFile?.deselect();
@@ -299,6 +297,15 @@ export default class TorrentAddition {
             this.master.serverFallback?.unwatch(photo.infoHash);
             Logger.info('Stopped ' + photo.fileName + ': you have it already');
             this.emitter.emit('photos', { type: 'update', item: [photo] });
+        });
+    }
+
+    /** Forget photos that arrived, were removed, or can't be stopped. A torrent with a preview-only file never fires 'done'. */
+    pruneArriving() {
+        this.arriving.forEach(photo => {
+            if (photo.torrentFile?.done || photo.torrent?.destroyed || photo.previewOnly || !photo.torrentFileThumb) {
+                this.arriving.delete(photo);
+            }
         });
     }
 
@@ -929,6 +936,9 @@ export default class TorrentAddition {
 
     async done(torrent) {
         Logger.info('done ' + torrent.name);
+        this.arriving.forEach(photo => {
+            if (photo.torrent === torrent) this.arriving.delete(photo);
+        });
 
         // Receivers cache what they downloaded too (previously only the
         // uploader did), so a receiver's reload / later re-share does not

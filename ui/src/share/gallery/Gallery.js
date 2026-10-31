@@ -638,6 +638,7 @@ function Gallery(props) {
                 <PhotoViewer
                     master={master}
                     tiles={viewerTiles}
+                    roomTiles={tiles}
                     index={selectedIndex}
                     onClose={closeViewer}
                     onIndexChange={showIndex}

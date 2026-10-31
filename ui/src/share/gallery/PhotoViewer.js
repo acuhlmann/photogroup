@@ -36,7 +36,7 @@ import { canReadTorrentFile } from './saveRoom';
  * photo on a wide screen and are hidden until asked for on a narrow one,
  * so the photo gets the room.
  */
-function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
+function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange }) {
     const theme = useTheme();
     const narrow = useMediaQuery(theme.breakpoints.down('md'));
     const [detailsAsked, setDetailsAsked] = useState(null);
@@ -345,7 +345,8 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                         onFileNameChange={isPrivateRoom() ? undefined : handleFileNameChange}
                         onSaveDetails={canSaveDetails(master) ? handleSaveDetails : undefined}
                         myPeerId={master.client && master.client.peerId}
-                        locationHints={() => ({ nearby: nearbyLocations(tile, tiles, master), minutesAgo: takenMinutesAgo(tile, master) })}
+                        /* All of the room's photos, not only the ones a filter shows. */
+                        locationHints={() => ({ nearby: nearbyLocations(tile, roomTiles || tiles, master), minutesAgo: takenMinutesAgo(tile, master) })}
                     />
 
                     {Array.isArray(tile.owners) && master.peers && master.client
@@ -368,6 +369,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
 PhotoViewer.propTypes = {
     master: PropTypes.object.isRequired,
     tiles: PropTypes.array.isRequired,
+    roomTiles: PropTypes.array,
     index: PropTypes.number.isRequired,
     onClose: PropTypes.func.isRequired,
     onIndexChange: PropTypes.func.isRequired,
