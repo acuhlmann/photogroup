@@ -11,7 +11,8 @@ import RemoveRounded from '@mui/icons-material/RemoveRounded';
 import SearchRounded from '@mui/icons-material/SearchRounded';
 import MyLocationRounded from '@mui/icons-material/MyLocationRounded';
 import TileMap from './TileMap';
-import { formatDecimal, isValidLocation, searchPlaces } from './geo';
+import { formatDecimal, isValidLocation, parseLocationText, searchPlaces } from './geo';
+import { minutesText } from './locationHints';
 import { saveErrorText } from './saveDetails';
 
 const WORLD = { lat: 20, long: 0, zoom: 2 };
@@ -24,12 +25,20 @@ const zoomButtonSx = {
     '&:hover': { bgcolor: 'background.paper' },
 };
 
+const hintSx = {
+    width: '100%', textAlign: 'left', p: 0.75, border: 1, borderColor: 'divider', borderRadius: 1, cursor: 'pointer',
+    font: 'inherit', color: 'inherit', bgcolor: 'transparent', '&:hover': { bgcolor: 'action.hover' },
+};
+
 /**
- * Pick where a photo was taken: search for a place, use this device's
- * position, or drag the map under the pin. Saves {lat, long, name?} for
- * everyone in the room; "Remove" saves null, which hides the file's own.
+ * Pick where a photo was taken: search for a place, paste coordinates or a
+ * map link, use this device's position, or drag the map under the pin.
+ * `hints` offers the places of photos taken close in time
+ * ({nearby: [{fileName, minutes, location}]}), and the device's position
+ * first when the photo is recent ({minutesAgo}). Saves {lat, long, name?}
+ * for everyone in the room; "Remove" saves null, which hides the file's own.
  */
-function LocationEditor({ initial, canRemove, onSave, onCancel }) {
+function LocationEditor({ initial, canRemove, hints, onSave, onCancel }) {
     const start = initial && isValidLocation(initial.lat, initial.long);
     const [view, setView] = useState(start
         ? { lat: initial.lat, long: initial.long, zoom: PLACE_ZOOM }
@@ -50,6 +59,13 @@ function LocationEditor({ initial, canRemove, onSave, onCancel }) {
 
     const search = async () => {
         if (!query.trim()) return;
+        const pasted = parseLocationText(query);
+        if (pasted) {
+            setResults(null);
+            setError('');
+            moveTo(pasted.lat, pasted.long, PLACE_ZOOM);
+            return;
+        }
         setBusy('search');
         setError('');
         try {
@@ -93,6 +109,9 @@ function LocationEditor({ initial, canRemove, onSave, onCancel }) {
         }
     };
 
+    const nearby = (hints && hints.nearby) || [];
+    const recent = !!hints && Number.isFinite(hints.minutesAgo);
+
     const name = named && named.lat === view.lat && named.long === view.long ? named.name : null;
     const zoomBy = step => setView(current => ({ ...current, zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, current.zoom + step)) }));
 
@@ -104,7 +123,7 @@ function LocationEditor({ initial, canRemove, onSave, onCancel }) {
                 <TextField
                     size="small"
                     fullWidth
-                    placeholder="Search a place or address"
+                    placeholder="Search a place, or paste coordinates or a map link"
                     value={query}
                     onChange={event => setQuery(event.target.value)}
                     slotProps={{ htmlInput: { 'aria-label': 'Search a place' } }}
@@ -113,6 +132,35 @@ function LocationEditor({ initial, canRemove, onSave, onCancel }) {
                     <SearchRounded />
                 </IconButton>
             </Box>
+            {(nearby.length > 0 || recent) && (
+                <Box component="ul" aria-label="Suggestions" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    {recent && (
+                        <li>
+                            <Box component="button" type="button" onClick={useDevicePosition} disabled={busy === 'device'} sx={hintSx}>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                    {busy === 'device' ? 'Locating…' : 'Use where you are now'}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                                    {hints.minutesAgo < 1 ? 'Taken just now' : `Taken ${minutesText(hints.minutesAgo)} ago`}
+                                </Typography>
+                            </Box>
+                        </li>
+                    )}
+                    {nearby.map(item => (
+                        <li key={`${item.fileName}-${item.minutes}`}>
+                            <Box component="button" type="button" sx={hintSx}
+                                onClick={() => moveTo(Number(item.location.lat), Number(item.location.long), PLACE_ZOOM, item.location.name || null)}>
+                                <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
+                                    Use the location of {item.fileName}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                                    {item.minutes < 1 ? 'Taken at the same time' : `Taken ${minutesText(item.minutes)} apart`}
+                                </Typography>
+                            </Box>
+                        </li>
+                    ))}
+                </Box>
+            )}
             {results && (
                 results.length ? (
                     <Box component="ul" aria-label="Places found" sx={{ m: 0, p: 0, listStyle: 'none', maxHeight: 180, overflow: 'auto' }}>
@@ -146,10 +194,13 @@ function LocationEditor({ initial, canRemove, onSave, onCancel }) {
                 <Typography variant="body2" sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'text.secondary', flex: 1 }}>
                     {picked ? (name ? `${name} · ` : '') + formatDecimal(view.lat, view.long) : 'Search, use your location, or drag the map under the pin.'}
                 </Typography>
-                <Button size="small" startIcon={<MyLocationRounded fontSize="small" />} onClick={useDevicePosition}
-                    disabled={busy === 'device'} sx={{ textTransform: 'none' }}>
-                    {busy === 'device' ? 'Locating…' : 'Use my location'}
-                </Button>
+                {/* A recent photo offers this as its first suggestion instead. */}
+                {!recent && (
+                    <Button size="small" startIcon={<MyLocationRounded fontSize="small" />} onClick={useDevicePosition}
+                        disabled={busy === 'device'} sx={{ textTransform: 'none' }}>
+                        {busy === 'device' ? 'Locating…' : 'Use my location'}
+                    </Button>
+                )}
             </Stack>
             {error && <Typography variant="body2" role="alert" sx={{ color: 'error.main' }}>{error}</Typography>}
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
@@ -171,6 +222,7 @@ function LocationEditor({ initial, canRemove, onSave, onCancel }) {
 LocationEditor.propTypes = {
     initial: PropTypes.object,
     canRemove: PropTypes.bool,
+    hints: PropTypes.shape({ nearby: PropTypes.array, minutesAgo: PropTypes.number }),
     onSave: PropTypes.func.isRequired,
     onCancel: PropTypes.func.isRequired,
 };

@@ -25,7 +25,6 @@ import DownloadRoomButton from "./DownloadRoomButton";
 import AndroidLocationNote from "./AndroidLocationNote";
 import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
-import { captureDroppedHandles } from "./replaceOriginal";
 import { openSealedPhoto } from "./openSealed";
 import SimpleGrid from "../simple/SimpleGrid";
 import ChooseToSave, { toChoose } from "./ChooseToSave";
@@ -95,9 +94,7 @@ function Gallery(props) {
         if (files.length > 0) {
             // Through the uploader, so drops get what a pick from Share gets:
             // encryption when it's on, and on Android zips unpacked and blanked locations held back.
-            captureDroppedHandles(e.dataTransfer).then(() => {
-                master.emitter.emit('filesSelected', files);
-            });
+            master.emitter.emit('filesSelected', files);
         }
     }, [master]);
 
@@ -641,6 +638,7 @@ function Gallery(props) {
                 <PhotoViewer
                     master={master}
                     tiles={viewerTiles}
+                    roomTiles={tiles}
                     index={selectedIndex}
                     onClose={closeViewer}
                     onIndexChange={showIndex}

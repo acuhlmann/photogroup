@@ -1,11 +1,15 @@
 import Logger from 'js-logger';
 import { fingerprintFile, fingerprintSize } from './fingerprint';
 import { rememberHave } from './alreadyHave';
+import { readOriginalFingerprint } from './metadata/embed/originalFingerprint';
 
 // Let people point at a folder of their own photos (a camera roll, a synced
 // Google Photos folder) so the room can tell which of its photos they
 // already have. Only files whose exact size matches a room photo are read,
-// so a big folder is checked quickly.
+// so a big folder is checked quickly. A copy saved from PhotoGroup with
+// the room's details has other bytes and another size; it notes the
+// original's fingerprint in its XMP, which is read only for files named
+// like a room photo.
 
 const MAX_DEPTH = 8;
 
@@ -60,6 +64,11 @@ export async function pickFolder(win = window) {
     return pickWithInput(win.document);
 }
 
+/** A file name as saving may change it: any case, and "IMG_1 (2).jpg" for a second "IMG_1.jpg". */
+function plainName(name) {
+    return String(name || '').split(/[/\\]/).pop().toLowerCase().replace(/ \(\d+\)(?=\.[^.]*$|$)/, '');
+}
+
 /**
  * Which room photos are among `entries` (Files or file handles), by
  * fingerprint. Remembers them as on this device and resolves to the
@@ -67,11 +76,16 @@ export async function pickFolder(win = window) {
  */
 export async function findOnDevice(tiles, entries, { onProgress = () => {} } = {}) {
     const bySize = new Map();
+    const byName = new Map();
     tiles.forEach(tile => {
         const size = fingerprintSize(tile.fingerprint);
         if (!Number.isFinite(size)) return;
         if (!bySize.has(size)) bySize.set(size, new Set());
         bySize.get(size).add(tile.fingerprint);
+        const name = plainName(tile.fileName);
+        if (!name) return;
+        if (!byName.has(name)) byName.set(name, new Set());
+        byName.get(name).add(tile.fingerprint);
     });
 
     const found = new Set();
@@ -80,9 +94,12 @@ export async function findOnDevice(tiles, entries, { onProgress = () => {} } = {
             const entry = entries[index];
             const file = typeof entry.getFile === 'function' ? await entry.getFile() : entry;
             const candidates = bySize.get(file.size);
-            if (candidates) {
-                const fingerprint = await fingerprintFile(file);
-                if (candidates.has(fingerprint)) found.add(fingerprint);
+            const fingerprint = candidates ? await fingerprintFile(file) : null;
+            if (fingerprint && candidates.has(fingerprint)) {
+                found.add(fingerprint);
+            } else if (byName.has(plainName(file.name))) {
+                const original = await readOriginalFingerprint(file);
+                if (original && byName.get(plainName(file.name)).has(original)) found.add(original);
             }
         } catch (err) {
             Logger.warn('Skipped a file while looking for your photos: ' + (err && err.message ? err.message : err));

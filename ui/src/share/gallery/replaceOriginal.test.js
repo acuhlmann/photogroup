@@ -24,14 +24,11 @@ function handleWith(stream = writable()) {
 }
 
 let replaceOriginal;
-let captureDroppedHandles;
 let clearOriginalFiles;
-let originalReady;
 let replaceKind;
 let replaceLabel;
 let replaceHint;
 let replaceFailureMessage;
-let attachOriginalHandle;
 
 beforeEach(async () => {
     vi.resetModules();
@@ -40,43 +37,18 @@ beforeEach(async () => {
     navigator.canShare = undefined;
     ({
         replaceOriginal,
-        captureDroppedHandles,
         clearOriginalFiles,
-        originalReady,
         replaceKind,
         replaceLabel,
         replaceHint,
         replaceFailureMessage,
-        attachOriginalHandle,
         primePhotoCopy,
     } = await import('./replaceOriginal'));
     clearOriginalFiles();
 });
 
 describe('replaceOriginal', () => {
-    it('writes over a file the user already granted, without asking again', async () => {
-        const stream = writable();
-        const handle = handleWith(stream);
-        const file = new File([blob], 'a.jpg', { type: 'image/jpeg' });
-        attachOriginalHandle(file, handle);
-        window.showSaveFilePicker = vi.fn();
-
-        const result = await replaceOriginal({
-            elem: blob,
-            file,
-            fileName: 'a.jpg',
-            tileKey: 'k',
-        });
-
-        expect(result).toBe('replaced');
-        expect(window.showSaveFilePicker).not.toHaveBeenCalled();
-        const written = stream.write.mock.calls[0][0];
-        expect(new Uint8Array(await written.arrayBuffer())).toEqual(new Uint8Array(await blob.arrayBuffer()));
-        expect(stream.close).toHaveBeenCalled();
-        expect(originalReady({ tileKey: 'k' })).toBe(true);
-    });
-
-    it('asks where to replace, then remembers that file for the next edit', async () => {
+    it('asks where to save every time, and never writes over a file on its own', async () => {
         const stream = writable();
         const handle = handleWith(stream);
         window.showSaveFilePicker = vi.fn().mockResolvedValue(handle);
@@ -101,28 +73,22 @@ describe('replaceOriginal', () => {
             }],
         }));
         expect(stream.write).toHaveBeenCalled();
-        expect(replaceLabel(tile)).toBe('Replace original');
-        expect(replaceHint(tile)).toContain('over the file you chose');
+        expect(replaceLabel(tile)).toBe('Choose where to save…');
+        expect(replaceLabel(tile, { replaced: 'replaced' })).toBe('Saved');
 
         window.showSaveFilePicker.mockClear();
         await replaceOriginal(tile);
-        expect(window.showSaveFilePicker).not.toHaveBeenCalled();
+        expect(window.showSaveFilePicker).toHaveBeenCalledTimes(1);
     });
 
-    // The same dialog, named for what it is: a photo from someone else has no
-    // original on this device, so the person is choosing a destination.
-    it('names the choice by whose file it is', async () => {
+    it('names the choice the same for photos shared from here and received', () => {
         window.showSaveFilePicker = vi.fn();
         const received = { elem: blob, fileName: 'dock.jpg', fileType: 'image/jpeg', tileKey: 'theirs' };
         const shared = { elem: blob, fileName: 'dock.jpg', fileType: 'image/jpeg', tileKey: 'mine', seed: true };
 
-        expect(replaceLabel(shared)).toBe('Replace original…');
+        expect(replaceLabel(shared)).toBe('Choose where to save…');
         expect(replaceLabel(received)).toBe('Choose where to save…');
-        expect(replaceHint(received)).toContain('DCIM/Camera');
-
-        // Once it has been written, that file is theirs to replace from here on.
-        expect(replaceLabel(received, { replaced: 'replaced' })).toBe('Saved');
-        expect(replaceLabel(shared, { replaced: 'replaced' })).toBe('Replaced');
+        expect(replaceHint()).toContain('DCIM/Camera');
     });
 
     it('starts reading a torrent file before the save dialog returns', async () => {
@@ -152,7 +118,7 @@ describe('replaceOriginal', () => {
         expect(read).toBe(true);
     });
 
-    it('copies the photo before opening the destination, so the same file can be replaced', async () => {
+    it('copies the photo before opening the destination, so picking the file it came from is safe', async () => {
         const bytes = new Uint8Array([1, 2, 3, 4]);
         const file = new File([bytes], 'harbor.jpg', { type: 'image/jpeg' });
         let opened = false;
@@ -247,29 +213,17 @@ describe('replaceOriginal', () => {
         expect(replaceFailureMessage(err)).toBe('');
     });
 
-    it('discards a partial write and forgets a file that cannot be changed', async () => {
+    it('discards a partial write', async () => {
         const stream = writable(vi.fn().mockRejectedValue(Object.assign(new Error('ro'), { name: 'NoModificationAllowedError' })));
-        const handle = {
-            kind: 'file',
-            queryPermission: vi.fn().mockResolvedValue('granted'),
-            createWritable: vi.fn().mockResolvedValue(stream),
-        };
-        const file = new File([blob], 'a.jpg', { type: 'image/jpeg' });
-        attachOriginalHandle(file, handle);
-        const tile = { elem: blob, file, fileName: 'a.jpg', tileKey: 'ro' };
+        window.showSaveFilePicker = vi.fn().mockResolvedValue(handleWith(stream));
+        const tile = { elem: blob, fileName: 'a.jpg', tileKey: 'ro' };
 
         await expect(replaceOriginal(tile)).rejects.toMatchObject({ name: 'NoModificationAllowedError' });
         expect(stream.abort).toHaveBeenCalled();
         expect(stream.close).not.toHaveBeenCalled();
-        expect(originalReady(tile)).toBe(false);
-
-        const next = handleWith();
-        window.showSaveFilePicker = vi.fn().mockResolvedValue(next);
-        await replaceOriginal(tile);
-        expect(window.showSaveFilePicker).toHaveBeenCalled();
     });
 
-    it('shares a same-named file when the browser cannot write one in place', async () => {
+    it('opens the share sheet when the browser has no save dialog', async () => {
         const shared = vi.fn().mockResolvedValue(undefined);
         navigator.share = shared;
         navigator.canShare = vi.fn().mockReturnValue(true);
@@ -277,7 +231,7 @@ describe('replaceOriginal', () => {
 
         expect(replaceKind()).toBe('share');
         expect(replaceLabel(tile)).toBe('Save to Files');
-        expect(replaceHint(tile)).toContain('same folder');
+        expect(replaceHint()).toContain('Pick the folder');
 
         await expect(replaceOriginal(tile)).resolves.toBe('shared');
         const payload = shared.mock.calls[0][0];
@@ -286,7 +240,7 @@ describe('replaceOriginal', () => {
         expect(replaceLabel(tile, { replaced: 'shared' })).toBe('Saved');
     });
 
-    it('remembers a photo once it is written back, not when the picker is cancelled', async () => {
+    it('remembers a photo once it is saved, not when the picker is cancelled', async () => {
         const { alreadyHave, clearHave } = await import('./alreadyHave');
         clearHave();
         const written = { elem: blob, fileName: 'a.jpg', tileKey: 'w', fingerprint: '3:' + 'a'.repeat(64) };
@@ -305,26 +259,6 @@ describe('replaceOriginal', () => {
         navigator.canShare = vi.fn().mockReturnValue(false);
         expect(replaceKind()).toBe(null);
         await expect(replaceOriginal({ elem: blob, fileName: 'a.jpg' }))
-            .rejects.toThrow(/cannot put the file back/);
-    });
-});
-
-describe('captureDroppedHandles', () => {
-    it('keeps the dropped file handle on the file that will be seeded', async () => {
-        const file = new File(['a'], 'a.jpg', { type: 'image/jpeg' });
-        const handle = handleWith();
-        const dataTransfer = {
-            files: [file],
-            items: [{
-                kind: 'file',
-                getAsFileSystemHandle: vi.fn().mockResolvedValue(handle),
-            }, {
-                kind: 'string',
-            }],
-        };
-
-        await captureDroppedHandles(dataTransfer);
-
-        expect(originalReady({ file, tileKey: 'drop' })).toBe(true);
+            .rejects.toThrow(/cannot choose a folder/);
     });
 });

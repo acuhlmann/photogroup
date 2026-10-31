@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { canFindOnDevice, findOnDevice, pickFolder } from './findOnDevice';
 import { alreadyHave, clearHave } from './alreadyHave';
 import { fingerprintFile } from './fingerprint';
+import { embedDetails } from './metadata/embed/embedDetails';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const file = (text, name) => new File([text], name);
 
@@ -22,6 +25,18 @@ function folder(name, children) {
 
 describe('findOnDevice', () => {
     beforeEach(() => clearHave());
+
+    it('finds a copy saved with the room details, by the original it notes', async () => {
+        const original = new File([readFileSync(join(__dirname, 'metadata/embed/__fixtures__/photo.jpg'))], 'photo.jpg');
+        const fingerprint = await fingerprintFile(original);
+        const saved = await embedDetails(original, { title: 'Dock' }, { originalFingerprint: fingerprint });
+        const tiles = [{ fileName: 'photo.jpg', fingerprint }];
+
+        // Another browser's download folder: renamed by the browser, or under another name.
+        expect(await findOnDevice(tiles, [new File([saved], 'other.jpg')])).toEqual([]);
+        expect(await findOnDevice(tiles, [new File([saved], 'PHOTO (1).jpg')])).toEqual(tiles);
+        expect(alreadyHave(tiles[0])).toBe('device');
+    });
 
     it('finds room photos among the files, whatever they are called, and remembers them', async () => {
         const mine = file('beach photo bytes', 'IMG_0001.JPG');

@@ -30,6 +30,9 @@ const room = (id, settings = {}, sessions = []) => ({
  * burst is complete. Clearing a timer really removes it: a batch that keeps
  * growing must still end up as one message.
  */
+// Every service a test made, so the test's files are removed only after their writes finish.
+const madeServices = [];
+
 function service(options = {}) {
     const { dir, ...rest } = options;
     const timers = new Map();
@@ -49,6 +52,7 @@ function service(options = {}) {
         ...rest,
     });
     made.start();
+    madeServices.push(made);
     return {
         made,
         sent,
@@ -64,7 +68,11 @@ describe('PushService', () => {
     let dir;
 
     beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'push-')); });
-    afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+    afterEach(async () => {
+        // A key or subscription write still in flight would recreate files mid-removal (ENOTEMPTY).
+        await Promise.all(madeServices.splice(0).map(made => made.writing));
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
 
     describe('which endpoints may be posted to', () => {
         it('takes the push services browsers actually hand out', () => {

@@ -20,9 +20,11 @@ import { isTransferStalled, P2P_STALL_MS } from "../torrent/ServerFallback";
 import { serverCopyStatus } from "./serverCopyStatus";
 import { rememberImageSize } from './imageSize';
 import { loadPreviewUrl, previewUrlOf } from './tilePreview';
+import { alreadyHave, HAVE_LABELS, useHaveChanges } from './alreadyHave';
 
 /** Show transfer status and recovery controls, retaining a preview URL on the tile. */
 function LoadingTile({tile, master, name}) {
+    useHaveChanges();
     const [progress, setProgress] = useState(null);
     const [timeRemaining, setTimeRemaining] = useState('');
     const [downSpeed, setDownSpeed] = useState('');
@@ -137,7 +139,10 @@ function LoadingTile({tile, master, name}) {
     const copyStatus = have ? null : serverCopyStatus(tile, master.peers?.items, master.client.peerId,
         infoHash => !!master.roomPhotos?.uploadStalled(infoHash));
     let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
-    if (tile.previewOnly) loadingText = 'Preview only (Data saver)';
+    // Only the preview came: Data saver is on, or this browser has the photo already.
+    const haveOriginal = tile.previewOnly && ['saved', 'device'].includes(alreadyHave(tile)) ? alreadyHave(tile) : null;
+    if (haveOriginal) loadingText = HAVE_LABELS[haveOriginal] + ' · preview only';
+    else if (tile.previewOnly) loadingText = 'Preview only (Data saver)';
     else if (stalled && !have) loadingText = 'Connection stalled';
     else if (!have && tile.fromServerCopy) loadingText = 'Received from the server copy (P2P did not work)';
     else if (copyStatus && !isLoading && !tile.rendering) loadingText = copyStatus.text;
@@ -352,7 +357,9 @@ function LoadingTile({tile, master, name}) {
 
                 {tile.previewOnly && (
                     <Button size="small" variant="contained" sx={{ mt: 1.5 }} onClick={() => tile.loadFull?.()}>
-                        {fullSize ? `Get the full photo (${fullSize})` : 'Get the full photo'}
+                        {haveOriginal
+                            ? (fullSize ? `Download anyway (${fullSize})` : 'Download anyway')
+                            : (fullSize ? `Get the full photo (${fullSize})` : 'Get the full photo')}
                     </Button>
                 )}
 

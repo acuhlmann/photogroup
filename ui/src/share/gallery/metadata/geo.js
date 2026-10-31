@@ -50,6 +50,39 @@ export function isValidLocation(lat, long) {
         && !(lat === 0 && long === 0);
 }
 
+const NUMBER = '[-+]?\\d{1,3}(?:\\.\\d+)?';
+const PASTED = [
+    // Google Maps: the pin's own place, then the map's centre.
+    new RegExp(`!3d(${NUMBER})!4d(${NUMBER})`),
+    new RegExp(`@(${NUMBER}),(${NUMBER})`),
+    // ?q=, ?ll=, ?query= and geo: links.
+    new RegExp(`(?:[?&](?:q|ll|query|center)=|geo:)(${NUMBER})(?:,|%2C)\\s*(${NUMBER})`, 'i'),
+    // OpenStreetMap: ?mlat=…&mlon=…, or #map=zoom/lat/long.
+    new RegExp(`[?&]mlat=(${NUMBER})&mlon=(${NUMBER})`),
+    new RegExp(`#map=\\d+/(${NUMBER})/(${NUMBER})`),
+    // Amap: ?position=long,lat (longitude first).
+    { pattern: new RegExp(`[?&]position=(${NUMBER})(?:,|%2C)(${NUMBER})`), longFirst: true },
+    // "47.37, 8.54" or "47.37 8.54".
+    new RegExp(`^\\s*(${NUMBER})\\s*[,;\\s]\\s*(${NUMBER})\\s*$`),
+];
+
+/**
+ * Coordinates from pasted text: "47.37, 8.54", a Google Maps, OpenStreetMap
+ * or Amap link (the ones `mapLinks` makes too), or a geo: link. Null when the text is a place name to search for.
+ */
+export function parseLocationText(text) {
+    const value = String(text || '').trim();
+    for (const entry of PASTED) {
+        const { pattern, longFirst } = entry instanceof RegExp ? { pattern: entry } : entry;
+        const match = pattern.exec(value);
+        if (!match) continue;
+        const lat = Number(match[longFirst ? 2 : 1]);
+        const long = Number(match[longFirst ? 1 : 2]);
+        if (isValidLocation(lat, long)) return { lat, long };
+    }
+    return null;
+}
+
 /** "+31.2304+121.4737+012.000/" (ISO 6709, as QuickTime and Android write it). */
 export function parseIso6709(text) {
     const match = String(text || '').match(/^\s*([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)?/);

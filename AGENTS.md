@@ -79,10 +79,9 @@ aiming a keeper at `DCIM/Camera` rather than the Download album.
 It is offered on the gallery tile and the full-screen viewer (`ContentTile.js`,
 `PhotoViewer.js`), the keep-or-skip chooser's end screen (`gallery/ChooseToSave.js`), the
 gallery toolbar (`Gallery.js`), simple mode's viewer (`simple/SimpleGrid.js`) and the room
-zip's menu (`gallery/DownloadRoomButton.js`). Wording follows the file: a photo received
-from someone else reads "Choose where to save…", never "Replace original…", because there
-is no original of it on this device -- only a photo shared from this browser
-(`alreadyHave` 'shared'), or one whose handle was captured, claims that. The zip asks for its folder
+zip's menu (`gallery/DownloadRoomButton.js`). It always reads "Choose where to save…" and
+opens the dialog every time: the app never writes over a file on the device by itself, because
+the original can hold a location or metadata the room's copy lacks. The zip asks for its folder
 *before* building the archive: the browser opens the dialog only while the tap is fresh, and zipping
 a room - reading and rewriting a photo at a time - outlasts that window, so asking afterwards is
 refused. `saveRoom` then awaits its `save`, so a refused dialog or a failed write leaves the room's

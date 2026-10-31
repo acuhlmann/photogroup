@@ -5,55 +5,15 @@ they don't already have, without losing anything (location, metadata) on
 the way. Each slice says why it matters, what we already know, where to
 start in the code, and when it's done.
 
-- **Up next** (tomorrow): fix the XMP wipe on save, then make Replace
-  original safe or remove it.
-- **Later:** iPhone originals, skipping the transfer of photos people
-  have, recognising saved copies, and helpers for adding a location back.
+- **Up next:** iPhone originals.
+- **Later:** recognising saved clips and audio, and adding a location to
+  many photos at once.
 
 ---
 
 # Up next
 
-## Stop saving from wiping a photo's XMP
-
-**Why:** a data-loss bug on every Save, not just Replace. When Android
-blanks a GPS value written as an XML *element* in a photo's XMP (ExifTool
-writes them that way; Adobe apps and our own writer use attributes), it
-fills those bytes with zeros. Zero bytes make the XMP unparseable, so
-`parsePacket` in `ui/src/share/gallery/metadata/embed/xmpPacket.js` swaps
-in an empty packet, and saving with room details drops everything else in
-the XMP: keywords, ratings, edit history, Google motion-photo markers.
-
-**What we know:** confirmed in headless Chromium. Parsing the zeroed XMP
-gives a `parsererror`; replacing `\0` with spaces first parses cleanly and
-keeps the other fields.
-
-**Change:** in `parsePacket`, replace every `\0` with a space before
-parsing (today only trailing zeros are stripped).
-
-**Done when:** a test with element-form XMP whose GPS element is zeroed
-keeps its other fields after `applyDetailsToXmp`.
-
----
-
-## Make Replace original safe, or remove it
-
-**Why:** writing an edited photo back over the original on the device is
-hard to do safely. It can overwrite a file whose location was blanked
-before upload, or one that has metadata the room never saw.
-
-**Options:**
-
-- Remove Replace original and keep plain Save, or
-- Allow it only when the file is unchanged apart from the room's details and
-  nothing was blanked. `strippedLocation.js` already detects blanking for
-  JPEG, HEIC and MP4.
-
-**Also known:** `showSaveFilePicker` empties the chosen file as soon as the
-dialog is confirmed (see `replaceOriginal.js`), and Chrome writes through a `.crswap` swap
-file, which can drop file-system extras such as macOS tags and creation dates.
-
-**Done when:** the decision is made and the code matches it.
+See **Make iPhone uploads originals** below.
 
 ---
 
@@ -88,74 +48,88 @@ one in its Photos library, or the app explains why it couldn't.
 
 ---
 
-## Don't transfer photos people already have
+## Recognise saved clips and audio in a folder check
 
-**Why:** today, photos someone already has still download over P2P so the
-gallery can show them; only saving skips them. On mobile data or with big
-videos, that's wasted transfer.
+Saved photos are recognised now (see Done). Clips and audio saved with
+room details are not: MP4, MKV, MP3, FLAC, WAV and Ogg have no XMP here,
+so they don't note the original's fingerprint yet.
 
-**What we know:** WebTorrent 3 can add a torrent with nothing selected
-(`deselect: true`) and select single files. Every photo torrent also
-carries a small `Thumbnail <name>` file. Peers add every room torrent in
-`TorrentAddition.handlePhotoAddEvent` / `_add`, and `ServerFallback.watch`
-asks for (and fetches) a server copy when P2P stalls.
+**Work:** write the fingerprint into each format's own tags (`embed/mp4.js`,
+`mkv.js`, `id3.js`, `vorbisComments.js`, `wav.js`) and read it in
+`metadata/embed/originalFingerprint.js`.
 
-**Work:**
-
-- For photos `alreadyHave()` knows, add the torrent deselected and select
-  only the thumbnail; don't start the server fallback for them.
-- Show those tiles from the thumbnail, with **Download anyway**.
-- When a folder check finds a photo, stop its transfer if it's still arriving.
-- Careful: the tile rendering pipeline (`Gallery.js`, `RenderContent.js`,
-  `LoadingTile.js`) assumes the main file arrives; it needs a
-  "thumbnail only, by choice" state.
-
-**Done when:** in a two-browser test, a photo the receiver already has
-transfers only its thumbnail, and Download anyway still gets the original.
-
----
-
-## Recognise PhotoGroup-saved copies in a folder check
-
-**Why:** Save writes the room's details into the file, so its bytes (and
-fingerprint) no longer match the original. A later *Find the ones on this
-device…* won't recognise photos saved from PhotoGroup. This browser's own
-record still does, but another browser or device won't.
-
-**Work:**
-
-- When saving, write the original's fingerprint into the file's metadata
-  (an XMP property, plus the formats `embed/` already writes for video and audio).
-- Folder checks can't pre-filter these by size, because sizes differ. Read the
-  metadata only of files whose name or date taken matches a room photo, and
-  compare the stored fingerprint.
-
-**Done when:** a photo saved with details in one browser is found by a
+**Done when:** a clip saved with details in one browser is found by a
 folder check in another.
 
 ---
 
-## Helpers for adding a location back
+## Add a location to many photos at once
 
-For photos whose location was removed before they reached the app:
+The location editor suggests the place of a photo taken close in time
+(see Done), but one photo at a time. Several blanked photos from the same
+walk would need one batch action, for example in the gallery's place
+filter for photos without a location ("Use the nearest photo's location
+for all N").
 
-- **From a nearby photo:** Android only blanks GPS; date taken survives.
-  Offer "Use the location of IMG_x, taken 4 minutes apart" from other
-  located photos in the room, also as a batch action.
-- **Paste coordinates or a map link:** Google Photos still shows the
-  location. Parse `47.37, 8.54` and Google Maps `@lat,long` links in
-  `metadata/LocationEditor.js`.
-- **Current position at share time:** for photos taken in the last half
-  hour, offer the device's position (`LocationEditor` already has it).
-
-**Done when:** each of the three paths sets a location on a blanked photo
-in one or two taps.
-
-**Not now:** parked until the slices above are done.
+**Done when:** blanked photos with a located photo within two hours get
+their locations in one tap, and each one says which photo it came from.
 
 ---
 
 # Done
+
+## Helpers for adding a location back
+
+For photos whose location was removed before they reached the app, the
+location editor (`metadata/LocationEditor.js`) now offers:
+
+- **From a nearby photo:** "Use the location of IMG_2.jpg · Taken 4
+  minutes apart", for up to three located photos in the room taken within
+  two hours (`metadata/locationHints.js`).
+- **Pasted coordinates or a map link:** `47.37, 8.54`, Google Maps `@` and
+  `!3d…!4d…` links, `?q=` and `geo:` links (`parseLocationText` in `geo.js`).
+- **Where you are now:** for photos taken in the last half hour, this is
+  the first suggestion, in place of "Use my location".
+
+## Recognise PhotoGroup-saved photos in a folder check
+
+Save writes the room's details into the file, so its bytes and fingerprint
+no longer match the original. Now `fileForSave` also writes the original's
+fingerprint into the XMP (`pg:OriginalFingerprint`, for JPEG, PNG, WebP,
+GIF, HEIF and AVIF). For files whose name matches a room photo (any case,
+and "IMG_1 (2).jpg" too), `findOnDevice` reads the note from both ends of
+the file (`metadata/embed/originalFingerprint.js`).
+
+## Don't transfer photos people already have
+
+A photo this browser saved, or found on this device, used to download in
+full anyway. (Photos shared from here still come back in full, so a
+refresh never costs the sharer their own photos.) Now `TorrentAddition._add` adds the torrent
+deselected and selects only its `Thumbnail` file, the same way Data saver
+does. There is no server fallback for it, and this browser isn't listed as
+waiting for it. The tile says "You saved this · preview only" and offers
+**Download anyway** (`loadFull`). If a folder check finds a photo that is
+still on its way, `stopWhatYouHave` stops it. Tests:
+`torrent/__tests__/SkipWhatYouHave.test.js`, `e2e/tests/skip-what-you-have.spec.js`.
+
+## Saving keeps a photo's XMP
+
+When Android blanks a GPS value written as an XMP element, it fills the
+bytes with zeros, and the whole packet failed to parse. Saving with room
+details then dropped keywords, ratings, edit history and motion-photo
+markers. `parsePacket` in `embed/xmpPacket.js` now turns every `\0` into a
+space before parsing (`xmpPacket.test.js`).
+
+## No more Replace original
+
+The app no longer writes over a photo on the device. It used to keep the
+file handle from a drop or an earlier save, and write back without asking.
+That could replace an original that had a location or metadata the room's
+copy didn't have. Now each save opens the save dialog
+(**Choose where to save…**) or, on iPhone, the share sheet (**Save to
+Files**). If someone picks the original file in the dialog, the browser
+asks before it replaces it, and the copy is read before the dialog empties
+the file (`gallery/replaceOriginal.js`).
 
 ## Stay a peer when switching apps; server copies only when needed
 

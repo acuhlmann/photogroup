@@ -203,8 +203,6 @@ describe('PhotoViewer', () => {
             );
         });
 
-        // A photo received from someone else has no original on this device,
-        // so the honest name for this is choosing where the save goes.
         const button = document.body.querySelector('[data-testid="replace-original"]');
         expect(button.textContent).toContain('Choose where to save…');
         expect(document.body.textContent).toContain('Pick the folder this goes into');
@@ -218,7 +216,7 @@ describe('PhotoViewer', () => {
             id: 'photogroup-replace',
         }));
         expect(stream.write).toHaveBeenCalled();
-        expect(button.textContent).toContain('Replaced');
+        expect(button.textContent).toContain('Saved');
 
         await act(async () => {
             root.unmount();

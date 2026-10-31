@@ -44,3 +44,12 @@ window.matchMedia = window.matchMedia || function(query) {
   };
 };
 
+
+// On Node 22, Response.blob() gives Node's own Blob. jsdom's File can't read
+// that and stores the text "[object Blob]" instead, which breaks the unzip
+// tests there. Node 24, which CI uses, and browsers don't have this problem.
+const responseBlob = Response.prototype.blob;
+Response.prototype.blob = async function blob() {
+  const result = await responseBlob.call(this);
+  return result instanceof Blob ? result : new Blob([await result.arrayBuffer()], { type: result.type });
+};

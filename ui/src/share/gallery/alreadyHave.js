@@ -52,7 +52,8 @@ function persist() {
 /**
  * Note that these fingerprints are files the person has: `how` is
  * 'shared' (uploaded from here), 'saved' (saved from a room) or 'device'
- * (found in a folder on this device). The latest reason wins.
+ * (found in a folder on this device). The latest reason wins, except that
+ * 'shared' stays: a sharer's own photos always come back in full.
  */
 export function rememberHave(fingerprints, how) {
     const list = (Array.isArray(fingerprints) ? fingerprints : [fingerprints]).filter(Boolean);
@@ -70,8 +71,9 @@ export function rememberHave(fingerprints, how) {
         // Storage is unreadable; carry on with this tab's set.
     }
     list.forEach(fingerprint => {
+        const next = map.get(fingerprint) === 'shared' ? 'shared' : how;
         map.delete(fingerprint);
-        map.set(fingerprint, how);
+        map.set(fingerprint, next);
     });
     while (map.size > LIMIT) map.delete(map.keys().next().value);
     entries = map;
