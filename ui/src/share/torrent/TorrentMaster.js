@@ -393,18 +393,32 @@ export default class TorrentMaster {
     fillMissingOwnersItem(item) {
         //check for missing owners - can happen after re-connections.
         const peerId = this.client.peerId;
-        const torrent = getTorrent(this.client, item.infoHash);
+        const torrent = getTorrent(this.client, getBaseInfoHash(item.infoHash));
         // Check that torrent exists, has files array, and files array has items
-        const isOwner = torrent && torrent.files && torrent.files.length > 0;
-        if(isOwner) {
+        const hasTorrent = torrent && torrent.files && torrent.files.length > 0;
+        // The whole photo in this browser's cache, with no torrent to seed it
+        // (its torrent was never stored, or it came as a server copy): we
+        // still have it. Without saying so, a refresh leaves the room with
+        // nobody who has the photo, and nobody answers a request for a
+        // server copy. Private photos excluded: findPhotoBytes doesn't send
+        // them from the cache.
+        // The cache wins over a torrent that is still unfinished.
+        const hasCached = !!item.cachedFile && !item.secure && !item.previewOnly;
+        if(hasTorrent || hasCached) {
             const found = item.owners && item.owners.find(owner => owner.peerId === peerId);
+            if(found && found.loading && hasCached) {
+                // Listed as still loading, but the whole photo is here.
+                found.loading = false;
+                this.service.updateOwner?.([{ infoHash: item.infoHash, peerId, loading: false }]);
+                return null;
+            }
             if(!found) {
                 // Metadata alone isn't the photo: others (and the server's
                 // "everyone has it" check) must not count an unfinished download.
                 return {
                     infoHash: item.infoHash,
                     peerId: peerId,
-                    loading: !torrent.done
+                    loading: hasCached ? false : !torrent.done
                 }
             }
         }

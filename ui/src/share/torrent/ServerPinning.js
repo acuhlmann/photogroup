@@ -120,6 +120,18 @@ export default class ServerPinning {
             this.settle(infoHash);
             return;
         }
+        if (type === 'addOwner' || type === 'updateOwner') {
+            // We have just said that we have a photo (after a refresh, from
+            // the cache): answer a request that came before we said so.
+            (Array.isArray(item) ? item : [item]).forEach(owner => {
+                if (!owner?.infoHash || owner.peerId !== this.myPeerId) return;
+                // An update says so only when it says loading is over.
+                if (type === 'updateOwner' ? owner.loading !== false : owner.loading) return;
+                const photo = this.roomPhotos.get(owner.infoHash);
+                if (photo?.serverCopyRequestedAt && !photo.hasServerCopy) this.answerRequest(owner.infoHash);
+            });
+            return;
+        }
         if (type !== 'update' && type !== 'all') return;
         (Array.isArray(item) ? item : [item]).forEach(update => {
             if (!update?.infoHash) return;

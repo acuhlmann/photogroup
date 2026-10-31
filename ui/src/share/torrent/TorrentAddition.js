@@ -271,6 +271,9 @@ export default class TorrentAddition {
     /** If P2P stalls, ServerFallback asks for a server copy and delivers it. */
     watchFallback(photo, torrent, byFile = false) {
         if (!this.master.serverFallback) return;
+        // The whole photo is already in this browser's cache: asking the
+        // room for a server copy of it only asks ourselves.
+        if (photo.cachedFile && !photo.previewOnly) return;
         // With "Data saver" the torrent may never be whole, so follow this photo's file.
         const file = () => (byFile ? photo.torrentFile : null);
         this.master.serverFallback.watch(photo, () => ({
