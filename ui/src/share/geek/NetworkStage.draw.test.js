@@ -239,4 +239,3 @@ describe('NetworkStage drawing', () => {
     });
 });
 
-vi.mock('../gallery/replaceOriginal', () => ({ captureDroppedHandles: async () => [] }));

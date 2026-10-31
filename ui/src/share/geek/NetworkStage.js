@@ -12,7 +12,6 @@ import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 
 import FileUtil from '../util/FileUtil';
-import { captureDroppedHandles } from '../gallery/replaceOriginal';
 import { buildScene, routePoints, pointAlong, TIER } from './scene';
 import { attachTraffic, flowAt, FLOW_MS, RX, TX } from './traffic';
 import { watchLinks } from '../torrent/linkStats';
@@ -618,8 +617,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
         event.preventDefault();
         const files = Array.from(event.dataTransfer?.files || []);
         if (!files.length) return;
-        // Like the gallery: keep file handles so an edit can later replace the original.
-        captureDroppedHandles(event.dataTransfer).then(() => master.emitter.emit('filesSelected', files));
+        master.emitter.emit('filesSelected', files);
     }, [master.emitter]);
 
     const thumb = selected?.type === 'thumb' ? scene.thumbs.find(item => item.key === selected.key) : null;

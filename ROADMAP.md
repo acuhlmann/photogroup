@@ -5,55 +5,15 @@ they don't already have, without losing anything (location, metadata) on
 the way. Each slice says why it matters, what we already know, where to
 start in the code, and when it's done.
 
-- **Up next** (tomorrow): fix the XMP wipe on save, then make Replace
-  original safe or remove it.
-- **Later:** iPhone originals, skipping the transfer of photos people
-  have, recognising saved copies, and helpers for adding a location back.
+- **Up next:** skip the transfer of photos people already have.
+- **Later:** iPhone originals, recognising saved copies, and helpers for
+  adding a location back.
 
 ---
 
 # Up next
 
-## Stop saving from wiping a photo's XMP
-
-**Why:** a data-loss bug on every Save, not just Replace. When Android
-blanks a GPS value written as an XML *element* in a photo's XMP (ExifTool
-writes them that way; Adobe apps and our own writer use attributes), it
-fills those bytes with zeros. Zero bytes make the XMP unparseable, so
-`parsePacket` in `ui/src/share/gallery/metadata/embed/xmpPacket.js` swaps
-in an empty packet, and saving with room details drops everything else in
-the XMP: keywords, ratings, edit history, Google motion-photo markers.
-
-**What we know:** confirmed in headless Chromium. Parsing the zeroed XMP
-gives a `parsererror`; replacing `\0` with spaces first parses cleanly and
-keeps the other fields.
-
-**Change:** in `parsePacket`, replace every `\0` with a space before
-parsing (today only trailing zeros are stripped).
-
-**Done when:** a test with element-form XMP whose GPS element is zeroed
-keeps its other fields after `applyDetailsToXmp`.
-
----
-
-## Make Replace original safe, or remove it
-
-**Why:** writing an edited photo back over the original on the device is
-hard to do safely. It can overwrite a file whose location was blanked
-before upload, or one that has metadata the room never saw.
-
-**Options:**
-
-- Remove Replace original and keep plain Save, or
-- Allow it only when the file is unchanged apart from the room's details and
-  nothing was blanked. `strippedLocation.js` already detects blanking for
-  JPEG, HEIC and MP4.
-
-**Also known:** `showSaveFilePicker` empties the chosen file as soon as the
-dialog is confirmed (see `replaceOriginal.js`), and Chrome writes through a `.crswap` swap
-file, which can drop file-system extras such as macOS tags and creation dates.
-
-**Done when:** the decision is made and the code matches it.
+See **Don't transfer photos people already have** below.
 
 ---
 
@@ -156,6 +116,25 @@ in one or two taps.
 ---
 
 # Done
+
+## Saving keeps a photo's XMP
+
+When Android blanks a GPS value written as an XMP element, it fills the
+bytes with zeros, and the whole packet failed to parse. Saving with room
+details then dropped keywords, ratings, edit history and motion-photo
+markers. `parsePacket` in `embed/xmpPacket.js` now turns every `\0` into a
+space before parsing (`xmpPacket.test.js`).
+
+## No more Replace original
+
+The app no longer writes over a photo on the device. It used to keep the
+file handle from a drop or an earlier save, and write back without asking.
+That could replace an original that had a location or metadata the room's
+copy didn't have. Now each save opens the save dialog
+(**Choose where to save…**) or, on iPhone, the share sheet (**Save to
+Files**). If someone picks the original file in the dialog, the browser
+asks before it replaces it, and the copy is read before the dialog empties
+the file (`gallery/replaceOriginal.js`).
 
 ## Stay a peer when switching apps; server copies only when needed
 

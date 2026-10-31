@@ -46,7 +46,9 @@ function langAlt(doc, name, text) {
 function parsePacket(xml) {
     const parser = new DOMParser();
     if (xml) {
-        const doc = parser.parseFromString(xml.replace(/\0+$/, ''), 'application/xml');
+        // Android blanks a GPS value written as an element by zeroing its bytes,
+        // and one stray \0 makes the whole packet unparseable.
+        const doc = parser.parseFromString(xml.replace(/\0/g, ' '), 'application/xml');
         if (!doc.getElementsByTagName('parsererror').length
             && doc.getElementsByTagNameNS(NS.rdf, 'RDF').length) {
             return doc;
