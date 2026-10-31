@@ -12,7 +12,6 @@ globalThis.Buffer = Buffer;
 import { prepareShareLaunch, registerShareTarget } from './share/shareTarget';
 import { restoreRoomKey } from './share/privateRoom';
 
-import 'core-js';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';

@@ -9,8 +9,8 @@ import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Typography from "@mui/material/Typography";
-import { Html5QrcodeScanner } from 'html5-qrcode';
 import Logger from 'js-logger';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
@@ -46,6 +46,8 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
 
     const [invite, setInvite] = useState(false);
     const [scan, setScan] = useState(false);
+    // The scanner code loads on first use; on a bad connection that can fail.
+    const [scanFailed, setScanFailed] = useState(false);
     const [numPeers, setNumPeers] = useState(0);
     const scannerRef = useRef(null);
 
@@ -82,9 +84,13 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
     // Start the camera when the scan dialog opens, stop it when it closes.
     useEffect(() => {
         if (scan && !scannerRef.current) {
-            // Small delay to ensure DOM element exists
-            const timer = setTimeout(() => {
+            let cancelled = false;
+            // Small delay to ensure DOM element exists. The scanner code is
+            // large and only loaded when someone scans.
+            const timer = setTimeout(async () => {
                 try {
+                    const { Html5QrcodeScanner } = await import('html5-qrcode');
+                    if (cancelled || scannerRef.current) return;
                     const scanner = new Html5QrcodeScanner(
                         "qr-reader",
                         {
@@ -111,16 +117,21 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
                     scannerRef.current = scanner;
                 } catch (err) {
                     Logger.error('Failed to initialize QR scanner:', err);
+                    if (!cancelled) setScanFailed(true);
                 }
             }, 100);
 
-            return () => clearTimeout(timer);
+            return () => {
+                cancelled = true;
+                clearTimeout(timer);
+            };
         }
 
         if (!scan && scannerRef.current) {
             scannerRef.current.clear().catch(err => Logger.error('Failed to clear scanner:', err));
             scannerRef.current = null;
         }
+        if (!scan) setScanFailed(false);
     }, [scan, handleScan]);
 
     // Cleanup scanner on unmount
@@ -227,6 +238,15 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
                     >
                         <div id="qr-reader"></div>
                     </Box>
+                    {scanFailed && (
+                        <Box sx={{ textAlign: 'center', mt: 2 }}>
+                            <Typography variant="body2" sx={{ mb: 1 }}>
+                                Cannot start the scanner. Check your connection.
+                            </Typography>
+                            {/* The browser keeps a failed import for the page's life. */}
+                            <Button variant="outlined" onClick={() => window.location.reload()}>Reload the page</Button>
+                        </Box>
+                    )}
                 </DialogContent>
             </Dialog>
         </div>

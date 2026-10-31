@@ -32,6 +32,9 @@ export function readFileBlob(file) {
     });
 }
 
+// How long previews made while sharing wait to be shown together.
+const PREVIEW_FLUSH_MS = 700;
+
 export default class TorrentAddition {
 
     /** Initialize torrent services and upload confirmation tracking, and subscribe to rendered photos. */
@@ -434,7 +437,35 @@ export default class TorrentAddition {
 
             try {
                 // Photos, album art and a frame of each clip, all grabbed here.
-                thumbnailFiles = await extractThumbnails(filesArr);
+                // Show previews on their tiles as they are made, instead of
+                // when the slowest photo of the batch is done. Grouped, since
+                // each update redraws the gallery.
+                const ready = [];
+                let flushTimer = null;
+                let first = true;
+                const flush = () => {
+                    flushTimer = null;
+                    if(!ready.length) return;
+                    // Only the preview: the whole photo object would merge stale
+                    // fields (such as "loading") over a tile that moved on.
+                    self.emitter.emit('photos', {type: 'update', item: ready.splice(0).map(photo => ({
+                        infoHash: photo.infoHash, tileKey: photo.tileKey, isFake: photo.isFake,
+                        thumbnailFiles: photo.thumbnailFiles
+                    }))});
+                };
+                try {
+                    thumbnailFiles = await extractThumbnails(filesArr, (thumb, original) => {
+                        const photo = photos.find(item => item.file === original);
+                        if(!photo) return;
+                        photo.thumbnailFiles = [thumb];
+                        ready.push(photo);
+                        // The first one at once, then a few at a time.
+                        if(!flushTimer) flushTimer = setTimeout(flush, first ? 0 : PREVIEW_FLUSH_MS);
+                        first = false;
+                    });
+                } finally {
+                    clearTimeout(flushTimer);
+                }
             } catch(err) {
                 // The tile is already showing; share without a preview.
                 Logger.warn('thumbnail generation failed: ' + (err.message || err));
