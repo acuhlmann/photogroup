@@ -615,6 +615,8 @@ function RenderContent(props) {
         }
         return currentTile.isImage && currentTile.img
             ? <img src={currentTile.img} alt={currentTile.fileName}
+                   // Decode the full photo off the main thread; the preview shows meanwhile.
+                   decoding="async"
                    className={classes?.wide || ''}
                    // Reserve the size the loading preview measured so the
                    // tile doesn't collapse while the full image decodes.
