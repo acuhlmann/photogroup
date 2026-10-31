@@ -11,7 +11,15 @@ const byText = text => Array.from(document.body.querySelectorAll('[role="menuite
 async function render(name = '') {
     const master = {
         emitter: new EventEmitter(),
-        service: { id: 'room-1', updateRoomSettings: vi.fn().mockResolvedValue({ keepCopies: false, name: 'Beach day' }) },
+        service: {
+            id: 'room-1',
+            updateRoomSettings: vi.fn().mockResolvedValue({ keepCopies: false, name: 'Beach day' }),
+            updatePeer: vi.fn().mockResolvedValue({ peerId: 'me', name: 'Ana' }),
+        },
+        client: { peerId: 'me' },
+        me: { name: null },
+        peers: { items: [{ peerId: 'me', name: null }] },
+        device: 'Chrome on Samsung SM-S911B',
         roomPhotos: { all: () => [] },
         leaveRoomAndReload: vi.fn(),
     };
@@ -52,6 +60,27 @@ describe('RoomMenu', () => {
         await act(async () => byText('Leave the room').click());
         expect(master.leaveRoomAndReload).toHaveBeenCalled();
         expect(sessionStorage.getItem('photogroup.notice')).toBe(LEFT_ROOM);
+        await unmount();
+    });
+
+    it('lets a person change their name', async () => {
+        localStorage.getItem.mockReturnValue(null);
+        const { master, unmount } = await render();
+        await act(async () => document.querySelector('[aria-label^="Room: Room from 25 Oct"]').click());
+        const item = byText('Your name');
+        expect(item.textContent).toContain('Chrome on Samsung SM-S911B');
+        await act(async () => item.click());
+        const input = document.body.querySelector('input');
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+            setter.call(input, '  Ana ');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await act(async () => byText('Save').click());
+        expect(master.service.updatePeer).toHaveBeenCalledWith({ name: 'Ana' });
+        expect(master.me.name).toBe('Ana');
+        expect(master.peers.items[0].name).toBe('Ana');
+        localStorage.getItem.mockReset();
         await unmount();
     });
 });

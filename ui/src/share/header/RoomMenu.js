@@ -20,16 +20,27 @@ import EditRounded from '@mui/icons-material/EditRounded';
 import ShieldOutlined from '@mui/icons-material/ShieldOutlined';
 import LogoutRounded from '@mui/icons-material/LogoutRounded';
 import LockRounded from '@mui/icons-material/LockRounded';
+import PersonOutlineRounded from '@mui/icons-material/PersonOutlineRounded';
 
 import RoomPrivacy from '../RoomPrivacy';
 import { leaveRoomNotice } from '../roomNotice';
 import { dropRoomSubscription } from '../pushNotices';
 import { roomCryptoKey } from '../privateRoom';
 import { sealText } from '../security/roomKey';
+import { NICKNAME_KEY, MAX_NAME, NAME_ERROR, saveMyName } from './PeerNameField';
 
 export const ROOM_NAME_MAX = 60;
 const GO_BACK = 'To go back, open it under Your rooms.';
 export const LEFT_ROOM = 'You left the room. ' + GO_BACK;
+const ALL_SEE_NAME = 'All people in the room see this name.';
+
+function savedNickname() {
+    try {
+        return localStorage.getItem(NICKNAME_KEY) || '';
+    } catch {
+        return '';
+    }
+}
 
 /** Give the room a name everyone in it sees, or clear it. */
 function RoomNameDialog({ master, open, name, onClose }) {
@@ -73,7 +84,7 @@ function RoomNameDialog({ master, open, name, onClose }) {
                         onChange={event => setValue(event.target.value)}
                         slotProps={{ htmlInput: { maxLength: ROOM_NAME_MAX } }}
                         error={!!error}
-                        helperText={error || 'All people in the room see this name.'}
+                        helperText={error || ALL_SEE_NAME}
                     />
                 </DialogContent>
                 <DialogActions>
@@ -92,14 +103,71 @@ RoomNameDialog.propTypes = {
     onClose: PropTypes.func.isRequired,
 };
 
+/** What the room calls this person. It is here in every mode, next to the room's name. */
+function YourNameDialog({ master, open, onClose }) {
+    const [value, setValue] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+
+    const save = async (event) => {
+        event.preventDefault();
+        if (!value.trim()) return;
+        setBusy(true);
+        setError('');
+        try {
+            await saveMyName(master, value);
+            onClose();
+        } catch (err) {
+            Logger.warn('your name: ' + err);
+            setError(NAME_ERROR);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth aria-labelledby="your-name-title"
+            slotProps={{ transition: { onEnter: () => { setValue(savedNickname()); setError(''); } } }}>
+            <form onSubmit={save}>
+                <DialogTitle id="your-name-title">Your name</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        fullWidth
+                        margin="dense"
+                        label="Your name"
+                        placeholder="Ana"
+                        value={value}
+                        onChange={event => setValue(event.target.value)}
+                        slotProps={{ htmlInput: { maxLength: MAX_NAME } }}
+                        error={!!error}
+                        helperText={error || ALL_SEE_NAME}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={onClose} disabled={busy}>Cancel</Button>
+                    <Button type="submit" variant="contained" disabled={busy || !value.trim()}>Save</Button>
+                </DialogActions>
+            </form>
+        </Dialog>
+    );
+}
+
+YourNameDialog.propTypes = {
+    master: PropTypes.object.isRequired,
+    open: PropTypes.bool.isRequired,
+    onClose: PropTypes.func.isRequired,
+};
+
 /**
  * The room's name at the top of the page, in every mode. It opens the
  * things you do to the room itself: name it, see what the server keeps,
- * and leave it.
+ * and leave it, and what the room calls you.
  */
 export default function RoomMenu({ master, name, label, isPrivate = false, missingKey = false }) {
     const [anchor, setAnchor] = useState(null);
     const [naming, setNaming] = useState(false);
+    const [namingMe, setNamingMe] = useState(false);
     const [privacy, setPrivacy] = useState(false);
 
     const pick = (action) => () => {
@@ -150,6 +218,10 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
                     <ListItemIcon><EditRounded fontSize="small" /></ListItemIcon>
                     <ListItemText primary={name ? 'Change the name' : 'Name the room'} />
                 </MenuItem>
+                <MenuItem onClick={pick(() => setNamingMe(true))}>
+                    <ListItemIcon><PersonOutlineRounded fontSize="small" /></ListItemIcon>
+                    <ListItemText primary="Your name" secondary={savedNickname() || master.device || undefined} />
+                </MenuItem>
                 <MenuItem onClick={pick(() => setPrivacy(true))}>
                     <ListItemIcon><ShieldOutlined fontSize="small" /></ListItemIcon>
                     <ListItemText primary="Privacy" />
@@ -161,6 +233,7 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
                 </MenuItem>
             </Menu>
             <RoomNameDialog master={master} open={naming} name={name} onClose={() => setNaming(false)} />
+            <YourNameDialog master={master} open={namingMe} onClose={() => setNamingMe(false)} />
             <RoomPrivacy master={master} open={privacy} onClose={() => setPrivacy(false)} />
         </>
     );
