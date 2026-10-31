@@ -6,8 +6,8 @@ the way. Each slice says why it matters, what we already know, where to
 start in the code, and when it's done.
 
 - **Up next:** iPhone originals.
-- **Later:** recognising saved clips and audio, and helpers for adding a
-  location back.
+- **Later:** recognising saved clips and audio, and adding a location to
+  many photos at once.
 
 ---
 
@@ -63,27 +63,33 @@ folder check in another.
 
 ---
 
-## Helpers for adding a location back
+## Add a location to many photos at once
 
-For photos whose location was removed before they reached the app:
+The location editor suggests the place of a photo taken close in time
+(see Done), but one photo at a time. Several blanked photos from the same
+walk would need one batch action, for example in the gallery's place
+filter for photos without a location ("Use the nearest photo's location
+for all N").
 
-- **From a nearby photo:** Android only blanks GPS; date taken survives.
-  Offer "Use the location of IMG_x, taken 4 minutes apart" from other
-  located photos in the room, also as a batch action.
-- **Paste coordinates or a map link:** Google Photos still shows the
-  location. Parse `47.37, 8.54` and Google Maps `@lat,long` links in
-  `metadata/LocationEditor.js`.
-- **Current position at share time:** for photos taken in the last half
-  hour, offer the device's position (`LocationEditor` already has it).
-
-**Done when:** each of the three paths sets a location on a blanked photo
-in one or two taps.
-
-**Not now:** parked until the slices above are done.
+**Done when:** blanked photos with a located photo within two hours get
+their locations in one tap, and each one says which photo it came from.
 
 ---
 
 # Done
+
+## Helpers for adding a location back
+
+For photos whose location was removed before they reached the app, the
+location editor (`metadata/LocationEditor.js`) now offers:
+
+- **From a nearby photo:** "Use the location of IMG_2.jpg · Taken 4
+  minutes apart", for up to three located photos in the room taken within
+  two hours (`metadata/locationHints.js`).
+- **Pasted coordinates or a map link:** `47.37, 8.54`, Google Maps `@` and
+  `!3d…!4d…` links, `?q=` and `geo:` links (`parseLocationText` in `geo.js`).
+- **Where you are now:** for photos taken in the last half hour, this is
+  the first suggestion, in place of "Use my location".
 
 ## Recognise PhotoGroup-saved photos in a folder check
 

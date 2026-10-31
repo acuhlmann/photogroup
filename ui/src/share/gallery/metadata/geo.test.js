@@ -147,3 +147,25 @@ describe('describing a location', () => {
         vi.useRealTimers();
     });
 });
+
+describe('parseLocationText', () => {
+    it('reads pasted coordinates and map links', async () => {
+        const { parseLocationText } = await import('./geo');
+        expect(parseLocationText('47.37, 8.54')).toEqual({ lat: 47.37, long: 8.54 });
+        expect(parseLocationText(' -33.8568 151.2153 ')).toEqual({ lat: -33.8568, long: 151.2153 });
+        expect(parseLocationText('https://www.google.com/maps/@47.3727,8.5409,15z')).toEqual({ lat: 47.3727, long: 8.5409 });
+        // A place link: the pin (!3d!4d) wins over the map's centre (@).
+        expect(parseLocationText('https://www.google.com/maps/place/Lindenhof/@47.37,8.53,17z/data=!3m1!4b1!4m6!3m5!3d47.3727!4d8.5409'))
+            .toEqual({ lat: 47.3727, long: 8.5409 });
+        expect(parseLocationText('https://maps.google.com/?q=31.24,121.4905')).toEqual({ lat: 31.24, long: 121.4905 });
+        expect(parseLocationText('geo:47.37,8.54?z=15')).toEqual({ lat: 47.37, long: 8.54 });
+    });
+
+    it('leaves place names and impossible numbers to the search', async () => {
+        const { parseLocationText } = await import('./geo');
+        expect(parseLocationText('Lindenhof Zurich')).toBeNull();
+        expect(parseLocationText('8001 Zurich')).toBeNull();
+        expect(parseLocationText('120, 8')).toBeNull();
+        expect(parseLocationText('0, 0')).toBeNull();
+    });
+});

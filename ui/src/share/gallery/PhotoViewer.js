@@ -20,6 +20,7 @@ import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import OwnersList from './OwnersList';
 import MediaMetadataPanel from './metadata/MediaMetadataPanel';
+import { nearbyLocations, takenMinutesAgo } from './metadata/locationHints';
 import RenderContent from './RenderContent';
 import { saveLabel } from './savePhoto';
 import { saveToDevice, savedWhereText } from './saveToDevice';
@@ -344,6 +345,7 @@ function PhotoViewer({ master, tiles, index, onClose, onIndexChange }) {
                         onFileNameChange={isPrivateRoom() ? undefined : handleFileNameChange}
                         onSaveDetails={canSaveDetails(master) ? handleSaveDetails : undefined}
                         myPeerId={master.client && master.client.peerId}
+                        locationHints={() => ({ nearby: nearbyLocations(tile, tiles, master), minutesAgo: takenMinutesAgo(tile, master) })}
                     />
 
                     {Array.isArray(tile.owners) && master.peers && master.client

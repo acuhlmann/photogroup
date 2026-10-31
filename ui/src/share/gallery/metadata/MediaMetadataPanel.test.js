@@ -186,6 +186,44 @@ describe('MediaMetadataPanel shared editing', () => {
         await act(async () => root.unmount());
     });
 
+    it('takes pasted coordinates or a map link without searching', async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        const onSaveDetails = vi.fn().mockResolvedValue({});
+        const { div, root } = await renderPanel({ summary: [], tile: { isImage: true, infoHash: 'paste' }, onSaveDetails });
+        await act(async () => button(div, 'Add a location').click());
+        await act(async () => setInput(div.querySelector('input[aria-label="Search a place"]'),
+            'https://www.google.com/maps/place/Lindenhof/@47.3727,8.5409,17z'));
+        await act(async () => div.querySelector('[data-testid="location-editor"] form')
+            .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+        await act(async () => button(div, 'Save for everyone').click());
+        expect(onSaveDetails).toHaveBeenCalledWith({ location: { lat: 47.3727, long: 8.5409 } });
+        expect(fetchMock.mock.calls.some(call => String(call[0]).includes('search'))).toBe(false);
+        vi.unstubAllGlobals();
+        await act(async () => root.unmount());
+    });
+
+    it('offers the location of a photo taken close in time, and where you are for a recent one', async () => {
+        const onSaveDetails = vi.fn().mockResolvedValue({});
+        const hints = { nearby: [{ fileName: 'IMG_2.jpg', minutes: 4, location: { lat: 47.37, long: 8.54, name: 'Lindenhof' } }], minutesAgo: 12 };
+        const locationHints = vi.fn(() => hints);
+        const { div, root } = await renderPanel({
+            summary: [{ key: 'x-Location status', value: 'blank' }], tile: { isImage: true, infoHash: 'hint' }, onSaveDetails, locationHints,
+        });
+        await act(async () => button(div, 'Set the location').click());
+        expect(locationHints).toHaveBeenCalledTimes(1);
+        const suggestions = div.querySelector('[aria-label="Suggestions"]');
+        expect(suggestions.textContent).toContain('Use where you are nowTaken 12 minutes ago');
+        expect(suggestions.textContent).toContain('Use the location of IMG_2.jpgTaken 4 minutes apart');
+        // The recent photo's suggestion replaces the general button.
+        expect(button(div, 'Use my location')).toBeUndefined();
+
+        await act(async () => button(div, 'Use the location of IMG_2.jpg').click());
+        await act(async () => button(div, 'Save for everyone').click());
+        expect(onSaveDetails).toHaveBeenCalledWith({ location: { lat: 47.37, long: 8.54, name: 'Lindenhof' } });
+        await act(async () => root.unmount());
+    });
+
     it('offers to add a location when the file has none', async () => {
         const { div, root } = await renderPanel({ summary: [{ key: 'x-Camera', value: 'Pixel' }], tile: { isImage: true, infoHash: 'none' }, onSaveDetails: vi.fn() });
         await act(async () => button(div, 'Add a location').click());

@@ -559,7 +559,7 @@ function FileNameEditor({ tile, fileName, onFileNameChange }) {
  * A falsy summary means details are still loading; an empty array means none were found.
  * Providing `onFileNameChange` enables editing the file name without its suffix.
  */
-function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveDetails, myPeerId }) {
+function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveDetails, myPeerId, locationHints }) {
     const grouped = useMemo(
         () => groupMetadataForDisplay(summary, tile),
         [summary, tile]
@@ -575,6 +575,13 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
             setEditingLocation(false);
         }
     }, [tile?.infoHash]);
+
+    // Read once when the editor opens: it looks at every photo in the room.
+    const hints = useMemo(
+        () => (editingLocation && !grouped.location && locationHints ? locationHints() : null),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [editingLocation, tile?.infoHash]
+    );
 
     const canEdit = typeof onSaveDetails === 'function';
     const showFileNameEditor = tile && onFileNameChange;
@@ -612,6 +619,7 @@ function MediaMetadataPanel({ summary, tile, fileName, onFileNameChange, onSaveD
                     {editingLocation ? (
                         <LocationEditor
                             initial={grouped.location}
+                            hints={hints}
                             canRemove={!!grouped.location}
                             onSave={async location => {
                                 await onSaveDetails({ location });
@@ -694,6 +702,7 @@ MediaMetadataPanel.propTypes = {
     onFileNameChange: PropTypes.func,
     onSaveDetails: PropTypes.func,
     myPeerId: PropTypes.string,
+    locationHints: PropTypes.func,
 };
 
 export default MediaMetadataPanel;
