@@ -94,6 +94,29 @@ describe('ServerPinning', () => {
         expect(service.uploadServerCopy).toHaveBeenCalledTimes(1);
     });
 
+    it('answers an earlier request once it says it has the photo from its cache', async () => {
+        // After a refresh the sharer's device has a new peer ID: the room
+        // lists the photo, a friend asks for a copy, and only then does this
+        // device say it has the photo (from its cache, with no torrent).
+        const { service, emit, timers, settle } = setup({ bytes: { a: blob }, peers: [{ peerId: 'me' }, { peerId: 'asker' }] });
+        emit({ type: 'all', item: [{ ...photo('a', 'old-me'), serverCopyRequestedAt: 1 }] });
+        expect(timers).toHaveLength(0); // we don't hold it yet
+        emit({ type: 'addOwner', item: [{ infoHash: 'a', peerId: 'me', loading: false }] });
+        expect(timers[0].ms).toBe(HELPER_DELAY_MS);
+        timers[0].fn();
+        await settle();
+        expect(service.uploadServerCopy).toHaveBeenCalledWith('a', blob, expect.anything());
+    });
+
+    it('ignores other people saying they have a photo', () => {
+        const { service, emit, timers } = setup({ bytes: { a: blob }, peers: [{ peerId: 'me' }, { peerId: 'asker' }, { peerId: 'friend' }] });
+        emit({ type: 'all', item: [{ ...photo('a', 'old-me'), serverCopyRequestedAt: 1 }] });
+        emit({ type: 'addOwner', item: [{ infoHash: 'a', peerId: 'friend', loading: false }] });
+        emit({ type: 'addOwner', item: [{ infoHash: 'a', peerId: 'me', loading: true }] });
+        expect(timers).toHaveLength(0);
+        expect(service.uploadServerCopy).not.toHaveBeenCalled();
+    });
+
     it('lets the sharer go first when it only downloaded the photo', async () => {
         const { service, emit, timers, settle } = setup({ bytes: { a: blob }, peers: [{ peerId: 'me' }, { peerId: 'friend' }, { peerId: 'asker' }] });
         emit({ type: 'all', item: [photo('a', 'friend', [{ peerId: 'me', loading: false }])] });
