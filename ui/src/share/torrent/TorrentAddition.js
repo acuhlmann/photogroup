@@ -13,6 +13,16 @@ import { alreadyHave, onHaveChange, rememberHave } from '../gallery/alreadyHave'
 import parseTorrent from 'parse-torrent';
 import { readPreference } from '../preferences';
 
+/**
+ * Whether only the preview of this photo needs to come: the person saved it
+ * or has it on this device. A photo they shared themselves still comes back
+ * in full, so a refresh never costs the sharer their own photos.
+ */
+function haveSaved(photo) {
+    const how = alreadyHave(photo);
+    return how === 'saved' || how === 'device';
+}
+
 /** Read a torrent file into a Blob with either WebTorrent API; null when neither exists. */
 export function readFileBlob(file) {
     if (typeof file.blob === 'function') return file.blob();
@@ -121,11 +131,11 @@ export default class TorrentAddition {
 
         // "Data saver": start with nothing selected and fetch only the
         // previews; each photo comes when the person asks for it. Photos the
-        // person already has get only their preview too. Private rooms have
+        // person saved or has on this device get only their preview too. Private rooms have
         // no previews, and a reload uses what this phone kept.
         const previews = !fromCache && !photos.some(photo => photo.secure);
         const saveData = previews && readPreference('dataSaver');
-        const previewFirst = photo => saveData || (previews && !!alreadyHave(photo));
+        const previewFirst = photo => saveData || (previews && haveSaved(photo));
         const deselect = photos.some(previewFirst);
         const torrent = this.master.addSeedOrGetTorrent('add', torrentId, torrent => {
             Logger.info('_add done ' + torrent.name);
@@ -280,7 +290,7 @@ export default class TorrentAddition {
                 this.arriving.delete(photo);
                 return;
             }
-            if (!alreadyHave(photo)) return;
+            if (!haveSaved(photo)) return;
             this.arriving.delete(photo);
             photo.torrentFile?.deselect();
             photo.previewOnly = true;

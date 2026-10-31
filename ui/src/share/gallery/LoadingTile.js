@@ -140,7 +140,7 @@ function LoadingTile({tile, master, name}) {
         infoHash => !!master.roomPhotos?.uploadStalled(infoHash));
     let loadingText = tile.uploadError ? 'Upload Failed' : (tile.rendering && !isLoading ? 'Rendering' : (isLoading ? 'Loading' : 'Find Network Path'));
     // Only the preview came: Data saver is on, or this browser has the photo already.
-    const haveOriginal = tile.previewOnly ? alreadyHave(tile) : null;
+    const haveOriginal = tile.previewOnly && ['saved', 'device'].includes(alreadyHave(tile)) ? alreadyHave(tile) : null;
     if (haveOriginal) loadingText = HAVE_LABELS[haveOriginal] + ' · preview only';
     else if (tile.previewOnly) loadingText = 'Preview only (Data saver)';
     else if (stalled && !have) loadingText = 'Connection stalled';

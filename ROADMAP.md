@@ -91,8 +91,9 @@ in one or two taps.
 
 ## Don't transfer photos people already have
 
-A photo this browser already has (shared, saved or found on this device)
-used to download in full anyway. Now `TorrentAddition._add` adds the torrent
+A photo this browser saved, or found on this device, used to download in
+full anyway. (Photos shared from here still come back in full, so a
+refresh never costs the sharer their own photos.) Now `TorrentAddition._add` adds the torrent
 deselected and selects only its `Thumbnail` file, the same way Data saver
 does. There is no server fallback for it, and this browser isn't listed as
 waiting for it. The tile says "You saved this · preview only" and offers

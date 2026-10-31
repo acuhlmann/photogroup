@@ -107,7 +107,7 @@ function SimpleTile({ tile, roomId, onOpen, onError }) {
                 )}
                 {previewOnly ? (
                     <Typography variant="body2" sx={{ position: 'relative', color: picture ? '#fff' : 'text.secondary', fontWeight: 600 }}>
-                        {alreadyHave(tile) ? 'You have this. Tap to get it again' : 'Tap to get the photo'}
+                        {['saved', 'device'].includes(alreadyHave(tile)) ? 'You have this. Tap to get it again' : 'Tap to get the photo'}
                     </Typography>
                 ) : tile.loading ? (
                     <>

@@ -69,6 +69,15 @@ describe("photos you have don't download again", () => {
         expect(master.serverFallback.watch).toHaveBeenCalledTimes(2);
     });
 
+    it('brings back a photo you shared in full, so a refresh keeps your own photos', async () => {
+        rememberHave(HAVE, 'shared');
+        const { master, photos, added } = setup();
+        await added;
+
+        expect(master.addSeedOrGetTorrent.mock.calls[0][3]).toBeUndefined();
+        expect(photos.every(photo => !photo.previewOnly)).toBe(true);
+    });
+
     it('selects everything as before when you have none of them', async () => {
         const { master, photos, added } = setup();
         await added;
