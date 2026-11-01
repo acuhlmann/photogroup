@@ -10,6 +10,17 @@ import { renderStartingPage } from './starting-page.js';
 import { evaluateRequest } from './bot-filter.js';
 import { ActivityStore } from './activity.js';
 
+// This process is the only way in: exiting drops every open SSE stream,
+// upload and tracker socket at once, and Cloud Run answers 503 until a new
+// instance is up. A throw in one socket's callback must cost that socket, not
+// everyone's. Logged as ERROR so Cloud Run Error Reporting still surfaces it.
+process.on('uncaughtException', (err) => {
+  console.error('[wake-proxy] uncaught exception (kept running):', err);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('[wake-proxy] unhandled rejection (kept running):', err);
+});
+
 const config = loadConfig();
 const gce = new GceController(config);
 const proxy = createOriginProxy();
@@ -389,6 +400,11 @@ const server = http.createServer((req, res) => {
 
 server.on('upgrade', (req, socket, head) => {
   const host = req.headers.host || 'photogroup.network';
+  // The socket can sit here for a VM boot before http-proxy adds its own
+  // listeners; an ECONNRESET with no 'error' listener would crash the process.
+  socket.on('error', (err) => {
+    console.warn('[wake-proxy] ws client socket error:', err.code || err.message);
+  });
 
   const go = async () => {
     try {

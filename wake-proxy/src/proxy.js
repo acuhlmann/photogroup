@@ -47,26 +47,25 @@ export function wireOriginTeardown(proxy) {
     });
   });
 
-  proxy.on('open', (proxySocket, _req, socket) => {
-    const destroyBoth = () => {
+  // Not 'open': http-proxy 1.18 emits it with the origin socket only
+  // (`server.emit('open', proxySocket)`), and assuming a client socket there
+  // threw inside a socket data callback, which took the whole Cloud Run
+  // container down on every WebSocket upgrade (2026-11-01). 'proxyReqWs' is
+  // the event that carries the client socket.
+  proxy.on('proxyReqWs', (proxyReq, _req, socket) => {
+    const destroy = (s) => {
       try {
-        if (!proxySocket.destroyed) proxySocket.destroy();
-      } catch {
-        // ignore
-      }
-      try {
-        if (!socket.destroyed) socket.destroy();
+        if (s && !s.destroyed) s.destroy();
       } catch {
         // ignore
       }
     };
-    socket.on('close', destroyBoth);
-    proxySocket.on('close', () => {
-      try {
-        if (!socket.destroyed) socket.destroy();
-      } catch {
-        // ignore
-      }
+    // Client gone before the origin answered: drop the pending request.
+    socket.on('close', () => destroy(proxyReq));
+    proxyReq.on('upgrade', (_proxyRes, proxySocket) => {
+      socket.on('close', () => destroy(proxySocket));
+      proxySocket.on('close', () => destroy(socket));
+      if (socket.destroyed) destroy(proxySocket);
     });
   });
 }
