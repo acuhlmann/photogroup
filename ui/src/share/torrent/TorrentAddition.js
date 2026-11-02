@@ -891,6 +891,9 @@ export default class TorrentAddition {
         }
         
         const key = parsed.infoHash;
+        // The store is shared by every room this browser opens: say which
+        // rooms use this torrent, so opening another room doesn't delete it.
+        const roomId = this.master?.service?.id || this.service?.id;
 
         return new Promise((resolve, reject) => {
 
@@ -902,7 +905,20 @@ export default class TorrentAddition {
                     return;
                 }
 
+                if(value && roomId && !(Array.isArray(value.roomIds) && value.roomIds.includes(roomId))) {
+                    // Saved before rooms were recorded, or in another room.
+                    const roomIds = Array.isArray(value.roomIds) ? [...value.roomIds, roomId] : [roomId];
+                    try {
+                        self.torrentsDb.set(key, { ...value, roomIds }, () => resolve(torrent));
+                    } catch(e) {
+                        Logger.warn('storeTorrent IndexedDB error saving ' + e.message);
+                        resolve(torrent);
+                    }
+                    return;
+                }
+
                 if(!value) {
+                    if (roomId) parsed.roomIds = [roomId];
                     try {
                         self.torrentsDb.add(key, parsed, () => {
                             Logger.debug('storeTorrent IndexedDB added ' + key);

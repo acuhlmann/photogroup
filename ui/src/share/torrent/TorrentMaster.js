@@ -27,6 +27,33 @@ import { forgetRoom } from '../recentRooms';
 import { openSealedPhoto } from '../gallery/openSealed';
 import { describeDevice, detectDevice } from '../util/deviceLabel';
 
+/** The room's photos by the torrent that carries them (base infoHash), in room order. */
+export function groupByTorrent(photos) {
+    const groups = new Map();
+    (photos || []).forEach(photo => {
+        const base = getBaseInfoHash(photo?.infoHash);
+        if (!base) return;
+        if (!groups.has(base)) groups.set(base, []);
+        groups.get(base).push(photo);
+    });
+    return groups;
+}
+
+/**
+ * Whether saved torrent metadata that the room doesn't list may be deleted.
+ * The store is shared by every room this browser opened, so metadata saved
+ * in another room is not this room's to judge: deleting it cost the sharer
+ * the torrents of photos shared there, and after that nobody could get them
+ * by P2P. Only metadata saved in this room alone, and only against a room
+ * snapshot that lists photos, is evidence of a deletion. Metadata saved
+ * before rooms were recorded, or also used in another room, is kept.
+ */
+export function mayDeleteSavedTorrent(metadata, roomId, photos) {
+    const rooms = metadata?.roomIds;
+    return holdsRoomSnapshot(photos) && !!roomId
+        && Array.isArray(rooms) && rooms.length === 1 && rooms[0] === roomId;
+}
+
 export default class TorrentMaster {
 
     constructor(service, emitter) {
@@ -524,10 +551,11 @@ export default class TorrentMaster {
                             // A photo the room still lists but no longer holds is
                             // gone: clear our copy. An empty room does not say
                             // that — see holdsRoomSnapshot.
-                            if (holdsRoomSnapshot(photos)) {
+                            // Metadata saved in another room is that room's: keep it.
+                            if (mayDeleteSavedTorrent(metadata, self.service?.id, photos)) {
                                 self.torrentDeletion.deleteTorrent(metadata).catch(err => Logger.warn('deleteTorrent: ' + err));
                             } else {
-                                Logger.info('resurrectTorrent: keeping ' + metadata.name + ', the room listed no photos to judge by');
+                                Logger.debug('resurrectTorrent: keeping ' + metadata.name + ', not this room\'s to judge');
                             }
                             resolve(false);
                         }
@@ -769,24 +797,19 @@ export default class TorrentMaster {
             }
         });
 
-        photos.forEach(item => {
-            // Extract base infoHash (without file path suffix) for client.get()
-            const baseInfoHash = getBaseInfoHash(item.infoHash);
-            const torrent = getTorrent(self.client, baseInfoHash);
-            
-            if(!torrent) {
-                Logger.debug('syncUiWithServerUrls adding torrent: ' + baseInfoHash);
-
-                self.torrentAddition.add(baseInfoHash || item.infoHash, item).then(result => {
-                    Logger.debug('syncUiWithServerUrls add success: ' + (result ? result.infoHash : 'null'));
-                }).catch(err => {
-                    Logger.warn('syncUiWithServerUrls add failed: ' + err);
-                });
-            }
-
-            /*if(torrent && torrent.files && torrent.files.length < 1 && item.owners.find(owner => owner.peerId === this.client.peerId)) {
-                this.service.removeOwner(item.infoHash, this.client.peerId)
-            }*/
+        // Photos shared together are one torrent, listed as "<infoHash>-<path>".
+        // Add each torrent once with all its photos: adding them one by one
+        // bound only the first photo to the torrent, and the rest failed with
+        // "Cannot add duplicate torrent", so someone joining later never got
+        // them by P2P.
+        groupByTorrent(photos).forEach((group, baseInfoHash) => {
+            if (getTorrent(self.client, baseInfoHash)) return;
+            Logger.debug('syncUiWithServerUrls adding torrent: ' + baseInfoHash + ' with ' + group.length + ' photo(s)');
+            Promise.resolve(self.torrentAddition.handlePhotoAddEvent(group)).then(result => {
+                Logger.debug('syncUiWithServerUrls add success: ' + (result ? result.infoHash : 'null'));
+            }).catch(err => {
+                Logger.warn('syncUiWithServerUrls add failed: ' + err);
+            });
         });
     }
 
