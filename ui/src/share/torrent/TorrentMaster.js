@@ -54,6 +54,11 @@ export function mayDeleteSavedTorrent(metadata, roomId, photos) {
         && Array.isArray(rooms) && rooms.length === 1 && rooms[0] === roomId;
 }
 
+/** Whether a live torrent was added while this room was open (unknown counts as yes). */
+export function addedInThisRoom(torrent, roomId) {
+    return !torrent?.addedInRoom || !roomId || torrent.addedInRoom === roomId;
+}
+
 export default class TorrentMaster {
 
     constructor(service, emitter) {
@@ -516,6 +521,10 @@ export default class TorrentMaster {
                 if(existingTorrent) {
 
                     Logger.info('resurrectTorrent.client.get ' + metadata.name);
+                    // Already here from another room this page had open: this room uses it too.
+                    if (photos?.some(item => getBaseInfoHash(item.infoHash) === metadata.infoHash)) {
+                        self.torrentAddition?.rememberRoom?.(metadata.infoHash);
+                    }
                     resolve(metadata);
 
                 } else {
@@ -678,6 +687,8 @@ export default class TorrentMaster {
         //const torrent = this.client[addOrSeed](uri, { 'announce': window.WEBTORRENT_ANNOUNCE}, callback);
 
         if(torrent) {
+            // Scanning a code opens another room in this page, with this room's torrents still here.
+            torrent.addedInRoom = this.service?.id;
             Logger.info('addSeedOrGetTorrent ' + torrent.infoHash + ' ' + torrent.name);
         } else {
             Logger.warn('addSeedOrGetTorrent returned null/undefined torrent');
@@ -789,6 +800,11 @@ export default class TorrentMaster {
                 // dropping it here would destroy the only copy left on earth.
                 if (!holdsRoomSnapshot(photos)) {
                     Logger.info('syncUiWithServerUrls: keeping ' + torrent.infoHash + ', the room listed no photos to judge by');
+                    return;
+                }
+                // Added in another room this page had open: not this room's to delete.
+                if (!addedInThisRoom(torrent, this.service?.id)) {
+                    Logger.info('syncUiWithServerUrls: keeping ' + torrent.infoHash + ', it belongs to another room');
                     return;
                 }
                 self.torrentDeletion.deleteTorrent(torrent).then(infoHash => {

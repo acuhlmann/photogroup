@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import TorrentMaster, { groupByTorrent, mayDeleteSavedTorrent } from '../TorrentMaster';
+import TorrentMaster, { groupByTorrent, mayDeleteSavedTorrent, addedInThisRoom } from '../TorrentMaster';
 import TorrentAddition from '../TorrentAddition';
 
 // Room z45keexwrxqzbeqimgsz (2026-11-02): 8 photos in 5 torrents, three of
@@ -75,6 +75,31 @@ describe("opening a room keeps other rooms' saved torrents", () => {
     });
 });
 
+describe('a room opened in the same page by scanning a code', () => {
+    it("doesn't delete live torrents another room added", () => {
+        const master = joiner();
+        master.creator.client.torrents = [
+            { infoHash: 'bbbb', addedInRoom: 'other' },
+            { infoHash: 'cccc', addedInRoom: 'room' },
+        ];
+        master.syncUiWithServerUrls(ROOM, Date.now());
+        expect(master.torrentDeletion.deleteTorrent.mock.calls.map(call => call[0].infoHash)).toEqual(['cccc']);
+    });
+
+    it('counts a torrent with no room recorded as this room\'s', () => {
+        expect(addedInThisRoom({}, 'room')).toBe(true);
+        expect(addedInThisRoom({ addedInRoom: 'room' }, 'room')).toBe(true);
+        expect(addedInThisRoom({ addedInRoom: 'other' }, 'room')).toBe(false);
+    });
+
+    it('records this room on a saved torrent that is already live', async () => {
+        const master = joiner(['e68e']);
+        master.torrentAddition.rememberRoom = vi.fn();
+        await master.resurrectTorrent({ infoHash: 'e68e', name: 'x', roomIds: ['other'] }, ROOM);
+        expect(master.torrentAddition.rememberRoom).toHaveBeenCalledWith('e68e');
+    });
+});
+
 describe('storeTorrent records the room', () => {
     function store(existing) {
         const db = {
@@ -98,8 +123,28 @@ describe('storeTorrent records the room', () => {
     it('saves new metadata with this room', async () => {
         const { db, addition } = store(undefined);
         await addition.storeTorrent({ infoHash: 'h', torrentFile: await torrentFile() });
-        expect(db.add).toHaveBeenCalledOnce();
+        expect(db.set).toHaveBeenCalledOnce();
         expect(db.value.roomIds).toEqual(['room']);
+        expect(db.value.infoHash).toBeTruthy();
+    });
+
+    it('reads and writes in one transaction when the store has them', async () => {
+        const { db, addition } = store({ infoHash: 'h', roomIds: ['other'] });
+        const tx = { get: db.get, set: db.set };
+        db.transaction = vi.fn((mode, onfinish) => {
+            tx.set = vi.fn((key, value, cb) => { db.value = value; cb(); onfinish(); });
+            return tx;
+        });
+        await addition.rememberRoom('h');
+        expect(db.transaction).toHaveBeenCalledWith('readwrite', expect.any(Function));
+        expect(tx.set).toHaveBeenCalledOnce();
+        expect(db.value.roomIds).toEqual(['other', 'room']);
+    });
+
+    it('rememberRoom saves nothing when no metadata is saved', async () => {
+        const { db, addition } = store(undefined);
+        await addition.rememberRoom('h');
+        expect(db.set).not.toHaveBeenCalled();
     });
 
     it('adds this room to metadata saved elsewhere', async () => {
