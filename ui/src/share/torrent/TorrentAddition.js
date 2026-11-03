@@ -890,36 +890,60 @@ export default class TorrentAddition {
             return torrent; // Don't fail the whole flow
         }
         
-        const key = parsed.infoHash;
+        await this.saveWithRoom(parsed.infoHash, parsed);
+        return torrent;
+    }
 
-        return new Promise((resolve, reject) => {
+    /**
+     * Say that the open room uses this saved torrent: the store is shared by
+     * every room this browser opens, and a torrent no room claims is kept.
+     */
+    rememberRoom(infoHash) {
+        return this.saveWithRoom(infoHash, null);
+    }
 
-            const self = this;
-            this.torrentsDb.get(key, (err, value) => {
-                if (err) {
-                    Logger.debug('storeTorrent torrentsDb.get error: ' + err);
-                    resolve(torrent); // Resolve anyway so the flow continues
-                    return;
-                }
-
-                if(!value) {
-                    try {
-                        self.torrentsDb.add(key, parsed, () => {
-                            Logger.debug('storeTorrent IndexedDB added ' + key);
-                            resolve(torrent);
-                        });
-                    } catch(e) {
-                        Logger.warn('storeTorrent IndexedDB error saving ' + e.message);
-                        resolve(torrent);
+    /**
+     * Save `parsed` (when nothing is saved yet) or add the open room to the
+     * saved record's `roomIds`. The read and the write share one transaction,
+     * so two tabs adding different rooms can't drop each other's. Never
+     * rejects: storing metadata is best effort.
+     */
+    saveWithRoom(key, parsed) {
+        const roomId = this.master?.service?.id || this.service?.id;
+        const db = this.torrentsDb;
+        if (!key || !db) return Promise.resolve();
+        return new Promise(resolve => {
+            try {
+                const tx = typeof db.transaction === 'function' ? db.transaction('readwrite', () => resolve()) : db;
+                tx.get(key, (err, value) => {
+                    if (err) {
+                        Logger.debug('storeTorrent torrentsDb.get error: ' + err);
+                        return resolve();
                     }
-
-                } else {
-                    Logger.debug('storeTorrent metadata already added ' + key);
-                    resolve(torrent);
-                }
-            });
+                    const write = record => {
+                        const done = writeErr => {
+                            if (writeErr) Logger.warn('storeTorrent IndexedDB error saving ' + (writeErr.message || writeErr));
+                            if (tx === db) resolve();
+                        };
+                        try { tx.set(key, record, done); } catch (e) { done(e); }
+                    };
+                    if (!value) {
+                        if (!parsed) return resolve();
+                        write(roomId ? { ...parsed, roomIds: [roomId] } : parsed);
+                    } else if (roomId && !(Array.isArray(value.roomIds) && value.roomIds.includes(roomId))) {
+                        // Saved before rooms were recorded, or in another room.
+                        write({ ...value, roomIds: [...(Array.isArray(value.roomIds) ? value.roomIds : []), roomId] });
+                    } else {
+                        Logger.debug('storeTorrent metadata already added ' + key);
+                        if (tx === db) resolve();
+                    }
+                    // In a transaction, resolve comes when it finishes.
+                });
+            } catch (e) {
+                Logger.warn('storeTorrent IndexedDB error ' + (e.message || e));
+                resolve();
+            }
         });
-
     }
 
     wire(wire, addr, torrent) {
