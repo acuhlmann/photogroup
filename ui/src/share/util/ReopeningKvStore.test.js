@@ -54,12 +54,24 @@ describe('ReopeningKvStore', () => {
 });
 
 describe('opening a room when the saved torrents cannot be read', () => {
-    it('still goes on to add the room photos', async () => {
+    it('still shows the room photos and goes on to add them', async () => {
         const master = Object.create(TorrentMaster.prototype);
         const dead = new FakeStore();
         dead.browserCloses();
         master.torrentsDb = dead; // the old IdbKvStore, which threw "Database is closed"
+        master.peers = {};
+        master.emitter = new EventEmitter();
+        master.serveCachedPhotos = vi.fn(async () => {});
+        master.syncUiWithServerUrls = vi.fn();
+        master.fillMissingOwners = vi.fn();
+        const photos = [{ infoHash: 'abc' }];
+        const onPhotos = vi.fn();
+        master.emitter.on('photos', onPhotos);
 
-        await expect(master.resurrectLocallySavedTorrents([{ infoHash: 'abc' }])).resolves.toEqual([]);
+        await master.findExistingContent(() => Promise.resolve({ peers: [], connections: [], photos }));
+
+        expect(onPhotos).toHaveBeenCalledWith(expect.objectContaining({ type: 'all', item: photos }));
+        expect(master.syncUiWithServerUrls).toHaveBeenCalledWith(photos, expect.any(Number));
+        expect(master.fillMissingOwners).toHaveBeenCalledWith(photos);
     });
 });
