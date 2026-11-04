@@ -14,7 +14,7 @@
 export function shouldCacheBlob(fileType) {
     return typeof fileType === 'string' && fileType.startsWith('image/');
 }
-import IdbKvStore from 'idb-kv-store';
+import ReopeningKvStore from './ReopeningKvStore';
 import Logger from 'js-logger';
 
 // Lazily initialised so that importing this module in test environments
@@ -23,7 +23,7 @@ let _db = null;
 function getDb() {
     if (_db) return _db;
     if (typeof indexedDB === 'undefined') return null;
-    _db = new IdbKvStore('image-blob-cache');
+    _db = new ReopeningKvStore('image-blob-cache');
     return _db;
 }
 
