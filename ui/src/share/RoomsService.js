@@ -58,7 +58,12 @@ export default class RoomsService {
             const urlParams = new URLSearchParams(window.location.search);
             if(urlParams.has('room')) {
                 this.id = urlParams.get('room');
-                await this.master.findExistingContent(this.joinRoom);
+                // An event listener's rejection goes nowhere: say what failed.
+                try {
+                    await this.master.findExistingContent(this.joinRoom);
+                } catch (err) {
+                    Logger.error('open room failed: ' + (err?.message || err));
+                }
                 //this.emitter.emit('openRoomEnd');
                 this.emitter.emit('readyToUpload');
             }

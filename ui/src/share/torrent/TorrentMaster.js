@@ -1,6 +1,6 @@
 import Logger from 'js-logger';
 
-import IdbKvStore from 'idb-kv-store';
+import ReopeningKvStore from '../util/ReopeningKvStore';
 import Peers from '../topology/Peers';
 import idb from 'indexeddb-chunk-store';
 import TorrentAddition, { readFileBlob } from './TorrentAddition';
@@ -76,7 +76,7 @@ export default class TorrentMaster {
         this.STREAMING_FORMATS = [...this.STREAMING_VIDEO_FORMATS, ...this.STREAMING_AUDIO_FORMATS];
         // Before anything else listens to 'photos': others read it.
         this.roomPhotos = new RoomPhotos(emitter);
-        this.torrentsDb = new IdbKvStore('torrents');
+        this.torrentsDb = new ReopeningKvStore('torrents');
         this.torrentsDb.on('open',() => {
             Logger.info('torrentsDb open');
         });
@@ -295,7 +295,7 @@ export default class TorrentMaster {
      * and start reconciling downloads and ownership. `roomPromise` is a function
      * invoked with the room service as `this`, not an already-created promise.
      * Resolve with the room's photos, or undefined for a falsy response. Room-request
-     * and torrent-store iteration failures reject; photo publication can precede failure.
+     * failures reject; a torrent store that can't be read only logs; photo publication can precede failure.
      */
     async findExistingContent(roomPromise) {
 
@@ -473,25 +473,36 @@ export default class TorrentMaster {
             const loopPromise = new Promise(r => { loopResolve = r; });
 
             const allPendingTorrents = [loopPromise];
-            self.torrentsDb.iterator((err, cursor) => {
-                if(err) {
-                    reject(err);
-                    return;
-                }
-                if(cursor) {
-                    if(typeof cursor.value === 'object'){
-                        // One torrent that can't come back must not hold up the rest.
-                        allPendingTorrents.push(self.resurrectTorrent(cursor.value, photos).catch(err => {
-                            Logger.warn('resurrectTorrent failed: ' + err);
-                            return false;
-                        }));
+            // Without saved torrents the room still opens: its photos are
+            // added from the room's own list. Failing here left a phone
+            // with nothing added and nobody to connect to.
+            const giveUp = err => {
+                Logger.warn('resurrectAllTorrents: could not read saved torrents: ' + (err?.message || err));
+                loopResolve(true);
+            };
+            try {
+                self.torrentsDb.iterator((err, cursor) => {
+                    if(err) {
+                        giveUp(err);
+                        return;
                     }
-                    cursor.continue()
-                } else {
-                    // Iterator finished — resolve the loop sentinel so Promise.all can proceed
-                    loopResolve(true);
-                }
-            });
+                    if(cursor) {
+                        if(typeof cursor.value === 'object'){
+                            // One torrent that can't come back must not hold up the rest.
+                            allPendingTorrents.push(self.resurrectTorrent(cursor.value, photos).catch(err => {
+                                Logger.warn('resurrectTorrent failed: ' + err);
+                                return false;
+                            }));
+                        }
+                        cursor.continue()
+                    } else {
+                        // Iterator finished — resolve the loop sentinel so Promise.all can proceed
+                        loopResolve(true);
+                    }
+                });
+            } catch (err) {
+                giveUp(err);
+            }
 
             Promise.all(allPendingTorrents).then(values => {
                 Logger.info('resurrectAllTorrents ' + values);
