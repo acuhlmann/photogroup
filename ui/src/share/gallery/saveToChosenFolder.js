@@ -112,6 +112,7 @@ export default function ChooseFolderButton({ tiles, device = 'device', size = 's
     const [saved, setSaved] = useState(() => new Set());
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState('');
+    const [restError, setRestError] = useState('');
     if (!canChooseFolder() || (!walk && tiles.length === 0)) return null;
     const list = walk || tiles;
     // Photos this browser has never written still need a folder, even on a reopen.
@@ -169,6 +170,7 @@ export default function ChooseFolderButton({ tiles, device = 'device', size = 's
                         </IconButton>
                     </Stack>
                     <Stack spacing={2.5} sx={{ flex: 1, alignItems: 'center', justifyContent: 'center', p: 3, textAlign: 'center', maxWidth: 520, mx: 'auto', width: '100%' }}>
+                        {restError && <Typography variant="body2" role="alert" sx={{ color: 'error.light' }}>{restError}</Typography>}
                         {left.length ? (
                             <FolderWalk
                                 tiles={left}
@@ -183,10 +185,14 @@ export default function ChooseFolderButton({ tiles, device = 'device', size = 's
                                     }
                                 }}
                                 // "Save the rest": the ones left go the device's normal way, on this tap.
+                                // It closes only once they are saved, so a failure can be tried again.
                                 onBack={() => {
-                                    const rest = left;
-                                    setWalk(null);
-                                    saveToDevice(rest).catch(() => {});
+                                    setRestError('');
+                                    saveToDevice(left)
+                                        .then(result => {
+                                            if (result !== 'cancelled') setWalk(null);
+                                        })
+                                        .catch(() => setRestError("Couldn't save the rest. Try again in a moment."));
                                 }}
                             />
                         ) : (

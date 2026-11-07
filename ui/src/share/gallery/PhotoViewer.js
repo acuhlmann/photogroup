@@ -35,7 +35,8 @@ import { removeLabel } from './removeLabel';
  * keys), saving, and shared metadata editing. The details sit beside the
  * photo on a wide screen and are hidden until asked for on a narrow one,
  * so the photo gets the room. With `onRemove`, a Remove button takes the
- * photo out of the room and closes the viewer.
+ * photo out of the room and closes the viewer; if `onRemove` resolves to
+ * false (it failed), the viewer stays open so it can be tried again.
  */
 function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, onRemove }) {
     const theme = useTheme();
@@ -222,7 +223,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                             {showDetails ? 'Hide details' : 'Details'}
                         </Button>
                         {onRemove && (
-                            <IconButton aria-label={removeLabel(tile)} onClick={() => { onRemove(tile); onClose(); }}
+                            <IconButton aria-label={removeLabel(tile)} onClick={() => Promise.resolve(onRemove(tile)).then(removed => { if (removed !== false) onClose(); })}
                                 sx={{ color: '#fff' }}>
                                 <DeleteRounded />
                             </IconButton>

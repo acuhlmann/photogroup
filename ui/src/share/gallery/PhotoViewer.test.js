@@ -119,6 +119,14 @@ describe('PhotoViewer', () => {
         expect(onRemove).toHaveBeenCalledWith(tile);
         expect(onClose).toHaveBeenCalled();
 
+        // A failed remove keeps the viewer open.
+        const failing = vi.fn().mockResolvedValue(false);
+        const stay = vi.fn();
+        await act(async () => root.render(view({ onRemove: failing, onClose: stay })));
+        await act(async () => document.body.querySelector('[aria-label="Remove harbor.jpg"]').click());
+        expect(failing).toHaveBeenCalled();
+        expect(stay).not.toHaveBeenCalled();
+
         await act(async () => root.unmount());
         div.remove();
     });

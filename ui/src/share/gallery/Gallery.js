@@ -510,11 +510,16 @@ function Gallery(props) {
     const showError = useCallback(message => master.emitter.emit('showError', message), [master.emitter]);
     /** Take a photo out of the room for everyone; the room's delete event removes the tile. */
     const removePhoto = useCallback(tile => {
-        master.torrentDeletion.deleteItem(tile)
-            .then(infoHash => Logger.info('removed ' + infoHash))
+        // Resolves to false on failure, so the viewer can stay open for another try.
+        return master.torrentDeletion.deleteItem(tile)
+            .then(infoHash => {
+                Logger.info('removed ' + infoHash);
+                return true;
+            })
             .catch(err => {
                 Logger.error('remove: ' + (err && err.message ? err.message : err));
                 showError("Couldn't remove that. Try again in a moment.");
+                return false;
             });
     }, [master.torrentDeletion, showError]);
 

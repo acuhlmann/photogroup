@@ -20,6 +20,7 @@ describe('uiMode', () => {
 
     it('keeps someone new in simple mode on the next visit', () => {
         expect(readMode()).toBe('simple');
+        expect(localStorage.getItem('photogroup.uiMode')).toBe('simple');
         // RoomsService marks the visit after the first read.
         localStorage.setItem('clientId', 'abc');
         expect(readMode()).toBe('simple');

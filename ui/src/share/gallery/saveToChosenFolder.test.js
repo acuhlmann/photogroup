@@ -115,6 +115,19 @@ describe('saveToChosenFolder', () => {
         await act(async () => root.unmount());
     });
 
+    it('keeps the walk open and says so when saving the rest fails', async () => {
+        saveToDevice.mockRejectedValueOnce(new Error('Not here yet'));
+        const tiles = [tile('a'), tile('b')];
+        const { div, root } = await render(<ChooseFolderButton tiles={tiles} device="phone" />);
+        await press(div, 'Choose where each one goes');
+        await press(document.querySelector('[role="dialog"]'), 'Save the rest to your phone');
+        const dialog = document.querySelector('[role="dialog"]');
+        expect(dialog).not.toBeNull();
+        expect(dialog.textContent).toContain("Couldn't save the rest");
+        await act(async () => root.unmount());
+        document.querySelectorAll('[role="dialog"]').forEach(node => node.remove());
+    });
+
     it('counts the folders already chosen when the walk is opened again', async () => {
         const tiles = [tile('a'), tile('b')];
         const { div, root } = await render(<ChooseFolderButton tiles={tiles} device="phone" />);
