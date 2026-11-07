@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue } from 'react';
 import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -7,7 +7,6 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
-import Collapse from '@mui/material/Collapse';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -35,6 +34,7 @@ import { saveToDevice } from './saveToDevice';
 import { canReadTorrentFile } from './saveRoom';
 import { removeLabel } from './removeLabel';
 import { keyOf, useArriving, usePreview } from './mediaView';
+import { useSmallImage } from './smallImage';
 import { alreadyHave, HAVE_LABELS, useHaveChanges } from './alreadyHave';
 import { peerLabel } from '../topology/presence';
 
@@ -80,6 +80,7 @@ export function groupByDay(tiles, facts, sort) {
 /** A small square of the photo. A tap shows it full screen. */
 function Thumb({ tile, master, size, onOpen, onPick }) {
     const poster = usePreview(tile);
+    const small = useSmallImage(tile);
     const percent = useArriving(tile);
     const Icon = tile.isAudio ? AudiotrackRounded : PlayCircleRounded;
     const previewOnly = !!tile.previewOnly;
@@ -93,11 +94,12 @@ function Thumb({ tile, master, size, onOpen, onPick }) {
             </>
         );
     } else if (tile.isImage && !previewOnly) {
-        // The same RenderContent the full view uses: it also reads the photo's details once it is here.
+        // RenderContent also reads the photo's details once it is here. It
+        // shows the small copy: the full photo is only decoded where it is big.
         inside = (
             <TileErrorBoundary fileName={tile.fileName}>
-                <Box sx={{ ...fill, '& div': { height: '100%' }, '& img': { width: '100% !important', height: '100% !important', objectFit: 'cover', aspectRatio: 'auto !important' } }}>
-                    <RenderContent tile={tile} master={master} playbackActive={false} />
+                <Box sx={fill}>
+                    <RenderContent tile={tile} master={master} playbackActive={false} thumb thumbSrc={small || undefined} />
                 </Box>
             </TileErrorBoundary>
         );
@@ -247,6 +249,130 @@ function HeadCell({ id, label, sort, onSort, sx }) {
     );
 }
 
+/** Preview, actions and details of the picked photo. */
+function Details({ tile, master, roomTiles, wide, onOpen, onRemove }) {
+    const open = () => onOpen(tile);
+    // The photo and its buttons show on the tap's first frame; the long list
+    // of details follows a moment later, in work React can pause for a scroll
+    // or another tap.
+    const later = useDeferredValue(tile, null);
+    // Until it catches up, the details of the photo picked before are not
+    // shown, so an edit cannot go to the wrong photo.
+    const current = later && keyOf(later) === keyOf(tile) ? later : null;
+    return (
+        <Box sx={{ p: wide ? 2 : 1.5 }}>
+            <Preview tile={tile} master={master} onOpen={open} />
+            <Actions tile={tile} master={master} onOpen={open} onRemove={onRemove} />
+            {current && <PhotoDetails master={master} tile={current} roomTiles={roomTiles} />}
+        </Box>
+    );
+}
+
+// Opening a row fades and slides its details in. Only opacity and transform
+// change, so the phone's GPU draws it without laying out the page each frame
+// (a height animation laid out and repainted every row under it each frame).
+const reveal = {
+    '@keyframes pgReveal': {
+        from: { opacity: 0, transform: 'translateY(-6px)' },
+        to: { opacity: 1, transform: 'none' },
+    },
+    animation: 'pgReveal 160ms ease-out',
+    '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+};
+
+/**
+ * Row props are the same: the same objects, except the facts, which are
+ * worked out afresh whenever any photo changes and so are compared by value.
+ */
+export function sameRow(before, after) {
+    return Object.keys(after).every(key => key === 'fact'
+        ? before.fact === after.fact || JSON.stringify(before.fact) === JSON.stringify(after.fact)
+        : before[key] === after[key]);
+}
+
+/**
+ * One photo on a phone: thumbnail and its facts; a tap opens its details
+ * under it. Memoized, so picking a row draws two rows, not the whole list.
+ * Props are the tile and plain values; `roomTiles` only reaches the open row.
+ */
+const PhoneRow = React.memo(function PhoneRow({ tile, fact, open, master, roomTiles, onOpen, onPick, onMove, onRemove, setRowRef }) {
+    const theme = useTheme();
+    const key = keyOf(tile);
+    const line2 = fact?.exposure || '';
+    const line3 = [takenLabel(fact?.takenAt ?? null), fact?.place].filter(Boolean).join(' · ');
+    return (
+        <Box className="media-card" data-testid="photo-row"
+            sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: open ? 'action.selected' : 'transparent',
+                // Rows off screen skip layout and paint until scrolled to.
+                contentVisibility: 'auto', containIntrinsicSize: 'auto 82px' }}>
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', p: 1 }}>
+                <Thumb tile={tile} master={master} size={64} onOpen={() => onOpen(tile)} onPick={() => onPick(key)} />
+                <ButtonBase aria-expanded={open}
+                    ref={node => setRowRef(key, node)}
+                    onClick={() => onPick(open ? '' : key)}
+                    onKeyDown={event => {
+                        if (event.key === 'ArrowDown') { event.preventDefault(); onMove(tile, 1); }
+                        else if (event.key === 'ArrowUp') { event.preventDefault(); onMove(tile, -1); }
+                    }}
+                    sx={{ minWidth: 0, flex: 1, display: 'block', textAlign: 'left', borderRadius: 1, py: 0.5,
+                        '&.Mui-focusVisible': { boxShadow: `0 0 0 2px ${theme.palette.primary.main}` } }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                        <Box sx={{ minWidth: 0, flex: 1 }}><TitleCell tile={tile} facts={fact} /></Box>
+                        {fact?.rating > 0 && <RatingStars value={fact.rating} size={13} />}
+                    </Stack>
+                    {fact?.camera && <Typography variant="caption" noWrap component="div" sx={muted}>{fact.camera}</Typography>}
+                    {line2 && <Typography variant="caption" noWrap component="div" sx={{ ...muted, ...mono }}>{line2}</Typography>}
+                    {line3 && <Typography variant="caption" noWrap component="div" sx={muted}>{line3}</Typography>}
+                </ButtonBase>
+            </Stack>
+            {open && (
+                <Box sx={{ bgcolor: 'background.paper', ...reveal }}>
+                    <Details tile={tile} master={master} roomTiles={roomTiles} wide={false} onOpen={onOpen} onRemove={onRemove} />
+                </Box>
+            )}
+        </Box>
+    );
+}, sameRow);
+
+/** One photo as a table row on a wide screen. Memoized like PhoneRow. */
+const WideRow = React.memo(function WideRow({ tile, fact, from, selected, roomy, master, onOpen, onPick, onMove, setRowRef }) {
+    const theme = useTheme();
+    const key = keyOf(tile);
+    const onKeyDown = event => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === 'Enter') { event.preventDefault(); if (!tile.loading) onOpen(tile); }
+        else if (event.key === 'ArrowDown') { event.preventDefault(); onMove(tile, 1); }
+        else if (event.key === 'ArrowUp') { event.preventDefault(); onMove(tile, -1); }
+    };
+    return (
+        <TableRow hover selected={selected}
+            ref={node => setRowRef(key, node)}
+            tabIndex={0}
+            className="media-card"
+            aria-selected={selected}
+            data-testid="photo-row"
+            onKeyDown={onKeyDown}
+            onDoubleClick={() => !tile.loading && onOpen(tile)}
+            onClick={() => onPick(key)}
+            sx={{ cursor: 'pointer', outline: 'none',
+                '&:focus-visible': { boxShadow: `inset 0 0 0 2px ${theme.palette.primary.main}` } }}>
+            <TableCell><Thumb tile={tile} master={master} size={60} onOpen={() => onOpen(tile)} onPick={() => onPick(key)} /></TableCell>
+            <TableCell><TitleCell tile={tile} facts={fact} /></TableCell>
+            <TableCell>{fact?.rating > 0 ? <RatingStars value={fact.rating} size={14} />
+                : fact?.rating === -1 ? <Typography variant="caption" sx={{ color: 'error.main' }}>Rejected</Typography> : null}</TableCell>
+            <TableCell><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{takenLabel(fact?.takenAt ?? null)}</Typography></TableCell>
+            <TableCell>
+                <Typography variant="body2" noWrap title={fact?.camera}>{fact?.camera}</Typography>
+                {fact?.lens && <Typography variant="caption" noWrap component="div" sx={muted} title={fact.lens}>{fact.lens}</Typography>}
+            </TableCell>
+            <TableCell><Exposure value={fact?.exposure} /></TableCell>
+            {roomy && <TableCell><Typography variant="body2" noWrap title={fact?.place || ''}>{fact?.place}</Typography></TableCell>}
+            <TableCell><Typography variant="body2" sx={mono}>{tile.fileSize}</Typography></TableCell>
+            {roomy && <TableCell><Typography variant="body2" noWrap>{from}</Typography></TableCell>}
+        </TableRow>
+    );
+}, sameRow);
+
 /**
  * Photographer mode's room view: one row per photo with its title, rating,
  * date taken, camera, lens, exposure, place, size and who shared it. The
@@ -262,6 +388,8 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
     const roomy = useMediaQuery(theme.breakpoints.up('lg'), { noSsr: true });
     const [picked, setPicked] = useState(null);
     const rowRefs = useRef(new Map());
+    const tilesRef = useRef(tiles);
+    tilesRef.current = tiles;
 
     // Back from full screen, the photo seen last is the one picked.
     useEffect(() => {
@@ -274,39 +402,19 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
     const shownKey = shown ? keyOf(shown) : null;
     const groups = useMemo(() => groupByDay(tiles, facts, sort), [tiles, facts, sort]);
 
+    // Stable across renders, so the memoized rows only redraw when their own photo changes.
+    const setRowRef = useCallback((key, node) => {
+        if (node) rowRefs.current.set(key, node);
+        else rowRefs.current.delete(key);
+    }, []);
     const move = useCallback((tile, step) => {
-        const index = tiles.indexOf(tile) + step;
-        const next = tiles[index];
+        const list = tilesRef.current;
+        const next = list[list.indexOf(tile) + step];
         if (!next) return;
         setPicked(keyOf(next));
         const row = rowRefs.current.get(keyOf(next));
         if (row && typeof row.focus === 'function') row.focus();
-    }, [tiles]);
-
-    const onRowKey = (event, tile) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === 'Enter') { event.preventDefault(); if (!tile.loading) onOpen(tile); }
-        else if (event.key === 'ArrowDown') { event.preventDefault(); move(tile, 1); }
-        else if (event.key === 'ArrowUp') { event.preventDefault(); move(tile, -1); }
-    };
-
-    const rowProps = tile => ({
-        ref: node => { if (node) rowRefs.current.set(keyOf(tile), node); else rowRefs.current.delete(keyOf(tile)); },
-        tabIndex: 0,
-        className: 'media-card',
-        'aria-selected': keyOf(tile) === shownKey,
-        'data-testid': 'photo-row',
-        onKeyDown: event => onRowKey(event, tile),
-        onDoubleClick: () => !tile.loading && onOpen(tile),
-    });
-
-    const details = tile => (
-        <Box sx={{ p: wide ? 2 : 1.5 }}>
-            <Preview tile={tile} master={master} onOpen={() => onOpen(tile)} />
-            <Actions tile={tile} master={master} onOpen={() => onOpen(tile)} onRemove={onRemove} />
-            <PhotoDetails master={master} tile={tile} roomTiles={roomTiles} />
-        </Box>
-    );
+    }, []);
 
     if (!wide) {
         return (
@@ -315,39 +423,11 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
                     <Box key={group.label || 'all'}>
                         {group.label && <DayHeading label={group.label} count={group.tiles.length} />}
                         {group.tiles.map(tile => {
-                            const fact = facts.get(tile);
                             const open = keyOf(tile) === shownKey;
-                            const line2 = fact?.exposure || '';
-                            const line3 = [takenLabel(fact?.takenAt ?? null), fact?.place].filter(Boolean).join(' · ');
                             return (
-                                <Box key={keyOf(tile)} className="media-card" data-testid="photo-row"
-                                    sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: open ? 'action.selected' : 'transparent' }}>
-                                    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', p: 1 }}>
-                                        <Thumb tile={tile} master={master} size={64} onOpen={() => onOpen(tile)} onPick={() => setPicked(keyOf(tile))} />
-                                        <ButtonBase aria-expanded={open}
-                                            ref={node => { if (node) rowRefs.current.set(keyOf(tile), node); else rowRefs.current.delete(keyOf(tile)); }}
-                                            onClick={() => setPicked(open ? '' : keyOf(tile))}
-                                            onKeyDown={event => {
-                                                if (event.key === 'ArrowDown') { event.preventDefault(); move(tile, 1); }
-                                                else if (event.key === 'ArrowUp') { event.preventDefault(); move(tile, -1); }
-                                            }}
-                                            sx={{ minWidth: 0, flex: 1, display: 'block', textAlign: 'left', borderRadius: 1, py: 0.5,
-                                                '&.Mui-focusVisible': { boxShadow: `0 0 0 2px ${theme.palette.primary.main}` } }}>
-                                            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                                                <Box sx={{ minWidth: 0, flex: 1 }}><TitleCell tile={tile} facts={fact} /></Box>
-                                                {fact?.rating > 0 && <RatingStars value={fact.rating} size={13} />}
-                                            </Stack>
-                                            {fact?.camera && <Typography variant="caption" noWrap component="div" sx={muted}>{fact.camera}</Typography>}
-                                            {line2 && <Typography variant="caption" noWrap component="div" sx={{ ...muted, ...mono }}>{line2}</Typography>}
-                                            {line3 && <Typography variant="caption" noWrap component="div" sx={muted}>{line3}</Typography>}
-                                        </ButtonBase>
-                                    </Stack>
-                                    <Collapse in={open} unmountOnExit>
-                                        <Box sx={{ bgcolor: 'background.paper' }}>
-                                            {details(tile)}
-                                        </Box>
-                                    </Collapse>
-                                </Box>
+                                <PhoneRow key={keyOf(tile)} tile={tile} fact={facts.get(tile)} open={open} master={master}
+                                    roomTiles={open ? roomTiles : null} onOpen={onOpen} onPick={setPicked} onMove={move}
+                                    onRemove={onRemove} setRowRef={setRowRef} />
                             );
                         })}
                     </Box>
@@ -385,29 +465,10 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
                                         </TableCell>
                                     </TableRow>
                                 )}
-                                {group.tiles.map(tile => {
-                                    const fact = facts.get(tile);
-                                    return (
-                                        <TableRow key={keyOf(tile)} hover {...rowProps(tile)} selected={keyOf(tile) === shownKey}
-                                            onClick={() => setPicked(keyOf(tile))}
-                                            sx={{ cursor: 'pointer', outline: 'none',
-                                                '&:focus-visible': { boxShadow: `inset 0 0 0 2px ${theme.palette.primary.main}` } }}>
-                                            <TableCell><Thumb tile={tile} master={master} size={60} onOpen={() => onOpen(tile)} onPick={() => setPicked(keyOf(tile))} /></TableCell>
-                                            <TableCell><TitleCell tile={tile} facts={fact} /></TableCell>
-                                            <TableCell>{fact?.rating > 0 ? <RatingStars value={fact.rating} size={14} />
-                                                : fact?.rating === -1 ? <Typography variant="caption" sx={{ color: 'error.main' }}>Rejected</Typography> : null}</TableCell>
-                                            <TableCell><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{takenLabel(fact?.takenAt ?? null)}</Typography></TableCell>
-                                            <TableCell>
-                                                <Typography variant="body2" noWrap title={fact?.camera}>{fact?.camera}</Typography>
-                                                {fact?.lens && <Typography variant="caption" noWrap component="div" sx={muted} title={fact.lens}>{fact.lens}</Typography>}
-                                            </TableCell>
-                                            <TableCell><Exposure value={fact?.exposure} /></TableCell>
-                                            {roomy && <TableCell><Typography variant="body2" noWrap title={fact?.place || ''}>{fact?.place}</Typography></TableCell>}
-                                            <TableCell><Typography variant="body2" sx={mono}>{tile.fileSize}</Typography></TableCell>
-                                            {roomy && <TableCell><Typography variant="body2" noWrap>{sharerLabel(tile, master)}</Typography></TableCell>}
-                                        </TableRow>
-                                    );
-                                })}
+                                {group.tiles.map(tile => (
+                                    <WideRow key={keyOf(tile)} tile={tile} fact={facts.get(tile)} from={roomy ? sharerLabel(tile, master) : ''} selected={keyOf(tile) === shownKey}
+                                        roomy={roomy} master={master} onOpen={onOpen} onPick={setPicked} onMove={move} setRowRef={setRowRef} />
+                                ))}
                             </React.Fragment>
                         ))}
                     </TableBody>
@@ -416,7 +477,7 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
             <Box component="aside" aria-label="Details of the selected photo" data-testid="list-details"
                 sx={{ position: 'sticky', top: 72, maxHeight: 'calc(100vh - 88px)', overflow: 'auto',
                     border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
-                {shown ? details(shown) : null}
+                {shown ? <Details tile={shown} master={master} roomTiles={roomTiles} wide onOpen={onOpen} onRemove={onRemove} /> : null}
             </Box>
         </Box>
     );

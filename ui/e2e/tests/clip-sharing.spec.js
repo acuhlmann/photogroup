@@ -32,7 +32,8 @@ test('a shared clip arrives with its poster frame and plays in simple mode', asy
   const play = receiver.getByRole('button', { name: 'Play this clip' });
   await expect(play).toBeVisible({ timeout: 60000 });
   const poster = play.locator('img');
-  await expect(poster).toHaveAttribute('src', /^blob:/);
+  // From the torrent (blob:) or, sooner, from the room (data:).
+  await expect(poster).toHaveAttribute('src', /^(blob|data):/);
   await expect.poll(() => poster.evaluate(img => img.naturalWidth), { timeout: 15000 }).toBeGreaterThan(0);
 
   await play.click();

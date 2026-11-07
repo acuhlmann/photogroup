@@ -34,6 +34,37 @@ export function readFileBlob(file) {
 
 // How long previews made while sharing wait to be shown together.
 const PREVIEW_FLUSH_MS = 700;
+// The room keeps posters up to 64 KB as base64 (a third larger than the file).
+const MAX_SHARED_PREVIEW = 46 * 1024;
+
+const dataUrlOf = blob => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+});
+
+const JPEG_START = [0xff, 0xd8, 0xff];
+
+/** The picture as JPEG bytes: as it is when it already is one, else drawn again (on white). Null if it can't be. */
+async function asJpeg(blob) {
+    const start = new Uint8Array(await blob.slice(0, 3).arrayBuffer());
+    if (JPEG_START.every((byte, index) => start[index] === byte)) return blob;
+    if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null;
+    const bitmap = await createImageBitmap(blob);
+    try {
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(bitmap, 0, 0);
+        return await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+    } finally {
+        if (bitmap.close) bitmap.close();
+    }
+}
 
 export default class TorrentAddition {
 
@@ -332,6 +363,32 @@ export default class TorrentAddition {
     }
 
     /**
+     * The previews also go to the room, as each photo's poster: others see
+     * them within seconds, instead of when the torrent brings them (that can
+     * take minutes while the photos themselves arrive). Never for a private
+     * room's photos, whose previews the server must not see. Resolves once
+     * every preview was sent or given up on.
+     */
+    sharePreviews(photos) {
+        const service = this.master.service;
+        if (!service || typeof service.sharePoster !== 'function') return Promise.resolve();
+        return Promise.all(photos.map(photo => {
+            if (photo.secure || photo.deleted || photo.poster || !photo.infoHash) return null;
+            const thumb = (photo.thumbnailFiles || []).find(item => item?.name === 'Thumbnail ' + photo.fileName);
+            if (!(thumb instanceof Blob)) return null;
+            // The room only takes small JPEGs; a PNG or WebP preview is made into one.
+            return asJpeg(thumb)
+                .then(jpeg => {
+                    if (!jpeg || jpeg.size > MAX_SHARED_PREVIEW) return null;
+                    return dataUrlOf(jpeg)
+                        .then(dataUrl => dataUrl.replace(/^data:[^;,]*;base64,/, 'data:image/jpeg;base64,'))
+                        .then(dataUrl => service.sharePoster(photo.infoHash, dataUrl));
+                })
+                .catch(err => Logger.warn('preview to room ' + (photo.fileName || '') + ': ' + (err?.message || err)));
+        }));
+    }
+
+    /**
      * Start seeding local files and publish upload tiles before generating previews.
      * `files` accepts a File or iterable of Files. For secure uploads, supply
      * encrypted Files and matching original Files in `origFiles` for display metadata.
@@ -615,6 +672,7 @@ export default class TorrentAddition {
                     // A server copy is left only when someone needs one (or
                     // the room keeps copies): ServerPinning decides.
                     this.master.serverPinning?.shared(seeded);
+                    this.sharePreviews(photos);
                 }).catch(err => {
                     Logger.error('Failed to share photo: ' + err);
                     self.emitter.emit('showError', 'Failed to share photo: ' + (err.message || err));
