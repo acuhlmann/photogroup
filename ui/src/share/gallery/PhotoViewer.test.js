@@ -229,8 +229,8 @@ describe('PhotoViewer', () => {
         });
 
         const button = document.body.querySelector('[data-testid="replace-original"]');
-        expect(button.textContent).toContain('Choose where to save…');
-        expect(document.body.textContent).toContain('Pick the folder this goes into');
+        expect(button.textContent).toContain('Save to a folder…');
+        expect(button.getAttribute('title')).toContain('Pick the folder this goes into');
 
         await act(async () => {
             button.click();

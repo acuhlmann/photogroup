@@ -27,8 +27,7 @@ import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { openSealedPhoto } from "./openSealed";
 import SimpleGrid from "../simple/SimpleGrid";
-import ChooseToSave, { toChoose } from "./ChooseToSave";
-import ChooseFolderButton from "./saveToChosenFolder";
+import ChooseToSave from "./ChooseToSave";
 import { setPosterSink } from "./tilePreview";
 import { CLIP_SIZE_NOTE } from "../torrent/ServerCopyLimits";
 
@@ -588,9 +587,6 @@ function Gallery(props) {
                         total={arranged.total}
                         actions={<>
                             <ChooseToSave tiles={visible} roomId={master.service && master.service.id} />
-                            {/* The new photos, aimed at folders the person names: one tap each,
-                                because the save dialog takes one file per tap. */}
-                            <ChooseFolderButton tiles={toChoose(visible)} device="device" />
                             <DownloadRoomButton tiles={tiles} roomId={master.service && master.service.id} />
                         </>}
                     />

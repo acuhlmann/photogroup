@@ -60,7 +60,7 @@ describe('replaceOriginal', () => {
             details: { title: 'Dock' },
         };
 
-        expect(replaceLabel(tile)).toBe('Choose where to save…');
+        expect(replaceLabel(tile)).toBe('Save to a folder…');
         await replaceOriginal(tile);
 
         expect(window.showSaveFilePicker).toHaveBeenCalledWith(expect.objectContaining({
@@ -73,7 +73,7 @@ describe('replaceOriginal', () => {
             }],
         }));
         expect(stream.write).toHaveBeenCalled();
-        expect(replaceLabel(tile)).toBe('Choose where to save…');
+        expect(replaceLabel(tile)).toBe('Save to a folder…');
         expect(replaceLabel(tile, { replaced: 'replaced' })).toBe('Saved');
 
         window.showSaveFilePicker.mockClear();
@@ -86,8 +86,8 @@ describe('replaceOriginal', () => {
         const received = { elem: blob, fileName: 'dock.jpg', fileType: 'image/jpeg', tileKey: 'theirs' };
         const shared = { elem: blob, fileName: 'dock.jpg', fileType: 'image/jpeg', tileKey: 'mine', seed: true };
 
-        expect(replaceLabel(shared)).toBe('Choose where to save…');
-        expect(replaceLabel(received)).toBe('Choose where to save…');
+        expect(replaceLabel(shared)).toBe('Save to a folder…');
+        expect(replaceLabel(received)).toBe('Save to a folder…');
         expect(replaceHint()).toContain('DCIM/Camera');
     });
 

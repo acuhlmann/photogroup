@@ -19,10 +19,8 @@ import Logger from 'js-logger';
 import { isReadyToSave } from '../gallery/saveRoom';
 import { alreadyHave, useHaveChanges } from '../gallery/alreadyHave';
 import { saveToDevice, savedWhereText } from '../gallery/saveToDevice';
-import ChooseFolderButton, { canChooseFolder } from '../gallery/saveToChosenFolder';
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
 import MediaStage from '../gallery/MediaStage';
-import ChooseToSave from '../gallery/ChooseToSave';
 import { removeLabel } from '../gallery/removeLabel';
 
 /** "3 photos", "1 clip", "3 photos and 2 clips". */
@@ -165,13 +163,6 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
             </MediaStage>
             <Box sx={{ p: 2, pb: 'max(16px, env(safe-area-inset-bottom))', maxWidth: 420, width: '100%', mx: 'auto' }}>
                 <SaveButton tile={tile} roomId={roomId} onError={onError} />
-                {/* One photo, one tap: the save dialog opens and this phone can aim
-                    it at DCIM/Camera instead of the Download folder. */}
-                {canChooseFolder() && !tile.loading && isReadyToSave(tile) && (
-                    <Box sx={{ mt: 1 }}>
-                        <ChooseFolderButton tiles={[tile]} device="phone" />
-                    </Box>
-                )}
                 <Typography variant="caption" component="p" sx={{ mt: 1, textAlign: 'center', color: 'rgba(255,255,255,0.7)' }}>
                     {savedWhereText(1)}
                 </Typography>
@@ -181,9 +172,9 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
 }
 
 /**
- * The simple view of a room's photos and clips: big squares, each with a Save
- * button and a Remove button, one button to go through the new ones and keep or skip each, and
- * one to save everything new at once.
+ * The simple view of a room's photos and clips: big squares, each with one
+ * Save button and a Remove button, and one button to save everything new at
+ * once, with one line that says where it goes.
  */
 function SimpleGrid({ tiles: given, roomId, onError, onRemove }) {
     useHaveChanges();
@@ -205,19 +196,24 @@ function SimpleGrid({ tiles: given, roomId, onError, onRemove }) {
 
     return (
         <Box>
-            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 2 }}>
+            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: fresh.length > 1 ? 0.5 : 2 }}>
                 <Typography variant="h6" component="h2" sx={{ flex: 1, fontWeight: 600, minWidth: 'max-content' }}>
                     {countLabel(tiles)}
                 </Typography>
-                <ChooseToSave tiles={tiles} roomId={roomId} device="phone" size="large" variant="contained" />
+                {/* The one room-wide save. To pick some, open a photo and swipe. */}
                 {fresh.length > 1 && (
-                    <Button variant="outlined" size="large" onClick={saveAll} disabled={savingAll}
+                    <Button variant="contained" size="large" onClick={saveAll} disabled={savingAll}
                         startIcon={savingAll ? <CircularProgress size={16} color="inherit" /> : <DownloadRounded />}
                         sx={{ textTransform: 'none', fontWeight: 600 }}>
-                        {savingAll ? 'Saving…' : `Save all ${fresh.length}`}
+                        {savingAll ? 'Saving…' : `Save all ${fresh.length} new`}
                     </Button>
                 )}
             </Stack>
+            {fresh.length > 1 && (
+                <Typography variant="body2" data-testid="saved-where" sx={{ color: 'text.secondary', textAlign: 'right', mb: 2 }}>
+                    {savedWhereText(fresh.length)}
+                </Typography>
+            )}
             {/* A single photo or clip gets the whole width. */}
             <Box sx={{
                 display: 'grid',

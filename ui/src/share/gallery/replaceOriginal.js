@@ -119,7 +119,7 @@ export function replaceLabel(tile, state = {}) {
     if (replaced) return 'Saved';
     if (replacing) return 'Saving…';
     if (kind === 'share') return 'Save to Files';
-    if (kind === 'file') return 'Choose where to save…';
+    if (kind === 'file') return 'Save to a folder…';
     return '';
 }
 

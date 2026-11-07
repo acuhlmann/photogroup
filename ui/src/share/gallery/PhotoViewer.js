@@ -10,8 +10,6 @@ import CloseRounded from '@mui/icons-material/CloseRounded';
 import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
-import SaveRounded from '@mui/icons-material/SaveRounded';
-import IosShare from '@mui/icons-material/IosShare';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -284,23 +282,6 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                                 <ArrowForwardRounded />
                             </IconButton>
                         </Stack>
-                        {replaceMode && (
-                            <Button
-                                variant="outlined"
-                                color="primary"
-                                data-testid="replace-original"
-                                startIcon={replaceMode === 'share' ? <IosShare /> : <SaveRounded />}
-                                disabled={!canSave || replacing || saving || stillArriving}
-                                onClick={onReplace}
-                                sx={{
-                                    color: '#e8eef6',
-                                    borderColor: 'rgba(61,214,195,0.45)',
-                                    bgcolor: 'rgba(61,214,195,0.08)',
-                                }}
-                            >
-                                {replaceLabel(tile, { replacing, replaced })}
-                            </Button>
-                        )}
                         <Typography
                             variant="caption"
                             data-testid="saved-where"
@@ -308,18 +289,27 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                         >
                             {savedWhereText(1)}
                         </Typography>
-                        {(replaceError || hint) && replaceMode && (
+                        {/* The one Save goes the phone's normal way. Picking a folder is a small extra. */}
+                        {replaceMode && (
+                            <Button
+                                variant="text"
+                                size="small"
+                                data-testid="replace-original"
+                                title={hint}
+                                disabled={!canSave || replacing || saving || stillArriving}
+                                onClick={onReplace}
+                                sx={{ alignSelf: 'center', textTransform: 'none', color: 'rgba(232,238,246,0.85)' }}
+                            >
+                                {replaceLabel(tile, { replacing, replaced })}
+                            </Button>
+                        )}
+                        {replaceError && (
                             <Typography
                                 variant="caption"
                                 data-testid="replace-hint"
-                                sx={{
-                                    display: 'block',
-                                    textAlign: 'center',
-                                    color: replaceError ? 'error.main' : 'rgba(232,238,246,0.72)',
-                                    px: 1,
-                                }}
+                                sx={{ display: 'block', textAlign: 'center', color: 'error.main', px: 1 }}
                             >
-                                {replaceError || hint}
+                                {replaceError}
                             </Typography>
                         )}
                     </Stack>
