@@ -11,7 +11,9 @@ const { createRoom } = require('../helpers/test-helpers');
 const FIXTURES = path.join(__dirname, '../../src/share/gallery/metadata/embed/__fixtures__');
 const PHOTOS = [path.join(__dirname, '../fixtures/test-image.jpg'), path.join(FIXTURES, 'photo.jpg')];
 
+// Photographer mode: one row per photo; Save sits in the details of the picked row.
 const card = (page, name) => page.locator('.media-card').filter({ has: page.getByRole('button', { name: `View ${name}` }) });
+const saveButton = page => page.getByTestId('list-details').getByRole('button', { name: /^Save/ });
 const downloadButton = page => page.getByRole('button', { name: /^(Download|You have)/ }).first();
 
 test('Download room leaves out photos you shared or already saved', async ({ browser }) => {
@@ -36,9 +38,11 @@ test('Download room leaves out photos you shared or already saved', async ({ bro
 
     // The receiver has neither, until it saves one.
     const first = card(page2, 'test-image.jpg');
-    const firstSave = first.getByRole('button', { name: /^Save/ });
+    await card(page2, 'photo.jpg').click();
+    await expect(saveButton(page2)).toBeEnabled({ timeout: 60000 });
+    await first.click();
+    const firstSave = saveButton(page2);
     await expect(firstSave).toBeEnabled({ timeout: 60000 });
-    await expect(card(page2, 'photo.jpg').getByRole('button', { name: /^Save/ })).toBeEnabled({ timeout: 60000 });
     await expect(downloadButton(page2)).toHaveText('Download room');
     await expect(page2.getByTestId('already-have')).toHaveCount(0);
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import Dialog from '@mui/material/Dialog';
 import Box from '@mui/material/Box';
@@ -14,19 +14,13 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
-import _ from 'lodash';
-import Logger from 'js-logger';
-import FileUtil from '../util/FileUtil';
-import OwnersList from './OwnersList';
-import MediaMetadataPanel from './metadata/MediaMetadataPanel';
-import { nearbyLocations, takenMinutesAgo } from './metadata/locationHints';
 import RenderContent from './RenderContent';
+import PhotoDetails from './PhotoDetails';
+import { photoCaption } from './photoCaption';
 import { saveLabel } from './savePhoto';
 import { saveToDevice, savedWhereText } from './saveToDevice';
 import { useSwipe } from './mediaView';
 import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
-import { canSaveDetails, saveDetails } from './metadata/saveDetails';
-import { isPrivateRoom } from '../privateRoom';
 import { canReadTorrentFile } from './saveRoom';
 import { removeLabel } from './removeLabel';
 
@@ -34,57 +28,23 @@ import { removeLabel } from './removeLabel';
  * Display the selected media full screen with navigation (swipe, arrows,
  * keys), saving, and shared metadata editing. The details sit beside the
  * photo on a wide screen and are hidden until asked for on a narrow one,
- * so the photo gets the room. With `onRemove`, a Remove button takes the
- * photo out of the room and closes the viewer; if `onRemove` resolves to
- * false (it failed), the viewer stays open so it can be tried again.
+ * so the photo gets the room. With `details={false}` (photographer mode,
+ * where the list already shows them) the viewer is the photo alone, with a
+ * one-line caption. With `onRemove`, a Remove button takes the photo out of
+ * the room and closes the viewer; if `onRemove` resolves to false (it
+ * failed), the viewer stays open so it can be tried again.
  */
-function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, onRemove }) {
+function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, onRemove, details = true }) {
     const theme = useTheme();
     const narrow = useMediaQuery(theme.breakpoints.down('md'));
     const [detailsAsked, setDetailsAsked] = useState(null);
-    const showDetails = detailsAsked == null ? !narrow : detailsAsked;
+    const showDetails = details && (detailsAsked == null ? !narrow : detailsAsked);
     const tile = tiles[index];
-    const [summary, setSummary] = useState(null);
-    const [fileName, setFileName] = useState('');
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [replacing, setReplacing] = useState(false);
     const [replaced, setReplaced] = useState(null);
     const [replaceError, setReplaceError] = useState('');
-
-    const debouncedRename = useRef(
-        _.throttle((infoHash, value) => {
-            if (!value) return;
-            Logger.info('change name ' + value);
-            master.service.update([{
-                infoHash,
-                fileName: FileUtil.truncateFileName(value),
-            }]);
-        }, 1000, { leading: true, trailing: true })
-    ).current;
-
-    const handleSaveDetails = useCallback(
-        (fields) => saveDetails(master, tile.infoHash, fields),
-        [master, tile?.infoHash]);
-
-    const handleFileNameChange = useCallback((value) => {
-        setFileName(value);
-        if (tile?.infoHash) {
-            debouncedRename(tile.infoHash, value);
-        }
-    }, [tile?.infoHash, debouncedRename]);
-
-    const applyMetadataSummary = useCallback((sourceTile) => {
-        if (!sourceTile || !master.metadata || typeof master.metadata.createMetadataSummary !== 'function') {
-            setSummary(null);
-            return;
-        }
-        if (sourceTile.metadata) {
-            setSummary(master.metadata.createMetadataSummary(sourceTile.metadata, sourceTile) || null);
-        } else {
-            setSummary(null);
-        }
-    }, [master.metadata]);
 
     useEffect(() => {
         if (tile) primePhotoCopy(tile);
@@ -92,28 +52,11 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
 
     useEffect(() => {
         if (!tile) return;
-        setFileName(FileUtil.getFileNameWithoutSuffix(tile.fileName) || '');
         setSaved(false);
         setSaving(false);
         setReplaced(null);
         setReplaceError('');
-        applyMetadataSummary(tile);
-    }, [tile, tile && tile.metadata, tile && tile.fileName, applyMetadataSummary]);
-
-    useEffect(() => {
-        if (!tile?.infoHash) return undefined;
-
-        const handlePhotos = (event) => {
-            if (event.type !== 'update' || !Array.isArray(event.item)) return;
-            const updated = event.item.find(item => item.infoHash === tile.infoHash);
-            if (updated) {
-                applyMetadataSummary(updated);
-            }
-        };
-
-        master.emitter.on('photos', handlePhotos);
-        return () => master.emitter.removeListener('photos', handlePhotos);
-    }, [tile?.infoHash, master.emitter, applyMetadataSummary]);
+    }, [tile]);
 
     useEffect(() => {
         const onKey = (event) => {
@@ -137,6 +80,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
     if (!tile) return null;
 
     const isImage = !!tile.isImage;
+    const caption = details ? '' : photoCaption(tile, master);
     const canSave = !!(tile.elem || canReadTorrentFile(tile.torrentFile));
     const stillArriving = !!(tile.torrentFile && !tile.torrentFile.done);
     const replaceMode = replaceKind();
@@ -213,7 +157,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                                 {index + 1} of {tiles.length}
                             </Typography>
                         )}
-                        <Button
+                        {details && <Button
                             size="small"
                             startIcon={<InfoOutlined fontSize="small" />}
                             aria-pressed={showDetails}
@@ -221,7 +165,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                             sx={{ color: '#fff', textTransform: 'none' }}
                         >
                             {showDetails ? 'Hide details' : 'Details'}
-                        </Button>
+                        </Button>}
                         {onRemove && (
                             <IconButton aria-label={removeLabel(tile)} onClick={() => Promise.resolve(onRemove(tile)).then(removed => { if (removed !== false) onClose(); })}
                                 sx={{ color: '#fff' }}>
@@ -244,6 +188,12 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                     }}>
                         {mediaPreview}
                     </Box>
+                    {!details && caption && (
+                        <Typography variant="body2" data-testid="viewer-caption"
+                            sx={{ color: 'rgba(232,238,246,0.85)', textAlign: 'center', px: 2, pt: 1, fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                            {caption}
+                        </Typography>
+                    )}
                     <Stack spacing={1} sx={{ mx: 1.5, mb: 1.5 }}>
                         <Stack
                             direction="row"
@@ -323,43 +273,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                     p: 2.5,
                     minHeight: 0,
                 }}>
-                    {/* The catalog title/rating/description lead; the file is context. */}
-                    <Typography
-                        id="photo-viewer-title"
-                        variant="body2"
-                        sx={{ color: 'text.secondary', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', wordBreak: 'break-word' }}
-                    >
-                        {tile.fileName}{tile.fileSize ? ` · ${tile.fileSize}` : ''}
-                    </Typography>
-
-                    {(tile.isVideo || tile.isAudio) && !tile.hasMetadata && !summary && (
-                        <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-                            Reading file details…
-                        </Typography>
-                    )}
-
-                    <MediaMetadataPanel
-                        summary={summary}
-                        tile={tile}
-                        fileName={fileName}
-                        onFileNameChange={isPrivateRoom() ? undefined : handleFileNameChange}
-                        onSaveDetails={canSaveDetails(master) ? handleSaveDetails : undefined}
-                        myPeerId={master.client && master.client.peerId}
-                        /* All of the room's photos, not only the ones a filter shows. */
-                        locationHints={() => ({ nearby: nearbyLocations(tile, roomTiles || tiles, master), minutesAgo: takenMinutesAgo(tile, master) })}
-                    />
-
-                    {Array.isArray(tile.owners) && master.peers && master.client
-                        && tile.owners.some(owner => owner.peerId !== master.client.peerId) && (
-                        <Box sx={{ mt: 2 }}>
-                            <OwnersList
-                                emitter={master.emitter}
-                                tile={tile}
-                                peers={master.peers}
-                                myPeerId={master.client && master.client.peerId}
-                            />
-                        </Box>
-                    )}
+                    <PhotoDetails master={master} tile={tile} roomTiles={roomTiles || tiles} headingId="photo-viewer-title" />
                 </Box>}
             </Box>
         </Dialog>
@@ -374,6 +288,7 @@ PhotoViewer.propTypes = {
     onClose: PropTypes.func.isRequired,
     onIndexChange: PropTypes.func.isRequired,
     onRemove: PropTypes.func,
+    details: PropTypes.bool,
 };
 
 export default PhotoViewer;

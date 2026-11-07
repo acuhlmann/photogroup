@@ -23,7 +23,7 @@ describe('ModeSwitch', () => {
         const items = Array.from(document.querySelectorAll('[role="menuitem"]'));
         expect(items.map(item => item.textContent)).toEqual([
             expect.stringContaining('Simple'),
-            expect.stringContaining('Default'),
+            expect.stringContaining('Photographer'),
             expect.stringContaining('Geek'),
         ]);
 

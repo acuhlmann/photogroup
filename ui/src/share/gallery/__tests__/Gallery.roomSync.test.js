@@ -5,6 +5,7 @@ import EventEmitter from 'eventemitter3';
 import Gallery from '../Gallery';
 
 vi.mock('../ContentTile', () => ({ default: ({ tile }) => <img alt={tile.fileName} /> }));
+vi.mock('../PhotoList', () => ({ default: ({ tiles }) => tiles.map(tile => <img key={tile.infoHash} alt={tile.fileName} />) }));
 vi.mock('../LoadingTile', () => ({ default: () => null }));
 vi.mock('../PhotoViewer', () => ({ default: () => null }));
 vi.mock('../../topology/NetworkReadout', () => ({ default: () => null }));

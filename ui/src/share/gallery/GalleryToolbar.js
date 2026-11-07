@@ -9,7 +9,7 @@ import Button from '@mui/material/Button';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import InputAdornment from '@mui/material/InputAdornment';
-import GridViewRounded from '@mui/icons-material/GridViewRounded';
+import ViewListRounded from '@mui/icons-material/ViewListRounded';
 import MapRounded from '@mui/icons-material/MapRounded';
 import SearchRounded from '@mui/icons-material/SearchRounded';
 import { DEFAULT_VIEW, NO_PLACE, SORTS, isFiltered } from './arrangeTiles';
@@ -21,16 +21,16 @@ const RATINGS = [
 
 const selectSx = { minWidth: 150, '& .MuiInputBase-input': { py: 0.75, fontSize: '0.85rem' } };
 
-/** Grid or map, sort, and filters for the gallery, then any `actions` at the end of the row. */
-function GalleryToolbar({ view, onChange, mode, onModeChange, places, unplaced, shown, total, actions }) {
+/** List or map, sort, and filters for the gallery, then any `actions` at the end of the row. */
+function GalleryToolbar({ view, onChange, mode, onModeChange, places, cameras = [], unplaced, shown, total, actions }) {
     const set = changes => onChange({ ...view, ...changes });
     return (
         <Box component="section" aria-label="Sort and filter photos" sx={{ mb: 2 }}>
             <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
                 <ToggleButtonGroup size="small" exclusive value={mode} onChange={(event, next) => next && onModeChange(next)}
                     aria-label="Show photos as">
-                    <ToggleButton value="grid" aria-label="Grid" sx={{ px: 1.25, gap: 0.5, textTransform: 'none' }}>
-                        <GridViewRounded fontSize="small" /> Grid
+                    <ToggleButton value="grid" aria-label="List" sx={{ px: 1.25, gap: 0.5, textTransform: 'none' }}>
+                        <ViewListRounded fontSize="small" /> List
                     </ToggleButton>
                     <ToggleButton value="map" aria-label="Map" sx={{ px: 1.25, gap: 0.5, textTransform: 'none' }}>
                         <MapRounded fontSize="small" /> Map
@@ -52,7 +52,16 @@ function GalleryToolbar({ view, onChange, mode, onModeChange, places, unplaced, 
                     ))}
                     {unplaced > 0 && <MenuItem value={NO_PLACE}>No location ({unplaced})</MenuItem>}
                 </TextField>
-                <TextField size="small" placeholder="Search titles, places, keywords…" value={view.query}
+                {cameras.length > 0 && (
+                    <TextField select size="small" label="Camera" value={view.camera || ''} onChange={event => set({ camera: event.target.value })}
+                        slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }} sx={selectSx}>
+                        <MenuItem value="">Any camera</MenuItem>
+                        {cameras.map(camera => (
+                            <MenuItem key={camera.name} value={camera.name}>{camera.name} ({camera.count})</MenuItem>
+                        ))}
+                    </TextField>
+                )}
+                <TextField size="small" placeholder="Search titles, places, cameras, keywords…" value={view.query}
                     onChange={event => set({ query: event.target.value })}
                     slotProps={{
                         htmlInput: { 'aria-label': 'Search photos' },
@@ -80,6 +89,7 @@ GalleryToolbar.propTypes = {
     onChange: PropTypes.func.isRequired,
     mode: PropTypes.oneOf(['grid', 'map']).isRequired,
     onModeChange: PropTypes.func.isRequired,
+    cameras: PropTypes.array,
     places: PropTypes.array.isRequired,
     unplaced: PropTypes.number.isRequired,
     shown: PropTypes.number.isRequired,

@@ -256,4 +256,23 @@ describe('PhotoViewer', () => {
         });
         div.remove();
     });
+
+    it('shows the photo alone with a one-line caption when details are in the list', async () => {
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        await act(async () => {
+            root.render(
+                <ThemeProvider theme={createAppTheme('dark')}>
+                    <PhotoViewer master={master} tiles={[tile]} index={0} details={false}
+                        onClose={() => {}} onIndexChange={() => {}} />
+                </ThemeProvider>
+            );
+        });
+        expect(document.body.querySelector('[data-testid="viewer-details"]')).toBeNull();
+        expect([...document.body.querySelectorAll('button')].some(button => button.textContent === 'Details')).toBe(false);
+        expect(document.body.querySelector('[data-testid="viewer-caption"]').textContent).toBe('Harbor light · Fujifilm X-T5');
+        await act(async () => root.unmount());
+        div.remove();
+    });
 });
