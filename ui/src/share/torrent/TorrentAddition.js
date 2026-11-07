@@ -34,6 +34,15 @@ export function readFileBlob(file) {
 
 // How long previews made while sharing wait to be shown together.
 const PREVIEW_FLUSH_MS = 700;
+// The room keeps posters up to 64 KB as base64 (a third larger than the file).
+const MAX_SHARED_PREVIEW = 46 * 1024;
+
+const dataUrlOf = blob => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+});
 
 export default class TorrentAddition {
 
@@ -342,6 +351,27 @@ export default class TorrentAddition {
      * The promise resolves to the started torrent, or null/undefined on handled
      * failure, without waiting for room sharing, storage, or server-copy uploads.
      */
+    /**
+     * The previews also go to the room, as each photo's poster: others see
+     * them within seconds, instead of when the torrent brings them (that can
+     * take minutes while the photos themselves arrive). Never for a private
+     * room's photos, whose previews the server must not see.
+     */
+    sharePreviews(photos) {
+        const service = this.master.service;
+        if (!service || typeof service.sharePoster !== 'function') return;
+        photos.forEach(photo => {
+            if (photo.secure || photo.deleted || photo.poster || !photo.infoHash) return;
+            const thumb = (photo.thumbnailFiles || []).find(item => item?.name === 'Thumbnail ' + photo.fileName);
+            // The room only takes small JPEGs.
+            if (!(thumb instanceof Blob) || thumb.size > MAX_SHARED_PREVIEW) return;
+            dataUrlOf(thumb)
+                .then(dataUrl => dataUrl.replace(/^data:[^;,]*;base64,/, 'data:image/jpeg;base64,'))
+                .then(dataUrl => service.sharePoster(photo.infoHash, dataUrl))
+                .catch(err => Logger.warn('preview to room ' + (photo.fileName || '') + ': ' + (err?.message || err)));
+        });
+    }
+
     async seed(files, secure = false, origFiles = [], callback) {
 
         const self = this;
@@ -615,6 +645,7 @@ export default class TorrentAddition {
                     // A server copy is left only when someone needs one (or
                     // the room keeps copies): ServerPinning decides.
                     this.master.serverPinning?.shared(seeded);
+                    this.sharePreviews(photos);
                 }).catch(err => {
                     Logger.error('Failed to share photo: ' + err);
                     self.emitter.emit('showError', 'Failed to share photo: ' + (err.message || err));
