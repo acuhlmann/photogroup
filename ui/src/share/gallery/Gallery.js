@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { useTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
@@ -439,7 +439,9 @@ function Gallery(props) {
     }, [master.emitter]);
 
     // The viewer, the grid and the map all work on the tiles the current view shows.
-    const arranged = arrangeTiles(tiles, view, master);
+    // Worked out again only when the photos or the view change: opening the
+    // viewer or picking a row keeps the same facts, so list rows can skip redrawing.
+    const arranged = useMemo(() => arrangeTiles(tiles, view, master), [tiles, view, master]);
     const visible = arranged.tiles;
 
     // A photo an edit filters out stays open where it was until the viewer moves on.
@@ -456,6 +458,8 @@ function Gallery(props) {
     useEffect(() => {
         if (selectedIndex != null) lastIndex.current = selectedIndex;
     });
+
+    const sortBy = useCallback(sort => setView(current => ({ ...current, sort })), []);
 
     const openAt = useCallback((tile) => {
         setSelectedKey(tile ? tileKeyOf(tile) : null);
@@ -611,7 +615,7 @@ function Gallery(props) {
                 )}
                 {variant === 'full' && (mode === 'grid' || tiles.length < 2) && visible.length > 0 && (
                     <PhotoList master={master} tiles={visible} facts={arranged.facts} roomTiles={tiles}
-                        sort={view.sort} onSort={sort => setView({ ...view, sort })}
+                        sort={view.sort} onSort={sortBy}
                         openKey={selectedKey} onOpen={openAt} onRemove={removePhoto} />
                 )}
                 {variant !== 'full' && (mode === 'grid' || tiles.length < 2) && <Box
