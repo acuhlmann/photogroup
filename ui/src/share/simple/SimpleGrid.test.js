@@ -83,6 +83,11 @@ describe('SimpleGrid', () => {
         const tiles = [ready('a'), ready('b')];
         const { div, root } = await render(tiles, { onRemove });
         await act(async () => div.querySelector('[aria-label="Remove b.jpg"]').click());
+        // It asks once first, because Remove is for everyone.
+        expect(onRemove).not.toHaveBeenCalled();
+        const confirm = document.querySelector('[role="dialog"]');
+        expect(confirm.textContent).toContain('Remove this photo for everyone?');
+        await act(async () => Array.from(confirm.querySelectorAll('button')).find(b => b.textContent === 'Remove').click());
         expect(onRemove).toHaveBeenCalledWith(tiles[1]);
         await act(async () => root.unmount());
     });

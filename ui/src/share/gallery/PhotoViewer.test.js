@@ -40,6 +40,10 @@ const master = {
     },
 };
 
+/** Press Remove in the "Remove for everyone?" question. */
+const confirmRemove = () => Array.from(document.querySelectorAll('[role="dialog"] button'))
+    .find(button => button.textContent === 'Remove').click();
+
 describe('PhotoViewer', () => {
     afterEach(() => {
         delete window.showSaveFilePicker;
@@ -116,6 +120,7 @@ describe('PhotoViewer', () => {
         const onClose = vi.fn();
         await act(async () => root.render(view({ onRemove, onClose })));
         await act(async () => document.body.querySelector('[aria-label="Remove harbor.jpg"]').click());
+        await act(async () => confirmRemove());
         expect(onRemove).toHaveBeenCalledWith(tile);
         expect(onClose).toHaveBeenCalled();
 
@@ -124,6 +129,7 @@ describe('PhotoViewer', () => {
         const stay = vi.fn();
         await act(async () => root.render(view({ onRemove: failing, onClose: stay })));
         await act(async () => document.body.querySelector('[aria-label="Remove harbor.jpg"]').click());
+        await act(async () => confirmRemove());
         expect(failing).toHaveBeenCalled();
         expect(stay).not.toHaveBeenCalled();
 

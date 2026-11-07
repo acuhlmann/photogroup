@@ -11,7 +11,6 @@ import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
-import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import _ from 'lodash';
@@ -28,7 +27,7 @@ import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replac
 import { canSaveDetails, saveDetails } from './metadata/saveDetails';
 import { isPrivateRoom } from '../privateRoom';
 import { canReadTorrentFile } from './saveRoom';
-import { removeLabel } from './removeLabel';
+import RemoveButton from './RemoveButton';
 
 /**
  * Display the selected media full screen with navigation (swipe, arrows,
@@ -223,10 +222,8 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                             {showDetails ? 'Hide details' : 'Details'}
                         </Button>
                         {onRemove && (
-                            <IconButton aria-label={removeLabel(tile)} onClick={() => Promise.resolve(onRemove(tile)).then(removed => { if (removed !== false) onClose(); })}
-                                sx={{ color: '#fff' }}>
-                                <DeleteRounded />
-                            </IconButton>
+                            <RemoveButton tile={tile} sx={{ color: '#fff' }}
+                                onRemove={item => Promise.resolve(onRemove(item)).then(removed => { if (removed !== false) onClose(); })} />
                         )}
                         <IconButton aria-label="Close photo" onClick={onClose} sx={{ color: '#fff' }}>
                             <CloseRounded />

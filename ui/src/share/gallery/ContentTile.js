@@ -3,10 +3,8 @@ import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
-import IconButton from "@mui/material/IconButton";
 import CloudDownloadRounded from "@mui/icons-material/CloudDownloadRounded";
 import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
-import DeleteRounded from "@mui/icons-material/DeleteRounded";
 import LockRounded from "@mui/icons-material/LockRounded";
 import Logger from "js-logger";
 import update from "immutability-helper";
@@ -26,7 +24,7 @@ import { canSaveDetails, saveDetails, saveErrorText } from "./metadata/saveDetai
 import { alreadyHave, HAVE_LABELS, useHaveChanges } from "./alreadyHave";
 import { loadPreviewUrl } from "./tilePreview";
 import { canReadTorrentFile } from "./saveRoom";
-import { removeLabel } from './removeLabel';
+import RemoveButton from './RemoveButton';
 
 /** Display loaded media and metadata highlights, with save, delete, and decryption controls. */
 function ContentTile(props) {
@@ -181,9 +179,7 @@ function ContentTile(props) {
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <LockRounded fontSize="small" sx={{ color: 'text.secondary' }} />
                     <Typography variant="body2" sx={{ flex: 1 }}>{tile.sealedError}</Typography>
-                    <IconButton aria-label="Delete" onClick={() => handleDelete(tile)} size="small">
-                        <DeleteRounded fontSize="small" />
-                    </IconButton>
+                    <RemoveButton tile={tile} onRemove={handleDelete} size="small" />
                 </Stack>
             </Paper>
         );
@@ -348,13 +344,7 @@ function ContentTile(props) {
                     >
                         {saveLabel(tile.fileSize, isDownloadingFile, downloadedFile)}
                     </Button>
-                    <IconButton
-                        aria-label={removeLabel(tile)}
-                        onClick={() => handleDelete(tile)}
-                        size="small"
-                    >
-                        <DeleteRounded fontSize="small" />
-                    </IconButton>
+                    <RemoveButton tile={tile} onRemove={handleDelete} size="small" />
                 </Stack>
 
                 <PiecesLoadingView master={master} tile={tile} />

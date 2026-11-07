@@ -10,7 +10,6 @@ import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
 import CheckRounded from '@mui/icons-material/CheckRounded';
 import CloseRounded from '@mui/icons-material/CloseRounded';
-import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
 import PlayCircleRounded from '@mui/icons-material/PlayCircleRounded';
 import AudiotrackRounded from '@mui/icons-material/AudiotrackRounded';
@@ -23,7 +22,7 @@ import ChooseFolderButton from '../gallery/saveToChosenFolder';
 import { canChooseFolder, replaceFailureMessage, replaceHint, replaceOriginal } from '../gallery/replaceOriginal';
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
 import MediaStage from '../gallery/MediaStage';
-import { removeLabel } from '../gallery/removeLabel';
+import RemoveButton from '../gallery/RemoveButton';
 
 /** "3 photos", "1 clip", "3 photos and 2 clips". */
 export function countLabel(tiles) {
@@ -146,9 +145,7 @@ function SimpleTile({ tile, roomId, onOpen, onError, onRemove }) {
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <SaveButton tile={tile} roomId={roomId} onError={onError} />
                 {onRemove && (
-                    <IconButton aria-label={removeLabel(tile)} onClick={() => onRemove(tile)} sx={{ flexShrink: 0 }}>
-                        <DeleteRounded />
-                    </IconButton>
+                    <RemoveButton tile={tile} onRemove={onRemove} sx={{ flexShrink: 0 }} />
                 )}
             </Stack>
         </Stack>
