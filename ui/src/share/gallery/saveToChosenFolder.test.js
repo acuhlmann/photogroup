@@ -9,7 +9,12 @@ vi.mock('./replaceOriginal', () => ({
     replaceFailureMessage: err => (err && err.cancelled ? '' : 'Could not write that file.'),
 }));
 
+vi.mock('./saveToDevice', () => ({
+    saveToDevice: vi.fn().mockResolvedValue('saved'),
+}));
+
 const { canChooseFolder, replaceOriginal } = await import('./replaceOriginal');
+const { saveToDevice } = await import('./saveToDevice');
 const { default: ChooseFolderButton, FolderWalk, PlaceThumb } = await import('./saveToChosenFolder');
 
 const tile = (key, extra = {}) => ({
@@ -110,12 +115,26 @@ describe('saveToChosenFolder', () => {
         await act(async () => root.unmount());
     });
 
+    it('keeps the walk open and says so when saving the rest fails', async () => {
+        saveToDevice.mockRejectedValueOnce(new Error('Not here yet'));
+        const tiles = [tile('a'), tile('b')];
+        const { div, root } = await render(<ChooseFolderButton tiles={tiles} device="phone" />);
+        await press(div, 'Choose where each one goes');
+        await press(document.querySelector('[role="dialog"]'), 'Save the rest to your phone');
+        const dialog = document.querySelector('[role="dialog"]');
+        expect(dialog).not.toBeNull();
+        expect(dialog.textContent).toContain("Couldn't save the rest");
+        await act(async () => root.unmount());
+        document.querySelectorAll('[role="dialog"]').forEach(node => node.remove());
+    });
+
     it('counts the folders already chosen when the walk is opened again', async () => {
         const tiles = [tile('a'), tile('b')];
         const { div, root } = await render(<ChooseFolderButton tiles={tiles} device="phone" />);
         await press(div, 'Choose where each one goes');
         await press(document.querySelector('[role="dialog"]'), 'Choose a folder');
         await press(document.querySelector('[role="dialog"]'), 'Save the rest to your phone');
+        expect(saveToDevice).toHaveBeenCalledWith([tiles[1]]);
         expect(div.textContent).toContain('Choose where each one goes (1 left)');
 
         document.querySelectorAll('[role="dialog"]').forEach(node => node.remove());

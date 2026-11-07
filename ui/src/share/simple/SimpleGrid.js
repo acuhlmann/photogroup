@@ -10,6 +10,7 @@ import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
 import CheckRounded from '@mui/icons-material/CheckRounded';
 import CloseRounded from '@mui/icons-material/CloseRounded';
+import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
 import PlayCircleRounded from '@mui/icons-material/PlayCircleRounded';
 import AudiotrackRounded from '@mui/icons-material/AudiotrackRounded';
@@ -18,10 +19,11 @@ import Logger from 'js-logger';
 import { isReadyToSave } from '../gallery/saveRoom';
 import { alreadyHave, useHaveChanges } from '../gallery/alreadyHave';
 import { saveToDevice, savedWhereText } from '../gallery/saveToDevice';
-import ChooseFolderButton, { canChooseFolder } from '../gallery/saveToChosenFolder';
+import ChooseFolderButton from '../gallery/saveToChosenFolder';
+import { canChooseFolder, replaceFailureMessage, replaceHint, replaceOriginal } from '../gallery/replaceOriginal';
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
 import MediaStage from '../gallery/MediaStage';
-import ChooseToSave from '../gallery/ChooseToSave';
+import { removeLabel } from '../gallery/removeLabel';
 
 /** "3 photos", "1 clip", "3 photos and 2 clips". */
 export function countLabel(tiles) {
@@ -33,15 +35,30 @@ export function countLabel(tiles) {
     return parts.join(' and ');
 }
 
+/**
+ * Where Save puts photos, said once. Where the browser has a save dialog
+ * (Chrome on Android and computers), Save opens it, so the person picks the
+ * folder and knows where to look. Elsewhere (iPhone) Save goes the phone's
+ * own way, into the Photos app.
+ */
+function whereText(count) {
+    return canChooseFolder() ? replaceHint(count) : savedWhereText(count);
+}
+
 /** Save these tiles, tracking whether it is busy; `onError` hears about failures. */
 function useSave(tiles, roomId, onError) {
     const [busy, setBusy] = useState(false);
     const save = useCallback(() => {
         setBusy(true);
-        saveToDevice(tiles, { roomId })
+        // One photo with a save dialog: open it on this tap, so the person picks the folder.
+        const saving = canChooseFolder() && tiles.length === 1
+            ? replaceOriginal(tiles[0])
+            : saveToDevice(tiles, { roomId });
+        saving
             .catch(err => {
+                if (err && (err.cancelled || err.name === 'SaveCancelled')) return;
                 Logger.error('Simple save: ' + (err && err.message ? err.message : err));
-                onError && onError("Couldn't save that. Try again in a moment.");
+                onError && onError(replaceFailureMessage(err) || "Couldn't save that. Try again in a moment.");
             })
             .finally(() => setBusy(false));
     }, [tiles, roomId, onError]);
@@ -68,7 +85,7 @@ function SaveButton({ tile, roomId, onError }) {
     );
 }
 
-function SimpleTile({ tile, roomId, onOpen, onError }) {
+function SimpleTile({ tile, roomId, onOpen, onError, onRemove }) {
     const percent = useArriving(tile);
     const poster = usePreview(tile);
     const showImage = !tile.loading && tile.img;
@@ -126,7 +143,14 @@ function SimpleTile({ tile, roomId, onOpen, onError }) {
                     }} />
                 )}
             </ButtonBase>
-            <SaveButton tile={tile} roomId={roomId} onError={onError} />
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <SaveButton tile={tile} roomId={roomId} onError={onError} />
+                {onRemove && (
+                    <IconButton aria-label={removeLabel(tile)} onClick={() => onRemove(tile)} sx={{ flexShrink: 0 }}>
+                        <DeleteRounded />
+                    </IconButton>
+                )}
+            </Stack>
         </Stack>
     );
 }
@@ -156,15 +180,8 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
             </MediaStage>
             <Box sx={{ p: 2, pb: 'max(16px, env(safe-area-inset-bottom))', maxWidth: 420, width: '100%', mx: 'auto' }}>
                 <SaveButton tile={tile} roomId={roomId} onError={onError} />
-                {/* One photo, one tap: the save dialog opens and this phone can aim
-                    it at DCIM/Camera instead of the Download folder. */}
-                {canChooseFolder() && !tile.loading && isReadyToSave(tile) && (
-                    <Box sx={{ mt: 1 }}>
-                        <ChooseFolderButton tiles={[tile]} device="phone" />
-                    </Box>
-                )}
                 <Typography variant="caption" component="p" sx={{ mt: 1, textAlign: 'center', color: 'rgba(255,255,255,0.7)' }}>
-                    {savedWhereText(1)}
+                    {whereText(1)}
                 </Typography>
             </Box>
         </Dialog>
@@ -172,11 +189,11 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
 }
 
 /**
- * The simple view of a room's photos and clips: big squares, each with a Save
- * button, one button to go through the new ones and keep or skip each, and
- * one to save everything new at once.
+ * The simple view of a room's photos and clips: big squares, each with one
+ * Save button and a Remove button, and one button to save everything new at
+ * once, with one line that says where it goes.
  */
-function SimpleGrid({ tiles: given, roomId, onError }) {
+function SimpleGrid({ tiles: given, roomId, onError, onRemove }) {
     useHaveChanges();
     const [openKey, setOpenKey] = useState(null);
     // Other people's photos first; the ones this phone shared go last.
@@ -196,19 +213,29 @@ function SimpleGrid({ tiles: given, roomId, onError }) {
 
     return (
         <Box>
-            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 2 }}>
+            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: fresh.length > 1 ? 0.5 : 2 }}>
                 <Typography variant="h6" component="h2" sx={{ flex: 1, fontWeight: 600, minWidth: 'max-content' }}>
                     {countLabel(tiles)}
                 </Typography>
-                <ChooseToSave tiles={tiles} roomId={roomId} device="phone" size="large" variant="contained" />
-                {fresh.length > 1 && (
-                    <Button variant="outlined" size="large" onClick={saveAll} disabled={savingAll}
+                {/* The one room-wide save. To pick some, open a photo and swipe. */}
+                {fresh.length > 1 && canChooseFolder() && (
+                    // One save dialog per photo; it opens where the last one went.
+                    <ChooseFolderButton tiles={fresh} device="phone" size="large" variant="contained"
+                        label={`Save all ${fresh.length} new`} />
+                )}
+                {fresh.length > 1 && !canChooseFolder() && (
+                    <Button variant="contained" size="large" onClick={saveAll} disabled={savingAll}
                         startIcon={savingAll ? <CircularProgress size={16} color="inherit" /> : <DownloadRounded />}
                         sx={{ textTransform: 'none', fontWeight: 600 }}>
-                        {savingAll ? 'Saving…' : `Save all ${fresh.length}`}
+                        {savingAll ? 'Saving…' : `Save all ${fresh.length} new`}
                     </Button>
                 )}
             </Stack>
+            {fresh.length > 1 && (
+                <Typography variant="body2" data-testid="saved-where" sx={{ color: 'text.secondary', textAlign: 'right', mb: 2 }}>
+                    {whereText(fresh.length)}
+                </Typography>
+            )}
             {/* A single photo or clip gets the whole width. */}
             <Box sx={{
                 display: 'grid',
@@ -219,7 +246,7 @@ function SimpleGrid({ tiles: given, roomId, onError }) {
                 pb: 3,
             }}>
                 {tiles.map(tile => (
-                    <SimpleTile key={keyOf(tile)} tile={tile} roomId={roomId} onError={onError}
+                    <SimpleTile key={keyOf(tile)} tile={tile} roomId={roomId} onError={onError} onRemove={onRemove}
                         onOpen={() => setOpenKey(keyOf(tile))} />
                 ))}
             </Box>
@@ -236,6 +263,7 @@ SimpleGrid.propTypes = {
     tiles: PropTypes.array.isRequired,
     roomId: PropTypes.string,
     onError: PropTypes.func,
+    onRemove: PropTypes.func,
 };
 
 export default SimpleGrid;

@@ -98,6 +98,39 @@ describe('PhotoViewer', () => {
         div.remove();
     });
 
+    it('has a Remove button only when given onRemove, and closes after it', async () => {
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        const view = props => (
+            <ThemeProvider theme={createAppTheme('dark')}>
+                <PhotoViewer master={master} tiles={[tile]} index={0}
+                    onClose={() => {}} onIndexChange={() => {}} {...props} />
+            </ThemeProvider>
+        );
+
+        await act(async () => root.render(view()));
+        expect(document.body.querySelector('[aria-label="Remove harbor.jpg"]')).toBeNull();
+
+        const onRemove = vi.fn();
+        const onClose = vi.fn();
+        await act(async () => root.render(view({ onRemove, onClose })));
+        await act(async () => document.body.querySelector('[aria-label="Remove harbor.jpg"]').click());
+        expect(onRemove).toHaveBeenCalledWith(tile);
+        expect(onClose).toHaveBeenCalled();
+
+        // A failed remove keeps the viewer open.
+        const failing = vi.fn().mockResolvedValue(false);
+        const stay = vi.fn();
+        await act(async () => root.render(view({ onRemove: failing, onClose: stay })));
+        await act(async () => document.body.querySelector('[aria-label="Remove harbor.jpg"]').click());
+        expect(failing).toHaveBeenCalled();
+        expect(stay).not.toHaveBeenCalled();
+
+        await act(async () => root.unmount());
+        div.remove();
+    });
+
     it('shows video technical details when gallery metadata updates arrive', async () => {
         const videoTile = {
             infoHash: 'vid123',
@@ -204,8 +237,8 @@ describe('PhotoViewer', () => {
         });
 
         const button = document.body.querySelector('[data-testid="replace-original"]');
-        expect(button.textContent).toContain('Choose where to save…');
-        expect(document.body.textContent).toContain('Pick the folder this goes into');
+        expect(button.textContent).toContain('Save to a folder…');
+        expect(button.getAttribute('title')).toContain('Pick the folder this goes into');
 
         await act(async () => {
             button.click();

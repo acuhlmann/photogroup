@@ -10,9 +10,8 @@ import CloseRounded from '@mui/icons-material/CloseRounded';
 import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
-import SaveRounded from '@mui/icons-material/SaveRounded';
-import IosShare from '@mui/icons-material/IosShare';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
+import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import _ from 'lodash';
@@ -29,14 +28,17 @@ import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replac
 import { canSaveDetails, saveDetails } from './metadata/saveDetails';
 import { isPrivateRoom } from '../privateRoom';
 import { canReadTorrentFile } from './saveRoom';
+import { removeLabel } from './removeLabel';
 
 /**
  * Display the selected media full screen with navigation (swipe, arrows,
  * keys), saving, and shared metadata editing. The details sit beside the
  * photo on a wide screen and are hidden until asked for on a narrow one,
- * so the photo gets the room.
+ * so the photo gets the room. With `onRemove`, a Remove button takes the
+ * photo out of the room and closes the viewer; if `onRemove` resolves to
+ * false (it failed), the viewer stays open so it can be tried again.
  */
-function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange }) {
+function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, onRemove }) {
     const theme = useTheme();
     const narrow = useMediaQuery(theme.breakpoints.down('md'));
     const [detailsAsked, setDetailsAsked] = useState(null);
@@ -138,7 +140,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange }
     const canSave = !!(tile.elem || canReadTorrentFile(tile.torrentFile));
     const stillArriving = !!(tile.torrentFile && !tile.torrentFile.done);
     const replaceMode = replaceKind();
-    const hint = replaceHint(tile);
+    const hint = replaceHint();
 
     const onSave = () => {
         setSaving(true);
@@ -220,6 +222,12 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange }
                         >
                             {showDetails ? 'Hide details' : 'Details'}
                         </Button>
+                        {onRemove && (
+                            <IconButton aria-label={removeLabel(tile)} onClick={() => Promise.resolve(onRemove(tile)).then(removed => { if (removed !== false) onClose(); })}
+                                sx={{ color: '#fff' }}>
+                                <DeleteRounded />
+                            </IconButton>
+                        )}
                         <IconButton aria-label="Close photo" onClick={onClose} sx={{ color: '#fff' }}>
                             <CloseRounded />
                         </IconButton>
@@ -275,23 +283,6 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange }
                                 <ArrowForwardRounded />
                             </IconButton>
                         </Stack>
-                        {replaceMode && (
-                            <Button
-                                variant="outlined"
-                                color="primary"
-                                data-testid="replace-original"
-                                startIcon={replaceMode === 'share' ? <IosShare /> : <SaveRounded />}
-                                disabled={!canSave || replacing || saving || stillArriving}
-                                onClick={onReplace}
-                                sx={{
-                                    color: '#e8eef6',
-                                    borderColor: 'rgba(61,214,195,0.45)',
-                                    bgcolor: 'rgba(61,214,195,0.08)',
-                                }}
-                            >
-                                {replaceLabel(tile, { replacing, replaced })}
-                            </Button>
-                        )}
                         <Typography
                             variant="caption"
                             data-testid="saved-where"
@@ -299,18 +290,27 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange }
                         >
                             {savedWhereText(1)}
                         </Typography>
-                        {(replaceError || hint) && replaceMode && (
+                        {/* The one Save goes the phone's normal way. Picking a folder is a small extra. */}
+                        {replaceMode && (
+                            <Button
+                                variant="text"
+                                size="small"
+                                data-testid="replace-original"
+                                title={hint}
+                                disabled={!canSave || replacing || saving || stillArriving}
+                                onClick={onReplace}
+                                sx={{ alignSelf: 'center', textTransform: 'none', color: 'rgba(232,238,246,0.85)' }}
+                            >
+                                {replaceLabel(tile, { replacing, replaced })}
+                            </Button>
+                        )}
+                        {replaceError && (
                             <Typography
                                 variant="caption"
                                 data-testid="replace-hint"
-                                sx={{
-                                    display: 'block',
-                                    textAlign: 'center',
-                                    color: replaceError ? 'error.main' : 'rgba(232,238,246,0.72)',
-                                    px: 1,
-                                }}
+                                sx={{ display: 'block', textAlign: 'center', color: 'error.main', px: 1 }}
                             >
-                                {replaceError || hint}
+                                {replaceError}
                             </Typography>
                         )}
                     </Stack>
@@ -373,6 +373,7 @@ PhotoViewer.propTypes = {
     index: PropTypes.number.isRequired,
     onClose: PropTypes.func.isRequired,
     onIndexChange: PropTypes.func.isRequired,
+    onRemove: PropTypes.func,
 };
 
 export default PhotoViewer;

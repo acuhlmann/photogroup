@@ -119,14 +119,15 @@ export function replaceLabel(tile, state = {}) {
     if (replaced) return 'Saved';
     if (replacing) return 'Saving…';
     if (kind === 'share') return 'Save to Files';
-    if (kind === 'file') return 'Choose where to save…';
+    if (kind === 'file') return 'Save to a folder…';
     return '';
 }
 
-export function replaceHint() {
+export function replaceHint(count = 1) {
     const kind = replaceKind();
-    if (kind === 'share') return 'Opens the share sheet. Pick the folder this goes into.';
-    if (kind === 'file') return 'Pick the folder this goes into. On a phone, DCIM/Camera is your gallery.';
+    const it = count === 1 ? 'this goes' : 'they go';
+    if (kind === 'share') return `Opens the share sheet. Pick the folder ${it} into.`;
+    if (kind === 'file') return `Pick the folder ${it} into. On a phone, DCIM/Camera is your gallery.`;
     return '';
 }
 
