@@ -30,8 +30,8 @@ test('choose what to save: keep or skip each photo, then save the kept ones', as
     await expect(choose).toBeVisible({ timeout: 60000 });
     await expect(sharer.getByRole('button', { name: /Choose what to save/ })).toHaveCount(0);
 
-    // Wait until all three are here in full.
-    await expect(receiver.locator('img[src^="blob:"]')).toHaveCount(3, { timeout: 60000 });
+    // Wait until all three are here in full (one thumbnail per row; the details panel shows one more).
+    await expect(receiver.locator('[data-testid="photo-row"] img[src^="blob:"]')).toHaveCount(3, { timeout: 60000 });
     await dismissDialogs(receiver);
     await choose.click();
     const dialog = receiver.getByRole('dialog', { name: 'Choose what to save' });

@@ -78,7 +78,7 @@ export function groupByDay(tiles, facts, sort) {
 }
 
 /** A small square of the photo. A tap shows it full screen. */
-function Thumb({ tile, master, size, onOpen }) {
+function Thumb({ tile, master, size, onOpen, onPick }) {
     const poster = usePreview(tile);
     const percent = useArriving(tile);
     const Icon = tile.isAudio ? AudiotrackRounded : PlayCircleRounded;
@@ -109,18 +109,23 @@ function Thumb({ tile, master, size, onOpen }) {
             </>
         );
     }
+    const box = {
+        position: 'relative', width: size, height: size, flexShrink: 0, borderRadius: 1, overflow: 'hidden',
+        bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    };
+    // Only the preview is here, or it is still arriving: a tap picks the row,
+    // and its details have the one button that gets the photo.
+    if (previewOnly || tile.loading) {
+        return <Box onClick={onPick} sx={{ ...box, cursor: 'pointer' }}>{inside}</Box>;
+    }
     return (
         <ButtonBase
             onClick={event => {
                 event.stopPropagation();
-                if (previewOnly) tile.loadFull?.();
-                else onOpen();
+                onOpen();
             }}
-            aria-label={previewOnly ? `Get the full photo of ${tile.fileName || 'this photo'}` : (tile.fileName ? `View ${tile.fileName}` : 'View photo')}
-            sx={{
-                position: 'relative', width: size, height: size, flexShrink: 0, borderRadius: 1, overflow: 'hidden',
-                bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
+            aria-label={tile.fileName ? `View ${tile.fileName}` : 'View photo'}
+            sx={box}
         >
             {inside}
         </ButtonBase>
@@ -251,8 +256,10 @@ function HeadCell({ id, label, sort, onSort, sx }) {
  */
 function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onOpen, onRemove }) {
     const theme = useTheme();
-    const wide = useMediaQuery(theme.breakpoints.up('md'));
-    const roomy = useMediaQuery(theme.breakpoints.up('lg'));
+    // Read the width on the first render: a phone layout first and the table
+    // after would mount every thumbnail twice.
+    const wide = useMediaQuery(theme.breakpoints.up('md'), { noSsr: true });
+    const roomy = useMediaQuery(theme.breakpoints.up('lg'), { noSsr: true });
     const [picked, setPicked] = useState(null);
     const rowRefs = useRef(new Map());
 
@@ -278,7 +285,7 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
 
     const onRowKey = (event, tile) => {
         if (event.target !== event.currentTarget) return;
-        if (event.key === 'Enter') { event.preventDefault(); onOpen(tile); }
+        if (event.key === 'Enter') { event.preventDefault(); if (!tile.loading) onOpen(tile); }
         else if (event.key === 'ArrowDown') { event.preventDefault(); move(tile, 1); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); move(tile, -1); }
     };
@@ -316,7 +323,7 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
                                 <Box key={keyOf(tile)} className="media-card" data-testid="photo-row"
                                     sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: open ? 'action.selected' : 'transparent' }}>
                                     <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', p: 1 }}>
-                                        <Thumb tile={tile} master={master} size={64} onOpen={() => onOpen(tile)} />
+                                        <Thumb tile={tile} master={master} size={64} onOpen={() => onOpen(tile)} onPick={() => setPicked(keyOf(tile))} />
                                         <ButtonBase aria-expanded={open}
                                             ref={node => { if (node) rowRefs.current.set(keyOf(tile), node); else rowRefs.current.delete(keyOf(tile)); }}
                                             onClick={() => setPicked(open ? '' : keyOf(tile))}
@@ -385,7 +392,7 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
                                             onClick={() => setPicked(keyOf(tile))}
                                             sx={{ cursor: 'pointer', outline: 'none',
                                                 '&:focus-visible': { boxShadow: `inset 0 0 0 2px ${theme.palette.primary.main}` } }}>
-                                            <TableCell><Thumb tile={tile} master={master} size={60} onOpen={() => onOpen(tile)} /></TableCell>
+                                            <TableCell><Thumb tile={tile} master={master} size={60} onOpen={() => onOpen(tile)} onPick={() => setPicked(keyOf(tile))} /></TableCell>
                                             <TableCell><TitleCell tile={tile} facts={fact} /></TableCell>
                                             <TableCell>{fact?.rating > 0 ? <RatingStars value={fact.rating} size={14} />
                                                 : fact?.rating === -1 ? <Typography variant="caption" sx={{ color: 'error.main' }}>Rejected</Typography> : null}</TableCell>
