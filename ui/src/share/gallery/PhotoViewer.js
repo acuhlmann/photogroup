@@ -31,7 +31,8 @@ import { removeLabel } from './removeLabel';
  * so the photo gets the room. With `details={false}` (photographer mode,
  * where the list already shows them) the viewer is the photo alone, with a
  * one-line caption. With `onRemove`, a Remove button takes the photo out of
- * the room and closes the viewer.
+ * the room and closes the viewer; if `onRemove` resolves to false (it
+ * failed), the viewer stays open so it can be tried again.
  */
 function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, onRemove, details = true }) {
     const theme = useTheme();
@@ -166,7 +167,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                             {showDetails ? 'Hide details' : 'Details'}
                         </Button>}
                         {onRemove && (
-                            <IconButton aria-label={removeLabel(tile)} onClick={() => { onRemove(tile); onClose(); }}
+                            <IconButton aria-label={removeLabel(tile)} onClick={() => Promise.resolve(onRemove(tile)).then(removed => { if (removed !== false) onClose(); })}
                                 sx={{ color: '#fff' }}>
                                 <DeleteRounded />
                             </IconButton>
