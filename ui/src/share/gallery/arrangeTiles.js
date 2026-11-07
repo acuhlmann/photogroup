@@ -4,7 +4,7 @@ import { isValidLocation, knownPlaceName } from './metadata/geo';
 // Sorting and filtering the gallery: what a photo's rating, date taken and
 // place are, and which photos a view shows in what order.
 
-export const DEFAULT_VIEW = { sort: 'added', minRating: 0, place: '', query: '' };
+export const DEFAULT_VIEW = { sort: 'added', minRating: 0, place: '', camera: '', query: '' };
 
 export const SORTS = [
     { id: 'added', label: 'Recently added' },
@@ -12,6 +12,7 @@ export const SORTS = [
     { id: 'taken-asc', label: 'Taken, oldest first' },
     { id: 'rating', label: 'Highest rated' },
     { id: 'title', label: 'Title A–Z' },
+    { id: 'camera', label: 'Camera A–Z' },
 ];
 
 /** Filter value for photos without a location. */
@@ -38,6 +39,10 @@ export function tileFacts(tile, master) {
     const location = grouped.location && isValidLocation(Number(grouped.location.lat), Number(grouped.location.long))
         ? grouped.location : null;
     const place = location ? (location.name || knownPlaceName(Number(location.lat), Number(location.long)) || null) : null;
+    const lead = key => {
+        const item = grouped.lead.find(entry => entry.key === key);
+        return item && item.value != null ? String(item.value) : '';
+    };
     return {
         rating: grouped.values.rating || 0,
         takenAt: toTime(tile.picDateTakenDate),
@@ -48,6 +53,9 @@ export function tileFacts(tile, master) {
         description: grouped.values.description || '',
         keywords: grouped.values.keywords || [],
         fileName: tile.fileName || '',
+        camera: lead('x-Camera'),
+        lens: lead('LensModel'),
+        exposure: lead('x-Settings'),
     };
 }
 
@@ -55,9 +63,10 @@ function matches(facts, view) {
     if (view.minRating > 0 && facts.rating < view.minRating) return false;
     if (view.place === NO_PLACE && facts.location) return false;
     if (view.place && view.place !== NO_PLACE && facts.placeGroup !== view.place) return false;
+    if (view.camera && facts.camera !== view.camera) return false;
     const query = String(view.query || '').trim().toLowerCase();
     if (query) {
-        const haystack = [facts.title, facts.description, facts.place, facts.fileName, ...facts.keywords]
+        const haystack = [facts.title, facts.description, facts.place, facts.fileName, facts.camera, facts.lens, ...facts.keywords]
             .filter(Boolean).join('\n').toLowerCase();
         return query.split(/\s+/).every(word => haystack.includes(word));
     }
@@ -80,15 +89,20 @@ const COMPARE = {
         if (!a.facts.title !== !b.facts.title) return a.facts.title ? -1 : 1;
         return a.facts.title.localeCompare(b.facts.title) || a.order - b.order;
     },
+    // Photos without a camera go last; the same camera keeps the newest first.
+    camera: (a, b) => {
+        if (!a.facts.camera !== !b.facts.camera) return a.facts.camera ? -1 : 1;
+        return a.facts.camera.localeCompare(b.facts.camera) || byTaken(-1)(a, b);
+    },
 };
 
 /** Whether a view narrows the gallery down (as opposed to only ordering it). */
 export function isFiltered(view) {
-    return view.minRating > 0 || !!view.place || !!String(view.query || '').trim();
+    return view.minRating > 0 || !!view.place || !!view.camera || !!String(view.query || '').trim();
 }
 
 /**
- * The tiles a view shows, in order, plus the places to offer as filters.
+ * The tiles a view shows, in order, plus the places and cameras to offer as filters.
  * Uploads still arriving stay first and unfiltered, since nothing is known
  * about them yet.
  */
@@ -101,12 +115,17 @@ export function arrangeTiles(tiles, view, master) {
     });
 
     const groups = new Map();
+    const cameraCounts = new Map();
     let unplaced = 0;
     known.forEach(({ facts }) => {
+        if (facts.camera) cameraCounts.set(facts.camera, (cameraCounts.get(facts.camera) || 0) + 1);
         if (facts.placeGroup) groups.set(facts.placeGroup, (groups.get(facts.placeGroup) || 0) + 1);
         else if (!facts.location) unplaced += 1;
     });
     const places = [...groups.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([name, count]) => ({ name, count }));
+    const cameras = [...cameraCounts.entries()]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([name, count]) => ({ name, count }));
 
@@ -116,6 +135,7 @@ export function arrangeTiles(tiles, view, master) {
         tiles: [...loading, ...shown.map(item => item.tile)],
         facts: new Map(shown.map(item => [item.tile, item.facts])),
         places,
+        cameras,
         unplaced,
         total: tiles.length,
     };

@@ -1,10 +1,12 @@
 // Three ways to show the app. Simple is for strangers swapping photos on the
-// spot, default is the full gallery, geek puts the network first.
+// spot, default ("Photographer") is a list of the photos' details for photo
+// enthusiasts, geek puts the network first. The key stays "default", so a
+// mode picked before the rename is kept.
 export const MODES = ['simple', 'default', 'geek'];
 
 export const MODE_INFO = {
     simple: { label: 'Simple', detail: 'Just share and get photos' },
-    default: { label: 'Default', detail: 'Gallery, details, sorting and maps' },
+    default: { label: 'Photographer', detail: 'Camera, exposure and date of each photo, sorting and maps' },
     geek: { label: 'Geek', detail: 'Live network map, photos on the devices' },
 };
 

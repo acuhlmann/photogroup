@@ -28,6 +28,7 @@ import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { openSealedPhoto } from "./openSealed";
 import SimpleGrid from "../simple/SimpleGrid";
 import ChooseToSave from "./ChooseToSave";
+import PhotoList from "./PhotoList";
 import { setPosterSink } from "./tilePreview";
 import { CLIP_SIZE_NOTE } from "../torrent/ServerCopyLimits";
 
@@ -38,6 +39,8 @@ const tileKeyOf = tile => tile.tileKey || tile.infoHash;
  * Display room tiles, accept dropped uploads, and open the media viewer.
  * An unsynced empty gallery waits for a snapshot or four seconds before showing the upload prompt.
  * `showNetworkReadout` controls the readout in the empty state and defaults to true.
+ * `variant` "full" (photographer mode) shows a list of the photos' details (PhotoList),
+ * and full screen shows the photo alone.
  * `variant` "simple" swaps the tiles for big squares with a Save button each.
  * `variant` "geek" puts a Remove button in the viewer, since the geek map has no tiles to put one on.
  * `onTilesChange` hears every change to the tiles, for views that draw them elsewhere.
@@ -582,6 +585,7 @@ function Gallery(props) {
                         mode={mode}
                         onModeChange={setMode}
                         places={arranged.places}
+                        cameras={arranged.cameras}
                         unplaced={arranged.unplaced}
                         shown={visible.length}
                         total={arranged.total}
@@ -600,7 +604,12 @@ function Gallery(props) {
                         No photos match these filters.
                     </Typography>
                 )}
-                {(mode === 'grid' || tiles.length < 2) && <Box
+                {variant === 'full' && (mode === 'grid' || tiles.length < 2) && visible.length > 0 && (
+                    <PhotoList master={master} tiles={visible} facts={arranged.facts} roomTiles={tiles}
+                        sort={view.sort} onSort={sort => setView({ ...view, sort })}
+                        openKey={selectedKey} onOpen={openAt} onRemove={removePhoto} />
+                )}
+                {variant !== 'full' && (mode === 'grid' || tiles.length < 2) && <Box
                     className="stagger-children"
                     sx={{
                         columnCount: visible.length < 2 ? 1 : { xs: 1, sm: 2, xl: 3 },
@@ -649,8 +658,10 @@ function Gallery(props) {
                     index={selectedIndex}
                     onClose={closeViewer}
                     onIndexChange={showIndex}
-                    // Default has Remove on each tile; geek's map has no tiles, so it goes here.
+                    // Photographer mode has Remove beside the list; geek's map has no list, so it goes here.
                     onRemove={variant === 'geek' ? removePhoto : undefined}
+                    // Photographer mode shows the details in the list, so full screen is the photo alone.
+                    details={variant !== 'full'}
                 />
             )}
         </Box>

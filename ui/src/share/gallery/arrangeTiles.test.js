@@ -61,4 +61,21 @@ describe('arrangeTiles', () => {
         expect(placeGroup('Valais, Switzerland')).toBe('Valais, Switzerland');
         expect(placeGroup(null)).toBeNull();
     });
+
+    it('filters and sorts by camera, and searches camera and lens', () => {
+        const summary = { createMetadataSummary: (metadata, t) => t.summary };
+        const shot = (fileName, camera, lens, takenAt) => tile(fileName, {}, takenAt, {
+            summary: [{ key: 'x-Camera', value: camera }, { key: 'LensModel', value: lens }, { key: 'x-Settings', value: 'ƒ/2 · 1/250 s' }],
+            metadata: {},
+        });
+        const tiles = [shot('x.jpg', 'Pixel 8', 'Main', '2024-01-01'), shot('y.jpg', 'Fujifilm X-T5', 'XF 35mm', '2024-02-02'),
+            tile('z.jpg'), shot('w.jpg', 'Fujifilm X-T5', 'XF 23mm', '2024-03-03')];
+        const result = arrangeTiles(tiles, DEFAULT_VIEW, { metadata: summary });
+        expect(result.cameras).toEqual([{ name: 'Fujifilm X-T5', count: 2 }, { name: 'Pixel 8', count: 1 }]);
+        expect(result.facts.get(tiles[1])).toMatchObject({ camera: 'Fujifilm X-T5', lens: 'XF 35mm', exposure: 'ƒ/2 · 1/250 s' });
+        expect(names(arrangeTiles(tiles, view({ camera: 'Fujifilm X-T5' }), { metadata: summary }))).toEqual(['y.jpg', 'w.jpg']);
+        // Same camera newest first; photos without one last.
+        expect(names(arrangeTiles(tiles, view({ sort: 'camera' }), { metadata: summary }))).toEqual(['w.jpg', 'y.jpg', 'x.jpg', 'z.jpg']);
+        expect(names(arrangeTiles(tiles, view({ query: 'xf 23' }), { metadata: summary }))).toEqual(['w.jpg']);
+    });
 });
