@@ -10,7 +10,8 @@ import CircularProgress from "@mui/material/CircularProgress";
 import OwnersList from "./OwnersList";
 import FileUtil from "../util/FileUtil";
 import StringUtil from "../util/StringUtil";
-import RemoveButton from './RemoveButton';
+import IconButton from "@mui/material/IconButton";
+import DeleteRounded from "@mui/icons-material/DeleteRounded";
 import Logger from "js-logger";
 import Button from "@mui/material/Button";
 import PiecesLoadingView from "../torrent/PiecesLoadingView";
@@ -344,7 +345,14 @@ function LoadingTile({tile, master, name}) {
                         )}
                     </Box>
 
-                    <RemoveButton tile={tile} onRemove={handleDelete} size="small" sx={{ flexShrink: 0 }} />
+                    {/* Delete button */}
+                    <IconButton
+                        onClick={() => handleDelete(tile)}
+                        size="small"
+                        sx={{ flexShrink: 0 }}
+                    >
+                        <DeleteRounded fontSize="small" />
+                    </IconButton>
                 </Stack>
 
                 {tile.previewOnly && (
