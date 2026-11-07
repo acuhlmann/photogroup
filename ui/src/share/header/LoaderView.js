@@ -14,6 +14,9 @@ import { headerLabelSx } from './headerButtonSx';
 function LoaderView({emitter}) {
     const [transfer, setTransfer] = useState(null);
     const intervalRef = useRef(null);
+    const stats = useRef({});
+    // While the tooltip is open it shows the totals and speeds as they change.
+    const tipOpen = useRef(false);
 
     useEffect(() => {
         const handleWtInitialized = (client) => {
@@ -26,13 +29,18 @@ function LoaderView({emitter}) {
                 }
                 const torrents = client.torrents || [];
                 const sum = key => torrents.reduce((total, torrent) => total + (torrent[key] || 0), 0);
-                setTransfer({
-                    progress,
+                stats.current = {
                     down: FileUtil.formatBytes(sum('downloaded')),
                     up: FileUtil.formatBytes(sum('uploaded')),
                     downSpeed: FileUtil.formatBytes(client.downloadSpeed) + '/s',
                     upSpeed: FileUtil.formatBytes(client.uploadSpeed) + '/s',
-                });
+                };
+                // Five times a second: redraw the ring only when the whole
+                // percent changes, and the tooltip only while it is open.
+                const percent = Math.floor(progress);
+                const { down, up, downSpeed, upSpeed } = stats.current;
+                const text = tipOpen.current ? [down, up, downSpeed, upSpeed].join() : '';
+                setTransfer(prev => (prev && prev.percent === percent && prev.text === text ? prev : { percent, text }));
             }, 200);
         };
 
@@ -48,9 +56,12 @@ function LoaderView({emitter}) {
         return null;
     }
 
-    const percent = Math.floor(transfer.progress);
+    const { percent } = transfer;
+    const { down, downSpeed, up, upSpeed } = stats.current;
     return (
-        <Tooltip describeChild title={`↓ ${transfer.down} · ${transfer.downSpeed}   ↑ ${transfer.up} · ${transfer.upSpeed}`}>
+        <Tooltip describeChild title={`↓ ${down} · ${downSpeed}   ↑ ${up} · ${upSpeed}`}
+            onOpen={() => { tipOpen.current = true; }}
+            onClose={() => { tipOpen.current = false; }}>
             <Box
                 tabIndex={0}
                 role="progressbar"
@@ -70,7 +81,7 @@ function LoaderView({emitter}) {
                     color: 'text.secondary',
                 }}
             >
-                <CircularProgress variant="determinate" value={transfer.progress} size={16} thickness={5} />
+                <CircularProgress variant="determinate" value={percent} size={16} thickness={5} />
                 <Box component="span" sx={{ ...headerLabelSx, minWidth: '3ch', fontVariantNumeric: 'tabular-nums' }}>
                     {percent}%
                 </Box>

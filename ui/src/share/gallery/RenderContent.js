@@ -74,6 +74,9 @@ function showFirstFrame(tile, elem) {
     });
 }
 
+// Photos whose details this device has read in this visit, by infoHash.
+const imagesRead = new Set();
+
 export const CAN_NOT_PLAY = 'This browser cannot play this clip. Save it and open it in another app.';
 
 // WebTorrent 2+ dropped File#appendTo. Play the local copy when we have one
@@ -133,7 +136,7 @@ export function renderMedia(tile, file, node, opts, callback) {
  * `playbackActive` defaults to true; false skips attaching inline audio/video players.
  */
 function RenderContent(props) {
-    const {master, tile, classes, enqueueSnackbar, closeSnackbar, playbackActive = true} = props;
+    const {master, tile, classes, enqueueSnackbar, closeSnackbar, playbackActive = true, thumb = false, thumbSrc = null} = props;
     const emitter = master.emitter;
     
     // Use refs for instance variables
@@ -160,6 +163,13 @@ function RenderContent(props) {
     
     const readMetadata = useCallback((tileParam) => {
         const currentTile = tileParam || tileRef.current;
+        // A photo's details were read once already in this visit (by its list
+        // row, say). Reading them again for every larger view parsed the file
+        // again and redrew the whole gallery on each tap. A photo being shared
+        // is still read: reading it is what reports it as shared.
+        if(currentTile.isImage && !currentTile.seed && currentTile.hasMetadata !== undefined && imagesRead.has(currentTile.infoHash)) {
+            return;
+        }
         // For seeded images, try to use tile.file if elem is not set
         const elemToUse = currentTile.elem || (currentTile.seed && currentTile.isImage && currentTile.file ? currentTile.file : null);
         if(elemToUse) {
@@ -174,6 +184,7 @@ function RenderContent(props) {
             Logger.info('readMetadata called for ' + currentTile.fileName + ' seed=' + currentTile.seed + ' elem=' + !!currentTile.elem);
             master.metadata.readMetadata(currentTile, (tile, metadata) => {
                 Logger.info('readMetadata callback for ' + tile.fileName + ' seed=' + tile.seed);
+                if(tile.isImage && tile.infoHash) imagesRead.add(tile.infoHash);
                 // Preserve img property when emitting update
                 const updateTile = {...tile};
                 if(tile.img) {
@@ -523,6 +534,13 @@ function RenderContent(props) {
         }
     }, [tile]);
 
+    /** A list row's small copy is here: read the photo's details as a full load would. */
+    const thumbLoaded = useCallback(() => {
+        if(readMetadataRef.current) {
+            readMetadataRef.current(tile);
+        }
+    }, [tile]);
+
     // Set up event listeners and initialize seeded images
     // Only run this effect when infoHash changes (when a new tile is added)
     useEffect(() => {
@@ -613,6 +631,19 @@ function RenderContent(props) {
         if(currentTile.isImage && currentTile.elem && !currentTile.img) {
             currentTile.img = URL.createObjectURL(currentTile.elem);
         }
+        // A list row shows the small copy: the full photo would be decoded
+        // (tens of MB) for a 64 px square.
+        if(thumb && currentTile.isImage) {
+            return thumbSrc
+                ? <img src={thumbSrc} alt={currentTile.fileName} decoding="async" onLoad={thumbLoaded}
+                       // A broken preview: the full photo instead.
+                       onError={event => {
+                           const img = event.currentTarget;
+                           if (currentTile.img && img.src !== currentTile.img) img.src = currentTile.img;
+                       }}
+                       style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}} />
+                : null;
+        }
         return currentTile.isImage && currentTile.img
             ? <img src={currentTile.img} alt={currentTile.fileName}
                    // Decode the full photo off the main thread; the preview shows meanwhile.
@@ -654,7 +685,7 @@ function RenderContent(props) {
     };
 
     return (
-        <div style={{width: '100%', maxWidth: '100%', overflow: 'hidden'}}>
+        <div style={{width: '100%', maxWidth: '100%', overflow: 'hidden', ...(thumb ? {height: '100%'} : null)}}>
             {renderMediaDom()}
         </div>
     );
@@ -663,5 +694,9 @@ function RenderContent(props) {
 RenderContent.propTypes = {
     tile: PropTypes.object.isRequired,
     master: PropTypes.object.isRequired,
+    playbackActive: PropTypes.bool,
+    /** Show `thumbSrc` (a small copy) instead of the full photo; details are still read. */
+    thumb: PropTypes.bool,
+    thumbSrc: PropTypes.string,
 };
 export default withSnackbar(withStyles(styles)(RenderContent));

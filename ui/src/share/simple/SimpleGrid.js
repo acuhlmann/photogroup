@@ -23,6 +23,10 @@ import ChooseFolderButton from '../gallery/saveToChosenFolder';
 import { canChooseFolder, replaceFailureMessage, replaceHint, replaceOriginal } from '../gallery/replaceOriginal';
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
 import MediaStage from '../gallery/MediaStage';
+import { useSmallImage } from '../gallery/smallImage';
+
+// Tiles are at most about half a phone wide; 640 px stays sharp on a 3x screen.
+const GRID_SIDE = 640;
 import { removeLabel } from '../gallery/removeLabel';
 
 /** "3 photos", "1 clip", "3 photos and 2 clips". */
@@ -85,7 +89,7 @@ function SaveButton({ tile, roomId, onError }) {
     );
 }
 
-function SimpleTile({ tile, roomId, onOpen, onError, onRemove }) {
+function SimpleTile({ tile, roomId, onOpen, onError, onRemove, alone }) {
     const percent = useArriving(tile);
     const poster = usePreview(tile);
     const showImage = !tile.loading && tile.img;
@@ -93,7 +97,10 @@ function SimpleTile({ tile, roomId, onOpen, onError, onRemove }) {
     const previewOnly = !!tile.previewOnly;
     const canOpen = viewable(tile) || previewOnly;
     // A photo still being prepared or arriving shows its small preview, dimmed.
-    const picture = showImage ? tile.img : (tile.isVideo || previewOnly || tile.loading ? poster : null);
+    // A 640 px copy, not the full photo: a phone would decode ~48 MB for each square.
+    // A photo alone gets the whole width, so it shows in full.
+    const square = useSmallImage(showImage && !alone ? tile : null, GRID_SIDE);
+    const picture = showImage ? (alone ? tile.img : square || poster) : (tile.isVideo || previewOnly || tile.loading ? poster : null);
     const Icon = tile.isAudio ? AudiotrackRounded : PlayCircleRounded;
     return (
         <Stack spacing={1} data-testid="simple-tile">
@@ -246,7 +253,7 @@ function SimpleGrid({ tiles: given, roomId, onError, onRemove }) {
                 pb: 3,
             }}>
                 {tiles.map(tile => (
-                    <SimpleTile key={keyOf(tile)} tile={tile} roomId={roomId} onError={onError} onRemove={onRemove}
+                    <SimpleTile key={keyOf(tile)} tile={tile} roomId={roomId} onError={onError} onRemove={onRemove} alone={tiles.length === 1}
                         onOpen={() => setOpenKey(keyOf(tile))} />
                 ))}
             </Box>

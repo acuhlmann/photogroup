@@ -20,6 +20,7 @@ import { photoCaption } from './photoCaption';
 import { saveLabel } from './savePhoto';
 import { saveToDevice, savedWhereText } from './saveToDevice';
 import { useSwipe } from './mediaView';
+import { previewUrlOf } from './tilePreview';
 import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
 import { canReadTorrentFile } from './saveRoom';
 import { removeLabel } from './removeLabel';
@@ -72,6 +73,22 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
         return () => window.removeEventListener('keydown', onKey);
     }, [index, tiles.length, onIndexChange]);
 
+    // Decode the photos either side ahead of time, so a swipe shows the next one at once.
+    // On the next swipe the ones not needed any more are let go, so quick
+    // swipes never pile up decodes in front of the photo shown.
+    useEffect(() => {
+        const ahead = [tiles[index + 1], tiles[index - 1]]
+            .filter(next => next && next.isImage && next.img && !next.loading)
+            .map(next => {
+                const img = new Image();
+                img.decoding = 'async';
+                img.src = next.img;
+                if (typeof img.decode === 'function') img.decode().catch(() => {});
+                return img;
+            });
+        return () => ahead.forEach(img => img.removeAttribute('src'));
+    }, [tiles, index]);
+
     const swipe = useSwipe(step => {
         const next = index + step;
         if (next >= 0 && next < tiles.length) onIndexChange(next);
@@ -103,14 +120,33 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
             .finally(() => setReplacing(false));
     };
 
+    const preview = isImage ? previewUrlOf(tile) : null;
     const mediaPreview = isImage && tile.img ? (
         <img
+            key={tile.img}
             src={tile.img}
             alt={tile.fileName || 'Shared photo'}
+            // Decoded on another thread; the small preview shows meanwhile,
+            // so the viewer opens at once instead of on a blank screen.
+            decoding="async"
             style={{
                 width: '100%',
                 height: '100%',
                 objectFit: 'contain',
+                ...(preview ? {
+                    backgroundImage: `url(${preview})`,
+                    backgroundSize: 'contain',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                } : null),
+            }}
+            onLoad={event => {
+                // The preview stays until the photo is ready to paint.
+                const img = event.currentTarget;
+                const done = () => { img.style.backgroundImage = 'none'; };
+                // A failed decode keeps the preview, so the screen is never blank.
+                if (typeof img.decode === 'function') img.decode().then(done, () => {});
+                else done();
             }}
         />
     ) : (

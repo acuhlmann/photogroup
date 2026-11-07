@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '@mui/material/styles';
 import { createAppTheme } from '../../theme';
-import PhotoList, { groupByDay, sharerLabel, takenLabel } from './PhotoList';
+import PhotoList, { groupByDay, sameRow, sharerLabel, takenLabel } from './PhotoList';
 
 vi.mock('./RenderContent', () => ({ default: ({ tile }) => <img alt={tile.fileName} src={tile.img} /> }));
 vi.mock('./LoadingTile', () => ({ default: () => <div>Arriving</div> }));
@@ -110,5 +110,18 @@ describe('PhotoList', () => {
         act(() => toggle.click());
         expect(toggle.getAttribute('aria-expanded')).toBe('true');
         expect(div.querySelector('[data-testid="details-of"]').textContent).toBe('a.jpg');
+    });
+});
+
+describe('sameRow', () => {
+    const tile = { infoHash: 'a' };
+    it('skips a redraw when only the facts object is new', () => {
+        expect(sameRow({ tile, open: false, fact: { camera: 'X', keywords: [] } },
+            { tile, open: false, fact: { camera: 'X', keywords: [] } })).toBe(true);
+    });
+    it('redraws when the photo, its facts or the open state change', () => {
+        expect(sameRow({ tile, fact: { camera: 'X' } }, { tile: { ...tile }, fact: { camera: 'X' } })).toBe(false);
+        expect(sameRow({ tile, fact: { camera: 'X' } }, { tile, fact: { camera: 'Y' } })).toBe(false);
+        expect(sameRow({ tile, open: false }, { tile, open: true })).toBe(false);
     });
 });
