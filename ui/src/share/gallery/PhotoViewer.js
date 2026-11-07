@@ -13,6 +13,7 @@ import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
 import SaveRounded from '@mui/icons-material/SaveRounded';
 import IosShare from '@mui/icons-material/IosShare';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
+import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import _ from 'lodash';
@@ -29,14 +30,16 @@ import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replac
 import { canSaveDetails, saveDetails } from './metadata/saveDetails';
 import { isPrivateRoom } from '../privateRoom';
 import { canReadTorrentFile } from './saveRoom';
+import { removeLabel } from './removeLabel';
 
 /**
  * Display the selected media full screen with navigation (swipe, arrows,
  * keys), saving, and shared metadata editing. The details sit beside the
  * photo on a wide screen and are hidden until asked for on a narrow one,
- * so the photo gets the room.
+ * so the photo gets the room. With `onRemove`, a Remove button takes the
+ * photo out of the room and closes the viewer.
  */
-function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange }) {
+function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, onRemove }) {
     const theme = useTheme();
     const narrow = useMediaQuery(theme.breakpoints.down('md'));
     const [detailsAsked, setDetailsAsked] = useState(null);
@@ -220,6 +223,12 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange }
                         >
                             {showDetails ? 'Hide details' : 'Details'}
                         </Button>
+                        {onRemove && (
+                            <IconButton aria-label={removeLabel(tile)} onClick={() => { onRemove(tile); onClose(); }}
+                                sx={{ color: '#fff' }}>
+                                <DeleteRounded />
+                            </IconButton>
+                        )}
                         <IconButton aria-label="Close photo" onClick={onClose} sx={{ color: '#fff' }}>
                             <CloseRounded />
                         </IconButton>
@@ -373,6 +382,7 @@ PhotoViewer.propTypes = {
     index: PropTypes.number.isRequired,
     onClose: PropTypes.func.isRequired,
     onIndexChange: PropTypes.func.isRequired,
+    onRemove: PropTypes.func,
 };
 
 export default PhotoViewer;

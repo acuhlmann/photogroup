@@ -98,6 +98,31 @@ describe('PhotoViewer', () => {
         div.remove();
     });
 
+    it('has a Remove button only when given onRemove, and closes after it', async () => {
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        const view = props => (
+            <ThemeProvider theme={createAppTheme('dark')}>
+                <PhotoViewer master={master} tiles={[tile]} index={0}
+                    onClose={() => {}} onIndexChange={() => {}} {...props} />
+            </ThemeProvider>
+        );
+
+        await act(async () => root.render(view()));
+        expect(document.body.querySelector('[aria-label="Remove harbor.jpg"]')).toBeNull();
+
+        const onRemove = vi.fn();
+        const onClose = vi.fn();
+        await act(async () => root.render(view({ onRemove, onClose })));
+        await act(async () => document.body.querySelector('[aria-label="Remove harbor.jpg"]').click());
+        expect(onRemove).toHaveBeenCalledWith(tile);
+        expect(onClose).toHaveBeenCalled();
+
+        await act(async () => root.unmount());
+        div.remove();
+    });
+
     it('shows video technical details when gallery metadata updates arrive', async () => {
         const videoTile = {
             infoHash: 'vid123',

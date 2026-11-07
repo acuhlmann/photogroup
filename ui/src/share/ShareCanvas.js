@@ -230,7 +230,7 @@ function ShareCanvas({master, mode = 'default', roomName = '', enqueueSnackbar, 
                     {simple ? <SimpleRoomBar master={master} roomName={roomName} /> : null}
                     {/* The one offer of a notice, seen as soon as there is a room to be told about. */}
                     <NotifyPrompt master={master} />
-                    <Gallery master={master} variant={simple ? 'simple' : 'full'}
+                    <Gallery master={master} variant={simple ? 'simple' : geek ? 'geek' : 'full'}
                         showNetworkReadout={false} onTilesChange={setTiles} />
                 </Box>
             </Box>

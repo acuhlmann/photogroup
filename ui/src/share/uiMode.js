@@ -18,12 +18,18 @@ const RETURNING = 'clientId';
  * The mode to start in: the one picked last, else simple for someone new.
  * People who used PhotoGroup before modes existed keep the view they know.
  * Read this before RoomsService runs, since it is what marks a visit.
+ *
+ * The start mode is kept for someone new at once. Without that, their next
+ * visit finds the visit mark, takes them for someone from before modes and
+ * moves them to default.
  */
 export function readMode() {
     try {
         const stored = localStorage.getItem(KEY);
         if (MODES.includes(stored)) return stored;
-        return localStorage.getItem(RETURNING) ? 'default' : START;
+        if (localStorage.getItem(RETURNING)) return 'default';
+        saveMode(START);
+        return START;
     } catch {
         return START;
     }

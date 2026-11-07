@@ -10,6 +10,7 @@ import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
 import CheckRounded from '@mui/icons-material/CheckRounded';
 import CloseRounded from '@mui/icons-material/CloseRounded';
+import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
 import PlayCircleRounded from '@mui/icons-material/PlayCircleRounded';
 import AudiotrackRounded from '@mui/icons-material/AudiotrackRounded';
@@ -22,6 +23,7 @@ import ChooseFolderButton, { canChooseFolder } from '../gallery/saveToChosenFold
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
 import MediaStage from '../gallery/MediaStage';
 import ChooseToSave from '../gallery/ChooseToSave';
+import { removeLabel } from '../gallery/removeLabel';
 
 /** "3 photos", "1 clip", "3 photos and 2 clips". */
 export function countLabel(tiles) {
@@ -68,7 +70,7 @@ function SaveButton({ tile, roomId, onError }) {
     );
 }
 
-function SimpleTile({ tile, roomId, onOpen, onError }) {
+function SimpleTile({ tile, roomId, onOpen, onError, onRemove }) {
     const percent = useArriving(tile);
     const poster = usePreview(tile);
     const showImage = !tile.loading && tile.img;
@@ -126,7 +128,14 @@ function SimpleTile({ tile, roomId, onOpen, onError }) {
                     }} />
                 )}
             </ButtonBase>
-            <SaveButton tile={tile} roomId={roomId} onError={onError} />
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <SaveButton tile={tile} roomId={roomId} onError={onError} />
+                {onRemove && (
+                    <IconButton aria-label={removeLabel(tile)} onClick={() => onRemove(tile)} sx={{ flexShrink: 0 }}>
+                        <DeleteRounded />
+                    </IconButton>
+                )}
+            </Stack>
         </Stack>
     );
 }
@@ -173,10 +182,10 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
 
 /**
  * The simple view of a room's photos and clips: big squares, each with a Save
- * button, one button to go through the new ones and keep or skip each, and
+ * button and a Remove button, one button to go through the new ones and keep or skip each, and
  * one to save everything new at once.
  */
-function SimpleGrid({ tiles: given, roomId, onError }) {
+function SimpleGrid({ tiles: given, roomId, onError, onRemove }) {
     useHaveChanges();
     const [openKey, setOpenKey] = useState(null);
     // Other people's photos first; the ones this phone shared go last.
@@ -219,7 +228,7 @@ function SimpleGrid({ tiles: given, roomId, onError }) {
                 pb: 3,
             }}>
                 {tiles.map(tile => (
-                    <SimpleTile key={keyOf(tile)} tile={tile} roomId={roomId} onError={onError}
+                    <SimpleTile key={keyOf(tile)} tile={tile} roomId={roomId} onError={onError} onRemove={onRemove}
                         onOpen={() => setOpenKey(keyOf(tile))} />
                 ))}
             </Box>
@@ -236,6 +245,7 @@ SimpleGrid.propTypes = {
     tiles: PropTypes.array.isRequired,
     roomId: PropTypes.string,
     onError: PropTypes.func,
+    onRemove: PropTypes.func,
 };
 
 export default SimpleGrid;

@@ -40,6 +40,7 @@ const tileKeyOf = tile => tile.tileKey || tile.infoHash;
  * An unsynced empty gallery waits for a snapshot or four seconds before showing the upload prompt.
  * `showNetworkReadout` controls the readout in the empty state and defaults to true.
  * `variant` "simple" swaps the tiles for big squares with a Save button each.
+ * `variant` "geek" puts a Remove button in the viewer, since the geek map has no tiles to put one on.
  * `onTilesChange` hears every change to the tiles, for views that draw them elsewhere.
  */
 function Gallery(props) {
@@ -508,6 +509,15 @@ function Gallery(props) {
     }, [openAt, selectedKey, visible.length]);
 
     const showError = useCallback(message => master.emitter.emit('showError', message), [master.emitter]);
+    /** Take a photo out of the room for everyone; the room's delete event removes the tile. */
+    const removePhoto = useCallback(tile => {
+        master.torrentDeletion.deleteItem(tile)
+            .then(infoHash => Logger.info('removed ' + infoHash))
+            .catch(err => {
+                Logger.error('remove: ' + (err && err.message ? err.message : err));
+                showError("Couldn't remove that. Try again in a moment.");
+            });
+    }, [master.torrentDeletion, showError]);
 
     return (
         <Box
@@ -534,7 +544,8 @@ function Gallery(props) {
                 </Box>
                 </>
             ) : variant === 'simple' ? (
-                <SimpleGrid tiles={tiles} roomId={master.service && master.service.id} onError={showError} />
+                <SimpleGrid tiles={tiles} roomId={master.service && master.service.id} onError={showError}
+                    onRemove={removePhoto} />
             ) : tiles.length === 0 ? (
                 <>
                 <Box
@@ -642,6 +653,8 @@ function Gallery(props) {
                     index={selectedIndex}
                     onClose={closeViewer}
                     onIndexChange={showIndex}
+                    // Default has Remove on each tile; geek's map has no tiles, so it goes here.
+                    onRemove={variant === 'geek' ? removePhoto : undefined}
                 />
             )}
         </Box>
@@ -651,7 +664,7 @@ function Gallery(props) {
 Gallery.propTypes = {
     master: PropTypes.object.isRequired,
     showNetworkReadout: PropTypes.bool,
-    variant: PropTypes.oneOf(['full', 'simple']),
+    variant: PropTypes.oneOf(['full', 'simple', 'geek']),
     onTilesChange: PropTypes.func,
 };
 export default withSnackbar(Gallery);

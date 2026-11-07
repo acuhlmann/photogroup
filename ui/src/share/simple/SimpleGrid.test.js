@@ -27,11 +27,11 @@ const ready = (key, extra = {}) => ({
     elem: new Blob(['x']), loading: false, fingerprint: '1:' + key.padEnd(64, '0'), ...extra,
 });
 
-async function render(tiles) {
+async function render(tiles, props = {}) {
     const div = document.createElement('div');
     document.body.appendChild(div);
     const root = createRoot(div);
-    await act(async () => root.render(<SimpleGrid tiles={tiles} roomId="r1" />));
+    await act(async () => root.render(<SimpleGrid tiles={tiles} roomId="r1" {...props} />));
     return { div, root };
 }
 
@@ -69,6 +69,15 @@ describe('SimpleGrid', () => {
         expect(buttons(div)).toContain('Saved');
         expect(div.textContent).toContain('Arriving · 42%');
         expect(buttons(div)).not.toContain('Save all 1');
+        await act(async () => root.unmount());
+    });
+
+    it('gives every photo a Remove button', async () => {
+        const onRemove = vi.fn();
+        const tiles = [ready('a'), ready('b')];
+        const { div, root } = await render(tiles, { onRemove });
+        await act(async () => div.querySelector('[aria-label="Remove b.jpg"]').click());
+        expect(onRemove).toHaveBeenCalledWith(tiles[1]);
         await act(async () => root.unmount());
     });
 

@@ -29,6 +29,7 @@ import { canSaveDetails, saveDetails, saveErrorText } from "./metadata/saveDetai
 import { alreadyHave, HAVE_LABELS, useHaveChanges } from "./alreadyHave";
 import { loadPreviewUrl } from "./tilePreview";
 import { canReadTorrentFile } from "./saveRoom";
+import { removeLabel } from './removeLabel';
 
 /** Display loaded media and metadata highlights, with save, delete, and decryption controls. */
 function ContentTile(props) {
@@ -386,7 +387,7 @@ function ContentTile(props) {
                         </Button>
                     )}
                     <IconButton
-                        aria-label={`Remove ${tile.fileName || 'photo'}`}
+                        aria-label={removeLabel(tile)}
                         onClick={() => handleDelete(tile)}
                         size="small"
                     >
