@@ -23,7 +23,30 @@ export function usePreview(tile) {
     // A streamed clip can stop "loading" before its file is done: try again once it is.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [key, ready, tile && tile.torrentFileThumb, tile && tile.loading, !!(tile && tile.torrentFile && tile.torrentFile.done)]);
-    return ready || (fetched.key === key ? fetched.url : null);
+    const found = ready || (fetched.key === key ? fetched.url : null);
+    // The torrent sets a photo's thumbnail file on the tile without telling
+    // the view, so while one is still arriving without a preview, look again
+    // each second. (The whole app used to redraw on every transfer event,
+    // which hid this.)
+    const waiting = !!(tile && tile.loading && !found && !tile.secure);
+    useEffect(() => {
+        if (!waiting) return undefined;
+        let live = true;
+        const id = setInterval(() => {
+            const now = previewUrlOf(tile);
+            if (now) {
+                if (live) setFetched({ key, url: now });
+            } else if (tile.torrentFileThumb) {
+                loadPreviewUrl(tile).then(url => live && url && setFetched({ key, url }));
+            }
+        }, 1000);
+        return () => {
+            live = false;
+            clearInterval(id);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [key, waiting]);
+    return found;
 }
 
 /** An object URL for the clip's local file while it shows. */

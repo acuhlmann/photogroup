@@ -9,7 +9,6 @@ import Typography from '@mui/material/Typography';
 import CssBaseline from '@mui/material/CssBaseline';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-import Chip from '@mui/material/Chip';
 import './App.css';
 
 import EventEmitter from 'eventemitter3';
@@ -27,6 +26,7 @@ import Visibility from "visibilityjs";
 import AddPeersView from "./share/header/AddPeersView";
 import { clearShareFlag, rememberRoom, SHARE_ERRORS, SHARE_WAITING, takeSharedFiles } from "./share/shareTarget";
 import ModeSwitch from "./share/header/ModeSwitch";
+import NetworkStatus from "./share/header/NetworkStatus";
 import { readMode, saveMode } from "./share/uiMode";
 import RoomMenu from "./share/header/RoomMenu";
 import useRoom from "./share/useRoom";
@@ -56,7 +56,6 @@ function App({theme: propsTheme}) {
         masterRef.current.service.master = masterRef.current;
     }
 
-    const [networkStatus, setNetworkStatus] = useState({ peers: 0, downSpeed: '', upSpeed: '' });
     const [inRoom, setInRoom] = useState(() => new URLSearchParams(window.location.search).has('room'));
     const room = useRoom(masterRef.current, inRoom);
 
@@ -113,25 +112,10 @@ function App({theme: propsTheme}) {
             reactToTouchInOut();
         };
 
-        const handleNumPeersChange = (numPeers) => {
-            setNetworkStatus(prev => ({ ...prev, peers: numPeers }));
-        };
-
-        const handleDownloadProgress = (event) => {
-            setNetworkStatus(prev => ({ ...prev, downSpeed: event.speed || '' }));
-        };
-
-        const handleUploadProgress = (event) => {
-            setNetworkStatus(prev => ({ ...prev, upSpeed: event.speed || '' }));
-        };
-
         emitterRef.current.on('addPeerDone', handleAddPeerDone);
         emitterRef.current.on('readyToUpload', deliverSharedFiles);
         const handleInRoom = () => setInRoom(true);
         emitterRef.current.on('readyToUpload', handleInRoom);
-        emitterRef.current.on('numPeersChange', handleNumPeersChange);
-        emitterRef.current.on('downloadProgress', handleDownloadProgress);
-        emitterRef.current.on('uploadProgress', handleUploadProgress);
 
         // A share that arrived before any room was opened waits for one.
         const params = new URLSearchParams(window.location.search);
@@ -143,9 +127,6 @@ function App({theme: propsTheme}) {
             emitterRef.current.removeListener('addPeerDone', handleAddPeerDone);
             emitterRef.current.removeListener('readyToUpload', deliverSharedFiles);
             emitterRef.current.removeListener('readyToUpload', handleInRoom);
-            emitterRef.current.removeListener('numPeersChange', handleNumPeersChange);
-            emitterRef.current.removeListener('downloadProgress', handleDownloadProgress);
-            emitterRef.current.removeListener('uploadProgress', handleUploadProgress);
         };
     }, [deliverSharedFiles]);
 
@@ -171,7 +152,6 @@ function App({theme: propsTheme}) {
 
     const currentTheme = useMemo(() => propsTheme || createAppTheme('dark'), [propsTheme]);
 
-    const hasActivity = networkStatus.downSpeed || networkStatus.upSpeed;
     const simple = mode === 'simple';
 
     return (
@@ -254,47 +234,8 @@ function App({theme: propsTheme}) {
                                 </Stack>
                             </Toolbar>
 
-                            {/* Network status bar */}
-                            {!simple && (networkStatus.peers > 0 || hasActivity) && (
-                                <Box
-                                    className="telemetry"
-                                    sx={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 1.5,
-                                        px: 2,
-                                        py: 0.4,
-                                        borderTop: 1,
-                                        borderColor: 'divider',
-                                        color: 'text.secondary',
-                                    }}
-                                >
-                                    <Box className="live-dot" aria-hidden="true" />
-                                    {networkStatus.peers > 0 && (
-                                        <Chip
-                                            size="small"
-                                            label={`${networkStatus.peers} peer${networkStatus.peers !== 1 ? 's' : ''}`}
-                                            variant="outlined"
-                                            sx={{
-                                                height: 20,
-                                                borderColor: 'divider',
-                                                color: 'text.secondary',
-                                                '& .MuiChip-label': { px: 1 },
-                                            }}
-                                        />
-                                    )}
-                                    {networkStatus.downSpeed && (
-                                        <Typography variant="caption" sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'text.secondary' }}>
-                                            ↓ {networkStatus.downSpeed}
-                                        </Typography>
-                                    )}
-                                    {networkStatus.upSpeed && (
-                                        <Typography variant="caption" sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'text.secondary' }}>
-                                            ↑ {networkStatus.upSpeed}
-                                        </Typography>
-                                    )}
-                                </Box>
-                            )}
+                            {/* Peers and speeds; it listens to the transfer events itself. */}
+                            {!simple && <NetworkStatus emitter={masterRef.current.emitter} />}
                         </AppBar>
                     </header>
 

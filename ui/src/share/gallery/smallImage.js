@@ -1,6 +1,6 @@
 /**
  * A small copy of a photo for places that show it small: the rows of the
- * photographer list. A list row drawn from the full photo makes the phone
+ * photographer list (256 px) and the squares of the simple grid (640 px). A list row drawn from the full photo makes the phone
  * decode 12 megapixels (about 48 MB of pixels) for a 64 px square, and do it
  * again whenever the row is drawn at another size, which is most of what made
  * opening a row slow.
@@ -42,11 +42,11 @@ function queued(task) {
     });
 }
 
-async function shrink(blob) {
+async function shrink(blob, side) {
     if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null;
     let bitmap;
     try {
-        bitmap = await createImageBitmap(blob, { resizeHeight: SIDE, resizeQuality: 'medium', imageOrientation: 'from-image' });
+        bitmap = await createImageBitmap(blob, { resizeHeight: side, resizeQuality: 'medium', imageOrientation: 'from-image' });
     } catch {
         return null;
     }
@@ -62,21 +62,24 @@ async function shrink(blob) {
     }
 }
 
+// The preview that comes with a share is about 200 px: good for a list row, too soft for a grid tile.
+const madeKey = (tile, side) => keyOf(tile) + '@' + side;
+
 /** The small copy if this device already has one, else null. */
-export function smallImageOf(tile) {
+export function smallImageOf(tile, side = SIDE) {
     if (!tile) return null;
-    return previewUrlOf(tile) || made.get(keyOf(tile)) || null;
+    return (side <= SIDE && previewUrlOf(tile)) || made.get(madeKey(tile, side)) || null;
 }
 
 /** The small copy, made from the photo on this device when needed. Resolves to a URL, or null. */
-export function loadSmallImage(tile) {
-    const ready = smallImageOf(tile);
+export function loadSmallImage(tile, side = SIDE) {
+    const ready = smallImageOf(tile, side);
     if (ready) return Promise.resolve(ready);
     const blob = tile && (tile.elem || tile.file);
-    const key = keyOf(tile);
-    if (!tile || !tile.isImage || !(blob instanceof Blob) || key == null) return Promise.resolve(null);
+    if (!tile || !tile.isImage || !(blob instanceof Blob) || keyOf(tile) == null) return Promise.resolve(null);
+    const key = madeKey(tile, side);
     if (!making.has(key)) {
-        making.set(key, queued(() => shrink(blob))
+        making.set(key, queued(() => shrink(blob, side))
             .then(url => {
                 if (url) made.set(key, url);
                 return url;
@@ -95,19 +98,23 @@ export function loadSmallImage(tile) {
  * browser cannot make one, the full photo (as before), so the row is never
  * left empty.
  */
-export function useSmallImage(tile) {
-    const ready = smallImageOf(tile);
-    const key = keyOf(tile);
+export function useSmallImage(tile, side = SIDE) {
+    const ready = smallImageOf(tile, side);
+    const key = keyOf(tile) + '@' + side;
     const blob = tile && (tile.elem || tile.file);
     const [found, setFound] = useState({});
     useEffect(() => {
-        if (ready || !tile || !tile.isImage) return undefined;
+        if (ready || !tile || !tile.isImage || !(blob instanceof Blob) || typeof createImageBitmap !== 'function') return undefined;
         let live = true;
-        loadSmallImage(tile).then(url => {
+        loadSmallImage(tile, side).then(url => {
             if (live) setFound({ key, url: url || tile.img || null });
         });
         return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [key, ready, blob]);
-    return ready || (found.key === key ? found.url : null);
+    if (ready) return ready;
+    if (found.key === key) return found.url;
+    // Nothing to make a copy from, or no way to: the full photo, at once.
+    const cannot = tile && (!tile.isImage || !(blob instanceof Blob) || typeof createImageBitmap !== 'function');
+    return cannot ? tile.img || null : null;
 }

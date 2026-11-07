@@ -32,4 +32,17 @@ describe('smallImage', () => {
         const tile = { infoHash: 'r', isImage: true, elem: new Blob(['photo']) };
         await expect(loadSmallImage(tile)).resolves.toBe(null);
     });
+
+    it('makes a larger copy for the grid apart from the list one', async () => {
+        const make = vi.fn(async () => ({ width: 853, height: 640, close: () => {} }));
+        vi.stubGlobal('createImageBitmap', make);
+        HTMLCanvasElement.prototype.getContext = () => ({ drawImage: () => {} });
+        HTMLCanvasElement.prototype.toBlob = function (done) { done(new Blob(['x'])); };
+        URL.createObjectURL = vi.fn(() => 'blob:grid');
+        const tile = { infoHash: 's', isImage: true, previewUrl: 'blob:preview', elem: new Blob(['photo']) };
+        expect(smallImageOf(tile)).toBe('blob:preview');
+        expect(smallImageOf(tile, 640)).toBe(null);
+        await expect(loadSmallImage(tile, 640)).resolves.toBe('blob:grid');
+        expect(make.mock.calls[0][1]).toMatchObject({ resizeHeight: 640 });
+    });
 });
