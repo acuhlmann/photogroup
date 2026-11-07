@@ -29,15 +29,20 @@ export function usePreview(tile) {
     // each second. (The whole app used to redraw on every transfer event,
     // which hid this.)
     const waiting = !!(tile && tile.loading && !found && !tile.secure);
+    // The latest tile: a room update can replace it while this waits.
+    const latest = useRef(tile);
+    latest.current = tile;
     useEffect(() => {
         if (!waiting) return undefined;
         let live = true;
         const id = setInterval(() => {
-            const now = previewUrlOf(tile);
-            if (now) {
-                if (live) setFetched({ key, url: now });
-            } else if (tile.torrentFileThumb) {
-                loadPreviewUrl(tile).then(url => live && url && setFetched({ key, url }));
+            const now = latest.current;
+            if (!now) return;
+            const url = previewUrlOf(now);
+            if (url) {
+                if (live) setFetched({ key, url });
+            } else if (now.torrentFileThumb) {
+                loadPreviewUrl(now).then(made => live && made && setFetched({ key, url: made }));
             }
         }, 1000);
         return () => {

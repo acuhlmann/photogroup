@@ -42,11 +42,56 @@ function queued(task) {
     });
 }
 
-async function shrink(blob, side) {
+// Formats that can be see-through: their copy keeps that (a JPEG would turn it black).
+const SEE_THROUGH = /^image\/(png|webp|gif|avif|apng)$/;
+// A panorama's copy is at most this many times as long as it is high.
+const LONGEST = 4;
+
+/** The photo's width and height, read from the file's header (the pixels are not decoded). */
+function sizeOf(blob) {
+    if (typeof Image !== 'function' || typeof URL.createObjectURL !== 'function') return Promise.resolve(null);
+    return new Promise(resolve => {
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        // The size is known once the file has loaded; the pixels are only
+        // decoded when drawn, which this image never is.
+        const done = size => {
+            clearTimeout(timer);
+            img.onload = img.onerror = null;
+            URL.revokeObjectURL(url);
+            resolve(size);
+        };
+        const timer = setTimeout(() => done(null), 3000);
+        img.onload = () => done(img.naturalWidth > 0 ? { width: img.naturalWidth, height: img.naturalHeight } : null);
+        img.onerror = () => done(null);
+        img.src = url;
+    });
+}
+
+/**
+ * How to scale while decoding: the short side to `side`, but a panorama's
+ * long side to at most LONGEST times that. One side only, so the shape stays.
+ * Nothing when the photo is that small already.
+ */
+export function copySize(size, side) {
+    if (!size) return { resizeHeight: side };
+    const { width, height } = size;
+    const wide = width >= height;
+    const long = Math.max(width, height);
+    const short = Math.min(width, height);
+    const panorama = long > short * LONGEST;
+    const target = panorama ? side * LONGEST : side;
+    const now = panorama === wide ? width : height;
+    if (target >= now) return {};
+    return panorama === wide ? { resizeWidth: target } : { resizeHeight: target };
+}
+
+async function shrink(tile, blob, side) {
     if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null;
+    const size = await sizeOf(blob);
     let bitmap;
     try {
-        bitmap = await createImageBitmap(blob, { resizeHeight: side, resizeQuality: 'medium', imageOrientation: 'from-image' });
+        bitmap = await createImageBitmap(blob, { ...copySize(size, side), resizeQuality: 'medium', imageOrientation: 'from-image' });
     } catch {
         return null;
     }
@@ -55,7 +100,9 @@ async function shrink(blob, side) {
         canvas.width = bitmap.width;
         canvas.height = bitmap.height;
         canvas.getContext('2d').drawImage(bitmap, 0, 0);
-        const small = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+        // A browser that cannot write WebP writes PNG, which keeps it see-through too.
+        const type = SEE_THROUGH.test(blob.type || tile.fileType || '') ? 'image/webp' : 'image/jpeg';
+        const small = await new Promise(resolve => canvas.toBlob(resolve, type, 0.85));
         return small ? URL.createObjectURL(small) : null;
     } finally {
         if (bitmap.close) bitmap.close();
@@ -79,7 +126,7 @@ export function loadSmallImage(tile, side = SIDE) {
     if (!tile || !tile.isImage || !(blob instanceof Blob) || keyOf(tile) == null) return Promise.resolve(null);
     const key = madeKey(tile, side);
     if (!making.has(key)) {
-        making.set(key, queued(() => shrink(blob, side))
+        making.set(key, queued(() => shrink(tile, blob, side))
             .then(url => {
                 if (url) made.set(key, url);
                 return url;

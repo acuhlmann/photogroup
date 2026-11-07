@@ -56,7 +56,7 @@ function Gallery(props) {
     const [view, setView] = useState(DEFAULT_VIEW);
     const [mode, setMode] = useState('grid');
     // Re-arrange when a place name arrives, since places can be filtered on.
-    const [, setPlaceNames] = useState(0);
+    const [placeNames, setPlaceNames] = useState(0);
     useEffect(() => onPlaceName(() => setPlaceNames(count => count + 1)), []);
     // Until the first room snapshot arrives, an empty gallery means "not
     // loaded yet", not "no photos": after a reload it looked like they were gone.
@@ -143,12 +143,14 @@ function Gallery(props) {
             const oldTiles = state;
             let newTiles = oldTiles;
             photos.forEach(photo => {
-                const index = oldTiles.findIndex(item => item.infoHash === photo.infoHash);
+                const index = newTiles.findIndex(item => item.infoHash === photo.infoHash);
                 if(index > -1) {
-                    photo = _.merge(oldTiles[index], photo);
-                    update(oldTiles, {$splice: [[index, 1, photo]]});
+                    // A new tile and a new list, so the memoized arrangement and
+                    // the list rows see that the photo finished loading.
+                    photo = { ..._.merge(newTiles[index], photo) };
+                    newTiles = update(newTiles, {$splice: [[index, 1, photo]]});
                 } else {
-                    newTiles = update(oldTiles, {$unshift: [photo]});
+                    newTiles = update(newTiles, {$unshift: [photo]});
                 }
             });
 
@@ -441,7 +443,9 @@ function Gallery(props) {
     // The viewer, the grid and the map all work on the tiles the current view shows.
     // Worked out again only when the photos or the view change: opening the
     // viewer or picking a row keeps the same facts, so list rows can skip redrawing.
-    const arranged = useMemo(() => arrangeTiles(tiles, view, master), [tiles, view, master]);
+    // placeNames counts place names found later, which change the facts too.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const arranged = useMemo(() => arrangeTiles(tiles, view, master), [tiles, view, master, placeNames]);
     const visible = arranged.tiles;
 
     // A photo an edit filters out stays open where it was until the viewer moves on.

@@ -256,11 +256,14 @@ function Details({ tile, master, roomTiles, wide, onOpen, onRemove }) {
     // of details follows a moment later, in work React can pause for a scroll
     // or another tap.
     const later = useDeferredValue(tile, null);
+    // Until it catches up, the details of the photo picked before are not
+    // shown, so an edit cannot go to the wrong photo.
+    const current = later && keyOf(later) === keyOf(tile) ? later : null;
     return (
         <Box sx={{ p: wide ? 2 : 1.5 }}>
             <Preview tile={tile} master={master} onOpen={open} />
             <Actions tile={tile} master={master} onOpen={open} onRemove={onRemove} />
-            {later && <PhotoDetails master={master} tile={later} roomTiles={roomTiles} />}
+            {current && <PhotoDetails master={master} tile={current} roomTiles={roomTiles} />}
         </Box>
     );
 }

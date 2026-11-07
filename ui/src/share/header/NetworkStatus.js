@@ -14,13 +14,16 @@ const withValue = (key, value) => prev => (prev[key] === value ? prev : { ...pre
  * listens to the transfer events itself: they come up to five times a
  * second per photo, and kept in App they redrew the whole app each time.
  */
-function NetworkStatus({ emitter }) {
-    const [status, setStatus] = useState({ peers: 0, downSpeed: '', upSpeed: '' });
+function NetworkStatus({ emitter, peers = null }) {
+    // The peers already here (they may have come while another mode showed).
+    const [status, setStatus] = useState(() => ({ peers: peers?.items?.length || 0, downSpeed: '', upSpeed: '' }));
     useEffect(() => {
         const onPeers = numPeers => setStatus(withValue('peers', numPeers));
         const onDown = event => setStatus(withValue('downSpeed', event.speed || ''));
         const onUp = event => setStatus(withValue('upSpeed', event.speed || ''));
         emitter.on('numPeersChange', onPeers);
+        // One may have come between the first draw and now.
+        if (peers?.items) onPeers(peers.items.length);
         emitter.on('downloadProgress', onDown);
         emitter.on('uploadProgress', onUp);
         return () => {
@@ -28,7 +31,7 @@ function NetworkStatus({ emitter }) {
             emitter.removeListener('downloadProgress', onDown);
             emitter.removeListener('uploadProgress', onUp);
         };
-    }, [emitter]);
+    }, [emitter, peers]);
 
     if (!(status.peers > 0 || status.downSpeed || status.upSpeed)) return null;
     return (
@@ -67,6 +70,7 @@ function NetworkStatus({ emitter }) {
 
 NetworkStatus.propTypes = {
     emitter: PropTypes.object.isRequired,
+    peers: PropTypes.object,
 };
 
 export default NetworkStatus;

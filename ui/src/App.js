@@ -235,7 +235,7 @@ function App({theme: propsTheme}) {
                             </Toolbar>
 
                             {/* Peers and speeds; it listens to the transfer events itself. */}
-                            {!simple && <NetworkStatus emitter={masterRef.current.emitter} />}
+                            {!simple && <NetworkStatus emitter={masterRef.current.emitter} peers={masterRef.current.peers} />}
                         </AppBar>
                     </header>
 

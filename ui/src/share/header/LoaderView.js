@@ -15,6 +15,8 @@ function LoaderView({emitter}) {
     const [transfer, setTransfer] = useState(null);
     const intervalRef = useRef(null);
     const stats = useRef({});
+    // While the tooltip is open it shows the totals and speeds as they change.
+    const tipOpen = useRef(false);
 
     useEffect(() => {
         const handleWtInitialized = (client) => {
@@ -33,11 +35,12 @@ function LoaderView({emitter}) {
                     downSpeed: FileUtil.formatBytes(client.downloadSpeed) + '/s',
                     upSpeed: FileUtil.formatBytes(client.uploadSpeed) + '/s',
                 };
-                // Five times a second: redraw the ring (and its tooltip) only
-                // when the whole percent changes. The tooltip reads the
-                // latest totals and speeds then.
+                // Five times a second: redraw the ring only when the whole
+                // percent changes, and the tooltip only while it is open.
                 const percent = Math.floor(progress);
-                setTransfer(prev => (prev && prev.percent === percent ? prev : { percent }));
+                const { down, up, downSpeed, upSpeed } = stats.current;
+                const text = tipOpen.current ? [down, up, downSpeed, upSpeed].join() : '';
+                setTransfer(prev => (prev && prev.percent === percent && prev.text === text ? prev : { percent, text }));
             }, 200);
         };
 
@@ -56,7 +59,9 @@ function LoaderView({emitter}) {
     const { percent } = transfer;
     const { down, downSpeed, up, upSpeed } = stats.current;
     return (
-        <Tooltip describeChild title={`↓ ${down} · ${downSpeed}   ↑ ${up} · ${upSpeed}`}>
+        <Tooltip describeChild title={`↓ ${down} · ${downSpeed}   ↑ ${up} · ${upSpeed}`}
+            onOpen={() => { tipOpen.current = true; }}
+            onClose={() => { tipOpen.current = false; }}>
             <Box
                 tabIndex={0}
                 role="progressbar"

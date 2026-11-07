@@ -165,8 +165,9 @@ function RenderContent(props) {
         const currentTile = tileParam || tileRef.current;
         // A photo's details were read once already in this visit (by its list
         // row, say). Reading them again for every larger view parsed the file
-        // again and redrew the whole gallery on each tap.
-        if(currentTile.isImage && currentTile.hasMetadata !== undefined && imagesRead.has(currentTile.infoHash)) {
+        // again and redrew the whole gallery on each tap. A photo being shared
+        // is still read: reading it is what reports it as shared.
+        if(currentTile.isImage && !currentTile.seed && currentTile.hasMetadata !== undefined && imagesRead.has(currentTile.infoHash)) {
             return;
         }
         // For seeded images, try to use tile.file if elem is not set
@@ -635,6 +636,11 @@ function RenderContent(props) {
         if(thumb && currentTile.isImage) {
             return thumbSrc
                 ? <img src={thumbSrc} alt={currentTile.fileName} decoding="async" onLoad={thumbLoaded}
+                       // A broken preview: the full photo instead.
+                       onError={event => {
+                           const img = event.currentTarget;
+                           if (currentTile.img && img.src !== currentTile.img) img.src = currentTile.img;
+                       }}
                        style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}} />
                 : null;
         }

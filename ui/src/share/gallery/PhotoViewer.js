@@ -74,15 +74,19 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
     }, [index, tiles.length, onIndexChange]);
 
     // Decode the photos either side ahead of time, so a swipe shows the next one at once.
+    // On the next swipe the ones not needed any more are let go, so quick
+    // swipes never pile up decodes in front of the photo shown.
     useEffect(() => {
-        [tiles[index + 1], tiles[index - 1]]
+        const ahead = [tiles[index + 1], tiles[index - 1]]
             .filter(next => next && next.isImage && next.img && !next.loading)
-            .forEach(next => {
+            .map(next => {
                 const img = new Image();
                 img.decoding = 'async';
                 img.src = next.img;
                 if (typeof img.decode === 'function') img.decode().catch(() => {});
+                return img;
             });
+        return () => ahead.forEach(img => img.removeAttribute('src'));
     }, [tiles, index]);
 
     const swipe = useSwipe(step => {
@@ -136,7 +140,13 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                     backgroundRepeat: 'no-repeat',
                 } : null),
             }}
-            onLoad={event => { event.currentTarget.style.backgroundImage = 'none'; }}
+            onLoad={event => {
+                // The preview stays until the photo is ready to paint.
+                const img = event.currentTarget;
+                const done = () => { img.style.backgroundImage = 'none'; };
+                if (typeof img.decode === 'function') img.decode().then(done, done);
+                else done();
+            }}
         />
     ) : (
         <Box sx={{ width: '100%', maxWidth: '100%', px: 1 }}>
