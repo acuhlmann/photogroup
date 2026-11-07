@@ -140,7 +140,9 @@ async function waitForImage(page, timeout = 60000) {
     const images = await page.locator('img').all();
     for (const img of images) {
       const src = await img.getAttribute('src') || '';
-      if (src.startsWith('blob:') || src.includes('data:')) {
+      // A photo on this device is a blob: URL. A data: URL is only the
+      // preview the room sends ahead of the photo, so it doesn't count.
+      if (src.startsWith('blob:')) {
         // Verify it's a substantial image (not just a small icon)
         const rect = await img.boundingBox();
         if (rect && rect.width > 50 && rect.height > 50) {

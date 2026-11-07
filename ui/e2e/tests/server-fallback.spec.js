@@ -71,8 +71,10 @@ test.describe('server-copy fallback', () => {
         if (photo?.serverCopyRequestedAt || photo?.hasServerCopy) asked = true;
       }, 500);
       try {
-        // Stalls, asks, the sharer uploads, the receiver downloads.
-        expect(await waitForImage(receiver, 90000)).toBeTruthy();
+        // Stalls, asks, the sharer uploads, the receiver downloads. (The
+        // preview comes through the room at once, so wait for the photo itself.)
+        await expect.poll(() => asked, { timeout: 90000 }).toBe(true);
+        await expect(receiver.locator('[data-testid="photo-row"] button[aria-label^="View "]').first()).toBeVisible({ timeout: 90000 });
       } finally {
         clearInterval(watch);
       }
