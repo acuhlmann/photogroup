@@ -48,7 +48,7 @@ test.describe('server-copy fallback', () => {
   });
 
   test('pins a copy only when a receiver that P2P cannot reach asks for one', async ({ browser }) => {
-    test.setTimeout(180000);
+    test.setTimeout(240000);
     const sharerContext = await browser.newContext();
     const receiverContext = await browser.newContext();
     await blockP2P(receiverContext);

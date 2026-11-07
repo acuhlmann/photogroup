@@ -24,6 +24,8 @@ function LoaderView({emitter}) {
             intervalRef.current = setInterval(() => {
                 const progress = client.progress * 100;
                 if (!(progress > 0 && progress < 100)) {
+                    // The tooltip goes with the ring, without telling onClose.
+                    tipOpen.current = false;
                     setTransfer(null);
                     return;
                 }

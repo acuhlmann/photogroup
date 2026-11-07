@@ -7,8 +7,7 @@ const jpeg = name => new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2])], 
 async function sent(photos) {
     const sharePoster = vi.fn(async () => ({}));
     const addition = new TorrentAddition({}, {}, { on: vi.fn() }, { service: { sharePoster } });
-    addition.sharePreviews(photos);
-    await new Promise(resolve => setTimeout(resolve, 20));
+    await addition.sharePreviews(photos);
     return sharePoster.mock.calls;
 }
 
@@ -24,11 +23,26 @@ describe('previews through the room', () => {
     });
 
     it('never sends a private photo, one without a preview, or a large one', async () => {
+        const big = new Uint8Array(60 * 1024);
+        big.set([0xff, 0xd8, 0xff]);
         const calls = await sent([
             { infoHash: 'p', fileName: 'p.jpg', secure: true, thumbnailFiles: [jpeg('p.jpg')] },
             { infoHash: 'n', fileName: 'n.jpg', thumbnailFiles: [] },
-            { infoHash: 'big', fileName: 'big.jpg', thumbnailFiles: [new File([new Uint8Array(60 * 1024)], 'Thumbnail big.jpg')] },
+            { infoHash: 'big', fileName: 'big.jpg', thumbnailFiles: [new File([big], 'Thumbnail big.jpg')] },
         ]);
         expect(calls).toEqual([]);
+    });
+
+    it('makes a PNG preview into a JPEG', async () => {
+        const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2])], 'Thumbnail c.png');
+        vi.stubGlobal('createImageBitmap', async () => ({ width: 4, height: 3, close: () => {} }));
+        HTMLCanvasElement.prototype.getContext = () => ({ fillRect: () => {}, drawImage: () => {} });
+        HTMLCanvasElement.prototype.toBlob = function (done, type) {
+            done(new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xdb])], { type }));
+        };
+        const calls = await sent([{ infoHash: 'c', fileName: 'c.png', thumbnailFiles: [png] }]);
+        expect(calls).toHaveLength(1);
+        expect(calls[0][1]).toMatch(/^data:image\/jpeg;base64,\/9j\//);
+        vi.unstubAllGlobals();
     });
 });
