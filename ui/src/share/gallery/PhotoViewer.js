@@ -139,7 +139,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
     const canSave = !!(tile.elem || canReadTorrentFile(tile.torrentFile));
     const stillArriving = !!(tile.torrentFile && !tile.torrentFile.done);
     const replaceMode = replaceKind();
-    const hint = replaceHint(tile);
+    const hint = replaceHint();
 
     const onSave = () => {
         setSaving(true);

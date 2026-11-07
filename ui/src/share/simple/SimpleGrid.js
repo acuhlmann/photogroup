@@ -19,6 +19,8 @@ import Logger from 'js-logger';
 import { isReadyToSave } from '../gallery/saveRoom';
 import { alreadyHave, useHaveChanges } from '../gallery/alreadyHave';
 import { saveToDevice, savedWhereText } from '../gallery/saveToDevice';
+import ChooseFolderButton from '../gallery/saveToChosenFolder';
+import { canChooseFolder, replaceFailureMessage, replaceHint, replaceOriginal } from '../gallery/replaceOriginal';
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
 import MediaStage from '../gallery/MediaStage';
 import { removeLabel } from '../gallery/removeLabel';
@@ -33,15 +35,30 @@ export function countLabel(tiles) {
     return parts.join(' and ');
 }
 
+/**
+ * Where Save puts photos, said once. Where the browser has a save dialog
+ * (Chrome on Android and computers), Save opens it, so the person picks the
+ * folder and knows where to look. Elsewhere (iPhone) Save goes the phone's
+ * own way, into the Photos app.
+ */
+function whereText(count) {
+    return canChooseFolder() ? replaceHint(count) : savedWhereText(count);
+}
+
 /** Save these tiles, tracking whether it is busy; `onError` hears about failures. */
 function useSave(tiles, roomId, onError) {
     const [busy, setBusy] = useState(false);
     const save = useCallback(() => {
         setBusy(true);
-        saveToDevice(tiles, { roomId })
+        // One photo with a save dialog: open it on this tap, so the person picks the folder.
+        const saving = canChooseFolder() && tiles.length === 1
+            ? replaceOriginal(tiles[0])
+            : saveToDevice(tiles, { roomId });
+        saving
             .catch(err => {
+                if (err && (err.cancelled || err.name === 'SaveCancelled')) return;
                 Logger.error('Simple save: ' + (err && err.message ? err.message : err));
-                onError && onError("Couldn't save that. Try again in a moment.");
+                onError && onError(replaceFailureMessage(err) || "Couldn't save that. Try again in a moment.");
             })
             .finally(() => setBusy(false));
     }, [tiles, roomId, onError]);
@@ -164,7 +181,7 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
             <Box sx={{ p: 2, pb: 'max(16px, env(safe-area-inset-bottom))', maxWidth: 420, width: '100%', mx: 'auto' }}>
                 <SaveButton tile={tile} roomId={roomId} onError={onError} />
                 <Typography variant="caption" component="p" sx={{ mt: 1, textAlign: 'center', color: 'rgba(255,255,255,0.7)' }}>
-                    {savedWhereText(1)}
+                    {whereText(1)}
                 </Typography>
             </Box>
         </Dialog>
@@ -201,7 +218,12 @@ function SimpleGrid({ tiles: given, roomId, onError, onRemove }) {
                     {countLabel(tiles)}
                 </Typography>
                 {/* The one room-wide save. To pick some, open a photo and swipe. */}
-                {fresh.length > 1 && (
+                {fresh.length > 1 && canChooseFolder() && (
+                    // One save dialog per photo; it opens where the last one went.
+                    <ChooseFolderButton tiles={fresh} device="phone" size="large" variant="contained"
+                        label={`Save all ${fresh.length} new`} />
+                )}
+                {fresh.length > 1 && !canChooseFolder() && (
                     <Button variant="contained" size="large" onClick={saveAll} disabled={savingAll}
                         startIcon={savingAll ? <CircularProgress size={16} color="inherit" /> : <DownloadRounded />}
                         sx={{ textTransform: 'none', fontWeight: 600 }}>
@@ -211,7 +233,7 @@ function SimpleGrid({ tiles: given, roomId, onError, onRemove }) {
             </Stack>
             {fresh.length > 1 && (
                 <Typography variant="body2" data-testid="saved-where" sx={{ color: 'text.secondary', textAlign: 'right', mb: 2 }}>
-                    {savedWhereText(fresh.length)}
+                    {whereText(fresh.length)}
                 </Typography>
             )}
             {/* A single photo or clip gets the whole width. */}

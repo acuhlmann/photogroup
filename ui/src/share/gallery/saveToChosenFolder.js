@@ -12,6 +12,7 @@ import DriveFolderUploadRounded from '@mui/icons-material/DriveFolderUploadRound
 import { keyOf, usePreview } from './mediaView';
 import { isReadyToSave } from './saveRoom';
 import { canChooseFolder, replaceFailureMessage, replaceOriginal } from './replaceOriginal';
+import { saveToDevice } from './saveToDevice';
 
 export { canChooseFolder };
 
@@ -102,7 +103,7 @@ FolderWalk.propTypes = {
  * The button keeps its own score of which ones are done, so it can sit in
  * surfaces outside the keep-or-skip chooser.
  */
-export default function ChooseFolderButton({ tiles, device = 'device', size = 'small', variant = 'outlined', onDone }) {
+export default function ChooseFolderButton({ tiles, device = 'device', size = 'small', variant = 'outlined', label = 'Choose where each one goes', onDone }) {
     // The photos the walk opened with, frozen. The caller's own list shrinks as
     // photos are saved - a saved one stops being "new" - and a walk that read
     // the live list would collapse into the single-photo button and unmount
@@ -157,7 +158,7 @@ export default function ChooseFolderButton({ tiles, device = 'device', size = 's
                 onClick={() => setWalk(tiles)}
                 title="Opens the save dialog for each photo, so you choose the folder. On a phone, DCIM/Camera is the gallery."
                 sx={{ textTransform: 'none', whiteSpace: 'nowrap', fontWeight: 600 }}>
-                {done && left.length ? `Choose where each one goes (${left.length} left)` : 'Choose where each one goes'}
+                {done && left.length ? `${label} (${left.length} left)` : label}
             </Button>
             {walk && (
                 <Dialog open fullScreen onClose={() => setWalk(null)}
@@ -181,7 +182,12 @@ export default function ChooseFolderButton({ tiles, device = 'device', size = 's
                                         onDone?.(list.length);
                                     }
                                 }}
-                                onBack={() => setWalk(null)}
+                                // "Save the rest": the ones left go the device's normal way, on this tap.
+                                onBack={() => {
+                                    const rest = left;
+                                    setWalk(null);
+                                    saveToDevice(rest).catch(() => {});
+                                }}
                             />
                         ) : (
                             <>
@@ -205,5 +211,6 @@ ChooseFolderButton.propTypes = {
     device: PropTypes.oneOf(['phone', 'device']),
     size: PropTypes.string,
     variant: PropTypes.string,
+    label: PropTypes.string,
     onDone: PropTypes.func,
 };

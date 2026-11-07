@@ -9,7 +9,12 @@ vi.mock('./replaceOriginal', () => ({
     replaceFailureMessage: err => (err && err.cancelled ? '' : 'Could not write that file.'),
 }));
 
+vi.mock('./saveToDevice', () => ({
+    saveToDevice: vi.fn().mockResolvedValue('saved'),
+}));
+
 const { canChooseFolder, replaceOriginal } = await import('./replaceOriginal');
+const { saveToDevice } = await import('./saveToDevice');
 const { default: ChooseFolderButton, FolderWalk, PlaceThumb } = await import('./saveToChosenFolder');
 
 const tile = (key, extra = {}) => ({
@@ -116,6 +121,7 @@ describe('saveToChosenFolder', () => {
         await press(div, 'Choose where each one goes');
         await press(document.querySelector('[role="dialog"]'), 'Choose a folder');
         await press(document.querySelector('[role="dialog"]'), 'Save the rest to your phone');
+        expect(saveToDevice).toHaveBeenCalledWith([tiles[1]]);
         expect(div.textContent).toContain('Choose where each one goes (1 left)');
 
         document.querySelectorAll('[role="dialog"]').forEach(node => node.remove());

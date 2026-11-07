@@ -12,13 +12,14 @@ vi.mock('../gallery/saveToDevice', () => ({
 // The folder walk asks the browser's save dialog for a place; this stands in
 // for that dialog so the wiring, not the dialog, is under test.
 vi.mock('../gallery/replaceOriginal', () => ({
-    canChooseFolder: vi.fn(() => true),
+    canChooseFolder: vi.fn(() => false),
     replaceOriginal: vi.fn().mockResolvedValue('replaced'),
     replaceFailureMessage: () => 'Could not write that file.',
+    replaceHint: count => `Pick the folder ${count === 1 ? 'this goes' : 'they go'} into. On a phone, DCIM/Camera is your gallery.`,
 }));
 
 const { saveToDevice } = await import('../gallery/saveToDevice');
-const { replaceOriginal } = await import('../gallery/replaceOriginal');
+const { replaceOriginal, canChooseFolder } = await import('../gallery/replaceOriginal');
 const { default: SimpleGrid } = await import('./SimpleGrid');
 const { clearHave, rememberHave } = await import('../gallery/alreadyHave');
 
@@ -41,6 +42,8 @@ describe('SimpleGrid', () => {
     beforeEach(() => {
         clearHave();
         saveToDevice.mockClear();
+        replaceOriginal.mockClear();
+        canChooseFolder.mockReturnValue(false);
     });
 
     it('says what happens when there are no photos yet', async () => {
@@ -94,14 +97,45 @@ describe('SimpleGrid', () => {
         await act(async () => root.unmount());
     });
 
-    // One Save per photo: no second save button, even where a folder can be picked.
+    // One Save per photo: no second save button.
     it('gives a looked-at photo one Save button and says where it goes', async () => {
         const { div, root } = await render([ready('a'), ready('b')]);
         await act(async () => div.querySelector('[aria-label="Look at this photo"]').click());
         const viewer = document.querySelector('[role="dialog"]');
         expect(Array.from(viewer.querySelectorAll('button')).map(b => b.textContent).filter(t => /save/i.test(t))).toEqual(['Save']);
         expect(viewer.textContent).toContain('It goes to your gallery app.');
-        expect(replaceOriginal).not.toHaveBeenCalled();
+        await act(async () => root.unmount());
+    });
+
+    // Where the browser has a save dialog, the same one Save opens it, so the
+    // person picks the folder and knows where to find the photo.
+    it('lets Save pick the folder where the browser can', async () => {
+        canChooseFolder.mockReturnValue(true);
+        const tiles = [ready('a'), ready('b')];
+        const { div, root } = await render(tiles);
+        expect(div.querySelector('[data-testid="saved-where"]').textContent).toContain('DCIM/Camera');
+        expect(buttons(div)).toContain('Save all 2 new');
+
+        const save = Array.from(div.querySelectorAll('button')).find(button => button.textContent === 'Save');
+        await act(async () => save.click());
+        expect(replaceOriginal).toHaveBeenCalledWith(tiles[0]);
+        expect(saveToDevice).not.toHaveBeenCalled();
+
+        await act(async () => div.querySelector('[aria-label="Look at this photo"]').click());
+        const viewer = document.querySelector('[role="dialog"]');
+        expect(viewer.textContent).toContain('DCIM/Camera');
+        await act(async () => root.unmount());
+    });
+
+    it('saves all new ones one save dialog at a time where the browser can', async () => {
+        canChooseFolder.mockReturnValue(true);
+        const tiles = [ready('a'), ready('b')];
+        const { div, root } = await render(tiles);
+        const saveAll = Array.from(div.querySelectorAll('button')).find(button => button.textContent === 'Save all 2 new');
+        await act(async () => saveAll.click());
+        const walk = document.querySelector('[data-testid="folder-walk"]');
+        expect(walk.textContent).toContain('1 of 2');
+        expect(saveToDevice).not.toHaveBeenCalled();
         await act(async () => root.unmount());
     });
 
