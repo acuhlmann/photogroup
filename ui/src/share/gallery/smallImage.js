@@ -74,7 +74,6 @@ function sizeOf(blob) {
  * Nothing when the photo is that small already.
  */
 export function copySize(size, side) {
-    if (!size) return { resizeHeight: side };
     const { width, height } = size;
     const wide = width >= height;
     const long = Math.max(width, height);
@@ -89,6 +88,8 @@ export function copySize(size, side) {
 async function shrink(tile, blob, side) {
     if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null;
     const size = await sizeOf(blob);
+    // Without the size a panorama could make a huge bitmap: no copy, the full photo shows.
+    if (!size) return null;
     let bitmap;
     try {
         bitmap = await createImageBitmap(blob, { ...copySize(size, side), resizeQuality: 'medium', imageOrientation: 'from-image' });

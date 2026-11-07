@@ -67,7 +67,6 @@ describe('smallImage', () => {
         expect(copySize({ width: 20000, height: 100 }, 640)).toEqual({ resizeWidth: 2560 });
         expect(copySize({ width: 100, height: 20000 }, 640)).toEqual({ resizeHeight: 2560 });
         expect(copySize({ width: 300, height: 200 }, 640)).toEqual({});
-        expect(copySize(null, 640)).toEqual({ resizeHeight: 640 });
     });
 
     it('keeps a see-through photo see-through', async () => {
@@ -79,5 +78,17 @@ describe('smallImage', () => {
         URL.createObjectURL = vi.fn(() => 'blob:clear');
         await loadSmallImage({ infoHash: 't', isImage: true, elem: new Blob(['photo'], { type: 'image/png' }) });
         expect(types).toEqual(['image/webp']);
+    });
+
+    it('makes no copy when the size cannot be read', async () => {
+        vi.stubGlobal('Image', class {
+            set src(value) { setTimeout(() => this.onerror && this.onerror()); }
+        });
+        URL.revokeObjectURL = vi.fn();
+        URL.createObjectURL = vi.fn(() => 'blob:probe');
+        const make = vi.fn(async () => ({ width: 1, height: 1, close: () => {} }));
+        vi.stubGlobal('createImageBitmap', make);
+        await expect(loadSmallImage({ infoHash: 'u', isImage: true, elem: new Blob(['photo']) }, 640)).resolves.toBe(null);
+        expect(make).not.toHaveBeenCalled();
     });
 });

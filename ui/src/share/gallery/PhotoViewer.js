@@ -144,7 +144,8 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                 // The preview stays until the photo is ready to paint.
                 const img = event.currentTarget;
                 const done = () => { img.style.backgroundImage = 'none'; };
-                if (typeof img.decode === 'function') img.decode().then(done, done);
+                // A failed decode keeps the preview, so the screen is never blank.
+                if (typeof img.decode === 'function') img.decode().then(done, () => {});
                 else done();
             }}
         />
