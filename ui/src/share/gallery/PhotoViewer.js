@@ -122,7 +122,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
     };
 
     // The sharpest small copy already made (the simple grid's, the list's), else the share's preview.
-    const preview = isImage ? (smallImageOf(tile, GRID_SIDE) || smallImageOf(tile, PREVIEW_COPY) || previewUrlOf(tile)) : null;
+    const preview = isImage ? (smallImageOf(tile, Math.max(GRID_SIDE, PREVIEW_COPY)) || smallImageOf(tile, Math.min(GRID_SIDE, PREVIEW_COPY)) || previewUrlOf(tile)) : null;
     const mediaPreview = isImage && tile.img ? (
         <img
             key={tile.img}
