@@ -34,7 +34,7 @@ import { saveToDevice } from './saveToDevice';
 import { canReadTorrentFile } from './saveRoom';
 import { removeLabel } from './removeLabel';
 import { keyOf, useArriving, usePreview } from './mediaView';
-import { useSmallImage } from './smallImage';
+import { PREVIEW_COPY, PREVIEW_HEIGHT, useSmallImage } from './smallImage';
 import { alreadyHave, HAVE_LABELS, useHaveChanges } from './alreadyHave';
 import { peerLabel } from '../topology/presence';
 
@@ -142,22 +142,60 @@ const fill = { position: 'absolute', inset: 0, width: '100%', height: '100%', ob
  */
 function Preview({ tile, master, onOpen }) {
     if (tile.loading) {
-        return <Box sx={{ mb: 1.5 }}><LoadingTile name={tile.fileName || ''} tile={tile} master={master} /></Box>;
+        // Its preview in the same box as the photo will have, so the arrival
+        // doesn't resize it: full width, a preview was as tall as it was wide
+        // on a big screen, then shrank to the box.
+        return (
+            <Box sx={{ mb: 1.5, '& img': { height: PREVIEW_HEIGHT, objectFit: 'contain', bgcolor: '#07090d' } }}>
+                <LoadingTile name={tile.fileName || ''} tile={tile} master={master} />
+            </Box>
+        );
     }
     if (tile.secure && tile.sealedError) return null;
-    const media = <RenderContent tile={tile} master={master} />;
+    if (tile.isImage && !tile.previewOnly) return <PhotoPreview tile={tile} onOpen={onOpen} />;
     return (
         <TileErrorBoundary fileName={tile.fileName}>
             <Box data-testid="list-preview" sx={{ mb: 1.5, borderRadius: 1.5, overflow: 'hidden', bgcolor: '#07090d',
-                '& img': { maxHeight: 300, objectFit: 'contain' } }}>
-                {tile.isImage ? (
-                    <ButtonBase onClick={onOpen} aria-label={`Full screen ${tile.fileName || 'photo'}`}
-                        sx={{ display: 'block', width: '100%', cursor: 'zoom-in' }}>
-                        {media}
-                    </ButtonBase>
-                ) : media}
+                '& img': { maxHeight: PREVIEW_HEIGHT, objectFit: 'contain' } }}>
+                <RenderContent tile={tile} master={master} />
             </Box>
         </TileErrorBoundary>
+    );
+}
+
+
+/**
+ * A photo in a box of one fixed height, so opening a row never moves what is
+ * under it. The share's small preview shows at once, the sharper copy
+ * replaces it in the same place, both letterboxed the same way. (The full
+ * photo here had no size until it loaded, then a preview that filled the
+ * box, then the photo: three jumps, largest on a wide screen.) The row's
+ * thumbnail reads the photo's details, so nothing is read here.
+ */
+function PhotoPreview({ tile, onOpen }) {
+    const soft = usePreview(tile);
+    const sharp = useSmallImage(tile, PREVIEW_COPY);
+    const src = sharp || soft;
+    const [painted, setPainted] = useState(null);
+    return (
+        <Box data-testid="list-preview" sx={{ mb: 1.5, borderRadius: 1.5, overflow: 'hidden', bgcolor: '#07090d' }}>
+            <ButtonBase onClick={onOpen} aria-label={`Full screen ${tile.fileName || 'photo'}`}
+                sx={{ display: 'block', width: '100%', height: PREVIEW_HEIGHT, cursor: 'zoom-in' }}>
+                {src && <Box component="img" src={src} alt={tile.fileName || 'Photo'} decoding="async"
+                    onLoad={event => {
+                        const img = event.currentTarget;
+                        const done = () => setPainted(img.currentSrc || img.src);
+                        if (typeof img.decode === 'function') img.decode().then(done, () => {});
+                        else done();
+                    }}
+                    sx={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block',
+                        // The soft preview stays behind until the sharp copy is ready to paint.
+                        ...(soft && src !== soft && painted !== src ? {
+                            backgroundImage: `url(${soft})`, backgroundSize: 'contain',
+                            backgroundRepeat: 'no-repeat', backgroundPosition: 'center',
+                        } : null) }} />}
+            </ButtonBase>
+        </Box>
     );
 }
 

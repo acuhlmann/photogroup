@@ -21,6 +21,7 @@ import { saveLabel } from './savePhoto';
 import { saveToDevice, savedWhereText } from './saveToDevice';
 import { useSwipe } from './mediaView';
 import { previewUrlOf } from './tilePreview';
+import { GRID_SIDE, PREVIEW_COPY, smallImageOf } from './smallImage';
 import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
 import { canReadTorrentFile } from './saveRoom';
 import { removeLabel } from './removeLabel';
@@ -120,7 +121,8 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
             .finally(() => setReplacing(false));
     };
 
-    const preview = isImage ? previewUrlOf(tile) : null;
+    // The sharpest small copy already made (the simple grid's, the list's), else the share's preview.
+    const preview = isImage ? (smallImageOf(tile, GRID_SIDE) || smallImageOf(tile, PREVIEW_COPY) || previewUrlOf(tile)) : null;
     const mediaPreview = isImage && tile.img ? (
         <img
             key={tile.img}

@@ -15,6 +15,8 @@ import Logger from 'js-logger';
 import { previewUrlOf } from './tilePreview';
 
 const SIDE = 256;
+/** The side of the simple grid's squares' copies, which the viewer also shows while a photo decodes. */
+export const GRID_SIDE = 640;
 const AT_ONCE = 2;
 
 const made = new Map();
@@ -109,6 +111,19 @@ async function shrink(tile, blob, side) {
         if (bitmap.close) bitmap.close();
     }
 }
+
+/**
+ * The copy side for a picture shown `cssPx` high on this screen, in steps of
+ * 128 device pixels so one copy serves screens alike. At most 2048.
+ */
+export function sideFor(cssPx) {
+    const ratio = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    return Math.min(2048, Math.max(128, Math.ceil((cssPx * ratio) / 128) * 128));
+}
+
+/** The height of the photographer list's preview box, and the side of its copies on this screen. */
+export const PREVIEW_HEIGHT = 300;
+export const PREVIEW_COPY = sideFor(PREVIEW_HEIGHT);
 
 // The preview that comes with a share is about 200 px: good for a list row, too soft for a grid tile.
 const madeKey = (tile, side) => keyOf(tile) + '@' + side;

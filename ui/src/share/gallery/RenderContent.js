@@ -655,7 +655,12 @@ function RenderContent(props) {
                        aspectRatio: imageAspectRatio(currentTile), backgroundColor: '#3a3f47',
                        ...(decoded !== imgGenRef.current.gen && currentTile.previewUrl ? {
                            backgroundImage: `url(${currentTile.previewUrl})`,
-                           backgroundSize: 'cover',
+                           // Contain, as the photo itself is drawn: where a
+                           // parent letterboxes the photo (a capped height),
+                           // a covering preview filled the bars and then
+                           // snapped to the photo's shape.
+                           backgroundSize: 'contain',
+                           backgroundRepeat: 'no-repeat',
                            backgroundPosition: 'center',
                        } : null)}}
                    onLoad={imgLoaded} 
