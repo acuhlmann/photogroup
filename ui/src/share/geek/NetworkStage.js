@@ -17,6 +17,8 @@ import { attachTraffic, flowAt, FLOW_MS, RX, TX } from './traffic';
 import { watchLinks } from '../torrent/linkStats';
 import { demoInputs, withDemoRoutes } from './tour';
 import { posterFor, mediaUrlFor } from './videoPoster';
+import { GRID_SIDE, smallImageOf, useSmallImage } from '../gallery/smallImage';
+import { usePreview } from '../gallery/mediaView';
 import PeerNameField from '../header/PeerNameField';
 
 const mono = '"JetBrains Mono", "IBM Plex Mono", monospace';
@@ -525,7 +527,10 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                 // The preview that came with the share counts even when this
                 // device holds no bytes of its own - which is exactly the case
                 // for the server's shelf, where most of it is other people's.
-                const source = tile.img || tile.previewUrl || posterFor(tile);
+                // A small copy before the photo itself: drawing a full photo
+                // into a 40 px square decoded it on the main thread, which
+                // held up the tap that opens it.
+                const source = smallImageOf(tile) || posterFor(tile) || tile.img;
                 const img = source ? image(source) : null;
                 ctx.save();
                 roundRect(ctx, x - s / 2, y - s / 2, s, s, 6);
@@ -756,16 +761,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                             sx={{ width: '100%', height: 150, objectFit: 'cover', borderRadius: 1, display: 'block', bgcolor: '#0a0c10' }}
                         />
                     ) : (
-                        <Box
-                            component={thumb.tile.img ? 'img' : 'div'}
-                            src={thumb.tile.img || undefined}
-                            alt={thumb.tile.fileName || 'Photo'}
-                            onClick={() => thumb.tile.img && openFull(thumb.tileKey)}
-                            sx={{
-                                width: '100%', height: 150, objectFit: 'cover', borderRadius: 1, display: 'block',
-                                bgcolor: 'action.hover', cursor: thumb.tile.img ? 'zoom-in' : 'default',
-                            }}
-                        />
+                        <CardPicture tile={thumb.tile} onOpen={() => thumb.tile.img && openFull(thumb.tileKey)} />
                     )}
                     <Box sx={{ mt: 0.75, fontFamily: mono, fontSize: '0.62rem', lineHeight: 1.5, color: 'text.secondary', wordBreak: 'break-all' }}>
                         <Box sx={{ color: 'text.primary', fontWeight: 600 }}>{thumb.tile.fileName || 'photo'}</Box>
@@ -855,5 +851,30 @@ NetworkStage.propTypes = {
     onOpenPhoto: PropTypes.func.isRequired,
     timeline: PropTypes.object.isRequired,
 };
+
+/**
+ * The enlarged photo on the map's card: a 640 px copy (the share's preview
+ * until it is made), not the full photo, which took a big phone a moment to
+ * decode for a 220 px card and showed an empty box meanwhile.
+ */
+function CardPicture({ tile, onOpen }) {
+    const poster = usePreview(tile);
+    const copy = useSmallImage(tile.isImage && !tile.loading ? tile : null, GRID_SIDE);
+    const src = copy || poster || null;
+    return (
+        <Box
+            component={src ? 'img' : 'div'}
+            src={src || undefined}
+            alt={tile.fileName || 'Photo'}
+            onClick={onOpen}
+            sx={{
+                width: '100%', height: 150, objectFit: 'cover', borderRadius: 1, display: 'block',
+                bgcolor: 'action.hover', cursor: tile.img ? 'zoom-in' : 'default',
+            }}
+        />
+    );
+}
+
+CardPicture.propTypes = { tile: PropTypes.object.isRequired, onOpen: PropTypes.func.isRequired };
 
 export default NetworkStage;

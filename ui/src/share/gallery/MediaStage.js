@@ -8,6 +8,7 @@ import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import AudiotrackRounded from '@mui/icons-material/AudiotrackRounded';
 import { keyOf, playableClip, useArriving, useClipUrl, usePreview, useSwipe } from './mediaView';
+import { GRID_SIDE, smallImageOf } from './smallImage';
 
 const roundButton = { position: 'absolute', color: '#fff', bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' } };
 
@@ -38,7 +39,23 @@ function MediaStage({ tile, onStep, hasPrev, hasNext, children }) {
     const fit = { width: '100%', height: '100%', objectFit: 'contain', display: 'block' };
     let media;
     if (!tile.loading && tile.img) {
-        media = <Box component="img" src={tile.img} alt={tile.fileName || 'Photo'} sx={fit} />;
+        // The grid's copy (or the share's preview) shows until the photo is
+        // decoded, off the main thread. Without it the stage stayed black for
+        // as long as a big photo took to decode, then the photo popped in.
+        const behind = smallImageOf(tile, GRID_SIDE) || poster;
+        media = (
+            <Box component="img" key={tile.img} src={tile.img} alt={tile.fileName || 'Photo'} decoding="async"
+                onLoad={event => {
+                    const img = event.currentTarget;
+                    const done = () => { img.style.backgroundImage = 'none'; };
+                    if (typeof img.decode === 'function') img.decode().then(done, () => {});
+                    else done();
+                }}
+                sx={{ ...fit, ...(behind ? {
+                    backgroundImage: `url(${behind})`, backgroundSize: 'contain',
+                    backgroundRepeat: 'no-repeat', backgroundPosition: 'center',
+                } : null) }} />
+        );
     } else if (playableClip(tile)) {
         media = (
             <Box component="video" key={keyOf(tile)} src={clipUrl || undefined}

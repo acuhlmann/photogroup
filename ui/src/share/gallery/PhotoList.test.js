@@ -111,6 +111,22 @@ describe('PhotoList', () => {
         expect(toggle.getAttribute('aria-expanded')).toBe('true');
         expect(div.querySelector('[data-testid="details-of"]').textContent).toBe('a.jpg');
     });
+
+    it('shows the picked photo in a box of one height, from its preview, so opening a row moves nothing under it', () => {
+        matchMedia(false);
+        // The sharp copy is still being made.
+        vi.stubGlobal('createImageBitmap', () => new Promise(() => {}));
+        const withPreview = { ...a, infoHash: 'a-preview', previewUrl: 'blob:preview-a', elem: new Blob(['x'], { type: 'image/jpeg' }) };
+        show({ tiles: [withPreview, b], roomTiles: [withPreview, b], facts: new Map([[withPreview, facts.get(a)], [b, facts.get(b)]]) });
+        act(() => div.querySelectorAll('[data-testid="photo-row"] [aria-expanded]')[0].click());
+        const box = div.querySelector('[data-testid="list-preview"] [aria-label="Full screen a.jpg"]');
+        expect(getComputedStyle(box).height).toBe('300px');
+        const img = box.querySelector('img');
+        // Letterboxed like the full screen view; the full photo is not decoded here.
+        expect(getComputedStyle(img).objectFit).toBe('contain');
+        expect(img.getAttribute('src')).toBe('blob:preview-a');
+        vi.unstubAllGlobals();
+    });
 });
 
 describe('sameRow', () => {
