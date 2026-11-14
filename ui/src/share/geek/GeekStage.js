@@ -44,6 +44,7 @@ const KIND_COLOR = {
     ice: 'text.secondary',
     sse: 'text.secondary',
     copy: 'secondary.main',
+    pair: 'warning.main',
 };
 
 /**

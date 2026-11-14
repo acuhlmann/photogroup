@@ -66,6 +66,10 @@ Location comes from EXIF/XMP GPS, HEIC Exif items and video `udta`/`meta` boxes 
 
 The gallery toolbar (`gallery/GalleryToolbar.js`) sorts and filters tiles through `gallery/arrangeTiles.js` (rating, date taken, place grouped by town and country, text search over titles, descriptions, keywords and places) and switches to `gallery/RoomMap.js`, which pins every located photo on one map; the viewer pages through the tiles the current view shows.
 
+### Nearby pairing (`ui/src/share/nearby/`)
+
+Extra ways to hand the room link to phones nearby; photos still go over WebRTC. Invite (`InviteCode.js` → `NearbyInvite.js`) can play the room code as sound (`soundModem.js`, ggwave, about 10 bytes per second, audible or near-ultrasound) and, on Chrome for Android only, write the link to an NFC tag (`nfcTag.js`). "Scan to join" can listen for the sound instead of using the camera (`SoundListen.js`). The sound carries `pg1:<room>[#<key>]` (`roomCode.js`). `pairingLog.js` keeps how codes moved, and geek mode logs them as `pair` lines. Web Bluetooth, vibration, light and magnetic channels were judged not usable from a browser; do not send photo pieces over sound or QR (far too slow next to WebRTC).
+
 ### Where a save lands
 
 By default the app picks the folder. Where the browser has a save dialog -- Chrome on

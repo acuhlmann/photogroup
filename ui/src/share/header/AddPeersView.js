@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 import CloseRounded from '@mui/icons-material/CloseRounded';
+import CropFreeRounded from '@mui/icons-material/CropFreeRounded';
+import HearingRounded from '@mui/icons-material/HearingRounded';
 import IconButton from '@mui/material/IconButton';
 import PersonAddAlt1Rounded from '@mui/icons-material/PersonAddAlt1Rounded';
 import ButtonBase from '@mui/material/ButtonBase';
@@ -17,8 +19,11 @@ import { useTheme } from '@mui/material/styles';
 import Fade from '@mui/material/Fade';
 import { headerButtonSx, headerLabelSx } from './headerButtonSx';
 import InviteCode from '../InviteCode';
-import { setKeyInAddress } from '../privateRoom';
 import { keyFromHash } from '../security/roomKey';
+import { joinRoomByCode } from '../openRoom';
+import SoundListen from '../nearby/SoundListen';
+import { canListen } from '../nearby/soundModem';
+import { notePairing } from '../nearby/pairingLog';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Fade ref={ref} {...props} />;
@@ -38,7 +43,7 @@ DialogClose.propTypes = { onClose: PropTypes.func.isRequired };
  * Two dialogs about people and rooms. In a room, the header's Invite button
  * opens the code to scan and the link to send (simple mode shows the same
  * code in the page instead). On the front page, "Scan to join" opens the
- * camera to read someone else's code.
+ * camera to read someone else's code, or the microphone to hear it.
  */
 function AddPeersView({ master, showButton = true, inRoom = false, roomName = '' }) {
     const theme = useTheme();
@@ -48,6 +53,9 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
     const [scan, setScan] = useState(false);
     // The scanner code loads on first use; on a bad connection that can fail.
     const [scanFailed, setScanFailed] = useState(false);
+    // One at a time: iPhones give a page the camera or the microphone, not both.
+    const [listening, setListening] = useState(false);
+    const cameraOn = scan && !listening;
     const [numPeers, setNumPeers] = useState(0);
     const scannerRef = useRef(null);
 
@@ -67,23 +75,28 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
         }
 
         if(urlParams.has('room')) {
-            master.service.id = urlParams.get('room');
-            master.service.hasRoom = true;
-            // A private room's key, before the room's photos arrive.
-            setKeyInAddress(key);
+            notePairing(master.emitter, { channel: 'qr', direction: 'in', bytes: data.length });
+            await joinRoomByCode(master, { room: urlParams.get('room'), key });
             Logger.info('handleScan id ' + master.service.id);
-            await master.findExistingContent(master.service.joinRoom);
-            master.service.changeUrl('room', master.service.id);
-            master.emitter.emit('hideFrontView');
-            master.emitter.emit('readyToUpload');
-
             setScan(false);
         }
     }, [master]);
 
+    const handleHeard = useCallback(async (code, { bytes, ms }) => {
+        Logger.info('Room code heard: ' + code.room);
+        notePairing(master.emitter, { channel: 'sound', direction: 'in', bytes, ms });
+        try {
+            await joinRoomByCode(master, code);
+        } catch (err) {
+            Logger.error('Joining the heard room failed: ' + (err?.message || err));
+            master.emitter.emit('showError', "Couldn't join the room. Try again.");
+        }
+        setScan(false);
+    }, [master]);
+
     // Start the camera when the scan dialog opens, stop it when it closes.
     useEffect(() => {
-        if (scan && !scannerRef.current) {
+        if (cameraOn && !scannerRef.current) {
             let cancelled = false;
             // Small delay to ensure DOM element exists. The scanner code is
             // large and only loaded when someone scans.
@@ -127,12 +140,15 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
             };
         }
 
-        if (!scan && scannerRef.current) {
+        if (!cameraOn && scannerRef.current) {
             scannerRef.current.clear().catch(err => Logger.error('Failed to clear scanner:', err));
             scannerRef.current = null;
         }
-        if (!scan) setScanFailed(false);
-    }, [scan, handleScan]);
+        if (!scan) {
+            setScanFailed(false);
+            setListening(false);
+        }
+    }, [scan, cameraOn, handleScan]);
 
     // Cleanup scanner on unmount
     useEffect(() => {
@@ -216,29 +232,44 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
                 <DialogTitle id="scan-title" sx={{ textAlign: 'center', pr: 6, pl: 6 }}>Scan to join</DialogTitle>
                 <DialogClose onClose={() => setScan(false)} />
                 <DialogContent>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mb: 1.5 }}>
-                        Point the camera at the code on the other phone.
-                    </Typography>
-                    <Box
-                        sx={{
-                            width: '100%',
-                            maxWidth: 400,
-                            mx: 'auto',
-                            borderRadius: 2,
-                            overflow: 'hidden',
-                            border: '1px solid',
-                            borderColor: 'divider',
-                            '& #qr-reader': {
-                                border: 'none !important',
-                            },
-                            '& #qr-reader__scan_region': {
-                                minHeight: 250,
-                            },
-                        }}
-                    >
-                        <div id="qr-reader"></div>
+                    {listening && <SoundListen onCode={handleHeard} />}
+                    {/* Hidden, not removed: the scanner must find its element to stop the camera. */}
+                    <Box sx={{ display: listening ? 'none' : 'block' }}>
+                        <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mb: 1.5 }}>
+                            Point the camera at the code on the other phone.
+                        </Typography>
+                        <Box
+                            sx={{
+                                width: '100%',
+                                maxWidth: 400,
+                                mx: 'auto',
+                                borderRadius: 2,
+                                overflow: 'hidden',
+                                border: '1px solid',
+                                borderColor: 'divider',
+                                '& #qr-reader': {
+                                    border: 'none !important',
+                                },
+                                '& #qr-reader__scan_region': {
+                                    minHeight: 250,
+                                },
+                            }}
+                        >
+                            <div id="qr-reader"></div>
+                        </Box>
                     </Box>
-                    {scanFailed && (
+                    {canListen() && (
+                        <Box sx={{ textAlign: 'center', mt: 1.5 }}>
+                            <Button
+                                startIcon={listening ? <CropFreeRounded /> : <HearingRounded />}
+                                onClick={() => setListening(value => !value)}
+                                sx={{ textTransform: 'none' }}
+                            >
+                                {listening ? 'Use the camera instead' : 'Listen for the sound instead'}
+                            </Button>
+                        </Box>
+                    )}
+                    {scanFailed && !listening && (
                         <Box sx={{ textAlign: 'center', mt: 2 }}>
                             <Typography variant="body2" sx={{ mb: 1 }}>
                                 Cannot start the scanner. Check your connection.

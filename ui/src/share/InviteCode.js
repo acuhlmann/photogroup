@@ -9,6 +9,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import copy from 'clipboard-copy';
 import Logger from 'js-logger';
 import { keyHash, roomKeyText } from './privateRoom';
+import NearbyInvite from './nearby/NearbyInvite';
 
 /** The room's link, with a private room's key after "#". */
 export function roomUrl(id) {
@@ -46,7 +47,7 @@ export default function InviteCode({ master, roomName = '', size = 220 }) {
     }, [url, roomName, master.emitter]);
 
     return (
-        <Stack spacing={1.5} sx={{ alignItems: 'center', textAlign: 'center' }}>
+        <Stack spacing={1} sx={{ alignItems: 'center', textAlign: 'center' }}>
             <Box sx={{ bgcolor: '#fff', p: 2, borderRadius: 2, lineHeight: 0 }}>
                 <QRCodeSVG value={url} size={size} bgColor="#ffffff" fgColor="#000000" />
             </Box>
@@ -56,6 +57,7 @@ export default function InviteCode({ master, roomName = '', size = 220 }) {
             <Button size="small" startIcon={<ShareRounded />} onClick={sendLink} sx={{ textTransform: 'none' }}>
                 {copied ? 'Link copied' : 'Send the link instead'}
             </Button>
+            <NearbyInvite master={master} room={master.service.id} roomKey={roomKeyText()} url={url} />
         </Stack>
     );
 }

@@ -32,3 +32,18 @@ export async function createRoom(master) {
         }
     }
 }
+
+/**
+ * Join the room of a code this phone got from another phone: scanned,
+ * heard, or tapped.
+ */
+export async function joinRoomByCode(master, { room, key = null }) {
+    master.service.id = room;
+    master.service.hasRoom = true;
+    // A private room's key, before the room's photos arrive.
+    setKeyInAddress(key);
+    await master.findExistingContent(master.service.joinRoom);
+    master.service.changeUrl('room', master.service.id);
+    master.emitter.emit('hideFrontView');
+    master.emitter.emit('readyToUpload');
+}

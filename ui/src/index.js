@@ -11,6 +11,7 @@ globalThis.Buffer = Buffer;
 
 import { prepareShareLaunch, registerShareTarget } from './share/shareTarget';
 import { restoreRoomKey } from './share/privateRoom';
+import { noteArrival } from './share/nearby/pairingLog';
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -26,6 +27,8 @@ window.EventSource =  global.EventSource =  NativeEventSource || EventSourcePoly
 prepareShareLaunch();
 // A private room opened without "#k=…" gets the key this browser kept for it.
 restoreRoomKey();
+// A link from an NFC tag says so; geek mode shows it.
+noteArrival();
 
 const container = document.getElementById('root');
 const root = createRoot(container);
