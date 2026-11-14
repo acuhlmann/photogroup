@@ -130,6 +130,37 @@ describe('buildScene', () => {
         expect(onServer[0].y).toBeGreaterThan(copies.y);
     });
 
+    it("shows a photo under another device while it arrives there, and first", () => {
+        const tiles = [
+            { infoHash: 'h1', peerId: 'me', owners: [{ peerId: 'me' }, { peerId: 'ana' }] },
+            { infoHash: 'h2', peerId: 'me', owners: [{ peerId: 'me' }, { peerId: 'ana', loading: true }] },
+        ];
+        const ana = room([], { tiles }).thumbs.filter(thumb => thumb.deviceId === 'ana');
+        expect(ana.map(thumb => [thumb.tileKey, thumb.arriving])).toEqual([['h2', true], ['h1', false]]);
+    });
+
+    it('puts copies on their way up and asked-for copies on the server shelf too', () => {
+        const tiles = ['h1', 'h2', 'h3', 'h4'].map(infoHash => ({ infoHash, peerId: 'me', owners: [{ peerId: 'me' }] }));
+        const photos = [
+            { infoHash: 'h1', hasServerCopy: true, serverCopySize: 1048576 },
+            { infoHash: 'h2', serverCopyReceived: 10, serverCopySize: 100, serverCopyUploader: 'me' },
+            { infoHash: 'h3', serverCopyRequestedAt: 5 },
+        ];
+        const scene = room([], { tiles, photos });
+        const onServer = scene.thumbs.filter(thumb => thumb.deviceId === 'copies');
+        expect(onServer.map(thumb => [thumb.tileKey, thumb.copy])).toEqual([['h2', 'uploading'], ['h3', 'requested'], ['h1', 'stored']]);
+        expect(scene.byId.get('copies').sub).toBe('1 held · 1.0 MB · 1 uploading');
+    });
+
+    it('fits each device its share of a phone width, so rows do not run together', () => {
+        const tiles = Array.from({ length: 4 }, (_, i) => ({ infoHash: 'x' + i, peerId: 'me', owners: [{ peerId: 'me' }, { peerId: 'ana' }] }));
+        const scene = room([], { tiles, width: 400, height: 800 });
+        const ana = scene.thumbs.filter(thumb => thumb.deviceId === 'ana');
+        expect(ana).toHaveLength(2);
+        expect(ana[1].more).toBe(3);
+        expect(ana.at(-1).x + ana.at(-1).size / 2).toBeLessThan(scene.byId.get('me').x - 28 / 2);
+    });
+
     it('names a local dev server instead of the production edge', () => {
         const scene = room([], { origin: 'http://localhost:3000' });
         expect(scene.byId.get('edge')).toMatchObject({ label: 'dev server', sub: 'localhost:3000' });

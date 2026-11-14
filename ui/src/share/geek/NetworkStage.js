@@ -13,6 +13,10 @@ import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 
 import FileUtil from '../util/FileUtil';
 import { buildScene, routePoints, pointAlong, TIER } from './scene';
+import { thumbProgress, copyCaption } from './mediaProgress';
+import { ROUTE_STYLE } from './routeStyle';
+import ServerCopies from './ServerCopies';
+import { readServerCopies } from './transfers';
 import { attachTraffic, flowAt, FLOW_MS, RX, TX } from './traffic';
 import { watchLinks } from '../torrent/linkStats';
 import { demoInputs, withDemoRoutes } from './tour';
@@ -23,17 +27,8 @@ import PeerNameField from '../header/PeerNameField';
 
 const mono = '"JetBrains Mono", "IBM Plex Mono", monospace';
 
-// One colour per kind of traffic, used for routes, packets and the legend.
-export const ROUTE_STYLE = {
-    sse: { rgb: '96,165,250', label: 'SSE / API', dash: [3, 5], width: 1 },
-    tracker: { rgb: '167,139,250', label: 'tracker', dash: [3, 5], width: 1 },
-    copies: { rgb: '232,121,249', label: 'server copy', dash: [2, 6], width: 1, hidden: true },
-    stun: { rgb: '148,163,184', label: 'STUN', dash: [1, 4], width: 1 },
-    lan: { rgb: '61,222,139', label: 'P2P same LAN', dash: [], width: 3 },
-    punch: { rgb: '45,212,191', label: 'P2P via NAT', dash: [], width: 2.5 },
-    relay: { rgb: '255,93,115', label: 'TURN relay', dash: [], width: 2.5 },
-    turnctl: { rgb: '255,93,115', label: 'TURN allocate', dash: [1, 4], width: 1, hidden: true },
-};
+// Re-exported: the transfer view and the legend share the map's colours.
+export { ROUTE_STYLE };
 
 const NODE_RGB = {
     device: '61,214,195', nat: '245,185,66', stun: '148,163,184', turn: '255,93,115',
@@ -228,7 +223,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
     useEffect(() => {
         const emitter = master.emitter;
         const bump = () => setVersion(value => value + 1);
-        const names = ['peers', 'peerConnections', 'localNetwork', 'photos', 'addPeerDone'];
+        const names = ['peers', 'peerConnections', 'localNetwork', 'photos', 'addPeerDone', 'serverCopy'];
         names.forEach(name => emitter.on(name, bump));
         return () => names.forEach(name => emitter.removeListener(name, bump));
     }, [master.emitter]);
@@ -312,6 +307,25 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
             routeById.set(route.id, route);
             pointsOf.set(route.id, routePoints(scene, route));
         });
+
+        // Progress is read from the torrents a few times a second, not every frame.
+        let progressRead = 0;
+        const progressCache = new Map();
+        const progressNow = thumb => {
+            const now = performance.now();
+            if (now - progressRead > 300) {
+                progressRead = now;
+                progressCache.clear();
+                const known = {
+                    myPeerId: master.client?.peerId,
+                    torrents: master.client?.torrents || [],
+                    ledger: master.ledger,
+                    photoOf: infoHash => master.roomPhotos?.get?.(infoHash),
+                };
+                scene.thumbs.forEach(item => progressCache.set(item.key, thumbProgress(item, known)));
+            }
+            return progressCache.get(thumb.key) || null;
+        };
 
         let frame;
         let running = true;
@@ -570,19 +584,42 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                 ctx.lineWidth = isSelected ? 2.5 : 1;
                 ctx.strokeStyle = isSelected ? `rgb(${NODE_RGB.device})` : (isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)');
                 ctx.stroke();
-                // Still arriving: a ring fills up as pieces land.
-                const progress = tile.loading && tile.torrentFile ? tile.torrentFile.progress || 0 : null;
-                if (progress !== null) {
+                // Still arriving: the photo dims and a ring fills up as pieces
+                // land, with the percentage on it. Blue-green for P2P, pink
+                // for a server copy (on the server's shelf: the upload).
+                const progress = thumb.more ? null : progressNow(thumb);
+                if (progress) {
+                    roundRect(ctx, x - s / 2, y - s / 2, s, s, 6);
+                    ctx.fillStyle = 'rgba(9,12,18,0.55)';
+                    ctx.fill();
+                    const rgb = progress.via === 'server' ? NODE_RGB.copies : RX;
+                    const r = s / 2 - 4;
                     ctx.beginPath();
-                    ctx.arc(x, y, s / 2 - 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
-                    ctx.strokeStyle = `rgb(${RX})`;
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
                     ctx.lineWidth = 3;
                     ctx.stroke();
-                    ctx.font = `8px ${mono}`;
-                    ctx.fillStyle = text;
+                    if (progress.value !== null) {
+                        ctx.beginPath();
+                        ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress.value);
+                        ctx.strokeStyle = `rgb(${rgb})`;
+                        ctx.stroke();
+                    }
+                    ctx.font = `700 ${s < 32 ? 8 : 10}px ${mono}`;
+                    ctx.fillStyle = '#fff';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(Math.round(progress * 100) + '%', x, y);
+                    ctx.fillText(progress.value === null ? '…' : Math.floor(progress.value * 100) + '%', x, y);
+                }
+                // Under each server copy: how long it stays, or that it was asked for.
+                const caption = thumb.copy ? copyCaption(thumb.copy, master.roomPhotos?.get?.(tile.infoHash) || tile)
+                    : progress?.via === 'server' && thumb.deviceId !== 'copies' ? 'server' : null;
+                if (caption) {
+                    ctx.font = `7px ${mono}`;
+                    ctx.fillStyle = `rgb(${NODE_RGB.copies})`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(caption, x, y + s / 2 + 3);
                 }
             });
 
@@ -594,7 +631,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
             running = false;
             cancelAnimationFrame(frame);
         };
-    }, [scene, size, isDark, selected, image, shown, spotlight]);
+    }, [scene, size, isDark, selected, image, shown, spotlight, master]);
 
     const handlePointer = useCallback((event) => {
         const canvas = canvasRef.current;
@@ -831,10 +868,17 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                     {node.kind === 'device' && node.isMe && (
                         <PeerNameField master={master} compact hint="Shown to everyone in the room." />
                     )}
+                    {/* What the server has right now, copy by copy: the same
+                        list as in Transfers, so the map answers it on one tap. */}
                     {node.kind === 'copies' && (
-                        <Typography sx={{ fontFamily: mono, fontSize: '0.64rem', color: 'text.secondary', lineHeight: 1.55 }}>
-                            {node.mediaCount ? `holding ${node.mediaCount} of them` : 'holding none of them'}
-                        </Typography>
+                        <Box sx={{ mt: 0.75, mx: -1.25, borderTop: 1, borderColor: 'divider' }}>
+                            <ServerCopies copies={readServerCopies({
+                                photos: master.roomPhotos?.all?.() || [],
+                                peers: master.peers?.items || [],
+                                myPeerId: master.client?.peerId,
+                                keepCopies: !!master.serverPinning?.keepCopies,
+                            })} />
+                        </Box>
                     )}
                 </Box>
             )}

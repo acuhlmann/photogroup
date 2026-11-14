@@ -1,4 +1,5 @@
 import StringUtil from '../util/StringUtil';
+import { getBaseInfoHash } from '../torrent/WebTorrentUtils';
 import { describeIceServers, summarizeChain, forecastPath, verdictFor, NAT_LABELS } from '../topology/NetworkInsight';
 
 // The geek stage draws the room as layers, top to bottom, so where a node
@@ -10,6 +11,7 @@ import { describeIceServers, summarizeChain, forecastPath, verdictFor, NAT_LABEL
 
 export const TIER = { infra: 0.12, net: 0.4, device: 0.66 };
 export const THUMB = 34;
+export const THUMB_COMPACT = 28;
 const MAX_THUMBS = 5;
 
 const isReflexive = item => item && (item.type === 'srflx' || item.type === 'prflx'
@@ -46,8 +48,12 @@ function infraNodes({ origin, trackerUrl, photos }) {
     const host = hostOf(origin) || 'photogroup.network';
     const local = /localhost|127\.0\.0\.1/.test(host);
     const copies = photos.filter(photo => photo.hasServerCopy);
-    const uploading = photos.filter(photo => photo.serverCopyUploader && !photo.hasServerCopy);
+    const uploading = photos.filter(photo => !photo.hasServerCopy && (photo.serverCopyUploader || photo.serverCopyReceived > 0));
+    const asked = photos.filter(photo => !photo.hasServerCopy && !uploading.includes(photo) && photo.serverCopyRequestedAt);
     const bytes = copies.reduce((sum, photo) => sum + (photo.serverCopySize || 0), 0);
+    const held = copies.length ? `${copies.length} held` + (bytes ? ` · ${(bytes / 1048576).toFixed(1)} MB` : '') : null;
+    const coming = [uploading.length ? `${uploading.length} uploading` : null, asked.length ? `${asked.length} asked` : null];
+    const copiesSub = [held, ...coming].filter(Boolean).slice(0, 2).join(' · ') || 'none held';
     return [
         {
             id: 'edge', kind: 'edge', label: local ? 'dev server' : 'edge',
@@ -72,10 +78,10 @@ function infraNodes({ origin, trackerUrl, photos }) {
         },
         {
             id: 'copies', kind: 'copies', label: 'server copies',
-            sub: copies.length ? `${copies.length} held` + (bytes ? ` · ${(bytes / 1048576).toFixed(1)} MB` : '') : (uploading.length ? `${uploading.length} uploading` : 'none held'),
+            sub: copiesSub,
             info: ['last resort when P2P and TURN fail', 'keeps · the photo, only while a device needs it',
                 '8 MB parts, upload continues after a stop, 60 s upload lease', 'deleted when all devices have the photo, or 24 h after upload',
-                `${copies.length} held, ${uploading.length} uploading`],
+                `${copies.length} held, ${uploading.length} uploading, ${asked.length} asked for`],
         },
     ];
 }
@@ -213,8 +219,10 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     // the server copy then catches what TURN would have.
     const turnHere = ice.turn.length > 0 || relayIps.size > 0;
     const provider = ice.turn.some(host => /twilio/i.test(host)) ? 'Twilio' : null;
+    // On a phone the server's shelf of copies hangs down to where TURN sits.
+    const turnY = compact ? Math.max(sideY, infraY + 22 + 30 + THUMB + 30) : sideY;
     const turn = add({
-        id: 'turn', kind: 'turn', x: Math.min(width * 0.93, width - 48), y: sideY,
+        id: 'turn', kind: 'turn', x: Math.min(width * 0.93, width - 48), y: turnY,
         label: 'TURN', sub: turnHere ? (provider || ice.turn[0] || [...relayIps][0]) : 'none configured',
         idle: !turnHere,
         info: turnHere
@@ -271,40 +279,62 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         routes.push({ id: 'p2p:' + key, kind, path, peers: [a, b], label: type || 'p2p', conn });
     });
 
-    // Photos: under each device that holds a full copy; ours also while arriving.
+    // Photos: under each device that holds a full copy, and also under each
+    // device that is getting one (ours, and others that told the room so).
     const devices = nodes.filter(node => node.kind === 'device');
+    // As many as fit in a device's share of the width: on a phone with three
+    // people, five each ran into the next device's row.
+    // Phones get smaller thumbnails, so three people still show a few each.
+    const side = compact ? THUMB_COMPACT : THUMB;
+    const share = devices.length ? width / (devices.length + 1) : width;
+    const fits = Math.max(1, Math.min(MAX_THUMBS, Math.floor(share / (side + 6))));
     // One row of thumbnails, centred under a node, with a +N when they overflow.
-    const shelf = (node, held, offset) => {
-        const shown = held.slice(0, MAX_THUMBS);
-        const gap = 6;
-        const total = shown.length * THUMB + (shown.length - 1) * gap;
+    const shelf = (node, held, offset, extra = () => ({}), max = MAX_THUMBS, gap = 6) => {
+        const shown = held.slice(0, max);
+        const total = shown.length * side + (shown.length - 1) * gap;
         shown.forEach((tile, index) => {
             thumbs.push({
                 key: node.id + ':' + (tile.tileKey || tile.infoHash),
                 tileKey: tile.tileKey || tile.infoHash,
                 deviceId: node.id,
-                x: Math.min(width - THUMB / 2 - 4, Math.max(THUMB / 2 + 4, node.x - total / 2 + index * (THUMB + gap) + THUMB / 2)),
-                y: node.y + offset + THUMB / 2,
-                size: THUMB,
+                x: Math.min(width - side / 2 - 4, Math.max(side / 2 + 4, node.x - total / 2 + index * (side + gap) + side / 2)),
+                y: node.y + offset + side / 2,
+                size: side,
                 tile,
-                more: index === MAX_THUMBS - 1 && held.length > MAX_THUMBS ? held.length - MAX_THUMBS + 1 : 0,
+                more: index === max - 1 && held.length > max ? held.length - max + 1 : 0,
+                ...extra(tile),
             });
         });
         node.mediaCount = held.length;
     };
+    const ownerOf = (tile, id) => (tile.owners || []).find(owner => owner.peerId === id);
     devices.forEach(device => {
-        const held = tiles.filter(tile => {
-            const owners = tile.owners || [];
-            if (device.isMe) return true;
-            return tile.peerId === device.id || owners.some(owner => owner.peerId === device.id && !owner.loading);
-        });
-        shelf(device, held, 44);
-        device.photoCount = held.length;
+        const has = tile => tile.peerId === device.id || (ownerOf(tile, device.id) && !ownerOf(tile, device.id).loading);
+        const getting = tile => !has(tile) && !!ownerOf(tile, device.id)?.loading;
+        const held = device.isMe ? tiles : tiles.filter(tile => has(tile) || getting(tile));
+        // Photos still arriving go first: they are the ones worth watching.
+        const arriving = tile => (device.isMe ? !!tile.loading : getting(tile));
+        const sorted = [...held.filter(arriving), ...held.filter(tile => !arriving(tile))];
+        shelf(device, sorted, 44, tile => ({ arriving: arriving(tile) }), fits);
+        device.photoCount = held.filter(tile => !arriving(tile)).length;
     });
-    // The server holds bytes too, and used to be the one node that showed no
-    // media for them: the copies it keeps sit under it like a device's photos.
+    // The server holds bytes too: the copies it keeps, the ones on their way
+    // up and the ones a device asked for sit under it like a device's photos.
     const copies = byId.get('copies');
-    if (copies) shelf(copies, tiles.filter(tile => tile.hasServerCopy), 30);
+    if (copies) {
+        const photoOf = new Map(photos.map(photo => [getBaseInfoHash(photo.infoHash), photo]));
+        const stateOf = tile => {
+            const photo = { ...tile, ...(photoOf.get(getBaseInfoHash(tile.infoHash)) || {}) };
+            if (photo.hasServerCopy) return 'stored';
+            if (photo.serverCopyUploader || photo.serverCopyReceived > 0) return 'uploading';
+            if (photo.serverCopyRequestedAt) return 'requested';
+            return null;
+        };
+        const order = { uploading: 0, requested: 1, stored: 2 };
+        const onServer = tiles.filter(stateOf).sort((a, b) => order[stateOf(a)] - order[stateOf(b)]);
+        // Wider gaps: each copy has a caption ("19h left") under it.
+        shelf(copies, onServer, 30, tile => ({ copy: stateOf(tile) }), compact ? 3 : MAX_THUMBS, 14);
+    }
 
     return { nodes, routes, thumbs, byId };
 }
