@@ -36,12 +36,16 @@ describe('fountain', () => {
         const decoder = createDecoder(encoder.k, blockSize, data.length);
         let seed = 0;
         let lost = 5;
+        let dropped = 0;
         while (!decoder.done && seed < k * 4 + 60) {
-            lost = (lost * 7 + 3) % 11;
-            if (lost > 3) decoder.add(seed, encoder.frame(seed));
+            // Full-period sequence over 0..15; 5 of 16 values drop the frame.
+            lost = (lost * 5 + 1) % 16;
+            if (lost < 5) dropped++;
+            else decoder.add(seed, encoder.frame(seed));
             seed++;
         }
         expect(decoder.done).toBe(true);
+        if (k > 1) expect(dropped).toBeGreaterThan(seed / 4);
         expect(same(decoder.result(), data)).toBe(true);
         // The price of a channel with no way back: some frames more than blocks.
         expect(decoder.frames).toBeLessThan(k * 1.45 + 40);

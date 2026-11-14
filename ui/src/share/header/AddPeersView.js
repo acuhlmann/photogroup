@@ -122,7 +122,7 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
                         (decodedText) => {
                             Logger.info('QR Code scanned: ' + decodedText);
                             handleScan(decodedText);
-                            scanner.clear().catch(err => Logger.error('Failed to clear scanner:', err));
+                            clearingRef.current = scanner.clear().catch(err => Logger.error('Failed to clear scanner:', err));
                             scannerRef.current = null;
                         },
                         () => {
