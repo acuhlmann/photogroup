@@ -36,6 +36,14 @@ describe('thumbProgress', () => {
         expect(thumbProgress({ tile, deviceId: 'ana', arriving: true }, { myPeerId: 'me', torrents: [torrent({ wires })] })).toBe(null);
     });
 
+    it("still shows another device's progress when this device has only the preview", () => {
+        const wires = [{ peerId: 'ana', peerPieces: bits([0]) }];
+        const preview = { ...tile, previewOnly: true };
+        expect(thumbProgress({ tile: preview, deviceId: 'ana', arriving: true }, { myPeerId: 'me', torrents: [torrent({ wires })] }))
+            .toEqual({ value: 0.25, via: 'p2p' });
+        expect(thumbProgress({ tile: preview, deviceId: 'me', arriving: true }, { myPeerId: 'me', torrents: [torrent()] })).toBe(null);
+    });
+
     it("shows a server copy's upload on the server's shelf", () => {
         const photoOf = () => ({ serverCopySize: 1000, serverCopyReceived: 250 });
         expect(thumbProgress({ tile, deviceId: 'copies', copy: 'uploading' }, { photoOf })).toEqual({ value: 0.25, via: 'server' });

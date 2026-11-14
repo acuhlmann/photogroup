@@ -47,7 +47,8 @@ export function thumbProgress(thumb, { myPeerId, torrents = [], ledger = null, p
         const size = photo.serverCopySize || 0;
         return { value: size ? Math.min(1, (photo.serverCopyReceived || 0) / size) : 0, via: 'server' };
     }
-    if (!thumb.arriving || tile.previewOnly) return null;
+    // Preview-only is this device's own state: others can still be loading it.
+    if (!thumb.arriving || (tile.previewOnly && thumb.deviceId === myPeerId)) return null;
     const torrent = torrentFor(tile, torrents);
     const file = fileFor(tile, torrent);
     if (thumb.deviceId === myPeerId) {

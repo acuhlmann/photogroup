@@ -152,6 +152,17 @@ describe('buildScene', () => {
         expect(scene.byId.get('copies').sub).toBe('1 held · 1.0 MB · 1 uploading');
     });
 
+    it('reads each photo of a shared torrent by its own id, not the torrent\'s', () => {
+        const tiles = ['base-a.jpg', 'base-b.jpg'].map(infoHash => ({ infoHash, peerId: 'me', owners: [{ peerId: 'me' }] }));
+        const photos = [
+            { infoHash: 'base-a.jpg', hasServerCopy: true, serverCopySize: 100 },
+            { infoHash: 'base-b.jpg', serverCopyRequestedAt: 5 },
+        ];
+        const scene = room([], { tiles, photos });
+        const onServer = scene.thumbs.filter(thumb => thumb.deviceId === 'copies');
+        expect(onServer.map(thumb => [thumb.tileKey, thumb.copy])).toEqual([['base-b.jpg', 'requested'], ['base-a.jpg', 'stored']]);
+    });
+
     it('fits each device its share of a phone width, so rows do not run together', () => {
         const tiles = Array.from({ length: 4 }, (_, i) => ({ infoHash: 'x' + i, peerId: 'me', owners: [{ peerId: 'me' }, { peerId: 'ana' }] }));
         const scene = room([], { tiles, width: 400, height: 800 });

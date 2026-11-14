@@ -162,6 +162,40 @@ describe('timings', () => {
         expect(times.p2p.ms).toBe(null);
     });
 
+    it('skips a step whose event came before the step it follows', () => {
+        const times = laneTimes({
+            startedAt: 0, direction: 'down', now: 20000,
+            stages: [
+                { at: 5000, lane: 'p2p', stage: 'signal' },
+                { at: 3000, lane: 'p2p', stage: 'handshake' },
+                { at: 6000, lane: 'p2p', stage: 'metadata' },
+                { at: 9000, lane: 'p2p', stage: 'verify' },
+            ],
+        });
+        expect(times.p2p).toEqual({ ms: 9000, running: false, steps: { signal: 5000, metadata: 1000, pieces: 3000 } });
+    });
+
+    it('counts a server lane up while its download is still going', () => {
+        const times = laneTimes({
+            startedAt: 0, direction: 'down', now: 10000, p2pDone: true,
+            serverStage: { direction: 'down', stage: 'downloading' },
+            stages: [
+                { at: 1000, lane: 'server', stage: 'requested' },
+                { at: 2000, lane: 'server', stage: 'downloading' },
+            ],
+        });
+        expect(times.server).toEqual({ ms: 9000, running: true, steps: { uploaded: 1000 } });
+        expect(times.p2p).toEqual({ ms: null, running: false, steps: {} });
+    });
+
+    it('ends an upload lane at the last piece sent', () => {
+        const times = laneTimes({
+            startedAt: 1000, direction: 'up', lastPiece: 7000, now: 50000,
+            stages: [{ at: 2000, lane: 'p2p', stage: 'signal' }],
+        });
+        expect(times.p2p).toEqual({ ms: 6000, running: false, steps: { signal: 1000, pieces: 5000 } });
+    });
+
     it('counts up while a transfer is still going, with no end to measure', () => {
         const [row] = readTransfers({
             ...room,

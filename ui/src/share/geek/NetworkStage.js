@@ -713,6 +713,14 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
 
     const thumb = selected?.type === 'thumb' ? scene.thumbs.find(item => item.key === selected.key) : null;
     const node = selected?.type === 'node' ? scene.byId.get(selected.id) : null;
+    // The server copies card counts down ("deleted in 19h"): redraw it while open.
+    const copiesOpen = node?.kind === 'copies';
+    const [, tickCopies] = useState(0);
+    useEffect(() => {
+        if (!copiesOpen) return undefined;
+        const timer = setInterval(() => tickCopies(value => value + 1), 30000);
+        return () => clearInterval(timer);
+    }, [copiesOpen]);
     const others = scene.nodes.filter(item => item.kind === 'device' && !item.isMe).length;
 
     // The media on the map, once each, in the order they are drawn: the detail

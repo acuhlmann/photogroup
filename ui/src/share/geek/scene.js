@@ -1,5 +1,4 @@
 import StringUtil from '../util/StringUtil';
-import { getBaseInfoHash } from '../torrent/WebTorrentUtils';
 import { describeIceServers, summarizeChain, forecastPath, verdictFor, NAT_LABELS } from '../topology/NetworkInsight';
 
 // The geek stage draws the room as layers, top to bottom, so where a node
@@ -322,9 +321,11 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     // up and the ones a device asked for sit under it like a device's photos.
     const copies = byId.get('copies');
     if (copies) {
-        const photoOf = new Map(photos.map(photo => [getBaseInfoHash(photo.infoHash), photo]));
+        // By the full id: two photos can share one torrent (a compound id)
+        // and still have their own server copy each.
+        const photoOf = new Map(photos.map(photo => [photo.infoHash, photo]));
         const stateOf = tile => {
-            const photo = { ...tile, ...(photoOf.get(getBaseInfoHash(tile.infoHash)) || {}) };
+            const photo = { ...tile, ...(photoOf.get(tile.infoHash) || {}) };
             if (photo.hasServerCopy) return 'stored';
             if (photo.serverCopyUploader || photo.serverCopyReceived > 0) return 'uploading';
             if (photo.serverCopyRequestedAt) return 'requested';
