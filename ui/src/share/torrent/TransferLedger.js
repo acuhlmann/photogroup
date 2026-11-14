@@ -14,6 +14,18 @@ import { getBaseInfoHash } from './WebTorrentUtils';
 
 export const MAX_STAGES = 40;
 
+/**
+ * The reason in a WebTorrent warning about a peer connection, in a few
+ * words, or null when the warning is about something else.
+ */
+export function connectionFailure(text = '') {
+    if (!/connection error|connection failed|ice connection/i.test(text)) return null;
+    if (/ice connection failed/i.test(text)) return 'ICE failed';
+    if (/connection failed/i.test(text)) return 'connection failed';
+    if (/timed? ?out/i.test(text)) return 'ICE timed out';
+    return text.replace(/^connection error:\s*/i, '').slice(0, 40) || 'connection error';
+}
+
 const short = value => String(value || '').slice(0, 8);
 
 export default class TransferLedger {
@@ -34,7 +46,7 @@ export default class TransferLedger {
         if (!key) return null;
         let item = this.items.get(key);
         if (!item) {
-            item = { infoHash: key, name, startedAt: this.now(), stages: [], peers: new Map(), server: { rx: 0, tx: 0 }, serverStage: null };
+            item = { infoHash: key, name, startedAt: this.now(), stages: [], peers: new Map(), server: { rx: 0, tx: 0 }, serverStage: null, failures: [] };
             this.items.set(key, item);
         }
         if (name && !item.name) item.name = name;
@@ -47,6 +59,12 @@ export default class TransferLedger {
 
     all() {
         return [...this.items.values()];
+    }
+
+    /** Every failed WebRTC connection this session, oldest first. */
+    failures() {
+        return this.all().flatMap(item => (item.failures || []).map(failure => ({ ...failure, infoHash: item.infoHash })))
+            .sort((a, b) => a.at - b.at);
     }
 
     subscribe(fn) {
@@ -93,6 +111,18 @@ export default class TransferLedger {
         torrent.once?.('metadata', () => {
             const item = begin();
             if (item) this.stage(item, 'p2p', 'metadata', `metadata · ${torrent.pieces?.length || '?'} pieces of ${Math.round((torrent.pieceLength || 0) / 1024)} KiB`);
+        });
+        // A WebRTC connection that never opened: bittorrent-tracker reports
+        // it as a torrent warning ("Connection error: Ice connection failed.").
+        torrent.on?.('warning', err => {
+            const text = String(err?.message || err || '');
+            const reason = connectionFailure(text);
+            if (!reason) return;
+            const item = begin();
+            if (!item) return;
+            item.failures.push({ at: this.now(), reason, text: text.slice(0, 160) });
+            if (item.failures.length > MAX_STAGES) item.failures.shift();
+            this.stage(item, 'p2p', 'failed', `WebRTC connection failed · ${reason}`);
         });
         torrent.once?.('done', () => {
             const item = begin();

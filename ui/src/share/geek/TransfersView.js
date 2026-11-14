@@ -9,6 +9,8 @@ import { describeIceServers, summarizeChain, verdictFor } from '../topology/Netw
 import PieceGrid from './PieceGrid';
 import { ROUTE_STYLE } from './routeStyle';
 import ServerCopies from './ServerCopies';
+import SessionSummary from './SessionSummary';
+import { readSummary } from './sessionSummary';
 
 const mono = 'var(--font-mono)';
 // Torrent progress and wires have no event of their own worth listening to.
@@ -274,6 +276,10 @@ function TransfersView({ master, onReplay, timeline }) {
                     <Box component="span" sx={{ color: 'text.disabled' }}>your link </Box>{verdict.text}
                 </Typography>
             </Box>
+            <SessionSummary summary={readSummary({
+                rows, share: master.deviceTimes?.summary?.() || {}, devices: master.deviceTimes?.read?.() || [],
+                peers: input.peers, myPeerId: input.myPeerId,
+            })} />
             <ServerCopies copies={readServerCopies(input)} />
             {rows.length ? (
                 <Box component="ol" sx={{ m: 0, p: 0, listStyle: 'none' }}>

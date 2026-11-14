@@ -317,3 +317,30 @@ export function flowAt(entries, routeId, clock = Date.now(), window = FLOW_MS) {
     }
     return state.rx || state.tx || state.rxSpeed || state.txSpeed || state.note || state.stats ? state : null;
 }
+
+/** A link counts as moving at this many bytes per second, both ways together. */
+export const BUSY_BYTES = 1024;
+/** And as stalled once it has not moved for this long while a photo still needs it. */
+export const STALL_MS = 5000;
+
+/**
+ * When a P2P route last moved real bytes, from WebRTC's own counters in the
+ * recording: `busyAt` the last sample at BUSY_BYTES or more, `measuredAt` the
+ * last sample at all (none while nothing is measuring). Read up to `clock`.
+ */
+export function linkActivity(entries, routeId, clock = Date.now()) {
+    let busyAt = null;
+    let measuredAt = null;
+    let firstAt = null;
+    for (let index = entries.length - 1; index >= 0; index--) {
+        const entry = entries[index];
+        if (entry.at > clock || entry.route !== routeId || !entry.stats) continue;
+        if (measuredAt === null) measuredAt = entry.at;
+        firstAt = entry.at;
+        if ((entry.stats.rx || 0) + (entry.stats.tx || 0) >= BUSY_BYTES) {
+            busyAt = entry.at;
+            break;
+        }
+    }
+    return { busyAt, measuredAt, since: busyAt ?? firstAt };
+}

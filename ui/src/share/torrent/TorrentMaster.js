@@ -16,6 +16,7 @@ import { cacheGet, cachePut, shouldCacheBlob } from '../util/ImageBlobCache';
 import ServerFallback, { isSharedPhoto } from './ServerFallback';
 import ServerPinning from './ServerPinning';
 import TransferLedger from './TransferLedger';
+import DeviceTimes from './DeviceTimes';
 import RoomPhotos from './RoomPhotos';
 import TrackerKick from './TrackerKick';
 import { watchPieces } from './pieceEvents';
@@ -148,6 +149,13 @@ export default class TorrentMaster {
         });
         // What each transfer went through, for geek mode.
         this.ledger = new TransferLedger({ emitter: this.emitter });
+        // How long each device took to its first photo and to all of them.
+        this.deviceTimes = new DeviceTimes({
+            emitter: this.emitter,
+            getPeers: () => this.peers?.items || [],
+            getPhotos: () => this.roomPhotos?.all?.() || [],
+            getMyPeerId: () => this.client?.peerId,
+        });
         this._serverCopies = new Map();
         this.emitter.on('serverCopyReady', photo => this.handleServerCopyReady(photo));
 
