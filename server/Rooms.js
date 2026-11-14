@@ -499,11 +499,13 @@ export default class Rooms {
         return {
             infoHash: photo.infoHash,
             hasServerCopy: !!photo.hasServerCopy,
-            serverCopySize: photo.serverCopySize,
-            serverCopyReceived: photo.serverCopyReceived,
-            serverCopyRequestedAt: photo.serverCopyRequestedAt,
-            serverCopyUploader: photo.serverCopyUploader,
-            // null, not missing: a client merging this must forget a dropped copy's times.
+            // null, not missing: a client merging this must forget a dropped
+            // copy's progress and times, or it shows "uploading 100%" for a
+            // copy that is gone.
+            serverCopySize: photo.serverCopySize ?? null,
+            serverCopyReceived: photo.serverCopyReceived ?? null,
+            serverCopyRequestedAt: photo.serverCopyRequestedAt ?? null,
+            serverCopyUploader: photo.serverCopyUploader ?? null,
             ...Object.fromEntries(COPY_TIMES.map(field => [field, photo[field] ?? null])),
         };
     }

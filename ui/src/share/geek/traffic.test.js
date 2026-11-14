@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import EventEmitter from 'eventemitter3';
-import { attachTraffic, flowAt, FLOW_MS } from './traffic';
+import { attachTraffic, flowAt, linkActivity, FLOW_MS } from './traffic';
 import { createTimeline } from './timeline';
 
 // The scene the map builds: our device, one other peer, and the routes traffic
@@ -297,5 +297,17 @@ describe('traffic through the timeline', () => {
         expect(timeline.recent()).toHaveLength(1);
         expect(timeline.recent()[0].text).toMatch(/piece \d\/4/);
         vi.resetAllMocks();
+    });
+});
+
+describe('linkActivity', () => {
+    const sample = (at, rx, route = 'p2p:a') => ({ at, route, stats: { rx, tx: 0 } });
+    it('finds when a link last moved real bytes, from WebRTC samples', () => {
+        const entries = [sample(1000, 50000), sample(2000, 10), sample(3000, 0), sample(4000, 0, 'p2p:b')];
+        expect(linkActivity(entries, 'p2p:a', 3500)).toEqual({ busyAt: 1000, measuredAt: 3000, since: 1000 });
+        // Never busy: it has been still since the first sample.
+        expect(linkActivity([sample(2000, 0), sample(3000, 0)], 'p2p:a', 3000)).toEqual({ busyAt: null, measuredAt: 3000, since: 2000 });
+        // Nothing measured: nothing to say.
+        expect(linkActivity([], 'p2p:a', 3000)).toEqual({ busyAt: null, measuredAt: null, since: null });
     });
 });

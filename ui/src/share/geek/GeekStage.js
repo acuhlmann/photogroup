@@ -11,6 +11,8 @@ import ExpandLessRounded from '@mui/icons-material/ExpandLessRounded';
 import OpenInFullRounded from '@mui/icons-material/OpenInFullRounded';
 import CloseFullscreenRounded from '@mui/icons-material/CloseFullscreenRounded';
 import SchoolRounded from '@mui/icons-material/SchoolRounded';
+import FileDownloadRounded from '@mui/icons-material/FileDownloadRounded';
+import Tooltip from '@mui/material/Tooltip';
 
 import NetworkStage from './NetworkStage';
 import TransfersView from './TransfersView';
@@ -20,6 +22,7 @@ import { tourSteps } from './tour';
 import { replaySteps } from './replay';
 import { createTourPlayer } from './tourPlayer';
 import { TourCard, ExplainCard } from './TourCard';
+import { buildExport, downloadExport } from './exportLog';
 
 const HEIGHT_KEY = 'photogroup.geekDrawerHeight';
 const COLLAPSED = 33;
@@ -401,6 +404,16 @@ function GeekStage({ master, tiles, isMobile }) {
                         <Tab label={`Packets${count ? ' · ' + count : ''}`} onClick={() => setOpen(true)} />
                         <Tab label="Transfers" onClick={() => setOpen(true)} />
                     </Tabs>
+                    {/* The whole session as a file, to send with a bug report. */}
+                    <Tooltip title="Export the log (JSON). It holds IP addresses and device names.">
+                        <IconButton size="small" aria-label="Export the log"
+                            onClick={() => downloadExport(buildExport({
+                                master, timeline, href: window.location.href, userAgent: navigator.userAgent,
+                            }))}
+                            sx={{ mr: 0.25 }}>
+                            <FileDownloadRounded fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
                     <IconButton size="small" onClick={toggleFull}
                         aria-label={full ? 'Give the map its room back' : 'Give the log the whole screen'}
                         aria-pressed={full} sx={{ mr: 0.25 }}>

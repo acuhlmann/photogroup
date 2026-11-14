@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readTransfers, describeSplit, serverSteps, linkKind, totals, formatDuration, formatSpan, readServerCopies } from './transfers';
+import { readTransfers, describeSplit, serverSteps, linkKind, totals, formatDuration, formatSpan, readServerCopies, laneTimes } from './transfers';
 
 const chain = ip => [
     { type: 'host', typeDetail: 'host', ip: '192.168.1.' + ip.split('.').pop() },
@@ -123,6 +123,79 @@ describe('timings', () => {
         expect(row.stages.map(stage => stage.tookMs)).toEqual([2000, 6000, null]);
     });
 
+    it('times each P2P step and the lane, and each source', () => {
+        const [row] = readTransfers({
+            ...room,
+            items: [ledgerItem({
+                peers: new Map([['ana', { rx: 4000, tx: 0 }]]),
+                pieceLog: [{ kind: 'rx', peerId: 'ana', at: 5000 }, { kind: 'rx', peerId: 'ana', at: 8500 }],
+                stages: [
+                    { at: 1000, lane: 'p2p', stage: 'signal', text: 'announce' },
+                    { at: 3000, lane: 'p2p', stage: 'handshake', text: 'wire up' },
+                    { at: 4000, lane: 'p2p', stage: 'metadata', text: 'metadata' },
+                    { at: 9000, lane: 'p2p', stage: 'verify', text: 'verified' },
+                ],
+            })],
+            photos: [{ infoHash: 'abc', peerId: 'ana', fileName: 'beach.jpg', fileSize: 4000 }],
+            torrents: [{ infoHash: 'abc', progress: 1, done: true, length: 4000, pieces: [1], wires: [] }],
+        });
+        // The wait for a peer goes on Discover; the handshake has no event of its own.
+        expect(row.times.p2p).toEqual({ ms: 8000, running: false, steps: { signal: 0, discover: 2000, metadata: 1000, pieces: 5000 } });
+        expect(row.times.server.ms).toBe(null);
+        expect(row.sources[0].tookMs).toBe(3500);
+    });
+
+    it('times the server lane, with the wait for the upload on "copy up"', () => {
+        const times = laneTimes({
+            startedAt: 0, direction: 'down', now: 99000, p2pDone: true,
+            serverStage: { direction: 'down', stage: 'done' },
+            stages: [
+                { at: 1000, lane: 'p2p', stage: 'signal' },
+                { at: 11000, lane: 'server', stage: 'requested' },
+                { at: 15000, until: 19000, lane: 'server', stage: 'downloading' },
+                { at: 19000, lane: 'server', stage: 'verifying' },
+                { at: 19500, lane: 'server', stage: 'done' },
+            ],
+        });
+        expect(times.server).toEqual({ ms: 8500, running: false, steps: { uploaded: 4000, downloading: 4000, verifying: 500 } });
+        // Done through the server: the P2P lane did not finish, and is not still going either.
+        expect(times.p2p.ms).toBe(null);
+    });
+
+    it('skips a step whose event came before the step it follows', () => {
+        const times = laneTimes({
+            startedAt: 0, direction: 'down', now: 20000,
+            stages: [
+                { at: 5000, lane: 'p2p', stage: 'signal' },
+                { at: 3000, lane: 'p2p', stage: 'handshake' },
+                { at: 6000, lane: 'p2p', stage: 'metadata' },
+                { at: 9000, lane: 'p2p', stage: 'verify' },
+            ],
+        });
+        expect(times.p2p).toEqual({ ms: 9000, running: false, steps: { signal: 5000, metadata: 1000, pieces: 3000 } });
+    });
+
+    it('counts a server lane up while its download is still going', () => {
+        const times = laneTimes({
+            startedAt: 0, direction: 'down', now: 10000, p2pDone: true,
+            serverStage: { direction: 'down', stage: 'downloading' },
+            stages: [
+                { at: 1000, lane: 'server', stage: 'requested' },
+                { at: 2000, lane: 'server', stage: 'downloading' },
+            ],
+        });
+        expect(times.server).toEqual({ ms: 9000, running: true, steps: { uploaded: 1000 } });
+        expect(times.p2p).toEqual({ ms: null, running: false, steps: {} });
+    });
+
+    it('ends an upload lane at the last piece sent', () => {
+        const times = laneTimes({
+            startedAt: 1000, direction: 'up', lastPiece: 7000, now: 50000,
+            stages: [{ at: 2000, lane: 'p2p', stage: 'signal' }],
+        });
+        expect(times.p2p).toEqual({ ms: 6000, running: false, steps: { signal: 1000, pieces: 5000 } });
+    });
+
     it('counts up while a transfer is still going, with no end to measure', () => {
         const [row] = readTransfers({
             ...room,
@@ -134,6 +207,7 @@ describe('timings', () => {
         expect(row.done).toBe(false);
         expect(row.elapsedMs).toBe(null);
         expect(row.runningMs).toBe(10000);
+        expect(row.times.p2p).toMatchObject({ ms: 10000, running: true });
     });
 
     it('uses the last update of a stage that rewrote itself', () => {
@@ -209,6 +283,8 @@ describe('readServerCopies', () => {
             ['asked.jpg', 'requested', 0, null],
         ]);
         expect(rows[0].goes).toBe('deleted when the last person gets it, or in 22 h 00 m at most');
+        // How long the upload took: from its start until it was stored.
+        expect(rows.map(row => row.uploadMs)).toEqual([4000, null, null]);
     });
 
     it('says a room that keeps copies holds them until they expire', () => {

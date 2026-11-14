@@ -13,7 +13,15 @@ import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 
 import FileUtil from '../util/FileUtil';
 import { buildScene, routePoints, pointAlong, TIER } from './scene';
-import { attachTraffic, flowAt, FLOW_MS, RX, TX } from './traffic';
+import { thumbProgress, copyCaption } from './mediaProgress';
+import { ROUTE_STYLE } from './routeStyle';
+import ServerCopies from './ServerCopies';
+import { attachTraffic, flowAt, linkActivity, FLOW_MS, STALL_MS, RX, TX } from './traffic';
+import { p2pIssues, wiredPeers, wantedPeers } from './p2pIssues';
+import { deviceTimesLine, readSummary } from './sessionSummary';
+import SessionSummary from './SessionSummary';
+import { readTransfers, readServerCopies } from './transfers';
+import { describeIceServers } from '../topology/NetworkInsight';
 import { watchLinks } from '../torrent/linkStats';
 import { demoInputs, withDemoRoutes } from './tour';
 import { posterFor, mediaUrlFor } from './videoPoster';
@@ -23,17 +31,8 @@ import PeerNameField from '../header/PeerNameField';
 
 const mono = '"JetBrains Mono", "IBM Plex Mono", monospace';
 
-// One colour per kind of traffic, used for routes, packets and the legend.
-export const ROUTE_STYLE = {
-    sse: { rgb: '96,165,250', label: 'SSE / API', dash: [3, 5], width: 1 },
-    tracker: { rgb: '167,139,250', label: 'tracker', dash: [3, 5], width: 1 },
-    copies: { rgb: '232,121,249', label: 'server copy', dash: [2, 6], width: 1, hidden: true },
-    stun: { rgb: '148,163,184', label: 'STUN', dash: [1, 4], width: 1 },
-    lan: { rgb: '61,222,139', label: 'P2P same LAN', dash: [], width: 3 },
-    punch: { rgb: '45,212,191', label: 'P2P via NAT', dash: [], width: 2.5 },
-    relay: { rgb: '255,93,115', label: 'TURN relay', dash: [], width: 2.5 },
-    turnctl: { rgb: '255,93,115', label: 'TURN allocate', dash: [1, 4], width: 1, hidden: true },
-};
+// Re-exported: the transfer view and the legend share the map's colours.
+export { ROUTE_STYLE };
 
 const NODE_RGB = {
     device: '61,214,195', nat: '245,185,66', stun: '148,163,184', turn: '255,93,115',
@@ -59,6 +58,32 @@ function readScene(master, tiles, width, height, demo = false) {
     // The tour needs someone to send to and public addresses to point at.
     if (!demo) return buildScene(inputs);
     return withDemoRoutes(buildScene(demoInputs(inputs)), inputs.myPeerId);
+}
+
+// A link that should move and does not; a device P2P does not work with.
+const STALLED_RGB = '245,158,11';
+const ISSUE_RGB = '239,68,68';
+
+/** What the map shows that changes faster than the scene: see liveNow. */
+function readLive(master, scene) {
+    const myPeerId = master.client?.peerId;
+    const torrents = master.client?.torrents || [];
+    const photos = master.roomPhotos?.all?.() || [];
+    const known = { myPeerId, torrents, ledger: master.ledger, photoOf: infoHash => master.roomPhotos?.get?.(infoHash) };
+    const progress = new Map();
+    scene.thumbs.forEach(item => progress.set(item.key, thumbProgress(item, known)));
+    const creator = master.creator || {};
+    const issues = p2pIssues({
+        myPeerId,
+        peers: master.peers?.items || [],
+        photos,
+        items: master.ledger?.all?.() || [],
+        wired: wiredPeers(torrents),
+        rtcConfig: creator.iceServers,
+        localNetwork: master.localNetwork,
+        hasTurn: describeIceServers(creator.iceServers).turn.length > 0,
+    });
+    return { progress, issues, wanted: wantedPeers({ photos, myPeerId }) };
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -105,11 +130,12 @@ export function routeLabel(route, state, now = Date.now(), base = route.label) {
     // second when no piece count says it already.
     const stats = state.stats;
     if (stats && Number.isFinite(stats.rtt)) parts.push(`${Math.round(stats.rtt)} ms`);
-    if (stats && !state.rx && !state.tx && (stats.rx >= 1 || stats.tx >= 1)) {
-        parts.push(`↓ ${FileUtil.formatBytes(Math.round(stats.rx))}/s ↑ ${FileUtil.formatBytes(Math.round(stats.tx))}/s`);
-    }
-    if (state.rx) parts.push(`↓ ${state.rx} pieces` + (state.rxSpeed ? ` ${state.rxSpeed}` : ''));
-    if (state.tx) parts.push(`↑ ${state.tx} pieces` + (state.txSpeed ? ` ${state.txSpeed}` : ''));
+    // The live speed WebRTC measures on this link, every second, also when
+    // it is 0: that is how a slow or stuck link shows.
+    if (stats) parts.push(`↓ ${FileUtil.formatBytes(Math.round(stats.rx || 0))}/s ↑ ${FileUtil.formatBytes(Math.round(stats.tx || 0))}/s`);
+    if (state.rx) parts.push(`↓ ${state.rx} pieces` + (state.rxSpeed && !stats ? ` ${state.rxSpeed}` : ''));
+    if (state.tx) parts.push(`↑ ${state.tx} pieces` + (state.txSpeed && !stats ? ` ${state.txSpeed}` : ''));
+    if (state.stalledMs) parts.push(`stalled ${Math.round(state.stalledMs / 1000)} s`);
     return parts.join(' · ');
 }
 
@@ -228,7 +254,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
     useEffect(() => {
         const emitter = master.emitter;
         const bump = () => setVersion(value => value + 1);
-        const names = ['peers', 'peerConnections', 'localNetwork', 'photos', 'addPeerDone'];
+        const names = ['peers', 'peerConnections', 'localNetwork', 'photos', 'addPeerDone', 'serverCopy'];
         names.forEach(name => emitter.on(name, bump));
         return () => names.forEach(name => emitter.removeListener(name, bump));
     }, [master.emitter]);
@@ -313,6 +339,20 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
             pointsOf.set(route.id, routePoints(scene, route));
         });
 
+        // Progress, P2P problems and the links photos still need are read
+        // from the torrents and the room a few times a second, not every frame.
+        let liveRead = -Infinity;
+        let live = { progress: new Map(), issues: new Map(), wanted: new Set() };
+        const liveNow = () => {
+            const now = performance.now();
+            if (now - liveRead > 300) {
+                liveRead = now;
+                live = readLive(master, scene);
+            }
+            return live;
+        };
+        const progressNow = thumb => liveNow().progress.get(thumb.key) || null;
+
         let frame;
         let running = true;
         const draw = () => {
@@ -371,7 +411,15 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                 if (!style) return;
                 const spot = spotlight ? spotlight.routes.has(route.id) : false;
                 const lit = focused.has(route.id) || spot;
-                const flow = flowAt(shown.entries, route.id, at);
+                let flow = flowAt(shown.entries, route.id, at);
+                // A link a photo still needs, measured but not moving: stalled.
+                const other = route.peers ? route.peers.find(id => id !== master.client?.peerId) : null;
+                if (other && liveNow().wanted.has(other)) {
+                    const activity = linkActivity(shown.entries, route.id, at);
+                    if (activity.measuredAt !== null && at - activity.measuredAt < STALL_MS && activity.since !== null && at - activity.since >= STALL_MS) {
+                        flow = { ...(flow || {}), at, stalledMs: at - activity.since };
+                    }
+                }
                 // Server copies are the exception: drawn only while one is
                 // moving. The tour's own paths only when a step is about them.
                 if ((style.hidden || route.demo) && !lit && !flow?.note) return;
@@ -387,7 +435,9 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                 const busy = flow?.stats ? Math.min(5, Math.log2(1 + ((flow.stats.rx || 0) + (flow.stats.tx || 0)) / 16384)) : 0;
                 ctx.lineWidth = (lit ? style.width + 1.5 : style.width) + busy;
                 const strength = lit ? 1 : transfer || style.hidden ? 0.75 : 0.28;
-                ctx.strokeStyle = `rgba(${style.rgb},${spotlight && !spot ? strength * 0.25 : strength})`;
+                const lineRgb = flow?.stalledMs ? STALLED_RGB : style.rgb;
+                if (flow?.stalledMs) ctx.setLineDash([6, 4]);
+                ctx.strokeStyle = `rgba(${lineRgb},${spotlight && !spot ? strength * 0.25 : strength})`;
                 ctx.stroke();
                 ctx.setLineDash([]);
                 if (base) {
@@ -399,7 +449,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                     roundRect(ctx, mid.x - w / 2, mid.y - 8, w, 16, 4);
                     ctx.fillStyle = isDark ? 'rgba(16,20,28,0.9)' : 'rgba(255,255,255,0.92)';
                     ctx.fill();
-                    ctx.fillStyle = `rgb(${style.rgb})`;
+                    ctx.fillStyle = `rgb(${lineRgb})`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(label, mid.x, mid.y);
@@ -516,6 +566,19 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                     ctx.fillStyle = muted;
                     ctx.fillText(fit(ctx, node.sub, w - 10), node.x, node.y + 8);
                 }
+                // Why P2P does not work with this device, right under it.
+                const issue = node.kind === 'device' ? liveNow().issues.get(node.id) : null;
+                if (issue) {
+                    ctx.font = `600 9px ${mono}`;
+                    // No wider than the device's share of the row, so badges never overlap.
+                    const textW = Math.min(ctx.measureText('✕ ' + issue.short).width, Math.max(w, (node.maxW || 140) - 10));
+                    roundRect(ctx, node.x - textW / 2 - 5, node.y + h / 2 + 3, textW + 10, 14, 4);
+                    ctx.fillStyle = isDark ? 'rgba(60,16,22,0.92)' : 'rgba(255,236,238,0.95)';
+                    ctx.fill();
+                    ctx.fillStyle = `rgb(${ISSUE_RGB})`;
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(fit(ctx, '✕ ' + issue.short, textW), node.x, node.y + h / 2 + 10);
+                }
                 ctx.globalAlpha = 1;
             });
 
@@ -570,19 +633,42 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                 ctx.lineWidth = isSelected ? 2.5 : 1;
                 ctx.strokeStyle = isSelected ? `rgb(${NODE_RGB.device})` : (isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)');
                 ctx.stroke();
-                // Still arriving: a ring fills up as pieces land.
-                const progress = tile.loading && tile.torrentFile ? tile.torrentFile.progress || 0 : null;
-                if (progress !== null) {
+                // Still arriving: the photo dims and a ring fills up as pieces
+                // land, with the percentage on it. Blue-green for P2P, pink
+                // for a server copy (on the server's shelf: the upload).
+                const progress = thumb.more ? null : progressNow(thumb);
+                if (progress) {
+                    roundRect(ctx, x - s / 2, y - s / 2, s, s, 6);
+                    ctx.fillStyle = 'rgba(9,12,18,0.55)';
+                    ctx.fill();
+                    const rgb = progress.via === 'server' ? NODE_RGB.copies : RX;
+                    const r = s / 2 - 4;
                     ctx.beginPath();
-                    ctx.arc(x, y, s / 2 - 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
-                    ctx.strokeStyle = `rgb(${RX})`;
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
                     ctx.lineWidth = 3;
                     ctx.stroke();
-                    ctx.font = `8px ${mono}`;
-                    ctx.fillStyle = text;
+                    if (progress.value !== null) {
+                        ctx.beginPath();
+                        ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress.value);
+                        ctx.strokeStyle = `rgb(${rgb})`;
+                        ctx.stroke();
+                    }
+                    ctx.font = `700 ${s < 32 ? 8 : 10}px ${mono}`;
+                    ctx.fillStyle = '#fff';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(Math.round(progress * 100) + '%', x, y);
+                    ctx.fillText(progress.value === null ? '…' : Math.floor(progress.value * 100) + '%', x, y);
+                }
+                // Under each server copy: how long it stays, or that it was asked for.
+                const caption = thumb.copy ? copyCaption(thumb.copy, master.roomPhotos?.get?.(tile.infoHash) || tile)
+                    : progress?.via === 'server' && thumb.deviceId !== 'copies' ? 'server' : null;
+                if (caption) {
+                    ctx.font = `7px ${mono}`;
+                    ctx.fillStyle = `rgb(${NODE_RGB.copies})`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(caption, x, y + s / 2 + 3);
                 }
             });
 
@@ -594,7 +680,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
             running = false;
             cancelAnimationFrame(frame);
         };
-    }, [scene, size, isDark, selected, image, shown, spotlight]);
+    }, [scene, size, isDark, selected, image, shown, spotlight, master]);
 
     const handlePointer = useCallback((event) => {
         const canvas = canvasRef.current;
@@ -627,6 +713,14 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
 
     const thumb = selected?.type === 'thumb' ? scene.thumbs.find(item => item.key === selected.key) : null;
     const node = selected?.type === 'node' ? scene.byId.get(selected.id) : null;
+    // The server copies card counts down ("deleted in 19h"): redraw it while open.
+    const copiesOpen = node?.kind === 'copies';
+    const [, tickCopies] = useState(0);
+    useEffect(() => {
+        if (!copiesOpen) return undefined;
+        const timer = setInterval(() => tickCopies(value => value + 1), 30000);
+        return () => clearInterval(timer);
+    }, [copiesOpen]);
     const others = scene.nodes.filter(item => item.kind === 'device' && !item.isMe).length;
 
     // The media on the map, once each, in the order they are drawn: the detail
@@ -655,6 +749,25 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
         setSelected(null);
         onOpenPhoto(key);
     };
+
+    // The share's summary card, once it is done; closed, it stays closed
+    // until another share finishes.
+    const [closedSummary, setClosedSummary] = useState(null);
+    const share = master.deviceTimes?.summary?.();
+    const summary = share?.done && share.endedAt !== closedSummary ? readSummary({
+        rows: readTransfers({
+            items: master.ledger?.all?.() || [],
+            torrents: master.client?.torrents || [],
+            photos: master.roomPhotos?.all?.() || [],
+            peers: master.peers?.items || [],
+            connections: master.peers?.connections || [],
+            myPeerId: master.client?.peerId,
+        }),
+        share,
+        devices: master.deviceTimes.read(),
+        peers: master.peers?.items || [],
+        myPeerId: master.client?.peerId,
+    }) : null;
 
     // How much of the room this device has, in one number. The per-photo ring
     // says which one is moving; this says how far to go before the room is
@@ -727,6 +840,13 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
 
             {paused && (
                 <PausedMark timeline={shown} replaying={replaying} />
+            )}
+
+            {/* When every device here has every photo: the share in one card. */}
+            {summary && !tour && !node && !thumb && (
+                <Box sx={{ position: 'absolute', left: 8, top: 8, zIndex: 1, maxWidth: 'calc(100% - 16px)' }}>
+                    <SessionSummary summary={summary} onClose={() => setClosedSummary(summary.key)} />
+                </Box>
             )}
 
 
@@ -825,16 +945,37 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                             {`photos held ${node.mediaCount || 0}`}
                         </Typography>
                     )}
+                    {node.kind === 'device' && (() => {
+                        const times = master.deviceTimes?.read?.().find(row => row.peerId === node.id);
+                        const line = times && deviceTimesLine(times);
+                        return line ? (
+                            <Typography data-testid="device-times" sx={{ fontFamily: mono, fontSize: '0.64rem', color: 'text.primary', lineHeight: 1.55 }}>
+                                {line}
+                            </Typography>
+                        ) : null;
+                    })()}
+                    {node.kind === 'device' && (readLive(master, scene).issues.get(node.id)?.why || []).map((line, index) => (
+                        <Typography key={'issue' + index} data-testid="p2p-issue" sx={{ fontFamily: mono, fontSize: '0.64rem', color: 'error.main', lineHeight: 1.55 }}>
+                            {`P2P · ${line}`}
+                        </Typography>
+                    ))}
                     {/* This device's own node is where the name gets changed:
                         it is what the map and the log call you, and there was
                         no way to set it from the map at all. */}
                     {node.kind === 'device' && node.isMe && (
                         <PeerNameField master={master} compact hint="Shown to everyone in the room." />
                     )}
+                    {/* What the server has right now, copy by copy: the same
+                        list as in Transfers, so the map answers it on one tap. */}
                     {node.kind === 'copies' && (
-                        <Typography sx={{ fontFamily: mono, fontSize: '0.64rem', color: 'text.secondary', lineHeight: 1.55 }}>
-                            {node.mediaCount ? `holding ${node.mediaCount} of them` : 'holding none of them'}
-                        </Typography>
+                        <Box sx={{ mt: 0.75, mx: -1.25, borderTop: 1, borderColor: 'divider' }}>
+                            <ServerCopies copies={readServerCopies({
+                                photos: master.roomPhotos?.all?.() || [],
+                                peers: master.peers?.items || [],
+                                myPeerId: master.client?.peerId,
+                                keepCopies: !!master.serverPinning?.keepCopies,
+                            })} />
+                        </Box>
                     )}
                 </Box>
             )}

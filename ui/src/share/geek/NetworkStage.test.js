@@ -172,4 +172,12 @@ describe('routeLabel', () => {
         expect(routeLabel(route, state, 1000 + 6000)).toBe('p2p nat');
         expect(routeLabel(route, undefined)).toBe('p2p nat');
     });
+
+    it("shows WebRTC's live speed, also at 0, and how long a needed link has stalled", () => {
+        const stats = { rtt: 12.4, rx: 3500000, tx: 0 };
+        expect(routeLabel(route, { rx: 7, tx: 0, rxSpeed: '1.2 MB/sec', stats, at: 1000 }, 2000))
+            .toBe('p2p nat · 12 ms · ↓ 3.5 MB/s ↑ 0 B/s · ↓ 7 pieces');
+        expect(routeLabel(route, { rx: 0, tx: 0, stats: { rx: 0, tx: 0 }, stalledMs: 8200, at: 2000 }, 2000))
+            .toBe('p2p nat · ↓ 0 B/s ↑ 0 B/s · stalled 8 s');
+    });
 });

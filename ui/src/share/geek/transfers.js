@@ -196,8 +196,23 @@ export function readTransfers({ items = [], torrents = [], photos = [], peers = 
             const bytes = direction === 'down' ? wire.downloaded : wire.uploaded;
             if (bytes > 0) sources.push({ peerId, label: peerName(peersById.get(peerId)) || 'peer ' + short(peerId), kind: kindWith(peerId), bytes });
         });
+        // How long each peer's pieces took: from its first piece to its last.
+        (item.pieceLog || []).forEach(entry => {
+            if (entry.kind !== key) return;
+            const source = sources.find(each => each.peerId === entry.peerId);
+            if (!source) return;
+            source.firstAt = Math.min(source.firstAt ?? entry.at, entry.at);
+            source.lastAt = Math.max(source.lastAt ?? entry.at, entry.at);
+        });
+        sources.forEach(source => {
+            source.tookMs = source.lastAt > source.firstAt ? source.lastAt - source.firstAt : null;
+        });
         const serverBytes = direction === 'down' ? item.server.rx : item.server.tx;
-        if (serverBytes > 0) sources.push({ peerId: null, label: 'server', kind: 'server', bytes: serverBytes });
+        if (serverBytes > 0) {
+            const moved = item.stages.find(stage => stage.lane === 'server' && (stage.stage === 'downloading' || stage.stage === 'uploading'));
+            sources.push({ peerId: null, label: 'server', kind: 'server', bytes: serverBytes,
+                tookMs: moved?.until > moved?.at ? moved.until - moved.at : null });
+        }
         sources.forEach(source => { source.how = KIND_WORDS[source.kind]; });
 
         const total = sources.reduce((sum, source) => sum + source.bytes, 0);
@@ -212,9 +227,13 @@ export function readTransfers({ items = [], torrents = [], photos = [], peers = 
             return { ...stage, tookMs: end > stage.at ? end - stage.at : null };
         });
         const lastStage = withDurations[withDurations.length - 1];
-        // Over when its last stage was written; still going, there is no end,
-        // only how long this device has been at it.
-        const endedAt = done ? (lastStage ? lastStage.until || lastStage.at : null) : null;
+        const lastPiece = (item.pieceLog || []).filter(entry => entry.kind === key).reduce((max, entry) => Math.max(max, entry.at), 0);
+        // Over when its last stage was written (or, for a share, its last
+        // piece went out); still going, there is no end, only how long this
+        // device has been at it.
+        const endedAt = done ? (lastStage ? Math.max(lastStage.until || lastStage.at, sharer ? lastPiece : 0) : null) : null;
+        const times = laneTimes({ stages: item.stages, startedAt: item.startedAt, direction, lastPiece, now,
+            p2pDone: done, serverStage: item.serverStage });
 
         const row = {
             infoHash: item.infoHash,
@@ -234,6 +253,7 @@ export function readTransfers({ items = [], torrents = [], photos = [], peers = 
             stages: withDurations,
             startedAt: item.startedAt,
             lastAt: lastStage ? lastStage.until || lastStage.at : item.startedAt,
+            times,
             // Wall-clock time the whole transfer took, or, while it is still
             // going, how long this device has been at it.
             elapsedMs: done && endedAt !== null ? Math.max(0, endedAt - item.startedAt) : null,
@@ -244,6 +264,73 @@ export function readTransfers({ items = [], torrents = [], photos = [], peers = 
         return row;
     });
     return rows.sort((a, b) => b.lastAt - a.lastAt);
+}
+
+const SERVER_ENDS = ['stored', 'exists', 'done', 'failed', 'rejected', 'interrupted', 'busy', 'too-large'];
+// Which ledger stage ends each server chip. The receiver's "copy up" is the
+// wait between asking and the download starting.
+const SERVER_CHIP_STAGE = {
+    up: { queued: 'queued', uploading: 'uploading' },
+    down: { uploaded: 'requested', downloading: 'downloading', verifying: 'verifying' },
+};
+
+/**
+ * How long each lane of a transfer took, and each step in it, from the
+ * ledger's real stage times.
+ * - P2P steps end at: announce sent, wire up with a peer (Discover),
+ *   metadata in, last piece in (or, for a share, last piece out). Steps
+ *   with no event of their own (handshake, verify) get no time.
+ * - Server steps run from their stage until the next one.
+ * @returns {{ p2p: {ms, running, steps}, server: {ms, running, steps} }}
+ */
+export function laneTimes({ stages = [], startedAt, direction, lastPiece = 0, now = Date.now(), p2pDone = false, serverStage = null }) {
+    const first = (lane, id) => stages.find(stage => stage.lane === lane && stage.stage === id);
+    const ends = {
+        signal: first('p2p', 'signal')?.at,
+        // The wait for a peer ends when a wire comes up; the handshake itself
+        // has no event of its own, so the wait goes on Discover.
+        discover: first('p2p', 'handshake')?.at,
+        metadata: first('p2p', 'metadata')?.at,
+        pieces: direction === 'down' ? first('p2p', 'verify')?.at : lastPiece || undefined,
+    };
+    const p2pSteps = {};
+    let previous = startedAt;
+    PHASES.forEach(({ id }) => {
+        const end = ends[id];
+        if (!Number.isFinite(end) || !Number.isFinite(previous) || end < previous) return;
+        p2pSteps[id] = end - previous;
+        previous = end;
+    });
+    const p2pEnd = direction === 'down' ? ends.pieces : lastPiece || null;
+    const p2p = p2pEnd && Number.isFinite(startedAt)
+        ? { ms: Math.max(0, p2pEnd - startedAt), running: false, steps: p2pSteps }
+        : !p2pDone && Number.isFinite(startedAt) && stages.some(stage => stage.lane === 'p2p')
+            ? { ms: Math.max(0, now - startedAt), running: true, steps: p2pSteps }
+            : { ms: null, running: false, steps: p2pSteps };
+
+    const server = stages.filter(stage => stage.lane === 'server');
+    const serverSteps = {};
+    const map = SERVER_CHIP_STAGE[serverStage?.direction] || {};
+    Object.entries(map).forEach(([chip, stageId]) => {
+        const index = server.findIndex(stage => stage.stage === stageId);
+        if (index < 0) return;
+        const stage = server[index];
+        const end = stageId === 'uploading' || stageId === 'downloading'
+            ? stage.until || server[index + 1]?.at
+            : server[index + 1]?.at;
+        if (Number.isFinite(end) && end >= stage.at) serverSteps[chip] = end - stage.at;
+    });
+    let serverTime = { ms: null, running: false, steps: serverSteps };
+    if (server.length) {
+        const last = server[server.length - 1];
+        const over = SERVER_ENDS.includes(last.stage);
+        serverTime = {
+            ms: Math.max(0, (over ? last.until || last.at : now) - server[0].at),
+            running: !over,
+            steps: serverSteps,
+        };
+    }
+    return { p2p, server: serverTime };
 }
 
 /** How long something took: "0.4 s", "12.4 s", "2 m 05 s". */
@@ -326,6 +413,8 @@ export function readServerCopies({ photos = [], peers = [], myPeerId, keepCopies
                 startedAt: photo.serverCopyStartedAt || null,
                 storedAt: photo.serverCopyStoredAt || null,
                 expiresAt: photo.serverCopyExpiresAt || null,
+                uploadMs: photo.serverCopyStoredAt && photo.serverCopyStartedAt && photo.serverCopyStoredAt >= photo.serverCopyStartedAt
+                    ? photo.serverCopyStoredAt - photo.serverCopyStartedAt : null,
                 goes,
             };
         });
