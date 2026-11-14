@@ -208,6 +208,46 @@ export default class ServerFallback {
         }
     }
 
+    /**
+     * Put a whole file on a photo that the gallery shows, and cache it.
+     * `original` is the gallery's photo object, so its tile is updated.
+     */
+    async accept(original, latest, blob) {
+        const photo = Object.assign(original, latest);
+        const file = typeof File !== 'undefined'
+            ? new File([blob], photo.fileName || 'photo', { type: photo.fileType || blob.type })
+            : blob;
+        try { await this.cachePut?.(photo.infoHash, file); } catch { /* cache is best-effort */ }
+        photo.fromCache = true;
+        photo.fromServerCopy = true;
+        photo.cachedFile = file;
+        photo.file = file;
+        photo.loading = false;
+        return photo;
+    }
+
+    /** Tell the room's parts that the file is here, and stop watching it. */
+    announce(photo) {
+        this.emitter?.emit('serverCopyReady', photo);
+        this.emitter?.emit('torrentReady', [photo]);
+        this.unwatch(photo.infoHash);
+    }
+
+    /**
+     * A whole file that came another way than the network (from a screen,
+     * by camera). It goes the same way in as a server copy.
+     * @returns {Promise<'delivered'|'rejected'>}
+     */
+    async deliverNearby(original, blob) {
+        const latest = this.watched.get(original.infoHash)?.photo || original;
+        if (this.verify && !(await this.verify(latest, blob))) return 'rejected';
+        const photo = await this.accept(this.watched.get(original.infoHash)?.original || original, latest, blob);
+        photo.fromLight = true;
+        Logger.info('Delivered ' + (photo.fileName || photo.infoHash) + ' by camera');
+        this.announce(photo);
+        return 'delivered';
+    }
+
     async _deliver(entry, why) {
         const infoHash = entry.photo.infoHash;
         entry.inFlight = true;
@@ -232,22 +272,10 @@ export default class ServerFallback {
                 Logger.warn('ServerFallback: server copy of ' + (entry.photo.fileName || infoHash) + " isn't the shared photo; ignored");
                 return false;
             }
-            // The gallery's photo object, so the tile it renders is updated.
-            const photo = Object.assign(entry.original, entry.photo);
-            const file = typeof File !== 'undefined'
-                ? new File([blob], photo.fileName || 'photo', { type: photo.fileType || blob.type })
-                : blob;
-            try { await this.cachePut?.(infoHash, file); } catch { /* cache is best-effort */ }
-            photo.fromCache = true;
-            photo.fromServerCopy = true;
-            photo.cachedFile = file;
-            photo.file = file;
-            photo.loading = false;
+            const photo = await this.accept(entry.original, entry.photo, blob);
             Logger.info('ServerFallback: delivered ' + (photo.fileName || infoHash) + ' via server copy');
             this._stage(entry, 'done', { why, loaded: blob.size, total: blob.size });
-            this.emitter?.emit('serverCopyReady', photo);
-            this.emitter?.emit('torrentReady', [photo]);
-            this.unwatch(infoHash);
+            this.announce(photo);
             return true;
         } catch (err) {
             Logger.warn('ServerFallback fetch failed for ' + infoHash + ': ' + (err?.message || err));

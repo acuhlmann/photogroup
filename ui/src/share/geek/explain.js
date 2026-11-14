@@ -59,8 +59,8 @@ const EXPLAIN = {
         sees: 'photogroup.network keeps the copy until all devices have the photo, for 24 h at most.',
     },
     pair: {
-        title: 'The room code went from phone to phone',
-        body: 'A new person needs only the room link. It goes as a QR code from screen to camera, as sound from speaker to microphone, or on an NFC tag. Sound moves about 10 bytes each second. That is enough for a room code, but photos go over WebRTC.',
+        title: 'Data went from phone to phone, not over the network',
+        body: 'A new person needs only the room link. It goes as a QR code from screen to camera, as sound from speaker to microphone, or on an NFC tag. Sound moves about 10 bytes each second. That is enough for a room code. A photo can also go from screen to camera as a stream of codes, at some kilobytes each second, with no network.',
         sees: 'Each person who sees the code or hears the sound can join the room. photogroup.network is not on this path.',
     },
 };

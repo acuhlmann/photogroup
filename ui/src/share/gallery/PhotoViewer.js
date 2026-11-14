@@ -12,6 +12,7 @@ import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import DeleteRounded from '@mui/icons-material/DeleteRounded';
+import QrCode2Rounded from '@mui/icons-material/QrCode2Rounded';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import RenderContent from './RenderContent';
@@ -25,6 +26,9 @@ import { GRID_SIDE, PREVIEW_COPY, smallImageOf } from './smallImage';
 import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
 import { canReadTorrentFile } from './saveRoom';
 import { removeLabel } from './removeLabel';
+
+// Loads with its code maker on first use.
+const LightSend = React.lazy(() => import('../nearby/LightSend'));
 
 /**
  * Display the selected media full screen with navigation (swipe, arrows,
@@ -43,6 +47,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
     const showDetails = details && (detailsAsked == null ? !narrow : detailsAsked);
     const tile = tiles[index];
     const [saving, setSaving] = useState(false);
+    const [lightSend, setLightSend] = useState(false);
     const [saved, setSaved] = useState(false);
     const [replacing, setReplacing] = useState(false);
     const [replaced, setReplaced] = useState(null);
@@ -204,6 +209,12 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                         >
                             {showDetails ? 'Hide details' : 'Details'}
                         </Button>}
+                        {canSave && !stillArriving && (
+                            <IconButton aria-label="Send by camera" title="Send by camera: show this photo as codes for another phone"
+                                onClick={() => setLightSend(true)} sx={{ color: '#fff' }}>
+                                <QrCode2Rounded />
+                            </IconButton>
+                        )}
                         {onRemove && (
                             <IconButton aria-label={removeLabel(tile)} onClick={() => Promise.resolve(onRemove(tile)).then(removed => { if (removed !== false) onClose(); })}
                                 sx={{ color: '#fff' }}>
@@ -314,6 +325,11 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                     <PhotoDetails master={master} tile={tile} roomTiles={roomTiles || tiles} headingId="photo-viewer-title" />
                 </Box>}
             </Box>
+            {lightSend && (
+                <React.Suspense fallback={null}>
+                    <LightSend master={master} tile={tile} open onClose={() => setLightSend(false)} />
+                </React.Suspense>
+            )}
         </Dialog>
     );
 }

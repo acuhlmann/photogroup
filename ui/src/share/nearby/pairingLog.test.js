@@ -37,6 +37,8 @@ describe('pairingLog', () => {
             .toBe('room code ← sound · 24 B · after 3.4 s');
         expect(describeEvent('pairing', [{ channel: 'qr', direction: 'in', bytes: 60 }]).text).toBe('room link ← QR code · 60 B');
         expect(describeEvent('pairing', [{ channel: 'nfc', direction: 'in' }]).text).toBe('room link ← NFC tag');
+        expect(describeEvent('pairing', [{ channel: 'light', direction: 'in', what: 'photo', bytes: 225472, ms: 8500, detail: '26 kB/s' }]).text)
+            .toBe('photo ← screen to camera · 225 kB · after 8.5 s · 26 kB/s');
     });
 });
 

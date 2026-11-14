@@ -175,7 +175,7 @@ export function readTransfers({ items = [], torrents = [], photos = [], peers = 
         const snap = snapshotTorrent(torrent);
         const sharer = photo ? photo.peerId === myPeerId : item.server.tx > 0 || item.serverStage?.direction === 'up';
         const direction = sharer ? 'up' : 'down';
-        const viaServer = item.server.rx > 0 || photos.some(each => each.fromServerCopy && getBaseInfoHash(each.infoHash) === item.infoHash);
+        const viaServer = item.server.rx > 0 || photos.some(each => each.fromServerCopy && !each.fromLight && getBaseInfoHash(each.infoHash) === item.infoHash);
         const done = sharer || !!snap?.done || viaServer;
         const seen = { announced: item.stages.length > 0, peerOffered: item.stages.some(stage => stage.stage === 'handshake') };
         const phase = computePhase(snap, seen);

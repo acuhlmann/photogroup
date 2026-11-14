@@ -559,7 +559,7 @@ function Gallery(props) {
                 </Box>
                 </>
             ) : variant === 'simple' ? (
-                <SimpleGrid tiles={tiles} roomId={master.service && master.service.id} onError={showError}
+                <SimpleGrid tiles={tiles} master={master} roomId={master.service && master.service.id} onError={showError}
                     onRemove={removePhoto} />
             ) : tiles.length === 0 ? (
                 <>
