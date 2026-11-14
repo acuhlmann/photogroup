@@ -222,6 +222,25 @@ export default class TorrentMaster {
     }
 
     /**
+     * A photo that came from another phone's screen, by camera. It joins the
+     * room photo with the same id; one from another room is saved instead.
+     * @returns {Promise<'delivered'|'already'|'rejected'|'saved'|'unknown'>}
+     */
+    async acceptNearbyPhoto(details, bytes) {
+        const photo = this.serverFallback?.watched.get(details?.id)?.original || this.roomPhotos?.get(details?.id);
+        const blob = new Blob([bytes], { type: details?.type || '' });
+        if (!photo) {
+            // A private room's photo is sealed: only its room can open it.
+            if (details?.sealed) return 'unknown';
+            const { default: download } = await import('downloadjs');
+            download(blob, details?.name || 'photo', details?.type || 'application/octet-stream');
+            return 'saved';
+        }
+        if (await this.findPhotoBytes(photo.infoHash)) return 'already';
+        return this.serverFallback.deliverNearby(photo, blob);
+    }
+
+    /**
      * The photo exactly as its torrent carries it (ciphertext for encrypted
      * shares), for leaving a server copy: what we got from the server, the
      * finished torrent, or the image cache.

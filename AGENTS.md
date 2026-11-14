@@ -66,6 +66,12 @@ Location comes from EXIF/XMP GPS, HEIC Exif items and video `udta`/`meta` boxes 
 
 The gallery toolbar (`gallery/GalleryToolbar.js`) sorts and filters tiles through `gallery/arrangeTiles.js` (rating, date taken, place grouped by town and country, text search over titles, descriptions, keywords and places) and switches to `gallery/RoomMap.js`, which pins every located photo on one map; the viewer pages through the tiles the current view shows.
 
+### Nearby pairing (`ui/src/share/nearby/`)
+
+Extra ways to hand the room link to phones nearby; photos still go over WebRTC. Invite (`InviteCode.js` → `NearbyInvite.js`) can play the room code as sound (`soundModem.js`, ggwave, about 10 bytes per second, audible or near-ultrasound) and, on Chrome for Android only, write the link to an NFC tag (`nfcTag.js`). "Scan to join" can listen for the sound instead of using the camera (`SoundListen.js`). The sound carries `pg1:<room>[#<key>]` (`roomCode.js`). `pairingLog.js` keeps how codes moved, and geek mode logs them as `pair` lines. Web Bluetooth, vibration, torch light and magnetic channels were judged not usable from a browser; do not send photo pieces over sound (far too slow next to WebRTC).
+
+**Photo by camera** (screen to camera, no network): a photo's viewer has "Send by camera" (`LightSend.js`, also in simple mode's viewer), which shows the photo's torrent bytes (`master.findPhotoBytes`) as a stream of QR codes; the room menu has "Get a photo by camera" (`LightReceive.js`). Frames are `lightFrames.js` (20-byte header + one block) over a Luby transform fountain code (`fountain.js`: frame number alone picks the blocks; files under 64 blocks go block by block first, larger ones mixed from the start; expect 14-30% more codes than blocks, `framesNeeded`). ZXing (`zxing-wasm`, `qrCodec.js`) writes and reads the codes; its wasm files are bundled with `?url`, not fetched from a CDN. Speed levels are in `lightSpeed.js` (3, 10 and 36 kB/s when no code is lost). A received photo goes in through `TorrentMaster.acceptNearbyPhoto` → `ServerFallback.deliverNearby`: same path as a server copy (fingerprint check, image cache, `fromServerCopy`) plus `fromLight`. E2E (`photo-by-camera.spec.js`) feeds Chromium's fake camera a Y4M video of the codes.
+
 ### Where a save lands
 
 By default the app picks the folder. Where the browser has a save dialog -- Chrome on

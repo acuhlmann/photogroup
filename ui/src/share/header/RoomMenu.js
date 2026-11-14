@@ -21,8 +21,10 @@ import ShieldOutlined from '@mui/icons-material/ShieldOutlined';
 import LogoutRounded from '@mui/icons-material/LogoutRounded';
 import LockRounded from '@mui/icons-material/LockRounded';
 import PersonOutlineRounded from '@mui/icons-material/PersonOutlineRounded';
+import QrCodeScannerRounded from '@mui/icons-material/QrCodeScannerRounded';
 
 import RoomPrivacy from '../RoomPrivacy';
+import LightReceive from '../nearby/LightReceive';
 import { leaveRoomNotice } from '../roomNotice';
 import { dropRoomSubscription } from '../pushNotices';
 import { roomCryptoKey } from '../privateRoom';
@@ -169,6 +171,7 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
     const [naming, setNaming] = useState(false);
     const [namingMe, setNamingMe] = useState(false);
     const [privacy, setPrivacy] = useState(false);
+    const [byCamera, setByCamera] = useState(false);
 
     const pick = (action) => () => {
         setAnchor(null);
@@ -226,6 +229,12 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
                     <ListItemIcon><ShieldOutlined fontSize="small" /></ListItemIcon>
                     <ListItemText primary="Privacy" />
                 </MenuItem>
+                {!!navigator.mediaDevices?.getUserMedia && (
+                    <MenuItem onClick={pick(() => setByCamera(true))} disabled={missingKey}>
+                        <ListItemIcon><QrCodeScannerRounded fontSize="small" /></ListItemIcon>
+                        <ListItemText primary="Get a photo by camera" secondary="From another phone's screen, with no network" />
+                    </MenuItem>
+                )}
                 <Divider />
                 <MenuItem onClick={pick(leave)}>
                     <ListItemIcon><LogoutRounded fontSize="small" /></ListItemIcon>
@@ -235,6 +244,7 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
             <RoomNameDialog master={master} open={naming} name={name} onClose={() => setNaming(false)} />
             <YourNameDialog master={master} open={namingMe} onClose={() => setNamingMe(false)} />
             <RoomPrivacy master={master} open={privacy} onClose={() => setPrivacy(false)} />
+            {byCamera && <LightReceive master={master} open onClose={() => setByCamera(false)} />}
         </>
     );
 }

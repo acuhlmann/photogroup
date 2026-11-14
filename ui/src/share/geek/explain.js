@@ -58,6 +58,11 @@ const EXPLAIN = {
         body: 'A download stopped, or all devices with the photo left. A device with the photo uploads a copy over HTTPS in 8 MB parts. The receiver downloads it and checks its fingerprint.',
         sees: 'photogroup.network keeps the copy until all devices have the photo, for 24 h at most.',
     },
+    pair: {
+        title: 'Data went from phone to phone, not over the network',
+        body: 'A new person needs only the room link. It goes as a QR code from screen to camera, as sound from speaker to microphone, or on an NFC tag. Sound moves about 10 bytes each second. That is enough for a room code. A photo can also go from screen to camera as a stream of codes, at some kilobytes each second, with no network.',
+        sees: 'Each person who sees the code or hears the sound can join the room. photogroup.network is not on this path.',
+    },
 };
 
 // An event the log has no line for (a peer's details changing, say) keeps
@@ -72,6 +77,7 @@ const ALIAS = {
     trackerAnnounce: 'trk',
     linkStats: 'path',
     serverCopy: 'copy',
+    pairing: 'pair',
 };
 
 /** `{ title, body, sees }` for a recorded event, or null when there is nothing to say. */

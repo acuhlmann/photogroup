@@ -2,6 +2,7 @@ import FileUtil from '../util/FileUtil';
 import { describeEvent } from './packetLog';
 import { transferRoutesFor } from './scene';
 import { flightMs } from './timeline';
+import { pairings } from '../nearby/pairingLog';
 
 // The single place room events become recorded traffic. Each event that the
 // footer can describe becomes one timeline entry, and that entry carries the
@@ -23,6 +24,9 @@ const SPEEDS = {
     answer: 0.01,
     binding: 0.009,
 };
+
+// Per timeline, the pairings it already has: the map can open many times.
+const recordedPairings = new WeakMap();
 
 const dur = speed => flightMs(speed) * (0.85 + Math.random() * 0.3);
 
@@ -256,7 +260,21 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
         });
     };
 
+    // Room codes that moved by sound, camera or NFC. They have no route on
+    // the map: they never touch the network.
+    const onPairing = (entry, at) => {
+        let done = recordedPairings.get(timeline);
+        if (!done) recordedPairings.set(timeline, done = new WeakSet());
+        if (!entry || done.has(entry)) return;
+        done.add(entry);
+        const line = describeEvent('pairing', [entry]);
+        if (line) timeline.push({ kind: line.kind, text: line.text, at });
+    };
+    // Also the ones from before the map opened, at their own time.
+    pairings().forEach(entry => onPairing(entry, entry.at));
+
     const handlers = [
+        ['pairing', entry => onPairing(entry)],
         ['sse', onSse],
         ['photos', onPhotos],
         ['peers', onPeers],

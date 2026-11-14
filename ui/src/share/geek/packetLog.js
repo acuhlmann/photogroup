@@ -18,7 +18,7 @@ function torrentName(torrent) {
 
 /**
  * One log entry for an event, or null for events not worth a line.
- * `kind` is the channel it came on: wire, trk, path, rx, tx, peer, link, photo, ice, sse, copy.
+ * `kind` is the channel it came on: wire, trk, path, rx, tx, peer, link, photo, ice, sse, copy, pair.
  */
 export function describeEvent(name, args) {
     const [first, second, third] = args;
@@ -116,6 +116,18 @@ export function describeEvent(name, args) {
                     ? ` · ${first.localAddress || 'mDNS'} ⇄ ${first.remoteAddress || 'mDNS'}` : ''),
         };
     }
+    case 'pairing': {
+        if (!first?.channel) return null;
+        const out = first.direction === 'out';
+        const how = { sound: 'sound', qr: 'QR code', nfc: 'NFC tag', light: 'screen to camera' }[first.channel] || first.channel;
+        const what = first.what || (first.channel === 'sound' ? 'room code' : 'room link');
+        const bytes = first.bytes ? ` · ${first.bytes < 10000 ? first.bytes + ' B' : FileUtil.formatBytes(first.bytes)}` : '';
+        const seconds = first.ms ? `${(first.ms / 1000).toFixed(1)} s` : '';
+        // Sent: how long one round plays. Heard: how long this device listened.
+        const time = seconds ? (out ? ` in ${seconds}` : ` · after ${seconds}`) : '';
+        const detail = first.detail ? ` · ${first.detail}` : '';
+        return { kind: 'pair', text: `${what} ${out ? '→' : '←'} ${how}${bytes}${time}${detail}` };
+    }
     case 'sseReconnected':
         return { kind: 'sse', text: 'event stream reconnected' };
     default:
@@ -125,5 +137,5 @@ export function describeEvent(name, args) {
 
 export const LOGGED_EVENTS = [
     'wire', 'downloadProgress', 'uploadProgress', 'pieceReceived', 'pieceSent', 'peers', 'peerConnections',
-    'photos', 'pcEvent', 'localNetwork', 'sseReconnected', 'serverCopy', 'trackerAnnounce', 'linkStats',
+    'photos', 'pcEvent', 'localNetwork', 'sseReconnected', 'serverCopy', 'trackerAnnounce', 'linkStats', 'pairing',
 ];

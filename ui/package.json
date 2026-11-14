@@ -29,6 +29,7 @@
     "exifr": "^7.1.3",
     "fast-xml-parser": "^5.11.2",
     "from2": "^2.3.0",
+    "ggwave": "^0.4.0",
     "html5-qrcode": "^2.3.8",
     "humanize-duration": "^3.35.0",
     "idb-kv-store": "^4.5.0",
@@ -55,7 +56,8 @@
     "vis-react": "^0.5.1",
     "visibilityjs": "^2.0.2",
     "webamp": "^2.3.1",
-    "webtorrent": "^3.0.21"
+    "webtorrent": "^3.0.21",
+    "zxing-wasm": "^3.1.6"
   },
   "scripts": {
     "dev": "vite",

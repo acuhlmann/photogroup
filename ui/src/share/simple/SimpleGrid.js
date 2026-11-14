@@ -6,6 +6,7 @@ import Button from '@mui/material/Button';
 import ButtonBase from '@mui/material/ButtonBase';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
+import QrCode2Rounded from '@mui/icons-material/QrCode2Rounded';
 import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
 import CheckRounded from '@mui/icons-material/CheckRounded';
@@ -26,6 +27,9 @@ import MediaStage from '../gallery/MediaStage';
 import { GRID_SIDE, useSmallImage } from '../gallery/smallImage';
 
 import { removeLabel } from '../gallery/removeLabel';
+
+// Loads with its code maker on first use.
+const LightSend = React.lazy(() => import('../nearby/LightSend'));
 
 /** "3 photos", "1 clip", "3 photos and 2 clips". */
 export function countLabel(tiles) {
@@ -162,8 +166,9 @@ function SimpleTile({ tile, roomId, onOpen, onError, onRemove, alone }) {
 }
 
 /** One photo or clip at a time, full screen, with a single Save button. Swipe to go on. */
-function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError }) {
+function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError, master }) {
     const tile = tiles[index];
+    const [lightSend, setLightSend] = useState(false);
     const go = useCallback(step => {
         const next = index + step;
         if (next >= 0 && next < tiles.length) onIndexChange(next);
@@ -189,7 +194,18 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
                 <Typography variant="caption" component="p" sx={{ mt: 1, textAlign: 'center', color: 'rgba(255,255,255,0.7)' }}>
                     {whereText(1)}
                 </Typography>
+                {master && !tile.loading && isReadyToSave(tile) && (
+                    <Button fullWidth size="small" startIcon={<QrCode2Rounded />} onClick={() => setLightSend(true)}
+                        sx={{ mt: 0.5, textTransform: 'none', color: 'rgba(255,255,255,0.85)' }}>
+                        Send by camera
+                    </Button>
+                )}
             </Box>
+            {lightSend && (
+                <React.Suspense fallback={null}>
+                    <LightSend master={master} tile={tile} open onClose={() => setLightSend(false)} />
+                </React.Suspense>
+            )}
         </Dialog>
     );
 }
@@ -199,7 +215,7 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError })
  * Save button and a Remove button, and one button to save everything new at
  * once, with one line that says where it goes.
  */
-function SimpleGrid({ tiles: given, roomId, onError, onRemove }) {
+function SimpleGrid({ tiles: given, roomId, onError, onRemove, master }) {
     useHaveChanges();
     const [openKey, setOpenKey] = useState(null);
     // Other people's photos first; the ones this phone shared go last.
@@ -257,7 +273,7 @@ function SimpleGrid({ tiles: given, roomId, onError, onRemove }) {
                 ))}
             </Box>
             {openIndex > -1 && (
-                <SimpleViewer tiles={open} index={openIndex} roomId={roomId} onError={onError}
+                <SimpleViewer tiles={open} index={openIndex} roomId={roomId} onError={onError} master={master}
                     onIndexChange={index => setOpenKey(keyOf(open[index]))}
                     onClose={() => setOpenKey(null)} />
             )}
@@ -267,6 +283,7 @@ function SimpleGrid({ tiles: given, roomId, onError, onRemove }) {
 
 SimpleGrid.propTypes = {
     tiles: PropTypes.array.isRequired,
+    master: PropTypes.object,
     roomId: PropTypes.string,
     onError: PropTypes.func,
     onRemove: PropTypes.func,
