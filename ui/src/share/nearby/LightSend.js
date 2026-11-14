@@ -44,7 +44,11 @@ export default function LightSend({ master, tile, open, onClose }) {
                 if (gone) return;
                 if (!blob) setProblem(NOT_HERE);
                 else if (blob.size > MAX_LIGHT_BYTES) setProblem(TOO_LARGE);
-                else setFile(new Uint8Array(await blob.arrayBuffer()));
+                else {
+                    const bytes = new Uint8Array(await blob.arrayBuffer());
+                    // Another photo may be open by now.
+                    if (!gone) setFile(bytes);
+                }
             })
             .catch((err) => {
                 Logger.warn('Reading the photo for the camera transfer failed: ' + (err?.message || err));

@@ -31,6 +31,8 @@ export function receivedPart({ have, frames, blocks, done }) {
     return Math.min(0.99, Math.max(have / blocks, frames / framesNeeded(blocks)));
 }
 
+export const ADD_FAILED = "Couldn't add the photo. Keep the camera on the codes to try again.";
+const RETRY_MS = 3000;
 // The camera picture is cut to a square this wide before it is read.
 const READ_SIDE = 960;
 
@@ -54,6 +56,7 @@ export default function LightReceive({ master, open, onClose }) {
         const context = canvas.getContext('2d', { willReadFrequently: true });
         let send = null; // { startedAt, freshBytes, read }
         let finished = false;
+        let retryAt = 0;
         setFailed(false);
         setProgress(null);
         setOutcome('');
@@ -65,7 +68,17 @@ export default function LightReceive({ master, open, onClose }) {
                 setOutcome(OUTCOME.rejected());
                 return;
             }
-            const how = await master.acceptNearbyPhoto(result.details, result.file);
+            let how;
+            try {
+                how = await master.acceptNearbyPhoto(result.details, result.file);
+            } catch (err) {
+                // The file is whole: the next code read tries to add it again.
+                Logger.warn('Adding the photo from the camera failed: ' + (err?.message || err));
+                if (!stopped) setOutcome(ADD_FAILED);
+                retryAt = Date.now() + RETRY_MS;
+                finished = false;
+                return;
+            }
             if (stopped) return;
             setOutcome(OUTCOME[how](result.details.name || 'The photo'));
             notePairing(master.emitter, {
@@ -89,18 +102,19 @@ export default function LightReceive({ master, open, onClose }) {
                     const state = bytes && receiver.add(bytes);
                     if (state && !stopped) {
                         // Another photo came on screen: count again.
-                        if (!send || send.total !== state.total || (finished && state.have < state.blocks)) {
-                            send = { startedAt: Date.now(), read: 0, total: state.total };
+                        if (!send || send.sendId !== state.sendId || send.total !== state.total) {
+                            send = { startedAt: Date.now(), read: 0, total: state.total, sendId: state.sendId };
+                            retryAt = 0;
                             finished = false;
                             setOutcome('');
                         }
                         if (state.fresh) send.read++;
-                        if (!finished) {
+                        if (!finished && !retryAt) {
                             const seconds = Math.max((Date.now() - send.startedAt) / 1000, 0.5);
                             const part = receivedPart(state);
                             setProgress({ part, codes: state.frames, total: state.total, rate: part * state.total / seconds });
                         }
-                        if (state.done && !finished) {
+                        if (state.done && !finished && Date.now() >= retryAt) {
                             finished = true;
                             await finish(state);
                         }
@@ -131,6 +145,7 @@ export default function LightReceive({ master, open, onClose }) {
                 read();
             } catch (err) {
                 Logger.warn('Starting the camera failed: ' + (err?.message || err));
+                stream?.getTracks().forEach(track => track.stop());
                 if (!stopped) setFailed(true);
             }
         })();
@@ -167,7 +182,7 @@ export default function LightReceive({ master, open, onClose }) {
                                 : 'Looking for codes…')}
                         </Typography>
                         <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 420 }}>
-                            {outcome ? 'Point the camera at the next photo, or close this.' : LIGHT_RECEIVE_HELP}
+                            {outcome && outcome !== ADD_FAILED ? 'Point the camera at the next photo, or close this.' : LIGHT_RECEIVE_HELP}
                         </Typography>
                     </>
                 )}

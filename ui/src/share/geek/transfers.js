@@ -176,7 +176,9 @@ export function readTransfers({ items = [], torrents = [], photos = [], peers = 
         const sharer = photo ? photo.peerId === myPeerId : item.server.tx > 0 || item.serverStage?.direction === 'up';
         const direction = sharer ? 'up' : 'down';
         const viaServer = item.server.rx > 0 || photos.some(each => each.fromServerCopy && !each.fromLight && getBaseInfoHash(each.infoHash) === item.infoHash);
-        const done = sharer || !!snap?.done || viaServer;
+        // By camera: the file is here, though no network path carried it.
+        const byCamera = photos.some(each => each.fromLight && getBaseInfoHash(each.infoHash) === item.infoHash);
+        const done = sharer || !!snap?.done || viaServer || byCamera;
         const seen = { announced: item.stages.length > 0, peerOffered: item.stages.some(stage => stage.stage === 'handshake') };
         const phase = computePhase(snap, seen);
         const key = direction === 'down' ? 'rx' : 'tx';

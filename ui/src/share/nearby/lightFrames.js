@@ -9,6 +9,10 @@ const MAGIC = [0x50, 0x4c]; // "PL"
 const VERSION = 1;
 // The largest file a camera transfer takes: it has to fit in memory twice.
 export const MAX_LIGHT_BYTES = 64 * 1024 * 1024;
+// A code from a stranger's screen must not make this phone set aside a lot
+// of memory: the smallest block and the most blocks a stream can declare.
+export const MIN_BLOCK_BYTES = 100;
+export const MAX_BLOCKS = 200000;
 
 function checksum(bytes) {
     let a = 1;
@@ -71,6 +75,7 @@ export function readFrame(bytes) {
     const blockSize = view.getUint16(12);
     const total = view.getUint32(8);
     if (bytes.length !== HEADER + blockSize || !total || total > MAX_LIGHT_BYTES + 4096) return null;
+    if (blockSize < MIN_BLOCK_BYTES || Math.ceil(total / blockSize) > MAX_BLOCKS) return null;
     const payload = bytes.subarray(HEADER);
     if (checksum(payload) !== view.getUint16(18)) return null;
     return { sendId: view.getUint32(4), total, blockSize, seed: view.getUint32(14), payload };
@@ -97,6 +102,7 @@ export function createLightReceiver() {
             }
             const fresh = current.decoder.add(frame.seed, frame.payload);
             return {
+                sendId: current.sendId,
                 have: current.decoder.have,
                 frames: current.decoder.frames,
                 blocks: current.decoder.k,

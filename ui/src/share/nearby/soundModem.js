@@ -145,9 +145,10 @@ export async function playText(text, { quiet = false } = {}) {
  * @param {object} handlers
  * @param {(text: string) => void} handlers.onText each text heard
  * @param {(level: number) => void} [handlers.onLevel] loudness 0..1, a few times a second
+ * @param {AbortSignal} [handlers.signal] aborts a start that is still under way, and frees the microphone
  * @returns {Promise<{stop: () => void}>}
  */
-export async function listenForText({ onText, onLevel }) {
+export async function listenForText({ onText, onLevel, signal }) {
     const context = audioContext();
     if (!context || !navigator.mediaDevices?.getUserMedia) {
         throw new Error('This browser cannot use the microphone from a page.');
@@ -161,8 +162,15 @@ export async function listenForText({ onText, onLevel }) {
             audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
             video: false,
         });
+        // Closed while the permission question was open: free the microphone
+        // now, not when the modem has loaded.
+        const release = () => stream.getTracks().forEach(track => track.stop());
+        if (signal?.aborted) throw new Error('listening was cancelled');
+        signal?.addEventListener('abort', release, { once: true });
         const ggwave = await loadModem();
         await resumed;
+        signal?.removeEventListener('abort', release);
+        if (signal?.aborted) throw new Error('listening was cancelled');
         decoder = createDecoder(ggwave, context.sampleRate);
     } catch (err) {
         stream?.getTracks().forEach(track => track.stop());

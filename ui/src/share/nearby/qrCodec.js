@@ -10,8 +10,9 @@ let reader = null;
 
 function loadWriter() {
     if (!writer) {
-        writer = import('zxing-wasm/writer').then((module) => {
-            module.prepareZXingModule({ overrides: { locateFile: () => writerWasm } });
+        writer = import('zxing-wasm/writer').then(async (module) => {
+            // Start the WebAssembly now, so a failed download is seen here and the next try loads again.
+            await module.prepareZXingModule({ overrides: { locateFile: () => writerWasm }, fireImmediately: true });
             return module;
         }).catch((err) => { writer = null; throw err; });
     }
@@ -20,8 +21,8 @@ function loadWriter() {
 
 function loadReader() {
     if (!reader) {
-        reader = import('zxing-wasm/reader').then((module) => {
-            module.prepareZXingModule({ overrides: { locateFile: () => readerWasm } });
+        reader = import('zxing-wasm/reader').then(async (module) => {
+            await module.prepareZXingModule({ overrides: { locateFile: () => readerWasm }, fireImmediately: true });
             return module;
         }).catch((err) => { reader = null; throw err; });
     }

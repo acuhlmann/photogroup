@@ -32,9 +32,12 @@ export default function NearbyInvite({ master, room, roomKey = null, url }) {
     const [nfc, setNfc] = useState('');
     const playerRef = useRef(null);
     const nfcRef = useRef(null);
+    // Each start gets a number; a start that is no longer the newest stops itself.
+    const startRef = useRef(0);
     const text = roomCodeText({ room, key: roomKey });
 
     const stopSound = useCallback(() => {
+        startRef.current++;
         playerRef.current?.stop();
         playerRef.current = null;
         setPlaying(false);
@@ -44,8 +47,13 @@ export default function NearbyInvite({ master, room, roomKey = null, url }) {
         playerRef.current?.stop();
         playerRef.current = null;
         setPlaying(true);
+        const mine = ++startRef.current;
         try {
             const player = await playText(text, { quiet: useQuiet });
+            if (mine !== startRef.current) {
+                player.stop();
+                return;
+            }
             playerRef.current = player;
             notePairing(master.emitter, {
                 channel: 'sound',
@@ -56,6 +64,7 @@ export default function NearbyInvite({ master, room, roomKey = null, url }) {
             });
         } catch (err) {
             Logger.warn('Playing the room code failed: ' + (err?.message || err));
+            if (mine !== startRef.current) return;
             setPlaying(false);
             master.emitter.emit('showError', "Couldn't play the sound. Let them scan the code instead.");
         }
@@ -85,6 +94,7 @@ export default function NearbyInvite({ master, room, roomKey = null, url }) {
 
     // The sound and the wait for a tag end with the invite.
     useEffect(() => () => {
+        startRef.current++;
         playerRef.current?.stop();
         nfcRef.current?.abort();
     }, []);

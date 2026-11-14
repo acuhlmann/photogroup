@@ -23,7 +23,9 @@ export default function SoundListen({ onCode }) {
         let listener = null;
         let ended = false;
         const startedAt = Date.now();
+        const starting = new AbortController();
         listenForText({
+            signal: starting.signal,
             onLevel: value => { if (!ended) setLevel(value); },
             onText: (text) => {
                 const code = parseRoomCode(text);
@@ -46,6 +48,7 @@ export default function SoundListen({ onCode }) {
         });
         return () => {
             ended = true;
+            starting.abort();
             listener?.stop();
         };
     }, []);

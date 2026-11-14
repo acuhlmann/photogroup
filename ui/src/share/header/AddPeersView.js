@@ -58,6 +58,8 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
     const cameraOn = scan && !listening;
     const [numPeers, setNumPeers] = useState(0);
     const scannerRef = useRef(null);
+    // The scanner empties its element when its camera has stopped; a new one waits for that.
+    const clearingRef = useRef(null);
 
     const handleScan = useCallback(async (data) => {
         if(!data) return;
@@ -102,6 +104,7 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
             // large and only loaded when someone scans.
             const timer = setTimeout(async () => {
                 try {
+                    await clearingRef.current;
                     const { Html5QrcodeScanner } = await import('html5-qrcode');
                     if (cancelled || scannerRef.current) return;
                     const scanner = new Html5QrcodeScanner(
@@ -141,7 +144,7 @@ function AddPeersView({ master, showButton = true, inRoom = false, roomName = ''
         }
 
         if (!cameraOn && scannerRef.current) {
-            scannerRef.current.clear().catch(err => Logger.error('Failed to clear scanner:', err));
+            clearingRef.current = scannerRef.current.clear().catch(err => Logger.error('Failed to clear scanner:', err));
             scannerRef.current = null;
         }
         if (!scan) {

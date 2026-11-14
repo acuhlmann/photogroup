@@ -132,3 +132,25 @@ describe('estimates', () => {
         expect(receivedPart({ have: 200, frames: 255, blocks: 200, done: true })).toBe(1);
     });
 });
+
+describe('limits', () => {
+    it('refuses a stream that declares too many or too small blocks', () => {
+        const frame = (total, blockSize) => {
+            const out = new Uint8Array(HEADER + blockSize);
+            const view = new DataView(out.buffer);
+            out[0] = 0x50; out[1] = 0x4c; out[2] = 1;
+            view.setUint32(8, total);
+            view.setUint16(12, blockSize);
+            view.setUint32(14, 0xffffffff);
+            // The checksum of an all-zero block.
+            let a = 1; let b = 0;
+            for (let i = 0; i < blockSize; i++) { a = (a + 0) % 251; b = (b + a) % 251; }
+            view.setUint16(18, (b << 8) | a);
+            return out;
+        };
+        expect(readFrame(frame(880 * 50, 880))).not.toBeNull();
+        expect(readFrame(frame(67108864, 1))).toBeNull();
+        expect(readFrame(frame(67108864, 100))).toBeNull();
+        expect(createLightReceiver().add(frame(67108864, 1))).toBeNull();
+    });
+});

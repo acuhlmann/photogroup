@@ -1,4 +1,4 @@
-import { keyForNewRoom, markPrivate, setKeyInAddress } from './privateRoom';
+import { keyForNewRoom, markPrivate, roomKeyText, setKeyInAddress } from './privateRoom';
 
 /**
  * Create a room, put it in the address bar, and tell the page it is ready
@@ -38,11 +38,22 @@ export async function createRoom(master) {
  * heard, or tapped.
  */
 export async function joinRoomByCode(master, { room, key = null }) {
+    const before = { id: master.service.id, hasRoom: master.service.hasRoom, key: roomKeyText() };
     master.service.id = room;
     master.service.hasRoom = true;
     // A private room's key, before the room's photos arrive.
     setKeyInAddress(key);
-    await master.findExistingContent(master.service.joinRoom);
+    await master.findExistingContent(async function joinOrGoBack() {
+        try {
+            return await master.service.joinRoom.call(this);
+        } catch (err) {
+            // No such room, or no connection: this page is still where it was.
+            master.service.id = before.id;
+            master.service.hasRoom = before.hasRoom;
+            setKeyInAddress(before.key);
+            throw err;
+        }
+    });
     master.service.changeUrl('room', master.service.id);
     master.emitter.emit('hideFrontView');
     master.emitter.emit('readyToUpload');
