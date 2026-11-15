@@ -8,14 +8,14 @@ const READ_SIDE = 720;
 const PAUSE_MS = 60;
 
 /**
- * Runs the back camera in a <video> and gives each QR code that it sees.
+ * Runs a camera (the back one, or with `facing: 'user'` the front one) in a <video> and gives each QR code that it sees.
  * @param {object} options
  * @param {{current: HTMLVideoElement|null}} options.videoRef
  * @param {boolean} options.active the camera runs only while this is true
  * @param {(bytes: Uint8Array) => void|Promise<void>} options.onBytes called for each picture with a code, also for the same code again
  * @returns {{failed: boolean, running: boolean}}
  */
-export function useCodeCamera({ videoRef, active, onBytes }) {
+export function useCodeCamera({ videoRef, active, onBytes, facing = 'environment' }) {
     const [failed, setFailed] = useState(false);
     const [running, setRunning] = useState(false);
 
@@ -53,7 +53,7 @@ export function useCodeCamera({ videoRef, active, onBytes }) {
                 const ready = prepareReader();
                 stream = await navigator.mediaDevices.getUserMedia({
                     audio: false,
-                    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+                    video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
                 });
                 await ready;
                 if (stopped) {
@@ -80,7 +80,7 @@ export function useCodeCamera({ videoRef, active, onBytes }) {
         };
         // onBytes is read through a ref by the caller; the camera does not restart for it.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [active, videoRef]);
+    }, [active, videoRef, facing]);
 
     return { failed, running };
 }

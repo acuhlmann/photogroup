@@ -7,15 +7,24 @@ import IconButton from '@mui/material/IconButton';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import LinearProgress from '@mui/material/LinearProgress';
+import Button from '@mui/material/Button';
+import ButtonBase from '@mui/material/ButtonBase';
+import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import { createLightReceiver } from './lightFrames';
 import { framesNeeded } from './fountain.js';
-import { readQrBytes, prepareReader } from './qrCodec';
+import { readQrBytes, prepareReader, qrSymbol, drawSymbol } from './qrCodec';
+import { readSheet, readBundle, encodePick, fitsBundle } from './lightBundle';
+import { LIGHT_LEVELS, DEFAULT_LEVEL, sendTimeText } from './lightSpeed';
 import { notePairing } from './pairingLog';
 
-export const LIGHT_RECEIVE_HELP = 'On the other phone: open a photo, then tap "Send by camera". Point this camera at the codes. Hold both phones still.';
+export const RECEIVE_TITLE = 'Get photos by camera';
+export const LIGHT_RECEIVE_HELP = 'On the other phone: tap "Send photos by camera". Point this camera at the codes. Hold both phones still.';
+export const CHOOSE_TEXT = 'Tap the photos that you want.';
+export const PICK_TEXT = 'Hold this code in front of the camera of the other phone. When its codes change, point this camera at them again.';
+export const TOO_MANY = 'These photos are too large together. Choose fewer photos.';
 export const CAMERA_ERROR = 'The camera is not available. Allow the camera for this page, then try again.';
 const OUTCOME = {
     delivered: name => `${name} is here.`,
@@ -24,6 +33,21 @@ const OUTCOME = {
     rejected: () => 'This is not the photo that the room has. It was not added.',
     unknown: () => 'This photo is from a different private room. It cannot be opened here.',
 };
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+/** What became of the photos of one transfer, as sentences. */
+export function outcomeLines(results) {
+    if (results.length === 1) return [OUTCOME[results[0].how](results[0].name || 'The photo')];
+    const count = how => results.filter(result => result.how === how).length;
+    const lines = [];
+    if (count('delivered')) lines.push(`${plural(count('delivered'), 'photo')} ${count('delivered') === 1 ? 'is' : 'are'} here.`);
+    if (count('saved')) lines.push(`${plural(count('saved'), 'photo')} ${count('saved') === 1 ? 'is' : 'are'} saved on this phone.`);
+    if (count('already')) lines.push(`You have ${plural(count('already'), 'photo')} already.`);
+    if (count('rejected')) lines.push(`${plural(count('rejected'), 'photo')} ${count('rejected') === 1 ? 'was' : 'were'} not added.`);
+    if (count('unknown')) lines.push(`${plural(count('unknown'), 'photo')} from a different private room cannot be opened here.`);
+    return lines;
+}
+
 // A mixed code gives its blocks only near the end, all at once. So the
 // part received is counted from the codes read.
 export function receivedPart({ have, frames, blocks, done }) {
@@ -45,6 +69,10 @@ export default function LightReceive({ master, open, onClose }) {
     const [failed, setFailed] = useState(false);
     const [progress, setProgress] = useState(null);
     const [outcome, setOutcome] = useState('');
+    const [view, setView] = useState('camera'); // camera, choose, pick
+    const [sheet, setSheet] = useState(null);
+    const [chosen, setChosen] = useState([]);
+    const pickRef = useRef(null);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -60,6 +88,8 @@ export default function LightReceive({ master, open, onClose }) {
         setFailed(false);
         setProgress(null);
         setOutcome('');
+        setView('camera');
+        setSheet(null);
 
         const finish = async (state) => {
             const result = receiver.result();
@@ -68,9 +98,27 @@ export default function LightReceive({ master, open, onClose }) {
                 setOutcome(OUTCOME.rejected());
                 return;
             }
-            let how;
+            // The small pictures of some photos: the person picks.
+            const sheet = readSheet(result);
+            if (sheet) {
+                if (stopped) return;
+                setSheet({ sendId: state.sendId, items: sheet.items.map(item => ({
+                    ...item, url: item.thumb ? URL.createObjectURL(new Blob([item.thumb], { type: 'image/jpeg' })) : '',
+                })) });
+                setChosen([]);
+                setView('choose');
+                notePairing(master.emitter, {
+                    channel: 'light', direction: 'in', what: 'small pictures', bytes: result.file.length,
+                    ms: Math.round(seconds * 1000), detail: `${sheet.items.length} photos`,
+                });
+                return;
+            }
+            const parts = readBundle(result) || [result];
+            const results = [];
             try {
-                how = await master.acceptNearbyPhoto(result.details, result.file);
+                for (const part of parts) {
+                    results.push({ name: part.details.name, how: await master.acceptNearbyPhoto(part.details, part.file) });
+                }
             } catch (err) {
                 // The file is whole: the next code read tries to add it again.
                 Logger.warn('Adding the photo from the camera failed: ' + (err?.message || err));
@@ -80,7 +128,7 @@ export default function LightReceive({ master, open, onClose }) {
                 return;
             }
             if (stopped) return;
-            setOutcome(OUTCOME[how](result.details.name || 'The photo'));
+            setOutcome(outcomeLines(results).join(' '));
             notePairing(master.emitter, {
                 channel: 'light', direction: 'in', what: 'photo', bytes: result.file.length,
                 ms: Math.round(seconds * 1000),
@@ -107,6 +155,8 @@ export default function LightReceive({ master, open, onClose }) {
                             retryAt = 0;
                             finished = false;
                             setOutcome('');
+                            // The other phone read the choice: its codes carry the photos now.
+                            setView('camera');
                         }
                         if (state.fresh) send.read++;
                         if (!finished && !retryAt) {
@@ -159,9 +209,27 @@ export default function LightReceive({ master, open, onClose }) {
 
     const percent = progress ? Math.floor(progress.part * 100) : 0;
 
+    // The small pictures are freed when another sheet comes or this closes.
+    useEffect(() => () => { sheet?.items.forEach((item) => { if (item.url) URL.revokeObjectURL(item.url); }); }, [sheet]);
+
+    // The code that carries the choice.
+    useEffect(() => {
+        if (view !== 'pick' || !sheet) return undefined;
+        let gone = false;
+        qrSymbol(encodePick(sheet.sendId, chosen)).then((symbol) => {
+            if (!gone && pickRef.current) drawSymbol(pickRef.current, symbol);
+        }).catch(err => Logger.warn('Making a code failed: ' + (err?.message || err)));
+        return () => { gone = true; };
+    }, [view, sheet, chosen]);
+
+    const toggle = index => setChosen(before => (before.includes(index) ? before.filter(each => each !== index) : [...before, index]));
+    const chosenBytes = sheet ? chosen.reduce((sum, index) => sum + sheet.items[index].size, 0) : 0;
+    const tooMany = sheet ? !fitsBundle(chosen.map(index => sheet.items[index].size)) : false;
+    const level = LIGHT_LEVELS.find(each => each.id === DEFAULT_LEVEL);
+
     return (
         <Dialog open={open} onClose={onClose} fullScreen aria-labelledby="light-receive-title">
-            <DialogTitle id="light-receive-title" sx={{ textAlign: 'center', px: 6 }}>Get a photo by camera</DialogTitle>
+            <DialogTitle id="light-receive-title" sx={{ textAlign: 'center', px: 6 }}>{RECEIVE_TITLE}</DialogTitle>
             <IconButton aria-label="Close" onClick={onClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
                 <CloseRounded />
             </IconButton>
@@ -170,20 +238,76 @@ export default function LightReceive({ master, open, onClose }) {
                     <Typography role="alert" sx={{ py: 4, textAlign: 'center' }}>{CAMERA_ERROR}</Typography>
                 ) : (
                     <>
-                        <Box sx={{ width: 'min(100%, 56vh)', aspectRatio: '1', borderRadius: 2, overflow: 'hidden', bgcolor: '#000', flexShrink: 0 }}>
-                            <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        {/* The camera stays on while the person picks: it sees when the photos come. */}
+                        <Box sx={view === 'camera' ? { display: 'contents' }
+                            : { position: 'absolute', width: 2, height: 2, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }}>
+                            <Box sx={{ width: 'min(100%, 56vh)', aspectRatio: '1', borderRadius: 2, overflow: 'hidden', bgcolor: '#000', flexShrink: 0 }}>
+                                <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                            </Box>
+                            <Box sx={{ width: '100%', maxWidth: 420 }}>
+                                <LinearProgress variant="determinate" value={percent} aria-label="Photo received" sx={{ height: 8, borderRadius: 4 }} />
+                            </Box>
+                            <Typography variant="body1" role="status" data-testid="light-progress" data-codes={progress?.codes || 0} sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
+                                {outcome || (progress
+                                    ? `${percent}% of ${FileUtil.formatBytes(progress.total)} · ${FileUtil.formatBytes(progress.rate)}/s`
+                                    : 'Looking for codes…')}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 420 }}>
+                                {outcome && outcome !== ADD_FAILED ? 'Point the camera at the next photos, or close this.' : LIGHT_RECEIVE_HELP}
+                            </Typography>
+                            {sheet && (
+                                <Button size="small" onClick={() => setView('choose')} sx={{ textTransform: 'none' }}>Choose again</Button>
+                            )}
                         </Box>
-                        <Box sx={{ width: '100%', maxWidth: 420 }}>
-                            <LinearProgress variant="determinate" value={percent} aria-label="Photo received" sx={{ height: 8, borderRadius: 4 }} />
-                        </Box>
-                        <Typography variant="body1" role="status" data-testid="light-progress" data-codes={progress?.codes || 0} sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
-                            {outcome || (progress
-                                ? `${percent}% of ${FileUtil.formatBytes(progress.total)} · ${FileUtil.formatBytes(progress.rate)}/s`
-                                : 'Looking for codes…')}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 420 }}>
-                            {outcome && outcome !== ADD_FAILED ? 'Point the camera at the next photo, or close this.' : LIGHT_RECEIVE_HELP}
-                        </Typography>
+                        {view === 'choose' && sheet && (
+                            <>
+                                <Typography variant="body1" role="status" sx={{ fontWeight: 600, textAlign: 'center' }}>{CHOOSE_TEXT}</Typography>
+                                <Box data-testid="light-sheet" sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 1, width: '100%', maxWidth: 560 }}>
+                                    {sheet.items.map((item, index) => {
+                                        const on = chosen.includes(index);
+                                        return (
+                                            <ButtonBase
+                                                key={item.id + index} onClick={() => toggle(index)} aria-pressed={on}
+                                                aria-label={`${item.name}, ${FileUtil.formatBytes(item.size)}`}
+                                                sx={{
+                                                    position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', borderRadius: 1.5,
+                                                    overflow: 'hidden', border: '2px solid', borderColor: on ? 'primary.main' : 'divider', bgcolor: 'background.paper',
+                                                }}
+                                            >
+                                                <Box sx={{ aspectRatio: '1', bgcolor: 'action.hover', display: 'grid', placeItems: 'center' }}>
+                                                    {item.url
+                                                        ? <img src={item.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                                        : <Typography variant="caption" sx={{ color: 'text.secondary', px: 0.5 }}>{item.sealed ? 'Private' : 'No picture'}</Typography>}
+                                                </Box>
+                                                <Typography variant="caption" sx={{ px: 0.5, py: 0.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {FileUtil.formatBytes(item.size)}
+                                                </Typography>
+                                                {on && <CheckCircleRounded color="primary" sx={{ position: 'absolute', top: 4, right: 4, bgcolor: '#fff', borderRadius: '50%' }} />}
+                                            </ButtonBase>
+                                        );
+                                    })}
+                                </Box>
+                                <Typography variant="body2" role="status" data-testid="light-chosen" sx={{ textAlign: 'center', color: tooMany ? 'error.main' : 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
+                                    {tooMany ? TOO_MANY : chosen.length
+                                        ? `${plural(chosen.length, 'photo')} · ${FileUtil.formatBytes(chosenBytes)} · ${sendTimeText(chosenBytes, level)}`
+                                        : 'A photo by camera can take minutes. Choose few photos.'}
+                                </Typography>
+                                <Button variant="contained" disabled={!chosen.length || tooMany} onClick={() => setView('pick')} sx={{ textTransform: 'none' }}>
+                                    Get these photos
+                                </Button>
+                            </>
+                        )}
+                        {view === 'pick' && sheet && (
+                            <>
+                                <Box sx={{ bgcolor: '#fff', p: '4vmin', width: 'min(90vw, 52vh)', aspectRatio: '1', flexShrink: 0, borderRadius: 2 }}>
+                                    <canvas ref={pickRef} data-testid="pick-code" aria-label="Code with your choice"
+                                        style={{ width: '100%', height: '100%', imageRendering: 'pixelated', display: 'block' }} />
+                                </Box>
+                                <Typography variant="body1" role="status" sx={{ fontWeight: 600, textAlign: 'center', maxWidth: 420 }}>{PICK_TEXT}</Typography>
+                                <Button variant="contained" onClick={() => setView('camera')} sx={{ textTransform: 'none' }}>The other phone has my choice</Button>
+                                <Button size="small" onClick={() => setView('choose')} sx={{ textTransform: 'none' }}>Choose again</Button>
+                            </>
+                        )}
                     </>
                 )}
             </DialogContent>

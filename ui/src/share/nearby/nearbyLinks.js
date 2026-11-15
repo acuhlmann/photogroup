@@ -45,6 +45,8 @@ export default class NearbyLinks {
             refresh();
         };
         this.emitter?.on?.('torrentReady', arrived);
+        // A photo, or its small picture, was added with no server.
+        this.emitter?.on?.('offlinePhotos', () => { if (this.open().length) refresh(); });
         this.emitter?.on?.('heldChanges', () => this.open().forEach(link => link.session.sendNotes()));
         // With no server later, the code for the nearby channels cannot load: get it now.
         this.emitter?.on?.('readyToUpload', () => loadNearbyCodeSoon());
@@ -231,6 +233,8 @@ export default class NearbyLinks {
                 return photo ? { name: photo.fileName || '', type: photo.fileType || '', sealed: !!photo.secure } : null;
             },
             accept: (details, blob) => master.acceptNearbyPhoto(details, blob, { via: 'direct' }),
+            photos: () => master.offlineRoom?.descriptions() || [],
+            onPhotos: items => master.offlineRoom?.learn(items),
             notes: () => master.nearbyNotes?.frames({ maxBytes: LINK_NOTE_BYTES }) || [],
             onNotes: frame => master.nearbyNotes?.apply(frame),
             onState: (state) => {

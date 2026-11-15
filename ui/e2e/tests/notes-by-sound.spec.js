@@ -47,7 +47,11 @@ async function soundOf({ room, peerId, notes }) {
   return wavFile(samples, 48000);
 }
 
+// The menu has this while the server does not answer (and in geek mode).
 async function openSoundDialog(page) {
+  await page.context().route('**/api/**', route => route.abort());
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await expect(page.getByTestId('server-away')).toBeVisible({ timeout: 15000 });
   await dismissDialogs(page);
   await page.getByRole('button', { name: /Room menu/ }).click();
   await page.getByRole('menuitem', { name: new RegExp(MENU) }).click();

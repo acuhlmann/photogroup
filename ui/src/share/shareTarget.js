@@ -19,6 +19,28 @@ export function registerShareTarget(nav = navigator) {
     });
 }
 
+/**
+ * Ask the service worker to keep the app, so that it opens with no network.
+ * Only a build has a list of its files; a development server has none.
+ * @returns {Promise<boolean>} whether the worker was asked
+ */
+export async function keepAppForOffline(nav = navigator, load = () => fetch('/app-files.json', { cache: 'no-cache' })) {
+    if (!nav?.serviceWorker) return false;
+    try {
+        const response = await load();
+        if (!response.ok) return false;
+        const { files } = await response.json();
+        if (!Array.isArray(files) || !files.length) return false;
+        const registration = await nav.serviceWorker.ready;
+        if (!registration.active) return false;
+        registration.active.postMessage({ type: 'keep-app', files });
+        return true;
+    } catch (err) {
+        Logger.info('The app is not kept for use with no network: ' + (err && err.message ? err.message : err));
+        return false;
+    }
+}
+
 export function rememberRoom(id) {
     if (!id) return;
     try {

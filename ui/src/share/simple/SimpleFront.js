@@ -11,6 +11,7 @@ import QrCodeScannerRounded from '@mui/icons-material/QrCodeScannerRounded';
 import { createRoom } from '../openRoom';
 import SimpleHowItWorks from './SimpleHowItWorks';
 import RecentRooms from '../RecentRooms';
+import NearbyFront from '../nearby/NearbyFront';
 import PrivateRoomSwitch from '../PrivateRoomSwitch';
 
 const STEPS = [
@@ -84,6 +85,7 @@ function SimpleFront({ master }) {
                 </Stack>
 
                 <RecentRooms />
+                <NearbyFront master={master} />
 
                 <Box component="ol" sx={{ m: 0, p: 0, listStyle: 'none', textAlign: 'left' }}>
                     {STEPS.map((step, index) => (

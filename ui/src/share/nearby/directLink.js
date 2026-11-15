@@ -2,8 +2,10 @@
 // channel that a QR code set up, see linkCode.js). No server is in it.
 //
 // Each phone says who it is, then which room photos it does not have.
-// The other phone sends those that it has, one file after the other. Small
-// notes (names, star ratings) go the same way. Text messages are JSON; the
+// The other phone sends those that it has, one file after the other. Before
+// that, each phone tells what its room lists (each photo's description and
+// small picture), so a photo that was added with no server is in the room
+// on both phones. Small notes (names, star ratings) go the same way. Text messages are JSON; the
 // bytes of a file go as binary messages between "file" and "end".
 
 import { roomTag, notesText, parseNotesText } from './notes';
@@ -17,6 +19,8 @@ const READ_BYTES = 1024 * 1024;
 const BUFFER_HIGH = 1024 * 1024;
 const BUFFER_LOW = 256 * 1024;
 const PROGRESS_MS = 200;
+// One text message. All browsers take this size.
+const MAX_TEXT = 60000;
 
 /**
  * One end of a direct link.
@@ -28,12 +32,14 @@ const PROGRESS_MS = 200;
  * @param {(id: string) => Promise<Blob|null>} options.findBytes a photo's bytes, or null when it is not here
  * @param {(id: string) => {name?: string, type?: string, sealed?: boolean}|null} options.describe
  * @param {(details: object, blob: Blob) => Promise<string>} options.accept puts a received photo in the room
+ * @param {() => object[]} [options.photos] what this phone's room lists: each photo as the server describes it
+ * @param {(items: object[]) => void} [options.onPhotos] the other phone told about photos
  * @param {() => Uint8Array[]} [options.notes] the note frames to send now
  * @param {(frame: Uint8Array) => void} [options.onNotes] a note frame came
  * @param {(state: object) => void} [options.onState]
  * @param {(event: object) => void} [options.onEvent] `{ what: 'sent'|'received', id, name, bytes, ms, how }`
  */
-export function createLinkSession({ channel, room, me, wants, findBytes, describe, accept, notes, onNotes, onState, onEvent, now = () => Date.now() }) {
+export function createLinkSession({ channel, room, me, wants, findBytes, describe, accept, photos, onPhotos, notes, onNotes, onState, onEvent, now = () => Date.now() }) {
     const state = {
         status: 'starting', // starting, open, otherRoom, closed
         peer: null,
@@ -52,6 +58,8 @@ export function createLinkSession({ channel, room, me, wants, findBytes, describ
     const skipped = new Set();
     // Received in full and not in the room yet, or not taken: not asked for again.
     const settled = new Set();
+    // Told to the other phone: id -> whether its small picture went with it.
+    const told = new Map();
     let pumping = false;
     let incoming = null; // { id, name, type, sealed, size, parts, loaded, startedAt }
     let closed = false;
@@ -211,6 +219,8 @@ export function createLinkSession({ channel, room, me, wants, findBytes, describ
             report();
         } else if (message.t === 'end') {
             if (incoming && incoming.id === message.id) finishIncoming();
+        } else if (message.t === 'photo' && message.item && typeof message.item === 'object') {
+            onPhotos?.([message.item]);
         } else if (message.t === 'notes' && Array.isArray(message.frames)) {
             message.frames.slice(0, 200).forEach((text) => {
                 const frame = parseNotesText(text);
@@ -272,6 +282,26 @@ export function createLinkSession({ channel, room, me, wants, findBytes, describ
         say({ t: 'want', ids: ids.filter(id => !settled.has(id) && incoming?.id !== id) });
     };
 
+    // What the room lists here. A photo is told once, and once more when
+    // its small picture is there.
+    const sendPhotos = () => {
+        (photos?.() || []).forEach((item) => {
+            if (!item?.infoHash || told.get(item.infoHash) || (told.has(item.infoHash) && !item.poster)) return;
+            let text = JSON.stringify({ t: 'photo', item });
+            let withPoster = !!item.poster;
+            if (text.length > MAX_TEXT) {
+                withPoster = false;
+                text = JSON.stringify({ t: 'photo', item: { ...item, poster: undefined } });
+            }
+            if (text.length > MAX_TEXT || closed || channel.readyState !== 'open') return;
+            try {
+                channel.send(text);
+                // A small picture that is too large is not tried again.
+                told.set(item.infoHash, withPoster || !!item.poster);
+            } catch { /* the channel closes */ }
+        });
+    };
+
     const sendNotes = (frames = notes?.() || []) => {
         if (frames.length) say({ t: 'notes', frames: frames.map(notesText) });
     };
@@ -282,6 +312,7 @@ export function createLinkSession({ channel, room, me, wants, findBytes, describ
     channel.addEventListener('close', onClose);
 
     say({ t: 'hello', v: LINK_VERSION, room: roomTag(room), peerId: me.peerId, name: me.name || '' });
+    sendPhotos();
     sendWants();
     sendNotes();
     report();
@@ -289,7 +320,10 @@ export function createLinkSession({ channel, room, me, wants, findBytes, describ
     return {
         get state() { return state; },
         /** The room's photos changed: tell the other phone what is missing now. */
-        refreshWants: sendWants,
+        refreshWants() {
+            sendPhotos();
+            return sendWants();
+        },
         /** A photo came to this phone another way: the other phone may want it. */
         photoArrived() { pump(); },
         sendNotes,

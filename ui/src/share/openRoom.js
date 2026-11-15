@@ -15,7 +15,10 @@ export async function createRoom(master) {
         setKeyInAddress(key);
         if (key) {
             markPrivate(true);
-            master.emitter.emit('roomSettings', await master.service.updateRoomSettings({ private: true }));
+            const makePrivate = async () => master.emitter.emit('roomSettings', await master.service.updateRoomSettings({ private: true }));
+            // With no server, the room is private on this phone now. The
+            // server learns it when it answers (see nearby/offlineRoom.js).
+            if (!master.offlineRoom?.away) await makePrivate();
         }
 
         master.emitter.emit('openRoomEnd');

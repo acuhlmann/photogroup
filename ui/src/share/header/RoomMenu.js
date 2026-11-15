@@ -22,11 +22,15 @@ import LogoutRounded from '@mui/icons-material/LogoutRounded';
 import LockRounded from '@mui/icons-material/LockRounded';
 import PersonOutlineRounded from '@mui/icons-material/PersonOutlineRounded';
 import QrCodeScannerRounded from '@mui/icons-material/QrCodeScannerRounded';
+import QrCode2Rounded from '@mui/icons-material/QrCode2Rounded';
 import SyncAltRounded from '@mui/icons-material/SyncAltRounded';
 import GraphicEqRounded from '@mui/icons-material/GraphicEqRounded';
 
 import RoomPrivacy from '../RoomPrivacy';
-import LightReceive from '../nearby/LightReceive';
+import LightReceive, { RECEIVE_TITLE } from '../nearby/LightReceive';
+import { RoomLightSend, SEND_MANY_TITLE } from '../nearby/LightSendMany';
+import { useServerAway } from '../nearby/ServerAwayBar';
+import { readMode } from '../uiMode';
 import DirectLinkDialog, { LINK_TITLE } from '../nearby/DirectLinkDialog';
 import NotesBySound, { NOTES_TITLE } from '../nearby/NotesBySound';
 import { canLinkDirectly } from '../nearby/directConnect';
@@ -180,6 +184,9 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
     const [byCamera, setByCamera] = useState(false);
     const [directLink, setDirectLink] = useState(false);
     const [bySound, setBySound] = useState(false);
+    const [sendByCamera, setSendByCamera] = useState(false);
+    const away = useServerAway(master);
+    const geek = readMode() === 'geek';
 
     const pick = (action) => () => {
         setAnchor(null);
@@ -237,19 +244,24 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
                     <ListItemIcon><ShieldOutlined fontSize="small" /></ListItemIcon>
                     <ListItemText primary="Privacy" />
                 </MenuItem>
+                <MenuItem onClick={pick(() => setSendByCamera(true))} disabled={missingKey}>
+                    <ListItemIcon><QrCode2Rounded fontSize="small" /></ListItemIcon>
+                    <ListItemText primary={SEND_MANY_TITLE} secondary="To another phone, with no network" />
+                </MenuItem>
                 {!!navigator.mediaDevices?.getUserMedia && (
                     <MenuItem onClick={pick(() => setByCamera(true))} disabled={missingKey}>
                         <ListItemIcon><QrCodeScannerRounded fontSize="small" /></ListItemIcon>
-                        <ListItemText primary="Get a photo by camera" secondary="From another phone's screen, with no network" />
+                        <ListItemText primary={RECEIVE_TITLE} secondary="From another phone, with no network" />
                     </MenuItem>
                 )}
-                {canLinkDirectly() && !!master.nearbyLinks && (
+                {/* With no server, the bar under the header offers the link. Here it is for geek mode. */}
+                {geek && !away && canLinkDirectly() && !!master.nearbyLinks && (
                     <MenuItem onClick={pick(() => setDirectLink(true))} disabled={missingKey}>
                         <ListItemIcon><SyncAltRounded fontSize="small" /></ListItemIcon>
                         <ListItemText primary={LINK_TITLE} secondary="With two codes and no server" />
                     </MenuItem>
                 )}
-                {(canPlaySound() || canListen()) && !!master.nearbyNotes && (
+                {(geek || away) && (canPlaySound() || canListen()) && !!master.nearbyNotes && (
                     <MenuItem onClick={pick(() => setBySound(true))}>
                         <ListItemIcon><GraphicEqRounded fontSize="small" /></ListItemIcon>
                         <ListItemText primary={NOTES_TITLE} secondary="Names and star ratings, with no network" />
@@ -265,6 +277,7 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
             <YourNameDialog master={master} open={namingMe} onClose={() => setNamingMe(false)} />
             <RoomPrivacy master={master} open={privacy} onClose={() => setPrivacy(false)} />
             {byCamera && <LightReceive master={master} open onClose={() => setByCamera(false)} />}
+            {sendByCamera && <RoomLightSend master={master} onClose={() => setSendByCamera(false)} />}
             {directLink && <DirectLinkDialog master={master} open onClose={() => setDirectLink(false)} />}
             {bySound && <NotesBySound master={master} open onClose={() => setBySound(false)} />}
         </>

@@ -88,6 +88,7 @@ export default class NearbyNotes {
         this.load();
         this.held.name = name;
         this.save();
+        this.master.offlineRoom?.failed(err);
         this.emitter?.emit('showInfo', HELD_TEXT);
         return true;
     }
@@ -101,6 +102,7 @@ export default class NearbyNotes {
         this.load();
         this.held.details[infoHash] = { ...(this.held.details[infoHash] || {}), ...fields };
         this.save();
+        this.master.offlineRoom?.failed(err);
         this.emitter?.emit('showInfo', HELD_TEXT);
         return { infoHash, details: this.localDetails(infoHash, fields, this.me()) };
     }

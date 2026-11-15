@@ -9,8 +9,9 @@ window.Buffer = Buffer;
 global.Buffer = Buffer;
 globalThis.Buffer = Buffer;
 
-import { prepareShareLaunch, registerShareTarget } from './share/shareTarget';
+import { keepAppForOffline, prepareShareLaunch, registerShareTarget } from './share/shareTarget';
 import { restoreRoomKey } from './share/privateRoom';
+import { readPreference } from './share/preferences';
 import { noteArrival } from './share/nearby/pairingLog';
 
 import React from 'react';
@@ -34,5 +35,8 @@ const container = document.getElementById('root');
 const root = createRoot(container);
 root.render(<AppWrapper />);
 
-// The only service worker receives photos shared from other apps; it caches nothing.
-registerShareTarget();
+// The only service worker receives photos shared from other apps. In a
+// build it also keeps the app itself, so the app opens with no network.
+registerShareTarget().then(() => {
+    if (import.meta.env.PROD && !readPreference('dataSaver')) setTimeout(() => { keepAppForOffline(); }, 3000);
+});

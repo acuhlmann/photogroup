@@ -10,6 +10,7 @@ import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import { createRoom } from './openRoom';
 import RecentRooms from './RecentRooms';
+import NearbyFront from './nearby/NearbyFront';
 import PrivateRoomSwitch from './PrivateRoomSwitch';
 
 const frames = [
@@ -196,6 +197,7 @@ function FrontView({ master }) {
                     <Box sx={{ pt: 1.5 }}>
                         <RecentRooms />
                     </Box>
+                    <NearbyFront master={master} />
                 </Stack>
 
                 <Box className="spec-row" aria-hidden="true">

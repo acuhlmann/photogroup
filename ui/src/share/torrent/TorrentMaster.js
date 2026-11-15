@@ -27,8 +27,10 @@ import { leaveRoomNotice } from '../roomNotice';
 import { forgetRoom } from '../recentRooms';
 import { openSealedPhoto } from '../gallery/openSealed';
 import { describeDevice, detectDevice } from '../util/deviceLabel';
+import OfflineRoom from '../nearby/offlineRoom';
 import NearbyNotes from '../nearby/nearbyNotes';
 import NearbyLinks from '../nearby/nearbyLinks';
+import { roomTag } from '../nearby/notes';
 
 /** The room's photos by the torrent that carries them (base infoHash), in room order. */
 export function groupByTorrent(photos) {
@@ -161,6 +163,7 @@ export default class TorrentMaster {
         this._serverCopies = new Map();
         // For when the server does not answer: changes that wait for it, and
         // links to phones nearby that need no server.
+        this.offlineRoom = new OfflineRoom(this);
         this.nearbyNotes = new NearbyNotes(this);
         this.nearbyLinks = new NearbyLinks(this);
         this.emitter.on('serverCopyReady', photo => this.handleServerCopyReady(photo));
@@ -236,8 +239,10 @@ export default class TorrentMaster {
      * @returns {Promise<'delivered'|'already'|'rejected'|'saved'|'unknown'>}
      */
     async acceptNearbyPhoto(details, bytes, { via = 'light' } = {}) {
-        const photo = this.serverFallback?.watched.get(details?.id)?.original || this.roomPhotos?.get(details?.id);
+        const find = () => this.serverFallback?.watched.get(details?.id)?.original || this.roomPhotos?.get(details?.id);
+        let photo = find();
         const blob = new Blob([bytes], { type: details?.type || '' });
+        if (!photo && await this.learnNearbyPhoto(details)) photo = find();
         if (!photo) {
             // A private room's photo is sealed: only its room can open it.
             if (details?.sealed || via === 'direct') return 'unknown';
@@ -247,6 +252,24 @@ export default class TorrentMaster {
         }
         if (await this.hasPhotoBytes(photo.infoHash)) return 'already';
         return this.serverFallback.deliverNearby(photo, blob, via);
+    }
+
+    /**
+     * A photo by camera from a phone in this same room, which this phone
+     * does not know (it was added with no server): it joins the room here.
+     * @returns {Promise<boolean>} whether the room has the photo now
+     */
+    async learnNearbyPhoto(details, { waitMs = 1500 } = {}) {
+        const about = details?.about;
+        if (!about || about.infoHash !== details.id || !this.service?.hasRoom || details.room !== roomTag(this.service.id)) return false;
+        await this.offlineRoom?.load();
+        if (!this.offlineRoom?.learn([about])) return false;
+        // The tile is made in a moment: the bytes go to it.
+        const until = Date.now() + waitMs;
+        while (!this.serverFallback?.watched.get(details.id) && Date.now() < until) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        return !!this.roomPhotos?.get(details.id);
     }
 
     /** The torrent file that carries a room photo, or null. */

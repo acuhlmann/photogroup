@@ -17,7 +17,7 @@ import { qrSymbol, drawSymbol } from './qrCodec';
 import { LIGHT_LEVELS, DEFAULT_LEVEL, sendTimeText } from './lightSpeed';
 import { notePairing } from './pairingLog';
 
-export const LIGHT_SEND_HELP = 'On the other phone: open the room menu, then "Get a photo by camera". Point its camera at these codes. No network is necessary.';
+export const LIGHT_SEND_HELP = 'On the other phone: open the room menu, then "Get photos by camera". Point its camera at these codes. No network is necessary.';
 export const NOT_HERE = 'This photo is not on this phone in full. Wait until it is here.';
 export const TOO_LARGE = 'This file is too large to send by camera.';
 

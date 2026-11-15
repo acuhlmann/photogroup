@@ -12,8 +12,8 @@ function bytes(length, seed = 1) {
 }
 
 // A phone: the photos its room lists, and the bytes it has for some of them.
-function phone(channel, { name, room = ROOM, listed = [], files = {}, accept, notes } = {}) {
-    const self = { files: { ...files }, listed: [...listed], got: [], states: [], events: [], heard: [] };
+function phone(channel, { name, room = ROOM, listed = [], files = {}, accept, notes, photos } = {}) {
+    const self = { files: { ...files }, listed: [...listed], got: [], states: [], events: [], heard: [], told: [] };
     self.session = createLinkSession({
         channel,
         room,
@@ -28,6 +28,12 @@ function phone(channel, { name, room = ROOM, listed = [], files = {}, accept, no
             return 'delivered';
         }),
         notes,
+        photos,
+        // A photo that the other phone told about is in this phone's room now.
+        onPhotos: items => items.forEach((item) => {
+            self.told.push(item);
+            if (!self.listed.includes(item.infoHash)) self.listed.push(item.infoHash);
+        }),
         onNotes: frame => self.heard.push(frame),
         onState: state => self.states.push(state),
         onEvent: event => self.events.push(event),
@@ -54,6 +60,39 @@ describe('direct link', () => {
         expect(anna.events.map(event => `${event.what} ${event.id}`).sort()).toEqual(['received b', 'sent a']);
         // No message is larger than a browser takes.
         expect(Math.max(...one.sent.filter(data => typeof data !== 'string').map(data => data.byteLength))).toBe(CHUNK_BYTES);
+    });
+
+    it('tells what its room lists, so a photo that was added with no server gets to the other phone', async () => {
+        const [one, two] = channelPair();
+        const poster = 'data:image/jpeg;base64,' + 'A'.repeat(4000);
+        const list = [{ infoHash: 'a', fileName: 'a.jpg', poster }];
+        const anna = phone(one, { name: 'Anna', listed: ['a'], files: { a: new Blob([bytes(100)]) }, photos: () => list });
+        const ben = phone(two, { name: 'Ben' });
+        await until(() => ben.told.length === 1);
+        expect(ben.told[0]).toEqual({ infoHash: 'a', fileName: 'a.jpg', poster });
+        // The room has it now: Ben asks for it, as the app does when its room changes.
+        await ben.session.refreshWants();
+        await until(() => ben.got.length === 1);
+        expect(ben.got[0].data).toEqual(bytes(100));
+
+        // A photo is told once. One more photo, and a small picture that came later, are told.
+        list.push({ infoHash: 'b', fileName: 'b.jpg' });
+        await anna.session.refreshWants();
+        await until(() => ben.told.length === 2);
+        list[1] = { ...list[1], poster };
+        await anna.session.refreshWants();
+        await until(() => ben.told.length === 3);
+        await anna.session.refreshWants();
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(ben.told.map(item => `${item.infoHash}${item.poster ? '+' : ''}`)).toEqual(['a+', 'b', 'b+']);
+    });
+
+    it('leaves out a small picture that is too large for one message', async () => {
+        const [one, two] = channelPair();
+        phone(one, { name: 'Anna', photos: () => [{ infoHash: 'a', fileName: 'a.jpg', poster: 'data:image/jpeg;base64,' + 'A'.repeat(70000) }] });
+        const ben = phone(two, { name: 'Ben' });
+        await until(() => ben.told.length === 1);
+        expect(ben.told[0]).toEqual({ infoHash: 'a', fileName: 'a.jpg' });
     });
 
     it('closes when the other phone is in a different room', async () => {

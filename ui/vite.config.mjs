@@ -97,8 +97,34 @@ const nodePolyfillPlugin = () => {
   };
 };
 
+// The service worker keeps the app for use with no network. This is the
+// list of what a build is made of (public/share-target-sw.js reads it).
+const KEPT_FILE_MAX = 4 * 1024 * 1024;
+const appFilesPlugin = () => ({
+  name: 'app-files',
+  apply: 'build',
+  closeBundle() {
+    const root = path.resolve(__dirname, 'build');
+    if (!fs.existsSync(root)) return;
+    const files = [];
+    const walk = (dir) => {
+      fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (!entry.name.endsWith('.map') && entry.name !== 'app-files.json' && entry.name !== 'share-target-sw.js'
+          && fs.statSync(full).size <= KEPT_FILE_MAX) {
+          files.push('/' + path.relative(root, full).split(path.sep).join('/'));
+        }
+      });
+    };
+    walk(root);
+    fs.writeFileSync(path.join(root, 'app-files.json'), JSON.stringify({ files: files.sort() }));
+  },
+});
+
 export default defineConfig({
   plugins: [
+    appFilesPlugin(),
     jsxInJsPlugin(),
     webtorrentBrowserPlugin(),
     processPolyfillPlugin(),
@@ -107,6 +133,17 @@ export default defineConfig({
   ],
   server: {
     port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+    },
+  },
+  // `vite preview` serves the build as a real server does: with it, the
+  // service worker and the app with no network can be tried.
+  preview: {
+    port: 4173,
     proxy: {
       '/api': {
         target: 'http://localhost:8081',
