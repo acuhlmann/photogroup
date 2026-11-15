@@ -9,7 +9,7 @@
  */
 import { UPLOAD_LEASE_MS } from './ServerCopyLimits';
 
-const TRACKED_FIELDS = ['peerId', 'fileName', 'fileType', 'secure', 'hasServerCopy', 'serverCopySize',
+const TRACKED_FIELDS = ['peerId', 'fileName', 'fileType', 'secure', 'details', 'fingerprint', 'hasServerCopy', 'serverCopySize',
     'serverCopyReceived', 'serverCopyRequestedAt', 'serverCopyUploader',
     'serverCopyStartedAt', 'serverCopyStoredAt', 'serverCopyExpiresAt', 'serverCopyFrom'];
 

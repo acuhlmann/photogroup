@@ -107,7 +107,9 @@ export function canListen() {
 
 /**
  * Play a text again and again until `stop()`. Call it from a tap: phones
- * let a page make sound only then.
+ * let a page make sound only then. With a list of texts, they play one
+ * after the other, then the list starts again.
+ * @param {string|string[]} text
  * @returns {Promise<{seconds: number, stop: () => void}>} `seconds` is one round.
  */
 export async function playText(text, { quiet = false } = {}) {
@@ -118,17 +120,22 @@ export async function playText(text, { quiet = false } = {}) {
     try {
         const ggwave = await loadModem();
         await resumed;
-        const tones = encodeTones(ggwave, text, { sampleRate: context.sampleRate, quiet });
+        const rounds = [].concat(text).map(each => encodeTones(ggwave, each, { sampleRate: context.sampleRate, quiet }));
         const gap = Math.round(GAP_SECONDS * context.sampleRate);
-        const buffer = context.createBuffer(1, tones.length + gap, context.sampleRate);
-        buffer.getChannelData(0).set(tones);
+        const length = rounds.reduce((sum, tones) => sum + tones.length + gap, 0);
+        const buffer = context.createBuffer(1, length, context.sampleRate);
+        let at = 0;
+        rounds.forEach((tones) => {
+            buffer.getChannelData(0).set(tones, at);
+            at += tones.length + gap;
+        });
         const source = context.createBufferSource();
         source.buffer = buffer;
         source.loop = true;
         source.connect(context.destination);
         source.start();
         return {
-            seconds: tones.length / context.sampleRate,
+            seconds: (length - gap) / context.sampleRate,
             stop() {
                 try { source.stop(); } catch { /* already stopped */ }
                 context.close().catch(() => {});

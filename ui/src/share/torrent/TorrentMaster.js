@@ -27,6 +27,8 @@ import { leaveRoomNotice } from '../roomNotice';
 import { forgetRoom } from '../recentRooms';
 import { openSealedPhoto } from '../gallery/openSealed';
 import { describeDevice, detectDevice } from '../util/deviceLabel';
+import NearbyNotes from '../nearby/nearbyNotes';
+import NearbyLinks from '../nearby/nearbyLinks';
 
 /** The room's photos by the torrent that carries them (base infoHash), in room order. */
 export function groupByTorrent(photos) {
@@ -157,6 +159,10 @@ export default class TorrentMaster {
             getMyPeerId: () => this.client?.peerId,
         });
         this._serverCopies = new Map();
+        // For when the server does not answer: changes that wait for it, and
+        // links to phones nearby that need no server.
+        this.nearbyNotes = new NearbyNotes(this);
+        this.nearbyLinks = new NearbyLinks(this);
         this.emitter.on('serverCopyReady', photo => this.handleServerCopyReady(photo));
 
         // Phones freeze pages in background: on return, re-announce to
@@ -222,22 +228,60 @@ export default class TorrentMaster {
     }
 
     /**
-     * A photo that came from another phone's screen, by camera. It joins the
-     * room photo with the same id; one from another room is saved instead.
+     * A photo that came from a phone nearby with no network: from its screen
+     * by camera, or over a direct link. It joins the room photo with the
+     * same id. One from another room is saved instead when it came by
+     * camera; a direct link sends only this room's photos.
+     * @param {{via?: 'light'|'direct'}} [options]
      * @returns {Promise<'delivered'|'already'|'rejected'|'saved'|'unknown'>}
      */
-    async acceptNearbyPhoto(details, bytes) {
+    async acceptNearbyPhoto(details, bytes, { via = 'light' } = {}) {
         const photo = this.serverFallback?.watched.get(details?.id)?.original || this.roomPhotos?.get(details?.id);
         const blob = new Blob([bytes], { type: details?.type || '' });
         if (!photo) {
             // A private room's photo is sealed: only its room can open it.
-            if (details?.sealed) return 'unknown';
+            if (details?.sealed || via === 'direct') return 'unknown';
             const { default: download } = await import('downloadjs');
             download(blob, details?.name || 'photo', details?.type || 'application/octet-stream');
             return 'saved';
         }
-        if (await this.findPhotoBytes(photo.infoHash)) return 'already';
-        return this.serverFallback.deliverNearby(photo, blob);
+        if (await this.hasPhotoBytes(photo.infoHash)) return 'already';
+        return this.serverFallback.deliverNearby(photo, blob, via);
+    }
+
+    /** The torrent file that carries a room photo, or null. */
+    photoFile(infoHash) {
+        const torrent = getTorrent(this.client, getBaseInfoHash(infoHash));
+        if (!torrent?.files) return null;
+        const path = isCompoundInfoHash(infoHash) ? getFilePathFromInfoHash(infoHash) : null;
+        return (path
+            ? torrent.files.find(item => item.path === path)
+            : torrent.files.find(item => !item.name.startsWith('Thumbnail '))) || null;
+    }
+
+    /**
+     * Whether all of a photo's bytes are on this device, without reading
+     * them. With "Data saver" a torrent can be done with only the preview.
+     */
+    async hasPhotoBytes(infoHash) {
+        if (this._serverCopies.has(infoHash)) return true;
+        const file = this.photoFile(infoHash);
+        if (file && (file.done === true || (file.done === undefined && file.progress >= 1))) return true;
+        if (this.roomPhotos.get(infoHash)?.secure) return false;
+        return !!(await cacheGet(infoHash).catch(() => null));
+    }
+
+    /** The ids of the room photos that are not on this device in full. */
+    async missingPhotoIds() {
+        const ids = this.roomPhotos.all().map(photo => photo.infoHash);
+        const here = await Promise.all(ids.map(id => this.hasPhotoBytes(id)));
+        return ids.filter((id, index) => !here[index]);
+    }
+
+    /** The ids of the room photos that are on this device in full. */
+    async heldPhotoIds() {
+        const missing = new Set(await this.missingPhotoIds());
+        return this.roomPhotos.all().map(photo => photo.infoHash).filter(id => !missing.has(id));
     }
 
     /**

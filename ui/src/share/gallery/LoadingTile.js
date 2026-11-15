@@ -145,6 +145,7 @@ function LoadingTile({tile, master, name}) {
     else if (tile.previewOnly) loadingText = 'Preview only (Data saver)';
     else if (stalled && !have) loadingText = 'Connection stalled';
     else if (!have && tile.fromLight) loadingText = 'Received by camera';
+    else if (!have && tile.fromDirect) loadingText = 'Received over a direct link';
     else if (!have && tile.fromServerCopy) loadingText = 'Received from the server copy (P2P did not work)';
     else if (copyStatus && !isLoading && !tile.rendering) loadingText = copyStatus.text;
     const isRendering = loadingText === 'Rendering';

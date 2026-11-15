@@ -18,10 +18,18 @@ export function saveErrorText(err) {
 
 /**
  * Save changed shared fields (title, description, rating) and publish the
- * updated photo locally; the room hears it over SSE too. Errors propagate.
+ * updated photo locally; the room hears it over SSE too. When the server
+ * does not answer, the change is kept and shown on this device, and it goes
+ * to the server later (nearby/nearbyNotes.js). Other errors propagate.
  */
 export async function saveDetails(master, infoHash, fields) {
-    const saved = await master.service.updateDetails(infoHash, fields);
+    let saved;
+    try {
+        saved = await master.service.updateDetails(infoHash, fields);
+    } catch (err) {
+        saved = master.nearbyNotes?.holdDetails(infoHash, fields, err);
+        if (!saved) throw err;
+    }
     master.emitter.emit('photos', { type: 'update', item: [saved] });
     return saved;
 }

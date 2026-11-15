@@ -22,9 +22,15 @@ import LogoutRounded from '@mui/icons-material/LogoutRounded';
 import LockRounded from '@mui/icons-material/LockRounded';
 import PersonOutlineRounded from '@mui/icons-material/PersonOutlineRounded';
 import QrCodeScannerRounded from '@mui/icons-material/QrCodeScannerRounded';
+import SyncAltRounded from '@mui/icons-material/SyncAltRounded';
+import GraphicEqRounded from '@mui/icons-material/GraphicEqRounded';
 
 import RoomPrivacy from '../RoomPrivacy';
 import LightReceive from '../nearby/LightReceive';
+import DirectLinkDialog, { LINK_TITLE } from '../nearby/DirectLinkDialog';
+import NotesBySound, { NOTES_TITLE } from '../nearby/NotesBySound';
+import { canLinkDirectly } from '../nearby/directConnect';
+import { canListen, canPlaySound } from '../nearby/soundModem';
 import { leaveRoomNotice } from '../roomNotice';
 import { dropRoomSubscription } from '../pushNotices';
 import { roomCryptoKey } from '../privateRoom';
@@ -172,6 +178,8 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
     const [namingMe, setNamingMe] = useState(false);
     const [privacy, setPrivacy] = useState(false);
     const [byCamera, setByCamera] = useState(false);
+    const [directLink, setDirectLink] = useState(false);
+    const [bySound, setBySound] = useState(false);
 
     const pick = (action) => () => {
         setAnchor(null);
@@ -235,6 +243,18 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
                         <ListItemText primary="Get a photo by camera" secondary="From another phone's screen, with no network" />
                     </MenuItem>
                 )}
+                {canLinkDirectly() && !!master.nearbyLinks && (
+                    <MenuItem onClick={pick(() => setDirectLink(true))} disabled={missingKey}>
+                        <ListItemIcon><SyncAltRounded fontSize="small" /></ListItemIcon>
+                        <ListItemText primary={LINK_TITLE} secondary="With two codes and no server" />
+                    </MenuItem>
+                )}
+                {(canPlaySound() || canListen()) && !!master.nearbyNotes && (
+                    <MenuItem onClick={pick(() => setBySound(true))}>
+                        <ListItemIcon><GraphicEqRounded fontSize="small" /></ListItemIcon>
+                        <ListItemText primary={NOTES_TITLE} secondary="Names and star ratings, with no network" />
+                    </MenuItem>
+                )}
                 <Divider />
                 <MenuItem onClick={pick(leave)}>
                     <ListItemIcon><LogoutRounded fontSize="small" /></ListItemIcon>
@@ -245,6 +265,8 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
             <YourNameDialog master={master} open={namingMe} onClose={() => setNamingMe(false)} />
             <RoomPrivacy master={master} open={privacy} onClose={() => setPrivacy(false)} />
             {byCamera && <LightReceive master={master} open onClose={() => setByCamera(false)} />}
+            {directLink && <DirectLinkDialog master={master} open onClose={() => setDirectLink(false)} />}
+            {bySound && <NotesBySound master={master} open onClose={() => setBySound(false)} />}
         </>
     );
 }

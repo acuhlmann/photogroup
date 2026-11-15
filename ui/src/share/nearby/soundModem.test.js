@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { loadModem, encodeTones, createDecoder, SAMPLES_PER_FRAME } from './soundModem';
 import { roomCodeText, parseRoomCode } from './roomCode';
+import { encodeNotes, decodeNotes, notesText, parseNotesText, photoMark, SOUND_FRAME_BYTES } from './notes';
 
 // The real signal path, without a speaker and a microphone between.
 function hear(ggwave, samples, sampleRate) {
@@ -51,6 +52,33 @@ describe('soundModem', () => {
         const tones = encodeTones(ggwave, withKey, { sampleRate: 48000 });
         expect(tones.length / 48000).toBeLessThan(6);
         expect(hear(ggwave, withRoomNoise(tones, 48000, 0.05), 48000)).toBe(withKey);
+    });
+
+    it('sends notes as tones, one frame after the other, and hears them all', () => {
+        const photos = Array.from({ length: 20 }, (_, i) => 'photo' + i);
+        const frames = encodeNotes({ room: 'z45keexwrxqzbeqimgsz', from: 0xcafe, notes: [
+            { type: 'name', name: 'Anna' },
+            { type: 'rating', photo: 'photo3', rating: 5 },
+            { type: 'have', photos },
+        ] });
+        expect(frames.length).toBeGreaterThan(1);
+        const decoder = createDecoder(ggwave, 48000);
+        const heard = [];
+        frames.forEach((frame) => {
+            expect(frame.length).toBeLessThanOrEqual(SOUND_FRAME_BYTES);
+            const tones = encodeTones(ggwave, notesText(frame), { sampleRate: 48000 });
+            // A full frame is the longest sound: short enough to hold phones together.
+            expect(tones.length / 48000).toBeLessThan(12);
+            const samples = withRoomNoise(tones, 48000, 0.02);
+            for (let at = 0; at + SAMPLES_PER_FRAME <= samples.length; at += SAMPLES_PER_FRAME) {
+                const text = decoder.feed(samples.slice(at, at + SAMPLES_PER_FRAME));
+                if (text) heard.push(decodeNotes(parseNotesText(text)));
+            }
+        });
+        decoder.free();
+        const notes = heard.flatMap(frame => frame.notes);
+        expect(notes.slice(0, 2)).toEqual([{ type: 'name', name: 'Anna' }, { type: 'rating', mark: photoMark('photo3'), rating: 5 }]);
+        expect(notes.filter(note => note.type === 'have').flatMap(note => note.marks)).toEqual(photos.map(photoMark));
     });
 
     it('hears nothing in noise alone', () => {

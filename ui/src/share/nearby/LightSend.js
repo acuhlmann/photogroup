@@ -155,6 +155,11 @@ export default function LightSend({ master, tile, open, onClose }) {
                                 If the other phone reads few codes, use a slower speed.
                             </Typography>
                         </Stack>
+                        {(master.nearbyNotes?.whoHas(tile.infoHash) || []).map(name => (
+                            <Typography key={name} variant="body2" sx={{ color: '#111', textAlign: 'center', fontWeight: 600 }}>
+                                {`${name} has this photo already.`}
+                            </Typography>
+                        ))}
                         <Typography variant="body2" sx={{ color: '#444', textAlign: 'center', maxWidth: 420 }}>
                             {LIGHT_SEND_HELP}
                         </Typography>

@@ -73,3 +73,8 @@ export async function readQrBytes(imageData) {
 export function prepareReader() {
     return loadReader();
 }
+
+/** Load the writer ahead of its first code. */
+export function prepareWriter() {
+    return loadWriter();
+}
