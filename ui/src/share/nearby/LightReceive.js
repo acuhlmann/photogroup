@@ -13,7 +13,7 @@ import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
-import { createLightReceiver } from './lightFrames';
+import { getSharedLightReceiver } from './lightFrames';
 import { framesNeeded } from './fountain.js';
 import { readQrBytes, prepareReader, qrSymbol, drawSymbol } from './qrCodec';
 import { readSheet, readBundle, encodePick, fitsBundle } from './lightBundle';
@@ -21,7 +21,7 @@ import { LIGHT_LEVELS, DEFAULT_LEVEL, sendTimeText } from './lightSpeed';
 import { notePairing } from './pairingLog';
 
 export const RECEIVE_TITLE = 'Get photos by camera';
-export const LIGHT_RECEIVE_HELP = 'On the other phone: tap "Send photos by camera". Point this camera at the codes. Hold both phones still.';
+export const LIGHT_RECEIVE_HELP = 'On the other phone: tap "Send photos by camera". Point this camera at the codes so they fill the square. Hold both phones still, turn the other screen\'s brightness up, and keep glare off it.';
 export const CHOOSE_TEXT = 'Tap the photos that you want.';
 export const PICK_TEXT = 'Hold this code in front of the camera of the other phone. When its codes change, point this camera at them again.';
 export const TOO_MANY = 'These photos are too large together. Choose fewer photos.';
@@ -55,6 +55,28 @@ export function receivedPart({ have, frames, blocks, done }) {
     return Math.min(0.99, Math.max(have / blocks, frames / framesNeeded(blocks)));
 }
 
+export const NO_CODES_TIP = 'No codes read yet. Fill the square with the other screen, turn its brightness up, and hold both phones still.';
+export const STALLED_TIP = 'No new codes for a while. Hold both phones still, move a little farther apart, and shade any glare. Blocks already read are kept, so keep the other phone showing its codes on the same speed and this carries on. If it never moves, start the other phone again on “Slow and sure”.';
+
+/**
+ * What to say when the codes stop coming, or null while they flow. A stall
+ * used to look like nothing at all: the percent froze and the person could
+ * not tell a shaky hand from a dead camera.
+ */
+export function stallTip({ codes, msSinceFresh, msSinceStart }) {
+    if (!codes && msSinceStart >= 6000) return NO_CODES_TIP;
+    if (codes && msSinceFresh >= 5000) return STALLED_TIP;
+    return null;
+}
+
+/** The reading so far, in words a person can act on. */
+export function seenText({ codes, have, blocks, msSinceFresh }) {
+    if (!codes) return '';
+    const needed = framesNeeded(blocks);
+    const ago = msSinceFresh == null ? '' : ` · last code ${Math.max(0, Math.round(msSinceFresh / 1000))}s ago`;
+    return `${codes} of about ${needed} codes read · ${have} of ${blocks} blocks${ago}`;
+}
+
 export const DAMAGED = 'The codes did not give correct photos. Nothing was added. Start again on the other phone.';
 export const ADD_FAILED = "Couldn't add the photo. Keep the camera on the codes to try again.";
 const RETRY_MS = 3000;
@@ -73,29 +95,60 @@ export default function LightReceive({ master, open, onClose }) {
     const [view, setView] = useState('camera'); // camera, choose, pick
     const [sheet, setSheet] = useState(null);
     const [chosen, setChosen] = useState([]);
+    const [cameraRun, setCameraRun] = useState(0);
+    const [now, setNow] = useState(() => Date.now());
+    const timingRef = useRef({ startedAt: Date.now(), lastFreshAt: null });
     const pickRef = useRef(null);
 
     useEffect(() => {
         if (!open) return undefined;
+        const isRestart = cameraRun > 0;
         let stopped = false;
         let stream = null;
         let timer = null;
-        const receiver = createLightReceiver();
+        let watchdog = null;
+        // Kept by the page, not by this dialog: closing and reopening, or
+        // the camera restarting below, carries on from the blocks read.
+        const receiver = getSharedLightReceiver();
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d', { willReadFrequently: true });
         let send = null; // { startedAt, freshBytes, read }
         let finished = false;
         let retryAt = 0;
+        let restarting = false;
+        const startedAt = Date.now();
+        let lastReadyAt = startedAt;
+        timingRef.current = { startedAt, lastFreshAt: null };
         setFailed(false);
-        setProgress(null);
-        setOutcome('');
-        setView('camera');
-        setSheet(null);
+        if (!isRestart) {
+            setProgress(null);
+            setOutcome('');
+            setView('camera');
+            setSheet(null);
+        }
+        // Show what a previous try already read, instead of 0%.
+        const held = receiver.progress();
+        if (held && !held.done) {
+            send = { startedAt, read: held.frames, total: held.total, sendId: held.sendId };
+            timingRef.current.lastFreshAt = startedAt;
+            setProgress({
+                part: receivedPart(held), codes: held.frames, have: held.have, blocks: held.blocks,
+                total: held.total, rate: 0,
+            });
+        }
+        const restartCamera = () => {
+            if (stopped || restarting) return;
+            restarting = true;
+            Logger.warn('The camera stopped giving pictures; starting it again');
+            setCameraRun(run => run + 1);
+        };
 
         const finish = async (state) => {
             const result = receiver.result();
             const seconds = (Date.now() - send.startedAt) / 1000;
             if (!result) {
+                // Nothing usable is held; a fresh stream must be able to start.
+                receiver.reset();
                 setOutcome(OUTCOME.rejected());
                 return;
             }
@@ -105,10 +158,12 @@ export default function LightReceive({ master, open, onClose }) {
             // Says that it is a sheet or a bundle, but is not a correct one:
             // not a photo, so nothing of it goes into the room.
             if ((kind === 'sheet' && !sheet) || (kind === 'bundle' && !readBundle(result))) {
+                receiver.reset();
                 if (!stopped) setOutcome(DAMAGED);
                 return;
             }
             if (sheet) {
+                receiver.reset();
                 if (stopped) return;
                 setSheet({ sendId: state.sendId, items: sheet.items.map(item => ({
                     ...item, url: item.thumb ? URL.createObjectURL(new Blob([item.thumb], { type: 'image/jpeg' })) : '',
@@ -136,6 +191,8 @@ export default function LightReceive({ master, open, onClose }) {
                 return;
             }
             if (stopped) return;
+            // This photo is in; the next one starts from nothing.
+            receiver.reset();
             setOutcome(outcomeLines(results).join(' '));
             notePairing(master.emitter, {
                 channel: 'light', direction: 'in', what: 'photo', bytes: result.file.length,
@@ -148,6 +205,7 @@ export default function LightReceive({ master, open, onClose }) {
             if (stopped) return;
             const video = videoRef.current;
             if (video && video.readyState >= 2 && video.videoWidth) {
+                lastReadyAt = Date.now();
                 const side = Math.min(video.videoWidth, video.videoHeight);
                 const size = Math.min(side, READ_SIDE);
                 canvas.width = size;
@@ -166,11 +224,17 @@ export default function LightReceive({ master, open, onClose }) {
                             // The other phone read the choice: its codes carry the photos now.
                             setView('camera');
                         }
-                        if (state.fresh) send.read++;
+                        if (state.fresh) {
+                            send.read++;
+                            timingRef.current.lastFreshAt = Date.now();
+                        }
                         if (!finished && !retryAt) {
                             const seconds = Math.max((Date.now() - send.startedAt) / 1000, 0.5);
                             const part = receivedPart(state);
-                            setProgress({ part, codes: state.frames, total: state.total, rate: part * state.total / seconds });
+                            setProgress({
+                                part, codes: state.frames, have: state.have, blocks: state.blocks,
+                                total: state.total, rate: part * state.total / seconds,
+                            });
                         }
                         if (state.done && !finished && Date.now() >= retryAt) {
                             finished = true;
@@ -178,12 +242,25 @@ export default function LightReceive({ master, open, onClose }) {
                         }
                     }
                 } catch (err) {
+                    // A failed read is one frame lost, not the end: the
+                    // loop below is always rescheduled.
                     Logger.warn('Reading a code failed: ' + (err?.message || err));
                 }
             }
+            if (stopped) return;
             // As fast as the reader goes, with a pause for the page.
             timer = setTimeout(read, 4);
         };
+
+        // The watchdog: a track that ended, or a picture that stopped
+        // arriving (the phone switched apps, another app took the camera),
+        // restarts the camera instead of leaving a frozen view. The blocks
+        // already read are kept either way.
+        watchdog = setInterval(() => {
+            const tracks = stream?.getVideoTracks() || [];
+            if (tracks.length && tracks.every(track => track.readyState === 'ended')) restartCamera();
+            else if (stream && Date.now() - lastReadyAt > 9000) restartCamera();
+        }, 2000);
 
         (async () => {
             try {
@@ -199,6 +276,7 @@ export default function LightReceive({ master, open, onClose }) {
                 }
                 const video = videoRef.current;
                 video.srcObject = stream;
+                stream.getVideoTracks().forEach(track => track.addEventListener('ended', restartCamera));
                 await video.play().catch(() => {});
                 read();
             } catch (err) {
@@ -211,11 +289,29 @@ export default function LightReceive({ master, open, onClose }) {
         return () => {
             stopped = true;
             clearTimeout(timer);
+            clearInterval(watchdog);
             stream?.getTracks().forEach(track => track.stop());
         };
-    }, [open, master]);
+    }, [open, master, cameraRun]);
+
+    // Once a second: how long since the last new code, for the stall tip.
+    useEffect(() => {
+        if (!open) return undefined;
+        const ticker = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(ticker);
+    }, [open ]);
 
     const percent = progress ? Math.floor(progress.part * 100) : 0;
+    const msSinceFresh = timingRef.current.lastFreshAt ? now - timingRef.current.lastFreshAt : null;
+    const tip = !outcome && !failed ? stallTip({
+        codes: progress?.codes || 0,
+        msSinceFresh: msSinceFresh ?? Number.POSITIVE_INFINITY,
+        msSinceStart: now - timingRef.current.startedAt,
+    }) : null;
+    const seen = progress && !outcome ? seenText({
+        codes: progress.codes, have: progress.have ?? 0, blocks: progress.blocks ?? progress.codes,
+        msSinceFresh,
+    }) : '';
 
     // The small pictures are freed when another sheet comes or this closes.
     useEffect(() => () => { sheet?.items.forEach((item) => { if (item.url) URL.revokeObjectURL(item.url); }); }, [sheet]);
@@ -260,8 +356,13 @@ export default function LightReceive({ master, open, onClose }) {
                                     ? `${percent}% of ${FileUtil.formatBytes(progress.total)} · ${FileUtil.formatBytes(progress.rate)}/s`
                                     : 'Looking for codes…')}
                             </Typography>
+                            {seen && (
+                                <Typography variant="body2" data-testid="light-seen" sx={{ color: 'text.secondary', fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
+                                    {seen}
+                                </Typography>
+                            )}
                             <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 420 }}>
-                                {outcome && outcome !== ADD_FAILED ? 'Point the camera at the next photos, or close this.' : LIGHT_RECEIVE_HELP}
+                                {tip || (outcome && outcome !== ADD_FAILED ? 'Point the camera at the next photos, or close this.' : LIGHT_RECEIVE_HELP)}
                             </Typography>
                             {sheet && (
                                 <Button size="small" onClick={() => setView('choose')} sx={{ textTransform: 'none' }}>Choose again</Button>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createEncoder, createDecoder, blocksOfFrame } from './fountain';
-import { createLightSender, createLightReceiver, readFrame, HEADER } from './lightFrames';
+import { createLightSender, createLightReceiver, getSharedLightReceiver, resetSharedLightReceiver, lightSendId, readFrame, HEADER } from './lightFrames';
 
 function bytesOf(length, salt = 1) {
     const out = new Uint8Array(length);
@@ -103,6 +103,50 @@ describe('lightFrames', () => {
         expect(readFrame(frame).seed).toBe(0);
     });
 
+    it('gives the same photo the same stream name every time', () => {
+        const file = bytesOf(3000, 3);
+        const first = createLightSender(details, file, 300);
+        const second = createLightSender(details, file, 300);
+        expect(lightSendId(details, file)).toBe(lightSendId(details, file));
+        expect(readFrame(first.frame(0)).sendId).toBe(readFrame(second.frame(0)).sendId);
+        const other = createLightSender(details, bytesOf(3000, 8), 300);
+        expect(readFrame(other.frame(0)).sendId).not.toBe(readFrame(first.frame(0)).sendId);
+    });
+
+    it('carries on after the sender is closed and opened again', () => {
+        // The reported failure: a first try got part way, a second try
+        // showed nothing. The second sender is a new one for the same
+        // photo; its blocks must add to the first try's, not replace them.
+        const file = bytesOf(20000, 5);
+        const receiver = createLightReceiver();
+        const first = createLightSender(details, file, 420);
+        let held = 0;
+        for (let i = 0; i < 10; i++) held = receiver.add(first.next()).have;
+        expect(held).toBeGreaterThan(0);
+        const second = createLightSender(details, file, 420);
+        let state = null;
+        for (let i = 0; i < 10; i++) state = receiver.add(second.frame(i));
+        // Frames 0..9 again are not new, but nothing already held is lost.
+        expect(state.have).toBe(held);
+        for (let seed = 10; !state?.done && seed < 400; seed++) state = receiver.add(second.frame(seed));
+        expect(state.done).toBe(true);
+        expect(same(receiver.result().file, file)).toBe(true);
+    });
+
+    it('keeps what was read in the shared receiver', () => {
+        resetSharedLightReceiver();
+        const sender = createLightSender(details, bytesOf(9000, 6), 420);
+        const first = getSharedLightReceiver();
+        first.add(sender.frame(0));
+        first.add(sender.frame(1));
+        // A reopened dialog asks again and gets the same blocks back.
+        expect(getSharedLightReceiver()).toBe(first);
+        expect(getSharedLightReceiver().progress()).toMatchObject({ have: 2, frames: 2 });
+        resetSharedLightReceiver();
+        expect(getSharedLightReceiver().progress()).toBeNull();
+        resetSharedLightReceiver();
+    });
+
     it('starts again when another photo comes on screen', () => {
         const receiver = createLightReceiver();
         const first = createLightSender(details, bytesOf(3000), 300, 1);
@@ -123,6 +167,10 @@ describe('estimates', () => {
         expect(framesNeeded(2000)).toBe(2280);
         const normal = LIGHT_LEVELS.find(level => level.id === 'normal');
         expect(levelRate(normal)).toBe(10560);
+        // Handheld transfers start slow and coarse, not at Normal.
+        const { DEFAULT_LEVEL } = await import('./lightSpeed');
+        expect(DEFAULT_LEVEL).toBe('sure');
+        expect(levelRate(LIGHT_LEVELS.find(level => level.id === DEFAULT_LEVEL))).toBe(3200);
         // A 2 MB photo: about 3.5 minutes at Normal, about 1 minute at Fast.
         expect(sendTimeText(2000000, normal)).toBe('about 4 minutes');
         expect(sendTimeText(2000000, LIGHT_LEVELS.find(level => level.id === 'fast'))).toBe('about 65 seconds');

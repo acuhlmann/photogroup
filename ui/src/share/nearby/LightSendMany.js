@@ -11,7 +11,7 @@ import Typography from '@mui/material/Typography';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
-import { createLightSender } from './lightFrames';
+import { createLightSender, lightSendId } from './lightFrames';
 import { qrSymbol, drawSymbol } from './qrCodec';
 import { LIGHT_LEVELS, DEFAULT_LEVEL, sendTimeText } from './lightSpeed';
 import { notePairing } from './pairingLog';
@@ -27,7 +27,7 @@ export const PHOTOS_STEP = 'Step 2 of 2: the photos go to the other phone.';
 export const NOTHING_TO_SEND = 'No photo is on this phone in full.';
 export const TOO_LARGE_TOGETHER = 'These photos are too large together to send by camera. Send fewer photos.';
 
-const CODES_FAILED = "Couldn't make the codes. Close this and try again.";
+const CODES_FAILED = "Couldn't make a code. Trying again…";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 const level = LIGHT_LEVELS.find(each => each.id === DEFAULT_LEVEL);
@@ -70,11 +70,15 @@ function useCodes({ canvasRef, stream, emitter, what }) {
                 if (stopped) return;
                 if (canvasRef.current) drawSymbol(canvasRef.current, symbol);
             } catch (err) {
+                // As in LightSend: one failed code retries, it does not
+                // leave the other phone stuck at its last percent.
                 Logger.warn('Making a code failed: ' + (err?.message || err));
                 if (!stopped) setProblem(CODES_FAILED);
+                if (!stopped) timer = setTimeout(step, 600);
                 return;
             }
-            timer = setTimeout(step, Math.max(0, due - performance.now()));
+            setProblem(before => (before === CODES_FAILED ? '' : before));
+            if (!stopped) timer = setTimeout(step, Math.max(0, due - performance.now()));
         };
         step();
         let lock = null;
@@ -125,7 +129,9 @@ export default function LightSendMany({ emitter, items, room, onClose }) {
                 thumbs.push(thumb);
             }
             const packed = packSheet(listed.map((item, index) => ({ ...item, thumb: thumbs[index] })), { room: tag });
-            setSheet({ ...packed, sendId: (Math.random() * 0xffffffff) >>> 0 });
+            // A stable name, so a receiver that read part of this sheet
+            // before carries on when the sheet is shown again.
+            setSheet({ ...packed, sendId: lightSendId(packed.details, packed.file) });
         })();
         return () => { gone = true; };
     }, [listed, single, tag]);
@@ -162,7 +168,8 @@ export default function LightSendMany({ emitter, items, room, onClose }) {
                 setProblem(NOTHING_TO_SEND);
                 return;
             }
-            setBundle({ ...packBundle(parts, { room: tag }), sendId: (Math.random() * 0xffffffff) >>> 0, count: parts.length });
+            const packed = packBundle(parts, { room: tag });
+            setBundle({ ...packed, sendId: lightSendId(packed.details, packed.file), count: parts.length });
         })().catch((err) => {
             Logger.warn('Getting the photos ready failed: ' + (err?.message || err));
             if (!gone) setProblem(CODES_FAILED);

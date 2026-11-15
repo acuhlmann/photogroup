@@ -29,10 +29,16 @@ function loadReader() {
     return reader;
 }
 
+// What the codes are made and read with. 'M' error correction, not the
+// lowest 'L': a blurred or partly glaring code can still be read, which
+// matters more for a handheld camera than the slightly denser code it
+// costs (the slow speed level more than pays for that in coarseness).
+export const QR_WRITE_OPTIONS = { format: 'QRCode', ecLevel: 'M', withQuietZones: false };
+
 /** The code for some bytes: `{ data, width, height }`, 0 for a dark module. */
 export async function qrSymbol(bytes) {
     const { writeBarcode } = await loadWriter();
-    const result = await writeBarcode(bytes, { format: 'QRCode', ecLevel: 'L', withQuietZones: false });
+    const result = await writeBarcode(bytes, QR_WRITE_OPTIONS);
     if (result.error || !result.symbol?.width) throw new Error(result.error || 'no code');
     return result.symbol;
 }
@@ -53,19 +59,23 @@ export function drawSymbol(canvas, symbol) {
     context.putImageData(image, 0, 0);
 }
 
-const READ_OPTIONS = {
+// Reading asks ZXing to work hard: a code filmed by hand is blurred,
+// tilted and often larger than the picture is wide. With every one of
+// these off (as they were), such codes were quietly not read and the
+// transfer sat still with nothing on screen saying why.
+export const QR_READ_OPTIONS = {
     formats: ['QRCode'],
-    tryHarder: false,
-    tryRotate: false,
+    tryHarder: true,
+    tryRotate: true,
     tryInvert: false,
-    tryDownscale: false,
+    tryDownscale: true,
     maxNumberOfSymbols: 1,
 };
 
 /** The bytes of the code in a camera picture, or null. */
 export async function readQrBytes(imageData) {
     const { readBarcodes } = await loadReader();
-    const [found] = await readBarcodes(imageData, READ_OPTIONS);
+    const [found] = await readBarcodes(imageData, QR_READ_OPTIONS);
     return found?.isValid && found.bytes?.length ? found.bytes : null;
 }
 
