@@ -18,8 +18,21 @@ export async function saveMyName(master, raw) {
     const name = String(raw || '').trim().slice(0, MAX_NAME);
     if (!name) throw new Error('empty name');
     // A rejected PUT comes back as nothing, so a falsy result is a failure.
-    const peer = await master.service.updatePeer({ name });
-    if (!peer) throw new Error('updatePeer returned no peer');
+    let peer = null;
+    let failed = null;
+    const before = master.nearbyNotes?.waiting?.(null);
+    try {
+        peer = await master.service.updatePeer({ name });
+        // An older name that waited for the server is out of date now.
+        if (peer) master.nearbyNotes?.saved?.(null, before);
+    } catch (err) {
+        failed = err;
+    }
+    // When the server does not answer, the name is kept: this device shows
+    // it now and the room gets it later (nearby/nearbyNotes.js).
+    if (!peer && !master.nearbyNotes?.holdName(name, failed)) {
+        throw failed || new Error('updatePeer returned no peer');
+    }
     // Keep the local record too, so a rejoin and the map agree.
     if (master.me) master.me.name = name;
     const mine = (master.peers?.items || []).find(item => item.peerId === master.client?.peerId);

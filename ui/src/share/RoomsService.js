@@ -4,6 +4,7 @@ import cryptoRandomString from "crypto-random-string";
 import { backoffDelay } from './util/ConnectionRecovery';
 import { CHUNK_BYTES, FIRST_CHUNK_BYTES } from './torrent/ServerCopyLimits';
 import { readPreference } from './preferences';
+import { serverNotReached } from './nearby/nearbyNotes';
 
 const SESSION_KEY = 'pgSessionId';
 
@@ -197,6 +198,7 @@ export default class RoomsService {
                 Logger.info(`photos: ${JSON.stringify(data, null, ' ')}`);
             }
 
+            scope.master?.offlineRoom?.apply(data);
             scope.emitter.emit('photos', data);
 
         }, false);
@@ -256,6 +258,7 @@ export default class RoomsService {
 
         source.addEventListener('error', e => {
             Logger.error('sse error: ' + JSON.stringify(e))
+            scope.master?.offlineRoom?.check().catch(() => {});
             if (source.readyState === EventSource.CLOSED) {
                 Logger.error('Connection was closed');
                 scope.scheduleSseReconnect();
@@ -489,32 +492,37 @@ export default class RoomsService {
                 body: JSON.stringify(data)});
 
             if (!response.ok) {
-
-                throw new Error(response.status); // 404
-
-            } else {
-
-                /*this.addNetwork(this.networkChain).then(() => {
-
-                    Logger.info('addNetwork no 2');
-
-                    this.emitter.emit('pcEvent', 'icegatheringstatechange', '');
-                    this.emitter.emit('pcEvent', 'iceconnectionstatechange', '');
-                    this.emitter.emit('pcEvent', 'signalingstatechange', '');
-                    //this is now in Uploader
-                    this.emitter.emit('topStateMessage', '');
-                });*/
+                const failure = new Error(response.status); // 404
+                failure.status = response.status;
+                throw failure;
             }
 
             const room = await response.json();
             if (room.sessionToken) this.sessionToken = room.sessionToken;
             this.listenToUrlChanges();
-            return room;
+            return await this.withHeld(room);
 
         } catch(err) {
             Logger.debug('create room ' + err);
+            // No server: the room starts on this phone alone.
+            const offline = await this.openOffline(err, { create: true });
+            if (offline) return offline;
             throw err;
         }
+    }
+
+    /** The room from this phone's copy when the server was not reached, or null. */
+    async openOffline(err, options) {
+        const offlineRoom = this.master?.offlineRoom;
+        if (!offlineRoom || !serverNotReached(err)) return null;
+        Logger.warn('The server was not reached: the room opens from this phone');
+        return offlineRoom.openOffline(options);
+    }
+
+    /** The server's room, with the photos that waited for the server on this phone. */
+    async withHeld(room) {
+        const offlineRoom = this.master?.offlineRoom;
+        return offlineRoom ? offlineRoom.reconcile(room) : room;
     }
 
     async joinRoom() {
@@ -543,16 +551,21 @@ export default class RoomsService {
                 }
                 const errText = await response.text().catch(() => '');
                 Logger.error('join room failed: ' + response.status + ' ' + errText);
-                throw new Error(`Join failed (${response.status})`);
+                const failure = new Error(`Join failed (${response.status})`);
+                failure.status = response.status;
+                throw failure;
             }
             Logger.info('joined room');
             const room = await response.json();
             if (room.sessionToken) this.sessionToken = room.sessionToken;
             this.listenToUrlChanges();
-            return room;
+            return await this.withHeld(room);
 
         } catch(err) {
             Logger.error('join room ' + err);
+            // No server: the room opens from the copy on this phone.
+            const offline = await this.openOffline(err);
+            if (offline) return offline;
             throw err;
         }
     }
@@ -623,30 +636,42 @@ export default class RoomsService {
                 item.infoHash = encodeURIComponent(item.infoHash);
             }
         });
-        const data = {
-            sessionId: this.sessionId,
-            photos: photos
-        };
+        const offlineRoom = this.master?.offlineRoom;
         try {
-
-            let response = await fetch(this.url + '/' + this.id + '/photos/', {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)});
-
-            if (!response.ok) {
-                Logger.error(response.url + ' ' + response.status);
-            } else {
-                return await response.json();
-            }
-
+            const result = await this.sendShare(photos);
+            if (result) offlineRoom?.apply({ type: 'add', item: result });
+            return result;
         } catch(err) {
+            // No server: the photos are in the room on this phone, and go to
+            // the server when it answers again.
+            if (offlineRoom && serverNotReached(err)) {
+                await offlineRoom.hold(photos);
+                return photos;
+            }
+            // The server said no: there is nothing to give back.
+            if (err?.status !== undefined) return undefined;
             Logger.error('share pic ' + err);
             throw err;
         }
+    }
+
+    /** Tell the server about photos. Rejects when the server did not take them; the error has the status when it answered. */
+    async sendShare(photos) {
+        const response = await fetch(this.url + '/' + this.id + '/photos/', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ sessionId: this.sessionId, photos })});
+
+        if (!response.ok) {
+            Logger.error(response.url + ' ' + response.status);
+            const failure = new Error('The server did not take the photos (' + response.status + ')');
+            failure.status = response.status;
+            throw failure;
+        }
+        return response.json();
     }
 
     /*async addServerPeer(url) {
@@ -738,14 +763,24 @@ export default class RoomsService {
      * so devices that can't decode the clip still see what it is.
      */
     async sharePoster(infoHash, poster) {
-        const response = await fetch(this.url + '/' + this.id + '/photos/poster', {
-            method: 'PUT',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ infoHash, poster, sessionId: this.sessionId, sessionToken: this.sessionToken }),
-        });
+        let response;
+        try {
+            response = await fetch(this.url + '/' + this.id + '/photos/poster', {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ infoHash, poster, sessionId: this.sessionId, sessionToken: this.sessionToken }),
+            });
+        } catch (err) {
+            // No server: phones nearby get the small picture from this phone.
+            if (this.master?.offlineRoom && serverNotReached(err)) {
+                this.master.offlineRoom.holdPoster(infoHash, poster);
+                return { infoHash, poster };
+            }
+            throw err;
+        }
         if (!response.ok) throw new Error('Could not share the poster (' + response.status + ')');
         return response.json();
     }

@@ -1,7 +1,11 @@
 // Receives photos shared into PhotoGroup from other apps, through the
 // manifest's share_target, and keeps them for the page to pick up. It also
 // shows the push messages that tell a closed browser about new photos.
-// That is all it does: it caches nothing and lets every other request through.
+//
+// It also keeps the app itself (the page and its code, never a photo and
+// never an answer of the server), so PhotoGroup opens with no network. The
+// page asks for that with a "keep-app" message after a production build
+// loaded; until then nothing is kept and every request goes through.
 
 const DB = 'photogroup-share-target';
 const STORE = 'shared-files';
@@ -56,10 +60,113 @@ self.addEventListener('notificationclick', event => {
     })());
 });
 
+const APP_CACHE = 'photogroup-app-v1';
+// How long a page load waits for the network before the kept page is used.
+const PAGE_WAIT_MS = 3000;
+
+/** Whether the app is kept: the page asked for it at least once. */
+function keepsApp() {
+    return caches.has(APP_CACHE);
+}
+
+/**
+ * Keep the files of this build, and drop the code of older builds. The old
+ * code goes only when all of the new code is here: with a part of the new
+ * code and none of the old, the app would not open with no network.
+ */
+async function keepApp(files) {
+    const cache = await caches.open(APP_CACHE);
+    const wanted = new Set(files.map(file => new URL(file, self.location.origin).href));
+    const kept = new Set((await cache.keys()).map(request => request.url));
+    const built = url => new URL(url).pathname.startsWith('/assets/');
+    let failed = 0;
+    // One by one: a file that fails must not stop the others.
+    for (const url of wanted) {
+        // Built code has its content in its name: the kept one is the same.
+        // A file with a fixed name (the page, the icons) can be newer now.
+        if (kept.has(url) && built(url)) continue;
+        try {
+            const response = await fetch(url, { cache: 'no-cache' });
+            if (response.ok) await cache.put(url, response);
+            else failed++;
+        } catch {
+            failed++;
+        }
+    }
+    if (!failed) {
+        await Promise.all([...kept].filter(url => !wanted.has(url) && built(url)).map(url => cache.delete(url)));
+    }
+    return { files: wanted.size, failed };
+}
+
+self.addEventListener('message', event => {
+    if (event.data?.type !== 'keep-app' || !Array.isArray(event.data.files)) return;
+    event.waitUntil(keepApp(event.data.files.filter(file => typeof file === 'string').slice(0, 2000))
+        .then(result => event.source?.postMessage({ type: 'app-kept', ...result }))
+        .catch(() => {}));
+});
+
+/** Whether an answer to a page load is the app's page. */
+function isAppPage(request, response) {
+    const path = new URL(request.url).pathname;
+    return (path === '/' || path === '/index.html') && !response.redirected
+        && (response.headers.get('content-type') || '').includes('text/html');
+}
+
+/** The page: from the network when it answers soon, else the kept one. */
+async function page(request) {
+    const cache = await caches.open(APP_CACHE);
+    const fresh = fetch(request).then((response) => {
+        // Only the app's own page: another address of this site (a file that
+        // opens in the tab, a page of the server) must not take its place.
+        if (response.ok && isAppPage(request, response)) cache.put('/index.html', response.clone());
+        return response;
+    });
+    const kept = await cache.match('/index.html', { ignoreVary: true });
+    if (!kept) return fresh;
+    let timer;
+    const late = new Promise(resolve => { timer = setTimeout(() => resolve(null), PAGE_WAIT_MS); });
+    try {
+        const response = await Promise.race([fresh, late]);
+        if (response && (response.ok || response.status < 500)) return response;
+    } catch { /* no network */ } finally {
+        clearTimeout(timer);
+    }
+    fresh.catch(() => {});
+    return kept;
+}
+
+/** A file of the app: the kept one for built code (its name changes with its content), else the network first. */
+async function appFile(request, url) {
+    const cache = await caches.open(APP_CACHE);
+    if (url.pathname.startsWith('/assets/')) {
+        const kept = await cache.match(request, { ignoreVary: true });
+        if (kept) return kept;
+    }
+    try {
+        const response = await fetch(request);
+        if (response.ok && response.type === 'basic') cache.put(request, response.clone());
+        return response;
+    } catch (err) {
+        const kept = await cache.match(request, { ignoreVary: true });
+        if (kept) return kept;
+        throw err;
+    }
+}
+
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
-    if (url.pathname !== '/share-target' || event.request.method !== 'POST') return;
-    event.respondWith(receive(event.request));
+    if (url.pathname === '/share-target' && event.request.method === 'POST') {
+        event.respondWith(receive(event.request));
+        return;
+    }
+    // Only the app's own files. The server's answers and the tracker go through.
+    if (event.request.method !== 'GET' || url.origin !== self.location.origin
+        || url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws') || event.request.headers.has('range')) return;
+    event.respondWith((async () => {
+        if (!(await keepsApp())) return fetch(event.request);
+        return event.request.mode === 'navigate' ? page(event.request) : appFile(event.request, url);
+    })());
 });
 
 async function receive(request) {

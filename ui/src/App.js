@@ -29,6 +29,7 @@ import ModeSwitch from "./share/header/ModeSwitch";
 import NetworkStatus from "./share/header/NetworkStatus";
 import { readMode, saveMode } from "./share/uiMode";
 import RoomMenu from "./share/header/RoomMenu";
+import ServerAwayBar from "./share/nearby/ServerAwayBar";
 import useRoom from "./share/useRoom";
 import ScreenAwake from "./share/screenAwake";
 import { watchNewPhotos } from "./share/newPhotoNotices";
@@ -239,6 +240,7 @@ function App({theme: propsTheme}) {
                         </AppBar>
                     </header>
 
+                    {inRoom && <ServerAwayBar master={masterRef.current} />}
                     <main className="App-main">
                         <ShareCanvas master={masterRef.current} mode={mode} roomName={room.name} />
                     </main>

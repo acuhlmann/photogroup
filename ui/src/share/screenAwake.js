@@ -49,7 +49,10 @@ export default class ScreenAwake {
 
     wanted() {
         const { master } = this;
-        return !this.doc.hidden && photosMoving({
+        if (this.doc.hidden) return false;
+        // A direct link to a phone nearby closes when this screen sleeps.
+        if (master.nearbyLinks?.busy()) return true;
+        return photosMoving({
             photos: master.roomPhotos?.all?.() || [],
             peers: master.peers?.items || [],
             me: master.client?.peerId,

@@ -79,7 +79,7 @@ test('a phone gets a photo from the codes on another screen', async ({ browser }
     expect(await waitForImage(receiver, 1000)).toBe(false);
 
     await receiver.getByRole('button', { name: /Room menu/ }).click();
-    await receiver.getByRole('menuitem', { name: /Get a photo by camera/ }).click();
+    await receiver.getByRole('menuitem', { name: /Get photos by camera/ }).click();
     await expect(receiver.getByTestId('light-progress')).toHaveText('test-image.jpg is here.', { timeout: 30000 });
     await receiver.getByRole('button', { name: 'Close' }).click();
     expect(await waitForImage(receiver, 20000)).toBe(true);

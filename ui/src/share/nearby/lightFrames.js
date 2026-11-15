@@ -32,6 +32,8 @@ function checksum(bytes) {
  */
 export function createLightSender(details, file, frameBytes, sendId = (Math.random() * 0xffffffff) >>> 0) {
     const meta = new TextEncoder().encode(JSON.stringify(details));
+    // The length of the details is two bytes: longer ones would be cut, and the file with them.
+    if (meta.length > 0xffff) throw new RangeError('The details are too long for a camera transfer');
     const stream = new Uint8Array(2 + meta.length + file.length);
     new DataView(stream.buffer).setUint16(0, meta.length);
     stream.set(meta, 2);

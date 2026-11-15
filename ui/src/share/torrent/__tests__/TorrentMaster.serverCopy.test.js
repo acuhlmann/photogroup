@@ -32,15 +32,19 @@ describe('TorrentMaster and server copies', () => {
     });
 
     it('finds the bytes the torrent carries, by path for multi-file torrents', async () => {
-        const file = (path, text) => ({ path, name: path.split('/').pop(), blob: async () => new Blob([text]) });
+        const file = (path, text, done = true) => ({ path, done, name: path.split('/').pop(), blob: async () => new Blob([text]) });
         const master = fakeMaster({ torrents: {
             multi: { done: true, files: [file('f/Thumbnail a.jpg', 'thumb'), file('f/a.jpg', 'A'), file('f/b.jpg', 'B')] },
             single: { done: true, files: [file('Thumbnail c.jpg', 'thumb'), file('c.jpg', 'C')] },
-            loading: { done: false, files: [file('d.jpg', 'D')] },
+            loading: { done: false, files: [file('d.jpg', 'D', false)] },
+            // One file of the torrent is whole, the other is not.
+            part: { done: false, files: [file('g/e.jpg', 'E'), file('g/f.jpg', 'F', false)] },
         } });
         expect(await (await master.findPhotoBytes('multi-f/b.jpg')).text()).toBe('B');
         expect(await (await master.findPhotoBytes('single')).text()).toBe('C');
         expect(await master.findPhotoBytes('loading')).toBeNull();
+        expect(await (await master.findPhotoBytes('part-g/e.jpg')).text()).toBe('E');
+        expect(await master.findPhotoBytes('part-g/f.jpg')).toBeNull();
         expect(await (await master.findPhotoBytes('cached')).text()).toBe('cached');
     });
 

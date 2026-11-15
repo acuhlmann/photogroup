@@ -2,7 +2,7 @@
 // (rooms list with private room keys, name, saved photos, choices) and
 // start again on the front page. Rooms and photos elsewhere stay.
 
-const DATABASES = ['image-blob-cache', 'torrents'];
+const DATABASES = ['image-blob-cache', 'torrents', 'room-snapshots'];
 
 function deleteDatabase(idb, name) {
     return new Promise(resolve => {
@@ -40,5 +40,10 @@ export async function forgetDevice({ win = window, idb = win.indexedDB } = {}) {
         } catch { /* not supported: delete the known ones */ }
         await Promise.all(names.map(name => deleteDatabase(idb, name)));
     }
+    // The app that the service worker kept for use with no network.
+    try {
+        const names = await win.caches?.keys();
+        await Promise.all((names || []).map(name => win.caches.delete(name)));
+    } catch { /* no cache storage */ }
     win.location.replace(win.location.pathname);
 }

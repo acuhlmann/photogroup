@@ -27,6 +27,10 @@ import { leaveRoomNotice } from '../roomNotice';
 import { forgetRoom } from '../recentRooms';
 import { openSealedPhoto } from '../gallery/openSealed';
 import { describeDevice, detectDevice } from '../util/deviceLabel';
+import OfflineRoom from '../nearby/offlineRoom';
+import NearbyNotes from '../nearby/nearbyNotes';
+import NearbyLinks from '../nearby/nearbyLinks';
+import { roomTag } from '../nearby/notes';
 
 /** The room's photos by the torrent that carries them (base infoHash), in room order. */
 export function groupByTorrent(photos) {
@@ -157,6 +161,11 @@ export default class TorrentMaster {
             getMyPeerId: () => this.client?.peerId,
         });
         this._serverCopies = new Map();
+        // For when the server does not answer: changes that wait for it, and
+        // links to phones nearby that need no server.
+        this.offlineRoom = new OfflineRoom(this);
+        this.nearbyNotes = new NearbyNotes(this);
+        this.nearbyLinks = new NearbyLinks(this);
         this.emitter.on('serverCopyReady', photo => this.handleServerCopyReady(photo));
 
         // Phones freeze pages in background: on return, re-announce to
@@ -222,22 +231,82 @@ export default class TorrentMaster {
     }
 
     /**
-     * A photo that came from another phone's screen, by camera. It joins the
-     * room photo with the same id; one from another room is saved instead.
+     * A photo that came from a phone nearby with no network: from its screen
+     * by camera, or over a direct link. It joins the room photo with the
+     * same id. One from another room is saved instead when it came by
+     * camera; a direct link sends only this room's photos.
+     * @param {{via?: 'light'|'direct'}} [options]
      * @returns {Promise<'delivered'|'already'|'rejected'|'saved'|'unknown'>}
      */
-    async acceptNearbyPhoto(details, bytes) {
-        const photo = this.serverFallback?.watched.get(details?.id)?.original || this.roomPhotos?.get(details?.id);
+    async acceptNearbyPhoto(details, bytes, { via = 'light' } = {}) {
+        const find = () => this.serverFallback?.watched.get(details?.id)?.original || this.roomPhotos?.get(details?.id);
+        let photo = find();
         const blob = new Blob([bytes], { type: details?.type || '' });
+        if (!photo && await this.learnNearbyPhoto(details)) photo = find();
         if (!photo) {
             // A private room's photo is sealed: only its room can open it.
-            if (details?.sealed) return 'unknown';
+            if (details?.sealed || via === 'direct') return 'unknown';
             const { default: download } = await import('downloadjs');
             download(blob, details?.name || 'photo', details?.type || 'application/octet-stream');
             return 'saved';
         }
-        if (await this.findPhotoBytes(photo.infoHash)) return 'already';
-        return this.serverFallback.deliverNearby(photo, blob);
+        if (await this.hasPhotoBytes(photo.infoHash)) return 'already';
+        return this.serverFallback.deliverNearby(photo, blob, via);
+    }
+
+    /**
+     * A photo by camera from a phone in this same room, which this phone
+     * does not know (it was added with no server): it joins the room here.
+     * @returns {Promise<boolean>} whether the room has the photo now
+     */
+    async learnNearbyPhoto(details, { waitMs = 1500 } = {}) {
+        const about = details?.about;
+        if (!about || about.infoHash !== details.id || !this.service?.hasRoom || details.room !== roomTag(this.service.id)) return false;
+        await this.offlineRoom?.load();
+        if (!this.offlineRoom?.learn([about])) return false;
+        // The tile is made in a moment: the bytes go to it.
+        const until = Date.now() + waitMs;
+        while (!this.serverFallback?.watched.get(details.id) && Date.now() < until) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        return !!this.roomPhotos?.get(details.id);
+    }
+
+    /** The torrent file that carries a room photo, or null. */
+    photoFile(infoHash) {
+        const torrent = getTorrent(this.client, getBaseInfoHash(infoHash));
+        if (!torrent?.files) return null;
+        const path = isCompoundInfoHash(infoHash) ? getFilePathFromInfoHash(infoHash) : null;
+        return (path
+            ? torrent.files.find(item => item.path === path)
+            : torrent.files.find(item => !item.name.startsWith('Thumbnail '))) || null;
+    }
+
+    /**
+     * Whether all of a photo's bytes are on this device, without reading
+     * them. With "Data saver" a torrent can be done with only the preview.
+     */
+    async hasPhotoBytes(infoHash) {
+        if (this._serverCopies.has(infoHash)) return true;
+        const file = this.photoFile(infoHash);
+        if (file && (file.done === true || (file.done === undefined && file.progress >= 1))) return true;
+        if (this.roomPhotos.get(infoHash)?.secure) return false;
+        return !!(await cacheGet(infoHash).catch(() => null));
+    }
+
+    /** The ids of the room photos that are not on this device in full. */
+    async missingPhotoIds() {
+        const ids = this.roomPhotos.all().map(photo => photo.infoHash);
+        const here = await Promise.all(ids.map(id => this.hasPhotoBytes(id)));
+        return ids.filter((id, index) => !here[index]);
+    }
+
+    /** The ids of the room photos that are on this device in full. */
+    async heldPhotoIds() {
+        // One list: a photo that comes while the others are checked is not in it.
+        const ids = this.roomPhotos.all().map(photo => photo.infoHash);
+        const here = await Promise.all(ids.map(id => this.hasPhotoBytes(id)));
+        return ids.filter((id, index) => here[index]);
     }
 
     /**
@@ -248,16 +317,13 @@ export default class TorrentMaster {
     async findPhotoBytes(infoHash) {
         const delivered = this._serverCopies.get(infoHash);
         if (delivered) return delivered;
-        const torrent = getTorrent(this.client, getBaseInfoHash(infoHash));
-        if (torrent?.done && torrent.files) {
-            const path = isCompoundInfoHash(infoHash) ? getFilePathFromInfoHash(infoHash) : null;
-            const file = path
-                ? torrent.files.find(item => item.path === path)
-                : torrent.files.find(item => !item.name.startsWith('Thumbnail '));
-            if (file) {
-                const blob = await readFileBlob(file).catch(() => null);
-                if (blob) return blob;
-            }
+        // This photo's file, not the torrent: other files of the torrent can
+        // be unfinished, and with "Data saver" a done torrent can have the
+        // preview only.
+        const file = this.photoFile(infoHash);
+        if (file && (file.done === true || (file.done === undefined && file.progress >= 1))) {
+            const blob = await readFileBlob(file).catch(() => null);
+            if (blob) return blob;
         }
         // The sharer's cache holds the decrypted original: never for encrypted shares.
         if (this.roomPhotos.get(infoHash)?.secure) return null;

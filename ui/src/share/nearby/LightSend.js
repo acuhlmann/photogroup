@@ -17,7 +17,7 @@ import { qrSymbol, drawSymbol } from './qrCodec';
 import { LIGHT_LEVELS, DEFAULT_LEVEL, sendTimeText } from './lightSpeed';
 import { notePairing } from './pairingLog';
 
-export const LIGHT_SEND_HELP = 'On the other phone: open the room menu, then "Get a photo by camera". Point its camera at these codes. No network is necessary.';
+export const LIGHT_SEND_HELP = 'On the other phone: open the room menu, then "Get photos by camera". Point its camera at these codes. No network is necessary.';
 export const NOT_HERE = 'This photo is not on this phone in full. Wait until it is here.';
 export const TOO_LARGE = 'This file is too large to send by camera.';
 
@@ -155,6 +155,11 @@ export default function LightSend({ master, tile, open, onClose }) {
                                 If the other phone reads few codes, use a slower speed.
                             </Typography>
                         </Stack>
+                        {(master.nearbyNotes?.whoHas(tile.infoHash) || []).map(name => (
+                            <Typography key={name} variant="body2" sx={{ color: '#111', textAlign: 'center', fontWeight: 600 }}>
+                                {`${name} has this photo already.`}
+                            </Typography>
+                        ))}
                         <Typography variant="body2" sx={{ color: '#444', textAlign: 'center', maxWidth: 420 }}>
                             {LIGHT_SEND_HELP}
                         </Typography>

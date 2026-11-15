@@ -234,16 +234,18 @@ export default class ServerFallback {
     }
 
     /**
-     * A whole file that came another way than the network (from a screen,
-     * by camera). It goes the same way in as a server copy.
+     * A whole file that came from a phone nearby, not from the server: from
+     * its screen by camera ('light'), or over a direct link ('direct'). It
+     * goes the same way in as a server copy.
      * @returns {Promise<'delivered'|'rejected'>}
      */
-    async deliverNearby(original, blob) {
+    async deliverNearby(original, blob, via = 'light') {
         const latest = this.watched.get(original.infoHash)?.photo || original;
         if (this.verify && !(await this.verify(latest, blob))) return 'rejected';
         const photo = await this.accept(this.watched.get(original.infoHash)?.original || original, latest, blob);
-        photo.fromLight = true;
-        Logger.info('Delivered ' + (photo.fileName || photo.infoHash) + ' by camera');
+        if (via === 'direct') photo.fromDirect = true;
+        else photo.fromLight = true;
+        Logger.info('Delivered ' + (photo.fileName || photo.infoHash) + (via === 'direct' ? ' over a direct link' : ' by camera'));
         this.announce(photo);
         return 'delivered';
     }

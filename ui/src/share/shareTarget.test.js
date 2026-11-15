@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { clearShareFlag, lastRoom, prepareShareLaunch, registerShareTarget, rememberRoom, takeSharedFiles } from './shareTarget';
+import { clearShareFlag, keepAppForOffline, lastRoom, prepareShareLaunch, registerShareTarget, rememberRoom, takeSharedFiles } from './shareTarget';
 
 /** A working localStorage; the shared test setup stubs one that stores nothing. */
 function memoryStorage() {
@@ -69,6 +69,19 @@ describe('shareTarget', () => {
         const keyed = fakeWindow('?shared=1&room=trip', '#k=abc');
         clearShareFlag(keyed);
         expect(keyed.history.replaceState).toHaveBeenCalledWith({}, '', '/?room=trip#k=abc');
+    });
+
+    it('asks the worker to keep the files of a build, so the app opens with no network', async () => {
+        const postMessage = vi.fn();
+        const nav = { serviceWorker: { ready: Promise.resolve({ active: { postMessage } }) } };
+        const list = files => async () => ({ ok: true, json: async () => ({ files }) });
+        expect(await keepAppForOffline(nav, list(['/index.html', '/assets/a.js']))).toBe(true);
+        expect(postMessage).toHaveBeenCalledWith({ type: 'keep-app', files: ['/index.html', '/assets/a.js'] });
+        // A development server has no list; a browser may have no worker.
+        expect(await keepAppForOffline(nav, async () => ({ ok: false }))).toBe(false);
+        expect(await keepAppForOffline(nav, async () => { throw new TypeError('Failed to fetch'); })).toBe(false);
+        expect(await keepAppForOffline({}, list(['/index.html']))).toBe(false);
+        expect(postMessage).toHaveBeenCalledTimes(1);
     });
 
     it('registers the share worker for the whole site, and copes without one', async () => {

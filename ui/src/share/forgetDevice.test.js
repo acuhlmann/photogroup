@@ -30,7 +30,7 @@ describe('forgetDevice', () => {
         await forgetDevice({ win, idb });
         expect(win.localStorage.clear).toHaveBeenCalled();
         expect(win.sessionStorage.clear).toHaveBeenCalled();
-        expect(idb.deleted.sort()).toEqual(['chunks-abc', 'image-blob-cache', 'torrents']);
+        expect(idb.deleted.sort()).toEqual(['chunks-abc', 'image-blob-cache', 'room-snapshots', 'torrents']);
         expect(win.location.replace).toHaveBeenCalledWith('/app/');
     });
 
@@ -38,6 +38,6 @@ describe('forgetDevice', () => {
         const win = fakeWindow();
         const idb = fakeIdb(null);
         await forgetDevice({ win, idb });
-        expect(idb.deleted.sort()).toEqual(['image-blob-cache', 'torrents']);
+        expect(idb.deleted.sort()).toEqual(['image-blob-cache', 'room-snapshots', 'torrents']);
     });
 });

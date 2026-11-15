@@ -119,7 +119,7 @@ export function describeEvent(name, args) {
     case 'pairing': {
         if (!first?.channel) return null;
         const out = first.direction === 'out';
-        const how = { sound: 'sound', qr: 'QR code', nfc: 'NFC tag', light: 'screen to camera' }[first.channel] || first.channel;
+        const how = { sound: 'sound', qr: 'QR code', nfc: 'NFC tag', light: 'screen to camera', direct: 'direct link' }[first.channel] || first.channel;
         const what = first.what || (first.channel === 'sound' ? 'room code' : 'room link');
         const bytes = first.bytes ? ` · ${first.bytes < 10000 ? first.bytes + ' B' : FileUtil.formatBytes(first.bytes)}` : '';
         const seconds = first.ms ? `${(first.ms / 1000).toFixed(1)} s` : '';
