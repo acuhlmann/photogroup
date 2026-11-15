@@ -18,6 +18,10 @@ const PAUSE_MS = 60;
 export function useCodeCamera({ videoRef, active, onBytes, facing = 'environment' }) {
     const [failed, setFailed] = useState(false);
     const [running, setRunning] = useState(false);
+    // A camera track that ends (another app took it, the phone slept) used
+    // to leave this watching a dead picture for ever. Starting again is
+    // cheap, so an ended track bumps this and the camera is opened anew.
+    const [attempt, setAttempt] = useState(0);
 
     useEffect(() => {
         if (!active) return undefined;
@@ -62,6 +66,9 @@ export function useCodeCamera({ videoRef, active, onBytes, facing = 'environment
                 }
                 const video = videoRef.current;
                 video.srcObject = stream;
+                stream.getVideoTracks().forEach(track => track.addEventListener('ended', () => {
+                    if (!stopped) setAttempt(before => before + 1);
+                }));
                 await video.play().catch(() => {});
                 setRunning(true);
                 read();
@@ -80,7 +87,7 @@ export function useCodeCamera({ videoRef, active, onBytes, facing = 'environment
         };
         // onBytes is read through a ref by the caller; the camera does not restart for it.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [active, videoRef, facing]);
+    }, [active, videoRef, facing, attempt]);
 
     return { failed, running };
 }

@@ -25,12 +25,39 @@ function checksum(bytes) {
 }
 
 /**
+ * A stable name for one stream, from its details and a sample of its bytes.
+ * The same photo sent again gets the same name, so a receiver that already
+ * holds some of its blocks can carry on instead of starting from nothing:
+ * the blocks themselves are made from the stream alone, so blocks from the
+ * first try and blocks from the second fit together. A random name (what
+ * this used) threw away everything the camera had read whenever the sender
+ * was closed and reopened, or its codes were rebuilt.
+ */
+export function lightSendId(details, file) {
+    const meta = new TextEncoder().encode(JSON.stringify(details));
+    let hash = 0x811c9dc5;
+    const mix = (byte) => { hash = Math.imul(hash ^ byte, 0x01000193) >>> 0; };
+    for (const byte of meta) mix(byte);
+    // The length, then the start, middle and end of the file.
+    const length = file.length;
+    for (let shift = 24; shift >= 0; shift -= 8) mix((length >>> shift) & 0xff);
+    const sample = Math.min(8192, length);
+    const starts = [0, Math.max(0, (length >> 1) - (sample >> 1)), Math.max(0, length - sample)];
+    for (const start of starts) {
+        for (let i = start; i < start + sample; i++) mix(file[i]);
+    }
+    // Zero is a fine name too, but keep the value clearly a name.
+    return hash || 1;
+}
+
+/**
  * The frames of one photo.
  * @param {{id: string, name: string, type: string}} details which room photo this is
  * @param {Uint8Array} file the photo's bytes as its torrent carries them
  * @param {number} frameBytes bytes per code, header included
+ * @param {number} [sendId] the stream's name; the stable one above when left out
  */
-export function createLightSender(details, file, frameBytes, sendId = (Math.random() * 0xffffffff) >>> 0) {
+export function createLightSender(details, file, frameBytes, sendId) {
     const meta = new TextEncoder().encode(JSON.stringify(details));
     // The length of the details is two bytes: longer ones would be cut, and the file with them.
     if (meta.length > 0xffff) throw new RangeError('The details are too long for a camera transfer');
@@ -38,6 +65,7 @@ export function createLightSender(details, file, frameBytes, sendId = (Math.rand
     new DataView(stream.buffer).setUint16(0, meta.length);
     stream.set(meta, 2);
     stream.set(file, 2 + meta.length);
+    if (sendId === undefined) sendId = lightSendId(details, file);
     const blockSize = frameBytes - HEADER;
     const encoder = createEncoder(stream, blockSize);
     // A small file goes block by block first. A large one goes mixed from
@@ -113,6 +141,18 @@ export function createLightReceiver() {
                 done: current.decoder.done,
             };
         },
+        /** What is held so far, or null before the first code of a send. */
+        progress() {
+            if (!current) return null;
+            return {
+                sendId: current.sendId,
+                have: current.decoder.have,
+                frames: current.decoder.frames,
+                blocks: current.decoder.k,
+                total: current.total,
+                done: current.decoder.done,
+            };
+        },
         /** `{ details, file }` once done, or null. */
         result() {
             const stream = current?.decoder.result();
@@ -129,4 +169,25 @@ export function createLightReceiver() {
             current = null;
         },
     };
+}
+
+let sharedReceiver = null;
+
+/**
+ * The one receiver this page keeps, however often the camera dialog is
+ * closed and opened again. Its blocks used to live in the dialog, so a
+ * second try started at nothing even when the first had nearly finished;
+ * now closing the dialog (or the camera restarting) keeps what was read,
+ * and the same photo shown again carries on from there. A different photo
+ * still starts again, because its stream has another name or size.
+ */
+export function getSharedLightReceiver() {
+    if (!sharedReceiver) sharedReceiver = createLightReceiver();
+    return sharedReceiver;
+}
+
+/** Forget what the shared receiver holds. For tests, and after a photo is in. */
+export function resetSharedLightReceiver() {
+    sharedReceiver?.reset();
+    sharedReceiver = null;
 }

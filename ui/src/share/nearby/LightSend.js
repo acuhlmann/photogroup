@@ -17,7 +17,8 @@ import { qrSymbol, drawSymbol } from './qrCodec';
 import { LIGHT_LEVELS, DEFAULT_LEVEL, sendTimeText } from './lightSpeed';
 import { notePairing } from './pairingLog';
 
-export const LIGHT_SEND_HELP = 'On the other phone: open the room menu, then "Get photos by camera". Point its camera at these codes. No network is necessary.';
+export const LIGHT_SEND_HELP = 'On the other phone: open the room menu, then "Get photos by camera". Point its camera at these codes. No network is necessary. The codes keep going until you close this, and a second try carries on where the first left off.';
+export const CODE_FAILED = "Couldn't make a code. Trying again…";
 export const NOT_HERE = 'This photo is not on this phone in full. Wait until it is here.';
 export const TOO_LARGE = 'This file is too large to send by camera.';
 
@@ -79,6 +80,7 @@ export default function LightSend({ master, tile, open, onClose }) {
                 const symbol = await qrSymbol(sender.next());
                 if (stopped) return;
                 if (canvasRef.current) drawSymbol(canvasRef.current, symbol);
+                setProblem(before => (before === CODE_FAILED ? '' : before));
                 shown++;
                 windowShown++;
                 const now = performance.now();
@@ -88,11 +90,14 @@ export default function LightSend({ master, tile, open, onClose }) {
                     windowShown = 0;
                 }
             } catch (err) {
+                // One failed code must not end the stream: the receiver
+                // would sit at its last percent with no way to finish.
                 Logger.warn('Making a code failed: ' + (err?.message || err));
-                if (!stopped) setProblem("Couldn't make the codes. Check your connection and try again.");
+                if (!stopped) setProblem(CODE_FAILED);
+                if (!stopped) timer = setTimeout(step, 600);
                 return;
             }
-            timer = setTimeout(step, Math.max(0, due - performance.now()));
+            if (!stopped) timer = setTimeout(step, Math.max(0, due - performance.now()));
         };
         step();
         // A dim or sleeping screen stops the transfer.
@@ -151,8 +156,10 @@ export default function LightSend({ master, tile, open, onClose }) {
                                     </ToggleButton>
                                 ))}
                             </ToggleButtonGroup>
-                            <Typography variant="caption" sx={{ color: '#555' }}>
-                                If the other phone reads few codes, use a slower speed.
+                            <Typography variant="caption" sx={{ color: '#555', textAlign: 'center', maxWidth: 420 }}>
+                                Start with “Slow and sure” for a phone held in a hand. Change speed before
+                                you start if you can: a new speed starts the other phone&apos;s count again.
+                                Turn this screen&apos;s brightness up and keep the codes out of glare.
                             </Typography>
                         </Stack>
                         {(master.nearbyNotes?.whoHas(tile.infoHash) || []).map(name => (
