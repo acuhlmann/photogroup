@@ -13,8 +13,8 @@ import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import QrCode2Rounded from '@mui/icons-material/QrCode2Rounded';
-import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
+import { useStickyDown } from '../useStickyMedia';
 import RenderContent from './RenderContent';
 import PhotoDetails from './PhotoDetails';
 import { photoCaption } from './photoCaption';
@@ -42,7 +42,9 @@ const LightSend = React.lazy(() => import('../nearby/LightSend'));
  */
 function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, onRemove, details = true }) {
     const theme = useTheme();
-    const narrow = useMediaQuery(theme.breakpoints.down('md'));
+    // Sticky like the list's: a width jittering over `md` would rebuild the
+    // viewer (photo and details swap places) mid-look.
+    const narrow = useStickyDown(theme.breakpoints.values.md);
     const [detailsAsked, setDetailsAsked] = useState(null);
     const showDetails = details && (detailsAsked == null ? !narrow : detailsAsked);
     const tile = tiles[index];

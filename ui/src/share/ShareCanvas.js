@@ -6,8 +6,8 @@ import IconButton from '@mui/material/IconButton';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
+import { useStickyDown } from './useStickyMedia';
 import Logger from 'js-logger';
 import { withSnackbar } from './compatibility/withSnackbar';
 
@@ -64,7 +64,7 @@ function ShareCanvas({master, mode = 'default', roomName = '', enqueueSnackbar, 
     const geek = mode === 'geek';
     const deferredPromptRef = useRef(null);
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+    const isMobile = useStickyDown(theme.breakpoints.values.md);
 
     const [hasRoom, setHasRoom] = useState(false);
     const [tiles, setTiles] = useState([]);
