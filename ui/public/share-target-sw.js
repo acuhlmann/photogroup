@@ -69,17 +69,22 @@ function keepsApp() {
     return caches.has(APP_CACHE);
 }
 
-/** Keep the files of this build, and drop the code of older builds. */
+/**
+ * Keep the files of this build, and drop the code of older builds. The old
+ * code goes only when all of the new code is here: with a part of the new
+ * code and none of the old, the app would not open with no network.
+ */
 async function keepApp(files) {
     const cache = await caches.open(APP_CACHE);
     const wanted = new Set(files.map(file => new URL(file, self.location.origin).href));
     const kept = new Set((await cache.keys()).map(request => request.url));
-    await Promise.all([...kept].filter(url => !wanted.has(url) && new URL(url).pathname.startsWith('/assets/'))
-        .map(url => cache.delete(url)));
+    const built = url => new URL(url).pathname.startsWith('/assets/');
     let failed = 0;
     // One by one: a file that fails must not stop the others.
     for (const url of wanted) {
-        if (kept.has(url)) continue;
+        // Built code has its content in its name: the kept one is the same.
+        // A file with a fixed name (the page, the icons) can be newer now.
+        if (kept.has(url) && built(url)) continue;
         try {
             const response = await fetch(url, { cache: 'no-cache' });
             if (response.ok) await cache.put(url, response);
@@ -87,6 +92,9 @@ async function keepApp(files) {
         } catch {
             failed++;
         }
+    }
+    if (!failed) {
+        await Promise.all([...kept].filter(url => !wanted.has(url) && built(url)).map(url => cache.delete(url)));
     }
     return { files: wanted.size, failed };
 }
@@ -98,11 +106,20 @@ self.addEventListener('message', event => {
         .catch(() => {}));
 });
 
+/** Whether an answer to a page load is the app's page. */
+function isAppPage(request, response) {
+    const path = new URL(request.url).pathname;
+    return (path === '/' || path === '/index.html') && !response.redirected
+        && (response.headers.get('content-type') || '').includes('text/html');
+}
+
 /** The page: from the network when it answers soon, else the kept one. */
 async function page(request) {
     const cache = await caches.open(APP_CACHE);
     const fresh = fetch(request).then((response) => {
-        if (response.ok) cache.put('/index.html', response.clone());
+        // Only the app's own page: another address of this site (a file that
+        // opens in the tab, a page of the server) must not take its place.
+        if (response.ok && isAppPage(request, response)) cache.put('/index.html', response.clone());
         return response;
     });
     const kept = await cache.match('/index.html', { ignoreVary: true });

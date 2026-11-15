@@ -15,6 +15,10 @@ export const MAX_SHEET_ITEMS = 60;
 // A small picture on the sheet: its longer side, and its largest size.
 export const THUMB_SIDE = 160;
 export const MAX_THUMB_BYTES = 12 * 1024;
+// The details of a stream have a length of two bytes (lightFrames.js).
+export const MAX_DETAILS_BYTES = 0xffff;
+// What the photos of one bundle can be together: the rest is for the details.
+export const MAX_BUNDLE_BYTES = MAX_LIGHT_BYTES - MAX_DETAILS_BYTES - 1;
 const PICK_MAGIC = [0x50, 0x4b]; // "PK"
 const PICK_VERSION = 1;
 
@@ -87,17 +91,21 @@ export function readSheet(result) {
  *   `about` is the photo as the room describes it, for a phone in the same room that does not know it
  */
 export function packBundle(items, { room } = {}) {
-    return {
-        details: {
-            kind: 'bundle',
-            ...(room === undefined ? {} : { room }),
-            items: items.map(item => ({
-                id: item.id, name: text(item.name, 200), type: text(item.type, 60), size: item.bytes.length,
-                ...(item.sealed ? { sealed: true } : {}), ...(item.about ? { about: item.about } : {}),
-            })),
-        },
-        file: concat(items.map(item => item.bytes)),
-    };
+    const listed = items.map(item => ({
+        id: item.id, name: text(item.name, 200), type: text(item.type, 60), size: item.bytes.length,
+        ...(item.sealed ? { sealed: true } : {}), ...(item.about ? { about: item.about } : {}),
+    }));
+    const details = { kind: 'bundle', ...(room === undefined ? {} : { room }), items: listed };
+    // The photos are what matters. When the descriptions make the details
+    // too long, the longest descriptions stay out: such a photo is saved on
+    // the other phone, and does not join its room.
+    const length = value => new TextEncoder().encode(JSON.stringify(value)).length;
+    while (length(details) > MAX_DETAILS_BYTES) {
+        const longest = listed.filter(item => item.about).sort((a, b) => length(b.about) - length(a.about))[0];
+        if (!longest) throw new RangeError('The details of the photos are too long for one transfer');
+        delete longest.about;
+    }
+    return { details, file: concat(items.map(item => item.bytes)) };
 }
 
 /** The photos of a bundle: `[{ details, file }]`, or null when this is not a bundle. */
@@ -137,9 +145,9 @@ export function decodePick(bytes) {
     return { sendId: view.getUint32(4), indexes: [...bytes.subarray(8)].filter(index => index < MAX_SHEET_ITEMS) };
 }
 
-/** Whether these photos are small enough for one bundle. */
+/** Whether these photos are small enough for one bundle, with room for their details. */
 export function fitsBundle(sizes) {
-    return sizes.reduce((sum, size) => sum + size, 0) <= MAX_LIGHT_BYTES;
+    return sizes.reduce((sum, size) => sum + size, 0) <= MAX_BUNDLE_BYTES;
 }
 
 /**

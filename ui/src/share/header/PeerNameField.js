@@ -20,8 +20,11 @@ export async function saveMyName(master, raw) {
     // A rejected PUT comes back as nothing, so a falsy result is a failure.
     let peer = null;
     let failed = null;
+    const before = master.nearbyNotes?.waiting?.(null);
     try {
         peer = await master.service.updatePeer({ name });
+        // An older name that waited for the server is out of date now.
+        if (peer) master.nearbyNotes?.saved?.(null, before);
     } catch (err) {
         failed = err;
     }

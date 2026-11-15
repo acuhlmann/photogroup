@@ -648,12 +648,14 @@ export default class RoomsService {
                 await offlineRoom.hold(photos);
                 return photos;
             }
+            // The server said no: there is nothing to give back.
+            if (err?.status !== undefined) return undefined;
             Logger.error('share pic ' + err);
             throw err;
         }
     }
 
-    /** Tell the server about photos. Rejects when the server was not reached. */
+    /** Tell the server about photos. Rejects when the server did not take them; the error has the status when it answered. */
     async sendShare(photos) {
         const response = await fetch(this.url + '/' + this.id + '/photos/', {
             method: 'POST',
@@ -665,12 +667,9 @@ export default class RoomsService {
 
         if (!response.ok) {
             Logger.error(response.url + ' ' + response.status);
-            if ([502, 503, 504].includes(response.status)) {
-                const failure = new Error('The server did not take the photos (' + response.status + ')');
-                failure.status = response.status;
-                throw failure;
-            }
-            return undefined;
+            const failure = new Error('The server did not take the photos (' + response.status + ')');
+            failure.status = response.status;
+            throw failure;
         }
         return response.json();
     }

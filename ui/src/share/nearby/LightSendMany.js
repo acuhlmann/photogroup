@@ -11,7 +11,7 @@ import Typography from '@mui/material/Typography';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
-import { createLightSender, MAX_LIGHT_BYTES } from './lightFrames';
+import { createLightSender } from './lightFrames';
 import { qrSymbol, drawSymbol } from './qrCodec';
 import { LIGHT_LEVELS, DEFAULT_LEVEL, sendTimeText } from './lightSpeed';
 import { notePairing } from './pairingLog';
@@ -26,6 +26,8 @@ export const SHEET_PICK = 'Then the other person picks photos, and holds that ph
 export const PHOTOS_STEP = 'Step 2 of 2: the photos go to the other phone.';
 export const NOTHING_TO_SEND = 'No photo is on this phone in full.';
 export const TOO_LARGE_TOGETHER = 'These photos are too large together to send by camera. Send fewer photos.';
+
+const CODES_FAILED = "Couldn't make the codes. Close this and try again.";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 const level = LIGHT_LEVELS.find(each => each.id === DEFAULT_LEVEL);
@@ -46,7 +48,14 @@ function useCodes({ canvasRef, stream, emitter, what }) {
     const [problem, setProblem] = useState('');
     useEffect(() => {
         if (!stream) return undefined;
-        const sender = createLightSender(stream.details, stream.file, level.frameBytes, stream.sendId);
+        let sender;
+        try {
+            sender = createLightSender(stream.details, stream.file, level.frameBytes, stream.sendId);
+        } catch (err) {
+            Logger.warn('Making the codes failed: ' + (err?.message || err));
+            setProblem(CODES_FAILED);
+            return undefined;
+        }
         let stopped = false;
         let timer = null;
         setProblem('');
@@ -62,7 +71,7 @@ function useCodes({ canvasRef, stream, emitter, what }) {
                 if (canvasRef.current) drawSymbol(canvasRef.current, symbol);
             } catch (err) {
                 Logger.warn('Making a code failed: ' + (err?.message || err));
-                if (!stopped) setProblem("Couldn't make the codes. Close this and try again.");
+                if (!stopped) setProblem(CODES_FAILED);
                 return;
             }
             timer = setTimeout(step, Math.max(0, due - performance.now()));
@@ -154,7 +163,10 @@ export default function LightSendMany({ emitter, items, room, onClose }) {
                 return;
             }
             setBundle({ ...packBundle(parts, { room: tag }), sendId: (Math.random() * 0xffffffff) >>> 0, count: parts.length });
-        })();
+        })().catch((err) => {
+            Logger.warn('Getting the photos ready failed: ' + (err?.message || err));
+            if (!gone) setProblem(CODES_FAILED);
+        });
         return () => { gone = true; };
     }, [picked, listed, tag]);
 
@@ -249,7 +261,7 @@ LightSendMany.propTypes = {
 
 /** The files that a person picked on the front page, as photos to send. */
 export function itemsOfFiles(files) {
-    return [...files].filter(file => file.size <= MAX_LIGHT_BYTES).map((file, index) => ({
+    return [...files].filter(file => fitsBundle([file.size])).map((file, index) => ({
         id: `file-${index}-${file.size}`, name: file.name || 'photo', type: file.type || '', size: file.size,
         load: async () => file,
     }));
@@ -267,7 +279,7 @@ export function RoomLightSend({ master, onClose }) {
             for (const id of ids) {
                 const photo = master.roomPhotos.get(id);
                 const blob = await master.findPhotoBytes(id).catch(() => null);
-                if (!photo || !blob || blob.size > MAX_LIGHT_BYTES) continue;
+                if (!photo || !blob || !fitsBundle([blob.size])) continue;
                 const about = master.offlineRoom?.describe(id) || null;
                 found.push({
                     id, name: photo.fileName || 'photo', type: photo.fileType || '', size: blob.size, sealed: !!photo.secure,

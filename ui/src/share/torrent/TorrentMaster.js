@@ -303,8 +303,10 @@ export default class TorrentMaster {
 
     /** The ids of the room photos that are on this device in full. */
     async heldPhotoIds() {
-        const missing = new Set(await this.missingPhotoIds());
-        return this.roomPhotos.all().map(photo => photo.infoHash).filter(id => !missing.has(id));
+        // One list: a photo that comes while the others are checked is not in it.
+        const ids = this.roomPhotos.all().map(photo => photo.infoHash);
+        const here = await Promise.all(ids.map(id => this.hasPhotoBytes(id)));
+        return ids.filter((id, index) => here[index]);
     }
 
     /**
@@ -315,16 +317,13 @@ export default class TorrentMaster {
     async findPhotoBytes(infoHash) {
         const delivered = this._serverCopies.get(infoHash);
         if (delivered) return delivered;
-        const torrent = getTorrent(this.client, getBaseInfoHash(infoHash));
-        if (torrent?.done && torrent.files) {
-            const path = isCompoundInfoHash(infoHash) ? getFilePathFromInfoHash(infoHash) : null;
-            const file = path
-                ? torrent.files.find(item => item.path === path)
-                : torrent.files.find(item => !item.name.startsWith('Thumbnail '));
-            if (file) {
-                const blob = await readFileBlob(file).catch(() => null);
-                if (blob) return blob;
-            }
+        // This photo's file, not the torrent: other files of the torrent can
+        // be unfinished, and with "Data saver" a done torrent can have the
+        // preview only.
+        const file = this.photoFile(infoHash);
+        if (file && (file.done === true || (file.done === undefined && file.progress >= 1))) {
+            const blob = await readFileBlob(file).catch(() => null);
+            if (blob) return blob;
         }
         // The sharer's cache holds the decrypted original: never for encrypted shares.
         if (this.roomPhotos.get(infoHash)?.secure) return null;

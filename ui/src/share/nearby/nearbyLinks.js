@@ -150,16 +150,17 @@ export default class NearbyLinks {
     async answer(shake, code) {
         const before = shake.answer;
         // Until the new answer is ready, the same offer is not read again.
-        shake.answer = { forId: code.id, pc: null };
+        let mine = shake.answer = { forId: code.id, pc: null };
         before?.pc?.close();
         try {
             const made = await this.connect.makeAnswer(code.sdp, this.iceServers());
-            if (this.handshake !== shake || shake.done) {
+            // A newer answer took this one's place while it was made.
+            if (this.handshake !== shake || shake.done || shake.answer !== mine) {
                 made.pc.close();
                 return;
             }
             const answerCode = encodeLinkCode({ kind: 'answer', id: code.id, room: this.master.service.id, sdp: made.sdp });
-            const answer = shake.answer = { ...made, forId: code.id, code: answerCode };
+            const answer = mine = shake.answer = { ...made, forId: code.id, code: answerCode };
             shake.step = 'answer';
             shake.code = answerCode;
             shake.problem = '';
@@ -176,8 +177,10 @@ export default class NearbyLinks {
                 });
         } catch (err) {
             Logger.warn('Answering a link code failed: ' + (err?.message || err));
-            if (this.handshake !== shake) return;
-            shake.answer = before && before.forId !== code.id ? before : null;
+            if (this.handshake !== shake || shake.answer !== mine) return;
+            // The answer before this one is closed: the offer can be read again.
+            mine.pc?.close();
+            shake.answer = null;
             shake.problem = LINK_PROBLEMS.failed;
             this.changed();
         }

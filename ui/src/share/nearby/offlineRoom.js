@@ -16,6 +16,8 @@ import { roomKeyText } from '../privateRoom';
 const SAVE_MS = 500;
 const PROBE_MS = 15000;
 const MAX_LEARNED = 500;
+// How many times a join gives held photos to the server.
+const REPLAY_ROUNDS = 3;
 // What a phone nearby may tell about a photo: text and numbers only.
 const MAX_FIELD = 70000;
 
@@ -80,6 +82,7 @@ export default class OfflineRoom {
         this.madeHere = false;
         this.saveTimer = null;
         this.returning = null;
+        this.loading = null;
 
         if (typeof window !== 'undefined') {
             window.addEventListener?.('online', () => { this.tryReturn().catch(() => {}); });
@@ -112,19 +115,27 @@ export default class OfflineRoom {
         if (!there) this.setAway(true);
     }
 
-    // The copy of the room that is open; another room has its own.
-    async load() {
-        if (this.roomId === this.room) return;
-        this.roomId = this.room;
+    // The copy of the room that is open; another room has its own. Callers
+    // that come while the copy is read wait for the same read.
+    load() {
+        if (this.roomId === this.room) return this.loading || Promise.resolve();
+        const roomId = this.room;
+        this.roomId = roomId;
         this.photos = new Map();
         this.held = new Set();
         this.settings = {};
         this.madeHere = false;
-        if (!this.store) return;
+        const reading = this.read(roomId).finally(() => { if (this.loading === reading) this.loading = null; });
+        this.loading = reading;
+        return reading;
+    }
+
+    async read(roomId) {
+        if (!this.store || !roomId) return;
         try {
-            const saved = await promised(this.store, 'get', this.roomId);
+            const saved = await promised(this.store, 'get', roomId);
             // The room changed while the copy was read.
-            if (this.roomId !== this.room || !saved || !Array.isArray(saved.photos)) return;
+            if (this.roomId !== roomId || !saved || !Array.isArray(saved.photos)) return;
             saved.photos.forEach((photo) => { if (photo?.infoHash && !this.photos.has(photo.infoHash)) this.photos.set(photo.infoHash, photo); });
             (saved.held || []).forEach(id => this.held.add(id));
             this.settings = saved.settings || {};
@@ -267,49 +278,62 @@ export default class OfflineRoom {
 
     /**
      * The server answered a join. Give it what was held, and return the
-     * room with those photos in it.
+     * room with those photos in it. Photos that the server did not get stay
+     * held, and the room stays on its own until a later join gives them.
      */
     async reconcile(room) {
         await this.load();
+        const roomId = this.roomId;
         const service = this.master.service;
-        const listed = new Set((room?.photos || []).map(photo => photo.infoHash));
-        const missing = [...this.held].map(id => this.photos.get(id)).filter(photo => photo && !listed.has(photo.infoHash));
-        if (missing.length) {
+        // Held photos that the server has, or said no to: held no longer.
+        const done = new Set((room?.photos || []).map(photo => photo.infoHash));
+        // A photo that a phone nearby tells about while the others go to the
+        // server is held too: it goes in a round of its own.
+        for (let round = 0; round < REPLAY_ROUNDS; round++) {
+            const missing = [...this.held].filter(id => !done.has(id)).map(id => this.photos.get(id)).filter(Boolean);
+            if (!missing.length) break;
             try {
-                const posters = missing.filter(photo => photo.poster && !photo.secure);
                 const shared = await service.sendShare(missing.map(photo => ({ ...photo })));
+                if (this.roomId !== roomId) return room;
                 room.photos = [...(shared || []), ...(room.photos || [])];
                 Logger.info(`${missing.length} photo(s) that waited for the server are in the room now`);
-                posters.forEach(photo => service.sharePoster(photo.infoHash, photo.poster).catch(() => {}));
+                missing.filter(photo => photo.poster && !photo.secure)
+                    .forEach(photo => service.sharePoster(photo.infoHash, photo.poster).catch(() => {}));
             } catch (err) {
-                // Still held: the next join tries again. Keep them on screen.
+                if (this.roomId !== roomId) return room;
                 Logger.warn('Giving the held photos to the server failed: ' + (err?.message || err));
-                room.photos = [...missing.map(photo => ({ ...photo, owners: [] })), ...(room.photos || [])];
-                await this.keepHeld(room);
-                this.setAway(false);
-                return room;
+                // No answer, or a failure of the server: still held. A "no"
+                // of the server (4xx) stays a no: do not ask again.
+                if (!(err?.status >= 400 && err.status < 500)) break;
             }
+            missing.forEach(photo => done.add(photo.infoHash));
         }
-        this.held = new Set();
+        const waiting = [...this.held].filter(id => !done.has(id) && this.photos.has(id));
+        // Keep them on screen and in the copy.
+        room.photos = [...waiting.map(id => ({ ...this.photos.get(id), owners: [] })), ...(room.photos || [])];
         if (this.madeHere) {
-            this.madeHere = false;
-            // A private room that started with no server: the server learns it now.
+            // A private room that started with no server: the server learns
+            // it now. Until it says so, the next join tries again.
             if (roomKeyText()) {
                 service.updateRoomSettings({ private: true })
-                    .then(settings => this.emitter?.emit('roomSettings', settings))
+                    .then((settings) => {
+                        if (this.roomId === roomId) {
+                            this.madeHere = false;
+                            this.save();
+                        }
+                        this.emitter?.emit('roomSettings', settings);
+                    })
                     .catch(err => Logger.warn('Making the room private on the server failed: ' + (err?.message || err)));
+            } else {
+                this.madeHere = false;
             }
         }
         await this.remember(room);
-        this.setAway(false);
-        return room;
-    }
-
-    async keepHeld(room) {
-        const held = this.held;
-        await this.remember(room);
-        this.held = held;
+        if (this.roomId !== roomId) return room;
+        this.held = new Set(waiting);
         this.save();
+        this.setAway(waiting.length > 0);
+        return room;
     }
 
     /** Ask whether the server answers; when it does, join the room again. */

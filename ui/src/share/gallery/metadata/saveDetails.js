@@ -24,8 +24,12 @@ export function saveErrorText(err) {
  */
 export async function saveDetails(master, infoHash, fields) {
     let saved;
+    const notes = master.nearbyNotes;
+    const before = notes?.waiting?.(infoHash);
     try {
         saved = await master.service.updateDetails(infoHash, fields);
+        // An older change to the same fields that waited is out of date now.
+        notes?.saved?.(infoHash, before, fields);
     } catch (err) {
         saved = master.nearbyNotes?.holdDetails(infoHash, fields, err);
         if (!saved) throw err;

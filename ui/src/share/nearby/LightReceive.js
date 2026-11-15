@@ -55,6 +55,7 @@ export function receivedPart({ have, frames, blocks, done }) {
     return Math.min(0.99, Math.max(have / blocks, frames / framesNeeded(blocks)));
 }
 
+export const DAMAGED = 'The codes did not give correct photos. Nothing was added. Start again on the other phone.';
 export const ADD_FAILED = "Couldn't add the photo. Keep the camera on the codes to try again.";
 const RETRY_MS = 3000;
 // The camera picture is cut to a square this wide before it is read.
@@ -100,6 +101,13 @@ export default function LightReceive({ master, open, onClose }) {
             }
             // The small pictures of some photos: the person picks.
             const sheet = readSheet(result);
+            const kind = result.details?.kind;
+            // Says that it is a sheet or a bundle, but is not a correct one:
+            // not a photo, so nothing of it goes into the room.
+            if ((kind === 'sheet' && !sheet) || (kind === 'bundle' && !readBundle(result))) {
+                if (!stopped) setOutcome(DAMAGED);
+                return;
+            }
             if (sheet) {
                 if (stopped) return;
                 setSheet({ sendId: state.sendId, items: sheet.items.map(item => ({
@@ -279,7 +287,10 @@ export default function LightReceive({ master, open, onClose }) {
                                                         ? <img src={item.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                                                         : <Typography variant="caption" sx={{ color: 'text.secondary', px: 0.5 }}>{item.sealed ? 'Private' : 'No picture'}</Typography>}
                                                 </Box>
-                                                <Typography variant="caption" sx={{ px: 0.5, py: 0.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                <Typography variant="caption" title={item.name} sx={{ px: 0.5, pt: 0.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {item.name}
+                                                </Typography>
+                                                <Typography variant="caption" sx={{ px: 0.5, pb: 0.25, color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                     {FileUtil.formatBytes(item.size)}
                                                 </Typography>
                                                 {on && <CheckCircleRounded color="primary" sx={{ position: 'absolute', top: 4, right: 4, bgcolor: '#fff', borderRadius: '50%' }} />}

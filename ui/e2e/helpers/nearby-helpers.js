@@ -45,7 +45,7 @@ async function codeOn(page, kind) {
   const code = page.locator(`[data-testid="link-code"][data-kind="${kind}"]`);
   await expect(code).toBeVisible({ timeout: 20000 });
   // The canvas is drawn a moment after the step changes.
-  await page.waitForTimeout(500);
+  await expect(code).toHaveAttribute('data-drawn', 'true', { timeout: 20000 });
   return code.evaluate(canvas => canvas.toDataURL());
 }
 

@@ -108,8 +108,9 @@ export function canListen() {
 /**
  * Play a text again and again until `stop()`. Call it from a tap: phones
  * let a page make sound only then. With a list of texts, they play one
- * after the other, then the list starts again.
- * @param {string|string[]} text
+ * after the other, then the list starts again. The text can be a promise:
+ * the sound is unlocked at once, in the tap, and plays when the text is here.
+ * @param {string|string[]|Promise<string|string[]>} text
  * @returns {Promise<{seconds: number, stop: () => void}>} `seconds` is one round.
  */
 export async function playText(text, { quiet = false } = {}) {
@@ -120,7 +121,7 @@ export async function playText(text, { quiet = false } = {}) {
     try {
         const ggwave = await loadModem();
         await resumed;
-        const rounds = [].concat(text).map(each => encodeTones(ggwave, each, { sampleRate: context.sampleRate, quiet }));
+        const rounds = [].concat(await text).map(each => encodeTones(ggwave, each, { sampleRate: context.sampleRate, quiet }));
         const gap = Math.round(GAP_SECONDS * context.sampleRate);
         const length = rounds.reduce((sum, tones) => sum + tones.length + gap, 0);
         const buffer = context.createBuffer(1, length, context.sampleRate);

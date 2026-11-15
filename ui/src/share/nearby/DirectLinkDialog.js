@@ -95,11 +95,15 @@ export default function DirectLinkDialog({ master, open, onClose }) {
     useEffect(() => { setAnother(false); }, [linkCount]);
 
     const code = shake?.code || null;
+    // The code that the canvas shows now: it is drawn a moment after it changes.
+    const [drawn, setDrawn] = useState(null);
     useEffect(() => {
         if (!code) return undefined;
         let gone = false;
         qrSymbol(code).then((symbol) => {
-            if (!gone && canvasRef.current) drawSymbol(canvasRef.current, symbol);
+            if (gone || !canvasRef.current) return;
+            drawSymbol(canvasRef.current, symbol);
+            setDrawn(code);
         }).catch(err => Logger.warn('Making a code failed: ' + (err?.message || err)));
         return () => { gone = true; };
     }, [code]);
@@ -184,6 +188,7 @@ export default function DirectLinkDialog({ master, open, onClose }) {
                                     ref={canvasRef}
                                     data-testid="link-code"
                                     data-kind={step === 'answer' ? 'answer' : 'offer'}
+                                    data-drawn={!!code && drawn === code}
                                     aria-label="Code for the other phone"
                                     style={{ width: '100%', height: '100%', imageRendering: 'pixelated', display: 'block' }}
                                 />

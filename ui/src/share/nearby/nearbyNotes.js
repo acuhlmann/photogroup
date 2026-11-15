@@ -17,10 +17,11 @@ const HAVE_PARTS_MS = 60000;
 
 /** Whether an error says that the server was not reached, not that it said no. */
 export function serverNotReached(err) {
+    // An answer with a status came from somewhere: only a gateway's "no server" counts.
+    if (err && err.status !== undefined) return [502, 503, 504].includes(err.status);
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
     if (!err) return false;
-    return err.status === undefined ? err instanceof TypeError || /fetch|network/i.test(String(err.message || err))
-        : [502, 503, 504].includes(err.status);
+    return err instanceof TypeError || /fetch|network/i.test(String(err.message || err));
 }
 
 export default class NearbyNotes {
@@ -107,6 +108,35 @@ export default class NearbyNotes {
         return { infoHash, details: this.localDetails(infoHash, fields, this.me()) };
     }
 
+    /** What waits for the server now: ask before a save, and give it to saved() after. */
+    waiting(infoHash) {
+        this.load();
+        return infoHash ? this.held.details[infoHash] : this.held.name;
+    }
+
+    /**
+     * The server took a newer change: the older one that waited must not
+     * go to the server after it. A change that came while the server was
+     * asked stays held.
+     * @param {string|null} infoHash the photo, or null for the name
+     * @param {*} before what waiting() gave before the save
+     * @param {object} [fields] the photo's fields that the server took
+     */
+    saved(infoHash, before, fields = {}) {
+        if (!before) return;
+        this.load();
+        if (!infoHash) {
+            if (this.held.name !== before) return;
+            this.held.name = null;
+        } else {
+            if (this.held.details[infoHash] !== before) return;
+            const rest = Object.fromEntries(Object.entries(before).filter(([key]) => !(key in fields)));
+            if (Object.keys(rest).length) this.held.details[infoHash] = rest;
+            else delete this.held.details[infoHash];
+        }
+        this.save();
+    }
+
     me() {
         const master = this.master;
         return { peerId: master.client?.peerId, name: master.me?.name || this.myName() || '', ...(master.device ? { device: master.device } : {}) };
@@ -143,14 +173,16 @@ export default class NearbyNotes {
             for (const [infoHash, fields] of Object.entries(this.held.details)) {
                 try {
                     const saved = await service.updateDetails(infoHash, fields);
-                    // A newer change to this photo may wait by now.
-                    if (this.held.details[infoHash] === fields) delete this.held.details[infoHash];
+                    // A newer change to this photo may wait by now: it stays
+                    // held, and it is what this phone shows.
+                    if (this.held.details[infoHash] !== fields) continue;
+                    delete this.held.details[infoHash];
                     this.emitter?.emit('photos', { type: 'update', item: [saved] });
                 } catch (err) {
                     if (serverNotReached(err)) break;
                     // The server said no (the photo is gone, for example).
                     Logger.warn('A held change was not taken: ' + (err?.message || err));
-                    delete this.held.details[infoHash];
+                    if (this.held.details[infoHash] === fields) delete this.held.details[infoHash];
                 }
             }
         } finally {

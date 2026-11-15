@@ -82,10 +82,18 @@ export default function NotesBySound({ master, open, onClose }) {
         setProblem('');
         setMode('playing');
         try {
-            const have = await master.heldPhotoIds().catch(() => []);
-            const frames = notes.frames({ have });
-            if (mine !== startRef.current) return;
-            const player = await playText(frames.map(notesText), { quiet: useQuiet });
+            let have = [];
+            let frames = [];
+            // The list of photos takes a moment to read. The sound must be
+            // unlocked now, while the tap still counts: playText does that
+            // before it waits for the text.
+            const texts = master.heldPhotoIds().catch(() => []).then((ids) => {
+                have = ids;
+                frames = notes.frames({ have });
+                return frames.map(notesText);
+            });
+            texts.catch(() => {});
+            const player = await playText(texts, { quiet: useQuiet });
             if (mine !== startRef.current) {
                 player.stop();
                 return;

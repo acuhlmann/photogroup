@@ -3,6 +3,9 @@ import EventEmitter from 'eventemitter3';
 import OfflineRoom, { checkedPhoto, plainPhoto } from './offlineRoom';
 import RoomPhotos from '../torrent/RoomPhotos';
 
+const key = vi.hoisted(() => ({ text: '' }));
+vi.mock('../privateRoom', () => ({ roomKeyText: () => key.text }));
+
 const ROOM = 'z45keexwrxqzbeqimgsz';
 const HASH = n => String(n).repeat(40).slice(0, 40);
 const photo = (n, more = {}) => ({
@@ -103,6 +106,72 @@ describe('a room with no server', () => {
         const joined = await room.reconcile({ photos: [photo(2)], settings: {} });
         expect(joined.photos.map(item => item.infoHash)).toEqual([HASH(1), HASH(2)]);
         expect([...room.held]).toEqual([HASH(1)]);
+        // The room stays on its own: the next look for the server tries again.
+        expect(room.away).toBe(true);
+    });
+
+    it('keeps the held photos when the server fails, and stops when the server says no', async () => {
+        const { room, service } = phone();
+        await room.openOffline();
+        await room.hold([photo(1)]);
+        service.sendShare.mockRejectedValueOnce(Object.assign(new Error('500'), { status: 500 }));
+        await room.reconcile({ photos: [], settings: {} });
+        expect([...room.held]).toEqual([HASH(1)]);
+        expect(room.describe(HASH(1))).toBeTruthy();
+        expect(room.away).toBe(true);
+
+        service.sendShare.mockRejectedValueOnce(Object.assign(new Error('400'), { status: 400 }));
+        const joined = await room.reconcile({ photos: [], settings: {} });
+        expect(joined.photos).toEqual([]);
+        expect(room.held.size).toBe(0);
+        expect(room.away).toBe(false);
+    });
+
+    it('keeps a photo that a phone nearby tells about while the held photos go to the server', async () => {
+        const { room, service } = phone();
+        await room.openOffline();
+        await room.hold([photo(1)]);
+        service.sendShare.mockImplementationOnce(async (photos) => {
+            room.learn([photo(2)]);
+            return photos.map(item => ({ ...item, owners: [] }));
+        });
+        const joined = await room.reconcile({ photos: [], settings: {} });
+        // The second photo went in a round of its own.
+        expect(service.sendShare).toHaveBeenCalledTimes(2);
+        expect(service.sendShare.mock.calls[1][0].map(item => item.infoHash)).toEqual([HASH(2)]);
+        expect(joined.photos.map(item => item.infoHash).sort()).toEqual([HASH(1), HASH(2)]);
+        expect(room.describe(HASH(2))).toBeTruthy();
+        expect(room.held.size).toBe(0);
+        expect(room.away).toBe(false);
+    });
+
+    it('tells the server that a room is private until the server says so', async () => {
+        key.text = 'room-key';
+        try {
+            const { room, service } = phone();
+            await room.openOffline({ create: true });
+            service.updateRoomSettings.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+            await room.reconcile({ photos: [], settings: {} });
+            await Promise.resolve();
+            expect(room.madeHere).toBe(true);
+            await room.reconcile({ photos: [], settings: {} });
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(service.updateRoomSettings).toHaveBeenCalledTimes(2);
+            expect(room.madeHere).toBe(false);
+        } finally {
+            key.text = '';
+        }
+    });
+
+    it('reads the copy one time when two callers ask together', async () => {
+        const store = memoryStore();
+        store.items.set(ROOM, { photos: [photo(1)], held: [HASH(1)], settings: {} });
+        const slow = { ...store, get: (key, done) => setTimeout(() => done(null, store.items.get(key)), 20) };
+        const { room } = phone({ store: slow });
+        // The second caller must not go on with an empty room.
+        const [, joined] = await Promise.all([room.load(), room.reconcile({ photos: [], settings: {} })]);
+        expect(joined.photos.map(item => item.infoHash)).toEqual([HASH(1)]);
     });
 
     it('learns a photo from a phone nearby once, and holds it for the server', async () => {

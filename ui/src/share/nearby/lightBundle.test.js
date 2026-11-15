@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { packSheet, readSheet, packBundle, readBundle, encodePick, decodePick, fitsBundle, MAX_THUMB_BYTES, MAX_SHEET_ITEMS } from './lightBundle';
+import { packSheet, readSheet, packBundle, readBundle, encodePick, decodePick, fitsBundle, MAX_THUMB_BYTES, MAX_SHEET_ITEMS, MAX_BUNDLE_BYTES, MAX_DETAILS_BYTES } from './lightBundle';
 import { createLightSender, createLightReceiver, MAX_LIGHT_BYTES } from './lightFrames';
 
 const bytes = (length, seed = 1) => Uint8Array.from({ length }, (unused, i) => (i * 7 + seed) & 0xff);
@@ -67,7 +67,26 @@ describe('photos by camera, small pictures first', () => {
     });
 
     it('says when photos are too large together', () => {
-        expect(fitsBundle([MAX_LIGHT_BYTES - 1, 1])).toBe(true);
-        expect(fitsBundle([MAX_LIGHT_BYTES, 1])).toBe(false);
+        expect(fitsBundle([MAX_BUNDLE_BYTES - 1, 1])).toBe(true);
+        expect(fitsBundle([MAX_BUNDLE_BYTES, 1])).toBe(false);
+        // The largest bundle with the longest details is a stream that the other phone takes.
+        expect(2 + MAX_DETAILS_BYTES + MAX_BUNDLE_BYTES).toBeLessThanOrEqual(MAX_LIGHT_BYTES + 4096);
+    });
+
+    it('leaves out the longest descriptions when the details are too long', () => {
+        const long = { note: 'x'.repeat(40000) };
+        const packed = packBundle([
+            { id: 'a', name: 'a.jpg', type: 'image/jpeg', bytes: bytes(10), about: { note: 'short' } },
+            { id: 'b', name: 'b.jpg', type: 'image/jpeg', bytes: bytes(20), about: long },
+            { id: 'c', name: 'c.jpg', type: 'image/jpeg', bytes: bytes(30), about: { note: 'x'.repeat(30000) } },
+        ]);
+        expect(packed.details.items.map(item => !!item.about)).toEqual([true, false, true]);
+        const parts = readBundle(through(packed));
+        expect(parts.map(part => part.file.length)).toEqual([10, 20, 30]);
+        expect(parts[0].details.about).toEqual({ note: 'short' });
+    });
+
+    it('does not start a stream whose details are too long', () => {
+        expect(() => createLightSender({ note: 'x'.repeat(70000) }, bytes(10), 420)).toThrow(RangeError);
     });
 });

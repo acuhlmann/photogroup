@@ -56,6 +56,48 @@ describe('changes with no server', () => {
         expect(serverNotReached(refused(503))).toBe(true);
         expect(serverNotReached(refused(404))).toBe(false);
         expect(serverNotReached(null)).toBe(false);
+        // The phone says that it is offline, but an answer came: the answer counts.
+        const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+        expect(serverNotReached(refused(404))).toBe(false);
+        expect(serverNotReached(null)).toBe(true);
+        online.mockRestore();
+    });
+
+    it('does not send an older kept change after a newer change that the server took', async () => {
+        const { master, notes } = room();
+        notes.holdDetails('photo-1', { rating: 2, title: 'Old' }, offline());
+        master.service.updateDetails.mockResolvedValueOnce({ infoHash: 'photo-1', details: { rating: 5 } });
+        await saveDetails(master, 'photo-1', { rating: 5 });
+        // The title was not in the newer change: it waits still.
+        expect(notes.waiting('photo-1')).toEqual({ title: 'Old' });
+        master.service.updateDetails.mockResolvedValueOnce({ infoHash: 'photo-1', details: { title: 'New' } });
+        await saveDetails(master, 'photo-1', { title: 'New' });
+        expect(notes.count()).toBe(0);
+
+        notes.holdName('Old name', offline());
+        master.service.updatePeer.mockResolvedValueOnce({ peerId: ME, name: 'New name' });
+        await saveMyName(master, 'New name');
+        expect(notes.count()).toBe(0);
+    });
+
+    it('keeps a newer change that came while an older one went to the server', async () => {
+        const { master, notes, seen } = room();
+        for (const answer of ['taken', 'refused']) {
+            notes.holdDetails('photo-1', { rating: 2 }, offline());
+            seen.photos.length = 0;
+            master.service.updateDetails.mockImplementationOnce(async () => {
+                notes.holdDetails('photo-1', { rating: 5 }, offline());
+                if (answer === 'refused') throw refused(500);
+                return { infoHash: 'photo-1', details: { rating: 2 } };
+            });
+            await notes.flush();
+            expect(notes.waiting('photo-1')).toEqual({ rating: 5 });
+            // The screen keeps the newer rating: the older answer is not shown.
+            expect(seen.photos).toEqual([]);
+            master.service.updateDetails.mockResolvedValueOnce({ infoHash: 'photo-1', details: { rating: 5 } });
+            await notes.flush();
+            expect(notes.count()).toBe(0);
+        }
     });
 
     it('keeps a star rating, shows it at once and sends it when the server is back', async () => {
