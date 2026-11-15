@@ -112,6 +112,32 @@ describe('PhotoList', () => {
         expect(div.querySelector('[data-testid="details-of"]').textContent).toBe('a.jpg');
     });
 
+    it('keeps the same rows when the width jitters over the fold breakpoint, and switches on a real crossing', () => {
+        // Unfolded foldable: about 880 CSS px, just under the 900 px breakpoint.
+        matchMedia(false);
+        Object.defineProperty(window, 'innerWidth', { value: 880, configurable: true });
+        show();
+        const resizeTo = width => act(() => {
+            Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
+            window.dispatchEvent(new Event('resize'));
+        });
+        const row = div.querySelectorAll('[data-testid="photo-row"]')[0];
+        expect(div.querySelector('[data-testid="list-details"]')).toBeNull();
+        // Chrome, a scrollbar or a half-fold nudging the width over 900 and
+        // back must not remount the rows (that remount is the flicker).
+        for (const width of [905, 895, 915, 885]) resizeTo(width);
+        expect(div.querySelectorAll('[data-testid="photo-row"]')[0]).toBe(row);
+        expect(div.querySelector('[data-testid="list-details"]')).toBeNull();
+        // Folding shut / a real resize crosses the band and switches once.
+        resizeTo(1000);
+        expect(div.querySelector('[data-testid="list-details"]')).not.toBeNull();
+        const wideRow = div.querySelectorAll('[data-testid="photo-row"]')[0];
+        for (const width of [910, 890, 905]) resizeTo(width);
+        expect(div.querySelectorAll('[data-testid="photo-row"]')[0]).toBe(wideRow);
+        resizeTo(800);
+        expect(div.querySelector('[data-testid="list-details"]')).toBeNull();
+    });
+
     it('shows the picked photo in a box of one height, from its preview, so opening a row moves nothing under it', () => {
         matchMedia(false);
         // The sharp copy is still being made.

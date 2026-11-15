@@ -13,8 +13,8 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
-import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
+import { useStickyUp } from '../useStickyMedia';
 import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
 import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import FullscreenRounded from '@mui/icons-material/FullscreenRounded';
@@ -421,9 +421,11 @@ const WideRow = React.memo(function WideRow({ tile, fact, from, selected, roomy,
 function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onOpen, onRemove }) {
     const theme = useTheme();
     // Read the width on the first render: a phone layout first and the table
-    // after would mount every thumbnail twice.
-    const wide = useMediaQuery(theme.breakpoints.up('md'), { noSsr: true });
-    const roomy = useMediaQuery(theme.breakpoints.up('lg'), { noSsr: true });
+    // after would mount every thumbnail twice. Sticky, too: an unfolded
+    // foldable sits just under `md`, and a width jittering over the line
+    // would remount every row (phone rows and table rows share nothing).
+    const wide = useStickyUp(theme.breakpoints.values.md);
+    const roomy = useStickyUp(theme.breakpoints.values.lg);
     const [picked, setPicked] = useState(null);
     const rowRefs = useRef(new Map());
     const tilesRef = useRef(tiles);
