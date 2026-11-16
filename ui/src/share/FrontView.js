@@ -194,11 +194,15 @@ function FrontView({ master }) {
                     >
                         Scan to join
                     </Button>
-                    <Box sx={{ pt: 1.5 }}>
-                        <RecentRooms />
-                    </Box>
-                    <NearbyFront master={master} />
                 </Stack>
+
+                <Box sx={{ width: '100%', maxWidth: 320, '&:not(:empty)': { mt: 2.5 } }}>
+                    <RecentRooms />
+                </Box>
+
+                <Box sx={{ width: '100%', maxWidth: 360, mt: 2 }}>
+                    <NearbyFront master={master} />
+                </Box>
 
                 <Box className="spec-row" aria-hidden="true">
                     <span>Direct</span>
