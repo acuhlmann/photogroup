@@ -66,9 +66,12 @@ describe('describeEvent', () => {
         expect(describeEvent('trackerAnnounce', [{ torrent, isPublic: true, host: 'tracker.openwebtorrent.com' }])).toMatchObject({
             kind: 'pub', text: 'public WS announce · beach.jpg · tracker.openwebtorrent.com',
         });
-        expect(describeEvent('trackerStatus', [{ isPublic: true, host: 'tracker.btorrent.xyz', status: 'connected' }])).toMatchObject({
+        const connected = describeEvent('trackerStatus', [{ isPublic: true, host: 'tracker.btorrent.xyz', status: 'connected' }]);
+        const disconnected = describeEvent('trackerStatus', [{ isPublic: true, host: 'tracker.btorrent.xyz', status: 'disconnected' }]);
+        expect(connected).toMatchObject({
             kind: 'pub', text: 'public WS tracker.btorrent.xyz · connected',
         });
+        expect(disconnected.key).not.toBe(connected.key);
         expect(describeEvent('linkStats', [{
             changed: true, peerId: 'ana12345', local: 'relay', remote: 'srflx', protocol: 'udp', relayProtocol: 'udp', rtt: 42,
         }])).toMatchObject({

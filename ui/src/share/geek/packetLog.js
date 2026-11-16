@@ -128,7 +128,7 @@ export function describeEvent(name, args) {
         const isPub = !!first.isPublic || first.source === 'public';
         return {
             kind: isPub ? 'pub' : 'trk',
-            key: 'trkstatus' + (first.url || first.host || (isPub ? 'pub' : 'pg')),
+            key: `trkstatus:${first.url || first.host || (isPub ? 'pub' : 'pg')}:${first.status}`,
             text: `${isPub ? 'public WS' : 'PG tracker'}${first.host ? ' ' + first.host : ''} · ${first.status}`,
         };
     }

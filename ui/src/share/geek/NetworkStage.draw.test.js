@@ -334,5 +334,81 @@ describe('NetworkStage drawing', () => {
             div.remove();
         }
     });
+
+    it('updates hover when moving directly between different nodes or thumbnails', async () => {
+        let capturedScene = null;
+        const master = room();
+        const tiles = [
+            { infoHash: 'h1', fileName: 'one.jpg', img: 'blob:1', owners: [{ peerId: 'me' }] },
+            { infoHash: 'h2', fileName: 'two.jpg', img: 'blob:2', owners: [{ peerId: 'me' }] },
+        ];
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        await act(async () => root.render(
+            <NetworkStage master={master} tiles={tiles} onOpenPhoto={() => {}} timeline={createTimeline()} onScene={s => { capturedScene = s; }} />
+        ));
+        await runFrames(1);
+        const canvas = div.querySelector('[data-testid="network-stage"]');
+        const api = capturedScene.byId.get('api');
+        const tracker = capturedScene.byId.get('tracker');
+
+        await act(async () => canvas.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: api.x, clientY: api.y })));
+        await runFrames(1);
+        const latestTexts = () => contexts.at(-1).painted.map(p => p.text);
+        expect(latestTexts().some(t => t.includes('SSE / API'))).toBe(true);
+        expect(latestTexts().some(t => t.includes('PG tracker'))).toBe(false);
+
+        // Moving directly from API node to tracker node must update hover despite both having key === undefined.
+        await act(async () => canvas.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: tracker.x, clientY: tracker.y })));
+        await runFrames(1);
+        expect(latestTexts().some(t => t.includes('PG tracker'))).toBe(true);
+        expect(latestTexts().some(t => t.includes('SSE / API'))).toBe(false);
+
+        // Moving directly between two thumbnails updates hover cursor without keeping stale id.
+        const [t1, t2] = capturedScene.thumbs;
+        await act(async () => canvas.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: t1.x, clientY: t1.y })));
+        expect(canvas.style.cursor).toBe('pointer');
+        await act(async () => canvas.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: t2.x, clientY: t2.y })));
+        expect(canvas.style.cursor).toBe('pointer');
+
+        await act(async () => root.unmount());
+        div.remove();
+    });
+
+    it('refreshes tracker nodes when tracker socket state changes without a room event', async () => {
+        const tracker = { announceUrl: 'wss://photogroup.network/ws', destroyed: false, reconnecting: false, socket: { connected: true } };
+        const master = {
+            ...room(),
+            client: { peerId: 'me', torrents: [{ discovery: { tracker: { _trackers: [tracker] } } }] },
+            creator: { trackerWsUrl: 'wss://photogroup.network/ws' },
+        };
+        let capturedScene = null;
+        let nowMs = 1000;
+        const perfSpy = vi.spyOn(performance, 'now').mockImplementation(() => nowMs);
+        try {
+            const div = document.createElement('div');
+            document.body.appendChild(div);
+            const root = createRoot(div);
+            await act(async () => root.render(
+                <NetworkStage master={master} tiles={[]} onOpenPhoto={() => {}} timeline={createTimeline()} onScene={s => { capturedScene = s; }} />
+            ));
+            expect(capturedScene.byId.get('tracker').status).toBe('connected');
+
+            // Tracker socket disconnects silently without any room event.
+            tracker.socket.connected = false;
+            tracker.reconnecting = true;
+            nowMs += 400;
+            await runFrames(1);
+
+            expect(capturedScene.byId.get('tracker').status).toBe('waiting');
+            expect(capturedScene.byId.get('tracker').info.join('\n')).toContain('socket · reconnecting');
+
+            await act(async () => root.unmount());
+            div.remove();
+        } finally {
+            perfSpy.mockRestore();
+        }
+    });
 });
 

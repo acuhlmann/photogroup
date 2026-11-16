@@ -83,12 +83,21 @@ function readTrackerStates(client) {
     return states;
 }
 
+function trackerSignature(states) {
+    if (!states || !states.size) return '';
+    return [...states.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([url, st]) => `${url}:${st.connected ? 1 : 0}:${st.waiting ? 1 : 0}`)
+        .join('|');
+}
+
 function readScene(master, tiles, width, height, demo = false) {
     const creator = master.creator || {};
     const trackerUrl = creator.trackerWsUrl || (Array.isArray(window.WEBTORRENT_ANNOUNCE) ? window.WEBTORRENT_ANNOUNCE[0] : '');
     const announceUrls = Array.isArray(window.WEBTORRENT_ANNOUNCE) && window.WEBTORRENT_ANNOUNCE.length
         ? window.WEBTORRENT_ANNOUNCE
         : buildAnnounceList(trackerUrl);
+    const trackerStates = readTrackerStates(master.client);
     const inputs = {
         myPeerId: master.client?.peerId,
         peers: master.peers?.items || [],
@@ -98,7 +107,7 @@ function readScene(master, tiles, width, height, demo = false) {
         rtcConfig: creator.iceServers,
         trackerUrl,
         announceUrls,
-        trackerStates: readTrackerStates(master.client),
+        trackerStates,
         origin: window.location.origin,
         tiles,
         photos: master.roomPhotos?.all?.() || [],
@@ -106,8 +115,9 @@ function readScene(master, tiles, width, height, demo = false) {
         height,
     };
     // The tour needs someone to send to and public addresses to point at.
-    if (!demo) return buildScene(inputs);
-    return withDemoRoutes(buildScene(demoInputs(inputs)), inputs.myPeerId);
+    const built = !demo ? buildScene(inputs) : withDemoRoutes(buildScene(demoInputs(inputs)), inputs.myPeerId);
+    built.trackerSig = trackerSignature(trackerStates);
+    return built;
 }
 
 // A link that should move and does not; a device P2P does not work with.
@@ -123,6 +133,7 @@ function readLive(master, scene) {
     const progress = new Map();
     scene.thumbs.forEach(item => progress.set(item.key, thumbProgress(item, known)));
     const creator = master.creator || {};
+    const trackerStates = readTrackerStates(master.client);
     const issues = p2pIssues({
         myPeerId,
         peers: master.peers?.items || [],
@@ -132,10 +143,10 @@ function readLive(master, scene) {
         rtcConfig: creator.iceServers,
         localNetwork: master.localNetwork,
         hasTurn: describeIceServers(creator.iceServers).turn.length > 0,
-        trackerStates: readTrackerStates(master.client),
+        trackerStates,
         trackerUrl: creator.trackerWsUrl || '',
     });
-    return { progress, issues, wanted: wantedPeers({ photos, myPeerId }) };
+    return { progress, issues, wanted: wantedPeers({ photos, myPeerId }), trackerSig: trackerSignature(trackerStates) };
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -328,6 +339,13 @@ function routeTouchesNode(route, nodeId) {
     return route.path.includes(nodeId);
 }
 
+function sameHit(a, b) {
+    if (!a && !b) return true;
+    if (!a || !b || a.type !== b.type) return false;
+    if (a.type === 'thumb') return a.key != null && a.key === b.key;
+    return a.id != null && a.id === b.id;
+}
+
 /** A tile we can show full size: a still image, or media the torrent can stream. */
 export function canOpen(tile) {
     return !!(tile && (tile.img || tile.elem || tile.file || tile.torrentFile));
@@ -392,6 +410,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
     const imagesRef = useRef(new Map());
     const sceneRef = useRef(null);
     const geometryRef = useRef(new Map());
+    const trackerSigRef = useRef(null);
     const [size, setSize] = useState({ width: 0, height: 0 });
     const [version, setVersion] = useState(0);
     const [selected, setSelected] = useState(null);
@@ -412,7 +431,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
     useEffect(() => {
         const emitter = master.emitter;
         const bump = () => setVersion(value => value + 1);
-        const names = ['peers', 'peerConnections', 'localNetwork', 'photos', 'addPeerDone', 'serverCopy', 'wtInitialized'];
+        const names = ['peers', 'peerConnections', 'localNetwork', 'photos', 'addPeerDone', 'serverCopy', 'wtInitialized', 'trackerStatus'];
         names.forEach(name => emitter.on(name, bump));
         return () => names.forEach(name => emitter.removeListener(name, bump));
     }, [master.emitter]);
@@ -441,6 +460,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [master, tiles, size.width, size.height, version, demo]);
     sceneRef.current = scene;
+    trackerSigRef.current = scene.trackerSig;
     useEffect(() => { onScene?.(scene); }, [scene, onScene]);
 
     const spotlight = useMemo(() => (tour?.step
@@ -493,12 +513,16 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
         const routeById = new Map(scene.routes.map(route => [route.id, route]));
 
         let liveRead = -Infinity;
-        let live = { progress: new Map(), issues: new Map(), wanted: new Set() };
+        let live = { progress: new Map(), issues: new Map(), wanted: new Set(), trackerSig: scene.trackerSig };
         const liveNow = () => {
             const now = performance.now();
             if (now - liveRead > 300) {
                 liveRead = now;
                 live = readLive(master, scene);
+                if (live.trackerSig !== scene.trackerSig && trackerSigRef.current !== live.trackerSig) {
+                    trackerSigRef.current = live.trackerSig;
+                    setVersion(value => value + 1);
+                }
             }
             return live;
         };
@@ -521,6 +545,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
             const moving = !prefersReducedMotion() || !shown.playing;
             const focus = shown.shown();
             const focused = new Set(focus ? focus.flights.map(flight => flight.routeId) : []);
+            liveNow();
 
             // Tier guides aligned with actual computed tier positions.
             const natNode = scene.nodes.find(n => n.kind === 'nat');
@@ -1084,10 +1109,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
 
     const handleMove = useCallback((event) => {
         const hit = hitAt(event.clientX, event.clientY);
-        setHovered(prev => {
-            if (prev?.type === hit?.type && (prev?.id === hit?.id || prev?.key === hit?.key)) return prev;
-            return hit;
-        });
+        setHovered(prev => (sameHit(prev, hit) ? prev : hit));
     }, [hitAt]);
 
     const handleDrop = useCallback((event) => {

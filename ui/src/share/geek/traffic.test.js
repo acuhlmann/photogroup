@@ -152,6 +152,22 @@ describe('attachTraffic', () => {
         ]);
     });
 
+    it('keeps connected -> disconnected trackerStatus transitions visible while throttling identical repeats', () => {
+        const { emitter, timeline, clock } = setup();
+        emitter.emit('trackerStatus', { host: 'photogroup.network', status: 'connected' });
+        clock.value += 200;
+        emitter.emit('trackerStatus', { host: 'photogroup.network', status: 'disconnected' });
+        clock.value += 200;
+        emitter.emit('trackerStatus', { host: 'photogroup.network', status: 'disconnected' });
+
+        const statuses = timeline.entries.filter(e => e.kind === 'trk');
+        expect(statuses.map(e => e.text)).toEqual([
+            'PG tracker photogroup.network · connected',
+            'PG tracker photogroup.network · disconnected',
+            '',
+        ]);
+    });
+
     it('shows the STUN binding when the public address comes back, only for our own NAT', () => {
         const { emitter, timeline } = setup();
         emitter.emit('pcEvent', 'icecandidate', 'srflx 203.0.113.7:51234');

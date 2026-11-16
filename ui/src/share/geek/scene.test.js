@@ -237,6 +237,24 @@ describe('buildScene', () => {
             });
         }
     });
+
+    it('keeps devices and thumbnails inside short (<220px) map containers when log drawer is tall', () => {
+        const tiles = [{ infoHash: 'h1', peerId: 'me', owners: [{ peerId: 'me' }] }];
+        for (const [w, h, withTiles] of [[800, 180, false], [800, 180, true], [360, 180, true], [600, 150, false]]) {
+            const scene = room([], { width: w, height: h, tiles: withTiles ? tiles : [] });
+            const edge = scene.byId.get('edge');
+            const api = scene.byId.get('api');
+            const nat = scene.byId.get('nat:1.1.1.1');
+            const me = scene.byId.get('me');
+            expect(edge.y).toBeLessThan(api.y);
+            expect(api.y).toBeLessThan(nat.y);
+            expect(nat.y).toBeLessThan(me.y);
+            expect(me.y).toBeLessThan(h - 15);
+            scene.thumbs.forEach(thumb => {
+                expect(thumb.y + thumb.size / 2).toBeLessThan(h);
+            });
+        }
+    });
 });
 
 describe('buildRouteGeometry', () => {
@@ -260,6 +278,25 @@ describe('buildRouteGeometry', () => {
         const lanPts = geo.get('p2p:ana|ben');
         const lanMid = pointAlong(lanPts, 0.5);
         expect(lanMid.y).toBeLessThan(scene.byId.get('me').y - 15);
+    });
+
+    it('separates multiple routes sharing a NAT-to-NAT segment into distinct lanes', () => {
+        const scene = room([
+            { fromPeerId: 'me', toPeerId: 'ben', connectionType: 'p2p nat' },
+        ]);
+        scene.routes.push({
+            id: 'demo:punch',
+            kind: 'punch',
+            path: ['me', 'nat:1.1.1.1', 'nat:2.2.2.2', 'ben'],
+            label: 'srflx ↔ srflx',
+            demo: true,
+        });
+        const geo = buildRouteGeometry(scene);
+        const realPts = geo.get('p2p:ben|me');
+        const demoPts = geo.get('demo:punch');
+        const realMid = pointAlong(realPts, 0.5);
+        const demoMid = pointAlong(demoPts, 0.5);
+        expect(Math.abs(realMid.y - demoMid.y)).toBeGreaterThan(2);
     });
 });
 

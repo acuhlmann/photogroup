@@ -139,6 +139,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     // unfolded foldables or viewports with the bottom log drawer open.
     const compact = width < 640;
     const tightY = height < 520;
+    const veryShort = height < 340;
     const hasCopiesOnShelf = photos.some(p => p.hasServerCopy || p.serverCopyUploader || p.serverCopyReceived > 0 || p.serverCopyRequestedAt)
         || tiles.some(t => t.hasServerCopy || t.serverCopyUploader || t.serverCopyReceived > 0 || t.serverCopyRequestedAt);
 
@@ -165,35 +166,64 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     const [edgeNode, apiNode, trackerNode, copiesNode] = infraNodes({ origin, trackerUrl, photos, trackerStates });
     const rackLeft = compact ? width * 0.03 : width * 0.22;
     const rackWidth = compact ? width * 0.94 : width * 0.56;
-    const edgeY = Math.round(Math.max(compact ? 38 : (tightY ? 42 : 48), height * (compact ? 0.07 : 0.082)));
-    const servicesY = Math.round(Math.max(edgeY + (compact ? (tightY ? 46 : 52) : (tightY ? 48 : 58)), height * (compact ? 0.165 : 0.19)));
     const serviceNodes = [apiNode, trackerNode, copiesNode];
 
     const effectiveAnnounce = announceUrls === undefined ? buildAnnounceList(trackerUrl) : announceUrls;
     const trackerSummary = describeTrackers(effectiveAnnounce, trackerUrl);
     const extTrackers = trackerSummary.external;
 
-    // Monotonic tier Y positions so STUN, Public trackers, TURN, NATs, and devices never overlap
-    // on short foldables (~880x420 with drawer open) or narrow phones (~360x640).
-    const compactExtY = Math.round(Math.max(servicesY + (hasCopiesOnShelf ? 94 : 68), height * 0.31));
-    const stunY = compact ? compactExtY : Math.round(Math.max(edgeY + (tightY ? 50 : 72), height * 0.22));
-    const pubY = compact ? compactExtY : Math.round(Math.max(stunY + (tightY ? 56 : 74), height * 0.34));
-    const turnY = compact ? compactExtY : Math.round(Math.max(edgeY + (tightY ? 56 : 80), height * 0.27));
+    const side = (compact || height < 260) ? THUMB_COMPACT : THUMB;
+    const thumbOffset = height < 260 ? 22 : (tightY ? 30 : 44);
+    const thumbReserve = tiles.length
+        ? (height < 260 ? thumbOffset + side + 6 : (tightY ? 72 : 96))
+        : (height < 260 ? 22 : (tightY ? 46 : 64));
 
-    const minNetY = compact
-        ? compactExtY + (tightY ? 56 : 70)
-        : Math.max(
-            servicesY + (hasCopiesOnShelf ? 96 : 56),
-            extTrackers.length ? pubY + (tightY ? 48 : 64) : stunY + (tightY ? 48 : 64),
-            turnY + (tightY ? 46 : 56),
-        );
-    const thumbReserve = tiles.length ? (tightY ? 72 : 96) : (tightY ? 46 : 64);
-    const maxDeviceY = Math.max(220, height - thumbReserve);
-    let deviceY = Math.round(Math.min(maxDeviceY, Math.max(height * TIER.device, minNetY + (tightY ? 52 : 76))));
-    let effectiveNetY = Math.round(Math.min(deviceY - (tightY ? 48 : 64), Math.max(height * TIER.net, minNetY)));
-    if (effectiveNetY < minNetY && deviceY < maxDeviceY) {
-        effectiveNetY = Math.round(minNetY);
-        deviceY = Math.round(Math.min(maxDeviceY, effectiveNetY + (tightY ? 48 : 64)));
+    let edgeY;
+    let servicesY;
+    let compactExtY;
+    let stunY;
+    let pubY;
+    let turnY;
+    let effectiveNetY;
+    let deviceY;
+
+    if (veryShort) {
+        // When the log drawer leaves <340px (e.g. <220px), scale tiers proportionally
+        // inside [0, height] so devices and thumbnails stay visible and selectable.
+        deviceY = Math.round(Math.max(24, height - thumbReserve));
+        edgeY = Math.round(Math.max(16, deviceY * 0.14));
+        const span = Math.max(40, deviceY - edgeY);
+        servicesY = Math.round(edgeY + span * 0.28);
+        compactExtY = Math.round(edgeY + span * 0.56);
+        stunY = compact ? compactExtY : Math.round(edgeY + span * 0.30);
+        turnY = compact ? compactExtY : Math.round(edgeY + span * 0.36);
+        pubY = compact ? compactExtY : Math.round(edgeY + span * 0.54);
+        effectiveNetY = Math.round(edgeY + span * 0.78);
+    } else {
+        edgeY = Math.round(Math.max(compact ? 38 : (tightY ? 42 : 48), height * (compact ? 0.07 : 0.082)));
+        servicesY = Math.round(Math.max(edgeY + (compact ? (tightY ? 46 : 52) : (tightY ? 48 : 58)), height * (compact ? 0.165 : 0.19)));
+
+        // Monotonic tier Y positions so STUN, Public trackers, TURN, NATs, and devices never overlap
+        // on short foldables (~880x420 with drawer open) or narrow phones (~360x640).
+        compactExtY = Math.round(Math.max(servicesY + (hasCopiesOnShelf ? 94 : 68), height * 0.31));
+        stunY = compact ? compactExtY : Math.round(Math.max(edgeY + (tightY ? 50 : 72), height * 0.22));
+        pubY = compact ? compactExtY : Math.round(Math.max(stunY + (tightY ? 56 : 74), height * 0.34));
+        turnY = compact ? compactExtY : Math.round(Math.max(edgeY + (tightY ? 56 : 80), height * 0.27));
+
+        const minNetY = compact
+            ? compactExtY + (tightY ? 56 : 70)
+            : Math.max(
+                servicesY + (hasCopiesOnShelf ? 96 : 56),
+                extTrackers.length ? pubY + (tightY ? 48 : 64) : stunY + (tightY ? 48 : 64),
+                turnY + (tightY ? 46 : 56),
+            );
+        const maxDeviceY = Math.max(220, height - thumbReserve);
+        deviceY = Math.round(Math.min(maxDeviceY, Math.max(height * TIER.device, minNetY + (tightY ? 52 : 76))));
+        effectiveNetY = Math.round(Math.min(deviceY - (tightY ? 48 : 64), Math.max(height * TIER.net, minNetY)));
+        if (effectiveNetY < minNetY && deviceY < maxDeviceY) {
+            effectiveNetY = Math.round(minNetY);
+            deviceY = Math.round(Math.min(maxDeviceY, effectiveNetY + (tightY ? 48 : 64)));
+        }
     }
 
     ordered.forEach((peer, index) => {
@@ -265,10 +295,11 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     const leftSideX = compact ? Math.max(width * 0.15, 44) : Math.max(60, Math.min(width * 0.105, rackLeft * 0.48));
     const rightSideX = compact ? Math.min(width * 0.85, width - 44) : Math.min(width - 60, Math.max(width * 0.895, rackLeft + rackWidth + (width - (rackLeft + rackWidth)) * 0.52));
 
+    const extClampY = Math.min(compactExtY, effectiveNetY - (veryShort ? 20 : 46));
     const stun = add({
         id: 'stun', kind: 'stun',
         x: leftSideX,
-        y: compact ? Math.min(compactExtY, effectiveNetY - 46) : stunY,
+        y: compact ? extClampY : stunY,
         badge: 'ICE DISCOVERY',
         label: 'STUN',
         sub: ice.stun[0]
@@ -291,7 +322,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         pubtrackers = add({
             id: 'pubtrackers', kind: 'pubtracker',
             x: compact ? width * 0.5 : leftSideX,
-            y: compact ? Math.min(compactExtY, effectiveNetY - 46) : pubY,
+            y: compact ? extClampY : pubY,
             maxW: compact ? Math.min(148, width * 0.34) : Math.min(156, Math.max(106, rackLeft - 24)),
             badge: 'BACKUP WS',
             label: 'Public trackers',
@@ -318,7 +349,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     const turn = add({
         id: 'turn', kind: 'turn',
         x: rightSideX,
-        y: compact ? Math.min(compactExtY, effectiveNetY - 46) : turnY,
+        y: compact ? extClampY : turnY,
         badge: turnHere ? 'MEDIA RELAY' : 'NO TURN',
         label: 'TURN',
         sub: turnHere ? (provider || ice.turn[0] || [...relayIps][0]) : 'none configured',
@@ -392,7 +423,6 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     // Photos: under each device that holds a full copy, and also under each
     // device that is getting one (ours, and others that told the room so).
     const devices = nodes.filter(node => node.kind === 'device');
-    const side = compact ? THUMB_COMPACT : THUMB;
     const share = devices.length ? width / (devices.length + 1) : width;
     const fits = Math.max(1, Math.min(MAX_THUMBS, Math.floor(share / (side + 6))));
     const shelf = (node, held, offset, extra = () => ({}), max = MAX_THUMBS, gap = 6) => {
@@ -420,7 +450,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         const held = device.isMe ? tiles : tiles.filter(tile => has(tile) || getting(tile));
         const arriving = tile => (device.isMe ? !!tile.loading : getting(tile));
         const sorted = [...held.filter(arriving), ...held.filter(tile => !arriving(tile))];
-        shelf(device, sorted, tightY ? 30 : 44, tile => ({ arriving: arriving(tile) }), fits);
+        shelf(device, sorted, thumbOffset, tile => ({ arriving: arriving(tile) }), fits);
         device.photoCount = held.filter(tile => !arriving(tile)).length;
     });
     const copies = byId.get('copies');
@@ -435,7 +465,8 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         };
         const order = { uploading: 0, requested: 1, stored: 2 };
         const onServer = tiles.filter(stateOf).sort((a, b) => order[stateOf(a)] - order[stateOf(b)]);
-        shelf(copies, onServer, 30, tile => ({ copy: stateOf(tile) }), compact ? 3 : MAX_THUMBS, 14);
+        // Wider gaps: each copy has a caption ("19h left") under it.
+        shelf(copies, onServer, veryShort ? 22 : 30, tile => ({ copy: stateOf(tile) }), compact ? 3 : MAX_THUMBS, 14);
     }
 
     return { nodes, routes, thumbs, byId };
@@ -540,8 +571,9 @@ export function buildRouteGeometry(scene) {
                 const cp = { x: (u.x + v.x) / 2, y: (u.y + v.y) / 2 + bow };
                 segPts = sampleQuad({ x: u.x, y: u.y }, cp, { x: v.x, y: v.y }, 14);
             } else if (u.kind === 'nat' && v.kind === 'nat') {
-                // Keep punch path between NATs clear of the NAT IP/location labels below them.
-                const cp = { x: (u.x + v.x) / 2, y: (u.y + v.y) / 2 - 22 - Math.abs(laneOffset) };
+                // Keep punch path between NATs clear of the NAT IP/location labels below them,
+                // while preserving signed lane separation across shared NAT-to-NAT segments.
+                const cp = { x: (u.x + v.x) / 2, y: (u.y + v.y) / 2 - 26 + laneOffset };
                 segPts = sampleQuad({ x: u.x, y: u.y }, cp, { x: v.x, y: v.y }, 12);
             } else if (uId === 'edge' && (vId === 'api' || vId === 'tracker' || vId === 'copies')) {
                 const p0 = { x: u.x + Math.sign(v.x - u.x) * 16, y: u.y + (u.h || 34) / 2 - 2 };
