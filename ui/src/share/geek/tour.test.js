@@ -99,7 +99,14 @@ describe('tourSteps', () => {
         expect(relayed.byId.get('turn').sub).toBe('Twilio');
         const turn = tourSteps(relayed, { myPeerId: 'me' }).find(step => step.id === 'turn');
         expect(turn.sees[0]).toEqual({ who: 'TURN sees', what: 'both IP addresses and encrypted bytes' });
+        expect(turn.routes).toContain('turnctl:me');
         expect(turn.packets.length).toBeGreaterThan(0);
+    });
+
+    it('includes public fallback trackers in the tracker step when present', () => {
+        const tracker = steps.find(step => step.id === 'tracker');
+        expect(tracker.nodes).toContain('pubtrackers');
+        expect(tracker.routes).toContain('pubtracker:me');
     });
 });
 
@@ -176,6 +183,11 @@ describe('explainEntry', () => {
             ['peerConnections', [[]]],
             ['photos', [{ type: 'add', item: [{ fileName: 'a.jpg' }] }]],
             ['pcEvent', ['icegatheringstatechange', 'gathering']],
+            ['pcEvent', ['icecandidate', 'srflx 203.0.113.5:5000']],
+            ['pcEvent', ['icecandidate', 'relay 192.0.2.9:49152']],
+            ['trackerAnnounce', [{ torrent: { name: 'a' }, isPublic: true, host: 'tracker.openwebtorrent.com' }]],
+            ['trackerStatus', [{ isPublic: true, host: 'tracker.btorrent.xyz', status: 'connected' }]],
+            ['linkStats', [{ changed: true, peerId: 'ana', local: 'relay', remote: 'srflx', relayProtocol: 'udp' }]],
             ['sseReconnected', []],
             ['serverCopy', [{ stage: 'queued', infoHash: 'h' }]],
         ];
@@ -184,6 +196,9 @@ describe('explainEntry', () => {
             expect(EXPLAINED_KINDS, name).toContain(line.kind);
             expect(explainEntry({ kind: line.kind }).sees).toBeTruthy();
         });
+        expect(explainEntry({ kind: 'stun' }).title).toContain('STUN');
+        expect(explainEntry({ kind: 'turn' }).title).toContain('TURN');
+        expect(explainEntry({ kind: 'pub' }).title).toContain('Public backup');
         // A change the log writes no line for still gets explained.
         expect(explainEntry({ kind: 'peers' }).title).toBe('Someone joined, left or changed');
         expect(explainEntry(null)).toBeNull();

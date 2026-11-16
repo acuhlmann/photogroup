@@ -97,6 +97,38 @@ export function describeIceServers(rtcConfig) {
 }
 
 /**
+ * Separate PhotoGroup's primary WebSocket tracker from public/external
+ * fallback WebSocket trackers in an announce list, without mutating input.
+ */
+export function describeTrackers(announceUrls, ownTrackerUrl = '') {
+    const primaryUrl = typeof ownTrackerUrl === 'string' && /^wss?:\/\//.test(ownTrackerUrl.trim())
+        ? ownTrackerUrl.trim()
+        : null;
+    const hostOfUrl = raw => {
+        try {
+            return new URL(raw).host;
+        } catch {
+            return raw;
+        }
+    };
+    const seen = new Set();
+    const external = [];
+    (Array.isArray(announceUrls) ? announceUrls : []).forEach(item => {
+        if (typeof item !== 'string') return;
+        const url = item.trim();
+        if (!/^wss?:\/\//.test(url) || seen.has(url)) return;
+        seen.add(url);
+        if (primaryUrl && url === primaryUrl) return;
+        external.push({ url, host: hostOfUrl(url) });
+    });
+    return {
+        primary: primaryUrl,
+        primaryHost: primaryUrl ? hostOfUrl(primaryUrl) : null,
+        external,
+    };
+}
+
+/**
  * Likely path between this device and another, from both sides' candidates.
  * level: good | ok | poor | unknown
  */

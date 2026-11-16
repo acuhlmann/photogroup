@@ -16,17 +16,32 @@ const EXPLAIN = {
     wire: {
         title: 'A peer connection opened',
         body: 'ICE found a path that works, and DTLS encrypted it. The two browsers sent the BitTorrent handshake. Now pieces can move.',
-        sees: 'The tracker sent the offer and the answer. The connection itself goes from browser to browser.',
+        sees: 'A tracker (PhotoGroup or a public backup) sent the offer and the answer. The connection itself goes browser to browser.',
     },
     trk: {
-        title: 'The tracker answered',
-        body: 'Your browser told the tracker which photos it has. This is an announce. The tracker sent back peers that want the same photos, with their WebRTC offers.',
-        sees: 'The tracker: your IP address and the infohash of each photo. It never sees the photo.',
+        title: 'PhotoGroup primary tracker',
+        body: 'Your browser sent the infohash to PhotoGroup’s own WebSocket tracker (photogroup.network). It introduces peers in the room via WebRTC offers and answers and feeds the server-side ICE topology view.',
+        sees: 'photogroup.network’s tracker: your IP address, infohashes, and ICE candidates. It never sees the photo.',
+    },
+    pub: {
+        title: 'Public backup WebSocket trackers',
+        body: 'Alongside PhotoGroup’s tracker, your browser announces to public WebSocket trackers (like openwebtorrent.com) so peer discovery survives if the main tracker socket drops on mobile. BitTorrent DHT is off.',
+        sees: 'Public trackers see infohashes and WebRTC offers/answers, never the photos.',
+    },
+    stun: {
+        title: 'STUN lookup: finding your public address',
+        body: 'Your browser sent a STUN Binding Request to learn the public IP address and port (srflx) your router assigns. STUN helps browsers punch holes through NATs, and carries no photo or media bytes.',
+        sees: 'STUN sees your public IP address and port only — never photos, rooms, or peers.',
+    },
+    turn: {
+        title: 'TURN relay: allocation & encrypted fallback',
+        body: 'Your browser either reserved a TURN relay address (Allocate) during ICE gathering or is forwarding encrypted WebRTC bytes through TURN because direct NAT hole punching failed.',
+        sees: 'TURN sees both IP addresses and encrypted DTLS bytes. It cannot read the photos.',
     },
     path: {
-        title: 'The path to a peer',
-        body: 'WebRTC tells which candidate pair it uses: host (same network), srflx (through the NATs) or relay (through TURN). Every few seconds each browser sends a STUN check on this path. The answer proves the path works and gives the round-trip time.',
-        sees: 'Only the two browsers, or the TURN relay when the path is relay. The data is encrypted.',
+        title: 'The direct path to a peer',
+        body: 'WebRTC reports the selected direct candidate pair: host (same LAN) or srflx (STUN-assisted NAT hole punch). Periodic STUN connectivity checks keep the path open and measure round-trip time.',
+        sees: 'Only the two browsers. Data is DTLS-encrypted and bypasses photogroup.network and TURN.',
     },
     peer: {
         title: 'Someone joined, left or changed',
@@ -35,7 +50,7 @@ const EXPLAIN = {
     },
     link: {
         title: 'The paths changed',
-        body: 'Each browser tells the server which path ICE chose to each peer: the same network, through the NATs, or through TURN. The colored lines between devices show these paths.',
+        body: 'Each browser tells the server which path ICE chose to each peer: same LAN (host↔host), STUN-assisted NAT hole punch (srflx↔srflx), or TURN relay. The colored lines between devices show these paths.',
         sees: 'photogroup.network: which path each pair of devices uses.',
     },
     photo: {
@@ -44,9 +59,9 @@ const EXPLAIN = {
         sees: 'photogroup.network keeps the magnet link and the file data with the room. It never sees the photo.',
     },
     ice: {
-        title: 'ICE: finding paths',
-        body: 'Your browser collects candidates: private addresses, the public address from STUN, and a relay address if TURN is configured. Peers use these addresses to try to reach you.',
-        sees: 'STUN sees your public IP address and port. The room receives your candidates.',
+        title: 'ICE: gathering connection candidates',
+        body: 'Your browser collects network candidates: local addresses (host), public addresses from STUN (srflx), and relay addresses from TURN if configured. Peers try direct paths before falling back to TURN.',
+        sees: 'STUN sees your public IP:port; TURN (if configured) allocates a relay port; the room receives your candidates.',
     },
     sse: {
         title: 'The server sent an update',
@@ -55,8 +70,8 @@ const EXPLAIN = {
     },
     copy: {
         title: 'Server copy: the last resort',
-        body: 'A download stopped, or all devices with the photo left. A device with the photo uploads a copy over HTTPS in 8 MB parts. The receiver downloads it and checks its fingerprint.',
-        sees: 'photogroup.network keeps the copy until all devices have the photo, for 24 h at most.',
+        body: 'Direct P2P and TURN did not connect, or all holders left. A device with the photo uploads a copy over HTTPS in 8 MB parts; the receiver downloads it and verifies its fingerprint.',
+        sees: 'photogroup.network keeps the copy only until all devices have the photo, for 24 h at most.',
     },
     pair: {
         title: 'Data went from phone to phone, not over the network',
@@ -75,6 +90,10 @@ const ALIAS = {
     localNetwork: 'ice',
     sseReconnected: 'sse',
     trackerAnnounce: 'trk',
+    trackerStatus: 'trk',
+    pubtracker: 'pub',
+    turnctl: 'turn',
+    relay: 'turn',
     linkStats: 'path',
     serverCopy: 'copy',
     pairing: 'pair',

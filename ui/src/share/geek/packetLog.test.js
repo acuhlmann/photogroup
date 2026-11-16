@@ -45,11 +45,39 @@ describe('describeEvent', () => {
         expect(describeEvent('pieceSent', [{ torrent, index: 0, total: 12, peerId: 'ben' }]).text).toBe('piece 1/12 → peer ben · beach.jpg');
     });
 
-    it('logs ICE state changes and candidates', () => {
+    it('logs ICE state changes, STUN lookups, TURN allocations, and candidates', () => {
         expect(describeEvent('pcEvent', ['iceconnectionstatechange', 'connected']).text).toBe('iceconnection → connected');
         expect(describeEvent('pcEvent', ['iceconnectionstatechange', ''])).toBeNull();
+        expect(describeEvent('pcEvent', ['icecandidate', 'srflx 203.0.113.5:5000'])).toEqual({
+            kind: 'stun', text: 'STUN lookup → srflx 203.0.113.5:5000',
+        });
+        expect(describeEvent('pcEvent', ['icecandidate', 'relay 192.0.2.9:49152'])).toEqual({
+            kind: 'turn', text: 'TURN allocate → relay 192.0.2.9:49152',
+        });
         expect(describeEvent('localNetwork', [[{ typeDetail: 'host' }, { typeDetail: 'srflx' }]]).text)
             .toBe('2 candidates · host srflx');
+    });
+
+    it('distinguishes primary PG tracker from public backup trackers and TURN-relayed linkStats', () => {
+        const torrent = { name: 'beach.jpg', infoHash: 'abc' };
+        expect(describeEvent('trackerAnnounce', [{ torrent, host: 'photogroup.network' }])).toMatchObject({
+            kind: 'trk', text: 'announce beach.jpg · photogroup.network answered',
+        });
+        expect(describeEvent('trackerAnnounce', [{ torrent, isPublic: true, host: 'tracker.openwebtorrent.com' }])).toMatchObject({
+            kind: 'pub', text: 'public WS announce · beach.jpg · tracker.openwebtorrent.com',
+        });
+        const connected = describeEvent('trackerStatus', [{ isPublic: true, host: 'tracker.btorrent.xyz', status: 'connected' }]);
+        const disconnected = describeEvent('trackerStatus', [{ isPublic: true, host: 'tracker.btorrent.xyz', status: 'disconnected' }]);
+        expect(connected).toMatchObject({
+            kind: 'pub', text: 'public WS tracker.btorrent.xyz · connected',
+        });
+        expect(disconnected.key).not.toBe(connected.key);
+        expect(describeEvent('linkStats', [{
+            changed: true, peerId: 'ana12345', local: 'relay', remote: 'srflx', protocol: 'udp', relayProtocol: 'udp', rtt: 42,
+        }])).toMatchObject({
+            kind: 'turn',
+            text: 'TURN relay peer ana12345 · relay ⇄ srflx udp via TURN/udp · rtt 42 ms',
+        });
     });
 
     it('ignores events it does not know', () => {

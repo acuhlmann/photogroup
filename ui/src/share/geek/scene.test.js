@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildScene, routePoints, pointAlong, transferRoutesFor, TIER, hostOf } from './scene';
+import { buildScene, buildRouteGeometry, routePoints, pointAlong, transferRoutesFor, TIER, hostOf } from './scene';
 
 const chain = (lan, pub) => [
     { ip: lan, port: 50000, type: 'host', transport: 'udp' },
@@ -33,12 +33,22 @@ describe('buildScene', () => {
         expect(devices.every(node => node.y === 800 * TIER.device)).toBe(true);
         expect(scene.byId.get('me').label).toBe('you · Mine');
 
-        expect(['edge', 'api', 'tracker', 'copies'].map(id => scene.byId.get(id).y)).toEqual(Array(4).fill(800 * TIER.infra));
+        const [edge, api, tracker, copies] = ['edge', 'api', 'tracker', 'copies'].map(id => scene.byId.get(id));
+        expect(edge.y).toBeLessThan(api.y);
+        expect([api.y, tracker.y, copies.y]).toEqual([api.y, api.y, api.y]);
+        expect(api.y).toBeLessThan(800 * TIER.net);
+        expect([edge.badge, api.badge, tracker.badge, copies.badge]).toEqual([
+            'INGRESS', 'STATE · SSE', 'PRIMARY WS', 'TEMP RELAY',
+        ]);
         expect(scene.byId.get('edge').sub).toBe('Cloud Run wake → nginx');
         expect(scene.byId.get('tracker').sub).toBe('photogroup.network');
+        expect(scene.byId.get('stun')).toMatchObject({ badge: 'ICE DISCOVERY', caption: 'finds IP:port · no media' });
         expect(scene.byId.get('stun').sub).toContain('stun.l.google.com');
+        // Public fallback WebSocket trackers appear outside photogroup.network.
+        expect(scene.byId.get('pubtrackers')).toMatchObject({ kind: 'pubtracker', badge: 'BACKUP WS' });
+        expect(scene.byId.get('pubtrackers').info.join('\n')).toContain('tracker.openwebtorrent.com');
         // No TURN server and no relay candidates: TURN is still shown, as missing.
-        expect(scene.byId.get('turn')).toMatchObject({ sub: 'none configured', idle: true });
+        expect(scene.byId.get('turn')).toMatchObject({ sub: 'none configured', idle: true, badge: 'NO TURN' });
         expect(scene.byId.get('turn').info.join(' ')).toContain('server copy takes over');
         // What each server holds and never sees is spelled out on it.
         expect(scene.byId.get('api').info.join('\n')).toMatch(/never sees · the photos/);
@@ -176,6 +186,117 @@ describe('buildScene', () => {
         const scene = room([], { origin: 'http://localhost:3000' });
         expect(scene.byId.get('edge')).toMatchObject({ label: 'dev server', sub: 'localhost:3000' });
         expect(hostOf('not a url')).toBe('not a url');
+    });
+
+    it('separates PhotoGroup tracker from configurable announceUrls and shows TURN allocate when TURN exists', () => {
+        const states = new Map([
+            ['wss://photogroup.network/tracker', { connected: true, waiting: false }],
+            ['wss://custom.tracker.example/ws', { connected: true, waiting: false }],
+        ]);
+        const scene = room([], {
+            announceUrls: ['wss://photogroup.network/tracker', 'wss://custom.tracker.example/ws'],
+            trackerStates: states,
+            rtcConfig: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'turn:turn.example.com:3478', username: 'u', credential: 'c' }] },
+        });
+        expect(scene.byId.get('tracker').status).toBe('connected');
+        expect(scene.byId.get('pubtrackers')).toMatchObject({
+            sub: 'custom.tracker.example',
+            status: 'connected',
+        });
+        expect(scene.routes.find(r => r.id === 'pubtracker:me').path).toEqual(['me', 'nat:1.1.1.1', 'pubtrackers']);
+        expect(scene.routes.find(r => r.id === 'turnctl:me').path).toEqual(['me', 'nat:1.1.1.1', 'turn']);
+
+        const noPublic = room([], { announceUrls: ['wss://photogroup.network/tracker'] });
+        expect(noPublic.byId.get('pubtrackers')).toBeUndefined();
+        expect(noPublic.routes.find(r => r.id === 'turnctl:me')).toBeUndefined();
+    });
+
+    it('keeps all tiers strictly ordered without overlap on narrow phones and short unfolded foldables', () => {
+        const tiles = [{ infoHash: 'h1', peerId: 'me', owners: [{ peerId: 'me' }], hasServerCopy: true }];
+        for (const [w, h] of [[360, 640], [412, 480], [880, 420], [880, 720]]) {
+            const scene = room([], { width: w, height: h, tiles, photos: tiles });
+            const edge = scene.byId.get('edge');
+            const api = scene.byId.get('api');
+            const stun = scene.byId.get('stun');
+            const pub = scene.byId.get('pubtrackers');
+            const turn = scene.byId.get('turn');
+            const nat = scene.byId.get('nat:1.1.1.1');
+            const me = scene.byId.get('me');
+            expect(edge.y).toBeLessThan(api.y);
+            expect(api.y).toBeLessThan(stun.y);
+            expect(stun.y).toBeLessThan(nat.y);
+            expect(pub.y).toBeLessThan(nat.y);
+            expect(turn.y).toBeLessThan(nat.y);
+            expect(nat.y).toBeLessThan(me.y);
+            scene.nodes.forEach(node => {
+                expect(node.x).toBeGreaterThanOrEqual(20);
+                expect(node.x).toBeLessThanOrEqual(w - 20);
+            });
+            scene.thumbs.forEach(thumb => {
+                expect(thumb.y + thumb.size / 2).toBeLessThan(h);
+            });
+        }
+    });
+
+    it('keeps devices and thumbnails inside short (<220px) map containers when log drawer is tall', () => {
+        const tiles = [{ infoHash: 'h1', peerId: 'me', owners: [{ peerId: 'me' }] }];
+        for (const [w, h, withTiles] of [[800, 180, false], [800, 180, true], [360, 180, true], [600, 150, false]]) {
+            const scene = room([], { width: w, height: h, tiles: withTiles ? tiles : [] });
+            const edge = scene.byId.get('edge');
+            const api = scene.byId.get('api');
+            const nat = scene.byId.get('nat:1.1.1.1');
+            const me = scene.byId.get('me');
+            expect(edge.y).toBeLessThan(api.y);
+            expect(api.y).toBeLessThan(nat.y);
+            expect(nat.y).toBeLessThan(me.y);
+            expect(me.y).toBeLessThan(h - 15);
+            scene.thumbs.forEach(thumb => {
+                expect(thumb.y + thumb.size / 2).toBeLessThan(h);
+            });
+        }
+    });
+});
+
+describe('buildRouteGeometry', () => {
+    it('fans shared segments into distinct curves and arcs LAN links clear of intermediate devices', () => {
+        const scene = room([
+            { fromPeerId: 'ana', toPeerId: 'ben', connectionType: 'p2p' },
+        ]);
+        const geo = buildRouteGeometry(scene);
+        const ssePts = geo.get('sse:me');
+        const trkPts = geo.get('tracker:me');
+        const pubPts = geo.get('pubtracker:me');
+        expect(ssePts.length).toBeGreaterThan(4);
+        expect(trkPts.length).toBeGreaterThan(4);
+        expect(pubPts.length).toBeGreaterThan(2);
+        // Midpoints on shared segments diverge into separate lanes rather than overlapping.
+        const sseMid = pointAlong(ssePts, 0.35);
+        const trkMid = pointAlong(trkPts, 0.35);
+        expect(Math.hypot(sseMid.x - trkMid.x, sseMid.y - trkMid.y)).toBeGreaterThan(2);
+
+        // Direct LAN route between Ana (left) and Ben (right) bows upward above Me (center).
+        const lanPts = geo.get('p2p:ana|ben');
+        const lanMid = pointAlong(lanPts, 0.5);
+        expect(lanMid.y).toBeLessThan(scene.byId.get('me').y - 15);
+    });
+
+    it('separates multiple routes sharing a NAT-to-NAT segment into distinct lanes', () => {
+        const scene = room([
+            { fromPeerId: 'me', toPeerId: 'ben', connectionType: 'p2p nat' },
+        ]);
+        scene.routes.push({
+            id: 'demo:punch',
+            kind: 'punch',
+            path: ['me', 'nat:1.1.1.1', 'nat:2.2.2.2', 'ben'],
+            label: 'srflx ↔ srflx',
+            demo: true,
+        });
+        const geo = buildRouteGeometry(scene);
+        const realPts = geo.get('p2p:ben|me');
+        const demoPts = geo.get('demo:punch');
+        const realMid = pointAlong(realPts, 0.5);
+        const demoMid = pointAlong(demoPts, 0.5);
+        expect(Math.abs(realMid.y - demoMid.y)).toBeGreaterThan(2);
     });
 });
 

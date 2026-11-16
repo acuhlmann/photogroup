@@ -279,6 +279,9 @@ function TransfersView({ master, onReplay, timeline }) {
             <SessionSummary summary={readSummary({
                 rows, share: master.deviceTimes?.summary?.() || {}, devices: master.deviceTimes?.read?.() || [],
                 peers: input.peers, myPeerId: input.myPeerId,
+                rtcConfig: master.creator?.iceServers,
+                trackerUrl: master.creator?.trackerWsUrl,
+                announceUrls: Array.isArray(window.WEBTORRENT_ANNOUNCE) ? window.WEBTORRENT_ANNOUNCE : undefined,
             })} />
             <ServerCopies copies={readServerCopies(input)} />
             {rows.length ? (

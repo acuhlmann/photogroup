@@ -166,15 +166,26 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
     };
 
     // The tracker answered an announce: which photos this device has, and
-    // back come peers that want them.
+    // back come peers that want them. Primary tracker + public backup trackers.
     const onTracker = (event = {}) => {
         if (throttled('announce' + (event.torrent?.infoHash || ''), 1000)) return;
-        record('trackerAnnounce', [event], {
+        const primary = mine('tracker');
+        const pub = mine('pubtracker');
+        record('trackerAnnounce', [{ ...event, host: primary?.sub }], {
             flights: [
-                flight(mine('tracker'), { label: 'announce' }),
-                flight(mine('tracker'), { reverse: true, label: 'peers', speed: SPEEDS.answer }),
+                flight(primary, { label: 'announce' }),
+                flight(primary, { reverse: true, label: 'peers', speed: SPEEDS.answer }),
             ],
         });
+        if (pub) {
+            record('trackerAnnounce', [{ ...event, isPublic: true, host: pub.sub }], {
+                flights: [flight(pub, { label: 'backup announce' })],
+            });
+        }
+    };
+
+    const onTrackerStatus = (event = {}) => {
+        record('trackerStatus', [event]);
     };
 
     // A server copy's stages, on this device's route to the copies store:
@@ -285,6 +296,7 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
         ['pieceSent', onPiece('tx')],
         ['wire', onWire],
         ['trackerAnnounce', onTracker],
+        ['trackerStatus', onTrackerStatus],
         ['serverCopy', onServerCopy],
         ['pcEvent', onIce],
         ['linkStats', onLinkStats],

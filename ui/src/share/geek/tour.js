@@ -106,6 +106,7 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
     const ice = describeIceServers(rtcConfig);
     const turnNode = scene.byId.get('turn');
     const hasTurn = !turnNode?.idle;
+    const hasPub = scene.byId.has('pubtrackers');
     const via = transferRoute(scene, myPeerId, friend);
     const settled = via && !via.demo ? via : null;
     const pathWords = { lan: 'on your network', punch: 'straight through both NATs', relay: 'through the TURN relay' };
@@ -184,21 +185,29 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
         },
         {
             id: 'tracker',
-            title: 'Meet through the tracker',
-            body: `Both browsers send the infohash to the tracker. The tracker is a WebSocket server on photogroup.network. It connects browsers that want the same photo. It sends a WebRTC offer and answer between them. These messages contain the ICE candidates of each side. Now the browser of ${friendName} knows how to reach your browser.`,
-            nodes: ids([myPeerId, friend, 'edge', 'tracker']),
-            routes: ids(['tracker:' + myPeerId, friend && 'tracker:' + friend]),
+            title: 'Meet through the trackers',
+            body: `Both browsers send the infohash to PhotoGroup's primary WebSocket tracker on photogroup.network`
+                + (hasPub ? ` (and public fallback WebSocket trackers so discovery survives mobile socket drops)` : '')
+                + `. It connects browsers that want the same photo and swaps WebRTC offers and answers with each side's ICE candidates. Now the browser of ${friendName} knows how to reach your browser.`,
+            nodes: ids([myPeerId, friend, 'edge', 'tracker', hasPub && 'pubtrackers']),
+            routes: ids([
+                'tracker:' + myPeerId,
+                friend && 'tracker:' + friend,
+                hasPub && has('pubtracker:' + myPeerId) && 'pubtracker:' + myPeerId,
+                hasPub && friend && has('pubtracker:' + friend) && 'pubtracker:' + friend,
+            ]),
             packets: ids([
                 { route: 'tracker:' + myPeerId, label: 'announce infohash', at: 0 },
                 friend && { route: 'tracker:' + friend, label: 'announce infohash', at: 300 },
+                hasPub && has('pubtracker:' + myPeerId) && { route: 'pubtracker:' + myPeerId, label: 'backup announce', at: 600 },
                 { route: 'tracker:' + myPeerId, label: 'offer (SDP)', at: 1500 },
                 friend && { route: 'tracker:' + friend, label: 'offer (SDP)', reverse: true, at: 2300 },
                 friend && { route: 'tracker:' + friend, label: 'answer (SDP)', at: 3300 },
                 { route: 'tracker:' + myPeerId, label: 'answer (SDP)', reverse: true, at: 4100 },
             ]),
             sees: [
-                { who: 'tracker sees', what: 'which device wants which infohash, and the ICE candidates' },
-                { who: NEVER, what: 'the photo: the tracker only connects devices', tone: 'good' },
+                { who: 'trackers see', what: 'which device wants which infohash, and the ICE candidates' },
+                { who: NEVER, what: 'the photo: trackers only introduce devices', tone: 'good' },
             ],
             duration: 5600,
         },
@@ -224,15 +233,16 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
             id: 'turn',
             title: 'When direct fails: TURN',
             body: hasTurn
-                ? 'Some networks block hole punching. Examples are mobile networks with carrier-grade NAT, strict office firewalls, and routers that change the port for each destination. Then both browsers send their data to a TURN relay. The relay forwards it. The data stays encrypted (DTLS), so the relay cannot read it.'
+                ? 'Some networks block hole punching (carrier-grade NAT, strict office firewalls, symmetric routers). During ICE gathering your browser asks TURN for an Allocate address, and if direct fails, both browsers send encrypted DTLS data through the TURN relay. Unlike STUN (which only finds your IP:port), TURN forwards every byte — still encrypted so it cannot read the photo.'
                 : 'Some networks block hole punching. Examples are mobile networks with carrier-grade NAT, strict office firewalls, and routers that change the port for each destination. A TURN relay can forward the data then. This server has no TURN configured. If P2P cannot connect, PhotoGroup uses a server copy (step 9).',
             nodes: ids([myPeerId, friend, mineNat, theirNat, 'turn']),
-            routes: has('demo:relay') ? ['demo:relay'] : [],
-            packets: hasTurn ? [
-                { route: 'demo:relay', label: 'encrypted', at: 0, rgb: TX },
-                { route: 'demo:relay', label: 'encrypted', at: 1200, rgb: TX },
-                { route: 'demo:relay', label: 'encrypted', reverse: true, at: 600, rgb: RX },
-            ] : [],
+            routes: ids([has('demo:relay') && 'demo:relay', hasTurn && has('turnctl:' + myPeerId) && 'turnctl:' + myPeerId]),
+            packets: hasTurn ? ids([
+                has('turnctl:' + myPeerId) && { route: 'turnctl:' + myPeerId, label: 'allocate', at: 0 },
+                { route: 'demo:relay', label: 'encrypted', at: 400, rgb: TX },
+                { route: 'demo:relay', label: 'encrypted', at: 1400, rgb: TX },
+                { route: 'demo:relay', label: 'encrypted', reverse: true, at: 800, rgb: RX },
+            ]) : [],
             sees: hasTurn ? [
                 { who: 'TURN sees', what: 'both IP addresses and encrypted bytes' },
                 { who: NEVER, what: 'the photo: the keys stay in the two browsers', tone: 'good' },

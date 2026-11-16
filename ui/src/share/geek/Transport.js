@@ -12,6 +12,7 @@ import SkipNextRounded from '@mui/icons-material/SkipNextRounded';
 import FiberManualRecordRounded from '@mui/icons-material/FiberManualRecordRounded';
 
 import { RATES } from './timeline';
+import { ROUTE_STYLE } from './routeStyle';
 import { RX, TX } from './traffic';
 
 // Signalling and everything that is not photo bytes, on the activity strip.
@@ -81,7 +82,7 @@ function TrafficStrip({ timeline, from, to, at }) {
         }
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, width, height);
-        const bins = Array.from({ length: BINS }, () => ({ rx: 0, tx: 0, other: 0 }));
+        const bins = Array.from({ length: BINS }, () => ({ rx: 0, tx: 0, stun: 0, turn: 0, pub: 0, other: 0 }));
         timeline.entries.forEach(entry => {
             if (entry.seen === false) return;
             const index = Math.floor((entry.at - from) / span * BINS);
@@ -89,16 +90,26 @@ function TrafficStrip({ timeline, from, to, at }) {
             const bin = bins[index];
             if (entry.kind === 'rx') bin.rx++;
             else if (entry.kind === 'tx') bin.tx++;
+            else if (entry.kind === 'stun') bin.stun++;
+            else if (entry.kind === 'turn') bin.turn++;
+            else if (entry.kind === 'pub') bin.pub++;
             else bin.other++;
         });
-        const peak = Math.max(1, ...bins.map(bin => bin.rx + bin.tx + bin.other));
+        const peak = Math.max(1, ...bins.map(bin => bin.rx + bin.tx + bin.stun + bin.turn + bin.pub + bin.other));
         const barW = width / BINS;
         const cut = (at - from) / span * width;
         bins.forEach((bin, index) => {
             let y = height;
             const x = index * barW;
             const ahead = x > cut;
-            [[bin.other, SIGNAL], [bin.tx, TX], [bin.rx, RX]].forEach(([count, rgb]) => {
+            [
+                [bin.other, SIGNAL],
+                [bin.stun, ROUTE_STYLE.stun.rgb],
+                [bin.pub, ROUTE_STYLE.pubtracker.rgb],
+                [bin.turn, ROUTE_STYLE.relay.rgb],
+                [bin.tx, TX],
+                [bin.rx, RX],
+            ].forEach(([count, rgb]) => {
                 if (!count) return;
                 // Even one event should be visible as a tick.
                 const h = Math.max(2, count / peak * (height - 2));

@@ -79,10 +79,12 @@ test.describe('with no server', () => {
       await sender.goto('/', { waitUntil: 'domcontentloaded' });
       await receiver.goto('/', { waitUntil: 'domcontentloaded' });
 
-      await expect(sender.getByRole('button', { name: 'Send photos by camera' })).toBeVisible({ timeout: 30000 });
+      await sender.getByRole('button', { name: /Send or get photos by camera/i }).click();
+      await expect(sender.getByRole('button', { name: 'Send photos by camera' })).toBeVisible({ timeout: 10000 });
       await sender.getByTestId('nearby-files').setInputFiles([TEST_IMAGE, CLIP]);
       await expect(sender.getByTestId('light-many-step')).toHaveAttribute('data-step', 'sheet', { timeout: 20000 });
 
+      await receiver.getByRole('button', { name: /Send or get photos by camera/i }).click();
       await receiver.getByRole('button', { name: 'Get photos by camera' }).click();
       // The receiver's camera reads the small pictures off the sender's screen.
       const sheet = receiver.getByTestId('light-sheet');

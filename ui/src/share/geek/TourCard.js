@@ -71,7 +71,7 @@ export function TourCard({ player, onExit, heading = 'HOW A SHARE WORKS' }) {
                 // A panel beside the map (below it on a phone), so the step
                 // never hides the boxes it is talking about.
                 flex: 'none', p: 1.5, bgcolor: 'background.paper', overflow: 'auto',
-                width: { xs: 'auto', sm: 380 }, maxHeight: { xs: '52%', sm: 'none' },
+                width: { xs: 'auto', sm: 320, md: 380 }, maxHeight: { xs: '52%', sm: 'none' },
                 borderTop: { xs: 1, sm: 0 }, borderRight: { xs: 0, sm: 1 }, borderColor: 'divider',
             }}
         >
@@ -157,7 +157,8 @@ export function ExplainCard({ timeline }) {
     if (!explained) return null;
     return (
         <Box data-testid="explain-card" role="status" sx={{
-            ...card, p: 1.25, left: 8, bottom: 34, right: { xs: 8, sm: 'auto' }, width: { sm: 360 },
+            ...card, p: 1.25, left: 8, bottom: { xs: 72, md: 36 }, right: { xs: 8, sm: 'auto' },
+            width: { sm: 360 }, maxWidth: 'calc(100% - 16px)', maxHeight: 'calc(100% - 88px)', overflow: 'auto',
         }}>
             <Typography sx={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '0.08em', color: 'warning.main' }}>
                 {`HELD ON · ${entry.kind.toUpperCase()}`}

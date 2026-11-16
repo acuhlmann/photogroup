@@ -127,6 +127,47 @@ describe('attachTraffic', () => {
         expect(entry.flights.map(f => [f.label, f.reverse])).toEqual([['announce', false], ['peers', true]]);
     });
 
+    it('also sends a separate pub log entry and backup announce flight when public trackers are in the scene', () => {
+        const emitter = new EventEmitter();
+        const timeline = createTimeline();
+        const withPublic = () => ({ routes: [
+            { id: 'tracker:me', kind: 'tracker', path: ['me', 'edge', 'tracker'], peerId: 'me', sub: 'photogroup.network' },
+            { id: 'pubtracker:me', kind: 'pubtracker', path: ['me', 'pubtrackers'], peerId: 'me', sub: 'tracker.openwebtorrent.com +1' },
+        ] });
+        attachTraffic({ timeline, emitter, getScene: withPublic, getMyId: () => 'me' });
+        emitter.emit('trackerAnnounce', { torrent });
+        const trk = timeline.entries.at(-2);
+        const pub = timeline.entries.at(-1);
+        expect(trk.kind).toBe('trk');
+        expect(trk.routeKind).toBe('tracker');
+        expect(trk.flights.map(f => [f.routeId, f.label])).toEqual([
+            ['tracker:me', 'announce'],
+            ['tracker:me', 'peers'],
+        ]);
+        expect(pub.kind).toBe('pub');
+        expect(pub.routeKind).toBe('pubtracker');
+        expect(pub.text).toContain('public WS announce');
+        expect(pub.flights.map(f => [f.routeId, f.label])).toEqual([
+            ['pubtracker:me', 'backup announce'],
+        ]);
+    });
+
+    it('keeps connected -> disconnected trackerStatus transitions visible while throttling identical repeats', () => {
+        const { emitter, timeline, clock } = setup();
+        emitter.emit('trackerStatus', { host: 'photogroup.network', status: 'connected' });
+        clock.value += 200;
+        emitter.emit('trackerStatus', { host: 'photogroup.network', status: 'disconnected' });
+        clock.value += 200;
+        emitter.emit('trackerStatus', { host: 'photogroup.network', status: 'disconnected' });
+
+        const statuses = timeline.entries.filter(e => e.kind === 'trk');
+        expect(statuses.map(e => e.text)).toEqual([
+            'PG tracker photogroup.network · connected',
+            'PG tracker photogroup.network · disconnected',
+            '',
+        ]);
+    });
+
     it('shows the STUN binding when the public address comes back, only for our own NAT', () => {
         const { emitter, timeline } = setup();
         emitter.emit('pcEvent', 'icecandidate', 'srflx 203.0.113.7:51234');

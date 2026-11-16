@@ -4,8 +4,8 @@ import { isAway } from '../topology/presence';
 
 // Why P2P did not work with a device, in a few words for the map and a
 // sentence for its card. Only from what this device saw: its own ICE
-// settings and candidates, the WebRTC connections that failed, the photos
-// that came as a server copy, and the devices it has no wire to.
+// settings and candidates, tracker socket states, the WebRTC connections that
+// failed, the photos that came as a server copy, and the devices it has no wire to.
 
 /** How long a wanted exchange may go without a wire before we call it. */
 export const NO_LINK_MS = 15000;
@@ -38,11 +38,22 @@ export function wiredPeers(torrents = []) {
     return ids;
 }
 
+function summarizeTrackers(trackerStates, trackerUrl) {
+    if (!trackerStates) return { any: false, anyUp: false, primaryDown: false, publicUp: false };
+    const entries = trackerStates instanceof Map ? [...trackerStates.entries()] : Object.entries(trackerStates);
+    if (!entries.length) return { any: false, anyUp: false, primaryDown: false, publicUp: false };
+    const anyUp = entries.some(([, st]) => !!st?.connected);
+    const primary = trackerUrl ? entries.find(([url]) => url === trackerUrl) : null;
+    const primaryDown = !!(primary && !primary[1]?.connected);
+    const publicUp = entries.some(([url, st]) => url !== trackerUrl && !!st?.connected);
+    return { any: true, anyUp, primaryDown, publicUp };
+}
+
 /**
  * @returns {Map<string, {short: string, why: string[]}>} by peer id
  */
 export function p2pIssues({ myPeerId, peers = [], photos = [], items = [], wired = new Set(), rtcConfig = null,
-    localNetwork = null, hasTurn = false, now = Date.now() }) {
+    localNetwork = null, hasTurn = false, trackerStates = null, trackerUrl = '', now = Date.now() }) {
     const issues = new Map();
     const photoOf = new Map(photos.map(photo => [getBaseInfoHash(photo.infoHash), photo]));
     const add = (peerId, short, why) => {
@@ -73,6 +84,7 @@ export function p2pIssues({ myPeerId, peers = [], photos = [], items = [], wired
     // Downloads that came as a server copy: P2P with their holders did not work.
     const mine = summarizeChain(myChain);
     const forecast = peer => forecastPath(mine, summarizeChain(peer.networkChain || []), { hasTurn });
+    const turnNote = hasTurn ? '' : ' No TURN server is configured, so the HTTPS server copy took over.';
     const fellBack = new Set();
     items.forEach(item => {
         const photo = photoOf.get(item.infoHash);
@@ -80,10 +92,11 @@ export function p2pIssues({ myPeerId, peers = [], photos = [], items = [], wired
         if (item.serverStage?.direction !== 'down') return;
         holders(photo).forEach(id => id !== myPeerId && fellBack.add(id));
         if (item.serverStage.stage === 'done' && !wired.size) {
-            add(myPeerId, 'no P2P · server copy', 'No WebRTC link came up, so a photo came as a server copy.');
+            add(myPeerId, 'no P2P · server copy', `No WebRTC link came up, so a photo came as a server copy.${turnNote}`);
         }
     });
 
+    let anyWaiting = false;
     peers.forEach(peer => {
         const id = peer.peerId;
         if (id === myPeerId) return;
@@ -114,9 +127,20 @@ export function p2pIssues({ myPeerId, peers = [], photos = [], items = [], wired
             return theyHave || theyWant;
         });
         if (waiting) {
+            anyWaiting = true;
             const seconds = Math.round((now - waiting.startedAt) / 1000);
             add(id, `no link after ${seconds} s`, `No WebRTC link to this device after ${seconds} s. ${forecast(peer).why}`.trim());
         }
     });
+
+    if (anyWaiting) {
+        const trk = summarizeTrackers(trackerStates, trackerUrl);
+        if (trk.any && !trk.anyUp) {
+            add(myPeerId, 'trackers reconnecting', 'PhotoGroup and public backup WebSocket trackers are reconnecting, so WebRTC offers cannot be exchanged yet.');
+        } else if (trk.primaryDown && trk.publicUp) {
+            add(myPeerId, 'PG tracker down · using public WS', 'PhotoGroup primary WS tracker is disconnected; peer discovery is relying on public backup WebSocket trackers.');
+        }
+    }
+
     return issues;
 }

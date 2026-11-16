@@ -64,4 +64,29 @@ describe('p2pIssues from the sharer side', () => {
         expect(issues.get('bo').short).toBe('no P2P · server copy');
         expect(issues.has('ana')).toBe(false);
     });
+
+    it('notes tracker status on this device when waiting for a wire without tracker connectivity', () => {
+        const photos = [{ infoHash: 'def', peerId: 'bo', owners: [{ peerId: 'bo' }] }];
+        const items = [item({ infoHash: 'def' })];
+
+        const allDown = p2pIssues({
+            myPeerId: 'me', peers, photos, items, now: NO_LINK_MS + 2000,
+            trackerUrl: 'wss://pg.example/ws',
+            trackerStates: new Map([
+                ['wss://pg.example/ws', { connected: false, waiting: true }],
+                ['wss://tracker.openwebtorrent.com', { connected: false, waiting: true }],
+            ]),
+        });
+        expect(allDown.get('me').short).toBe('trackers reconnecting');
+
+        const pgDownPubUp = p2pIssues({
+            myPeerId: 'me', peers, photos, items, now: NO_LINK_MS + 2000,
+            trackerUrl: 'wss://pg.example/ws',
+            trackerStates: new Map([
+                ['wss://pg.example/ws', { connected: false, waiting: true }],
+                ['wss://tracker.openwebtorrent.com', { connected: true, waiting: false }],
+            ]),
+        });
+        expect(pgDownPubUp.get('me').short).toBe('PG tracker down · using public WS');
+    });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    describeIceServers, forecastPath, isCgnat, isMdns, summarizeChain, verdictFor,
+    describeIceServers, describeTrackers, forecastPath, isCgnat, isMdns, summarizeChain, verdictFor,
 } from './NetworkInsight';
 
 const host = (ip, port = 5000) => ({ ip, port, transport: 'udp', type: 'host', typeDetail: 'host' });
@@ -36,6 +36,24 @@ describe('NetworkInsight', () => {
             { urls: ['turn:global.turn.example.com:3478?transport=udp', 'turns:global.turn.example.com:443'], username: 'u', credential: 'secret' },
         ] })).toEqual({ stun: ['stun.l.google.com'], turn: ['global.turn.example.com'] });
         expect(describeIceServers(undefined)).toEqual({ stun: [], turn: [] });
+    });
+
+    it('separates PhotoGroup primary WS tracker from external fallback trackers', () => {
+        expect(describeTrackers([
+            'wss://photogroup.network/ws',
+            'wss://tracker.openwebtorrent.com',
+            'wss://tracker.btorrent.xyz',
+            'wss://tracker.openwebtorrent.com',
+            'https://not-ws.example.com',
+        ], 'wss://photogroup.network/ws')).toEqual({
+            primary: 'wss://photogroup.network/ws',
+            primaryHost: 'photogroup.network',
+            external: [
+                { url: 'wss://tracker.openwebtorrent.com', host: 'tracker.openwebtorrent.com' },
+                { url: 'wss://tracker.btorrent.xyz', host: 'tracker.btorrent.xyz' },
+            ],
+        });
+        expect(describeTrackers(undefined, null)).toEqual({ primary: null, primaryHost: null, external: [] });
     });
 
     it('forecasts the path between two peers', () => {
