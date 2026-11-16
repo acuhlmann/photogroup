@@ -132,6 +132,8 @@ function readLive(master, scene) {
         rtcConfig: creator.iceServers,
         localNetwork: master.localNetwork,
         hasTurn: describeIceServers(creator.iceServers).turn.length > 0,
+        trackerStates: readTrackerStates(master.client),
+        trackerUrl: creator.trackerWsUrl || '',
     });
     return { progress, issues, wanted: wantedPeers({ photos, myPeerId }) };
 }
@@ -270,7 +272,8 @@ function measureNode(ctx, node) {
     const badge = ctx.measureText(node.badge || '').width;
     if (INFRA_KINDS.has(node.kind) || node.kind === 'pubtracker') {
         const iconPad = 32;
-        node.w = Math.min(node.maxW || 195, Math.max(102, label + iconPad, sub + iconPad, badge + iconPad));
+        const minW = Math.min(102, node.maxW || 102);
+        node.w = Math.min(node.maxW || 195, Math.max(minW, label + iconPad, sub + iconPad, badge + iconPad));
         node.h = node.kind === 'edge' ? 40 : 44;
         return node;
     }
@@ -345,12 +348,12 @@ const perSecond = bytes => `${FileUtil.formatBytes(Math.round(bytes))}/s`;
  * On the map, while it is not live: the moment it shows, and what crossed
  * the wire in the second up to it.
  */
-function PausedMark({ timeline, replaying }) {
+function PausedMark({ timeline, replaying, aboveTour = false }) {
     useTicker(replaying ? 200 : 1000);
     const rate = timeline.meter ? timeline.meter() : null;
     return (
         <Typography data-testid="paused-mark" sx={{
-            position: 'absolute', left: 8, bottom: 8, pointerEvents: 'none',
+            position: 'absolute', left: 8, bottom: aboveTour ? 44 : 8, pointerEvents: 'none',
             fontFamily: mono, fontSize: '0.62rem', letterSpacing: '0.08em',
             px: 0.75, py: 0.25, borderRadius: 1, border: 1, borderColor: 'warning.main', color: 'warning.main',
             bgcolor: 'background.paper',
@@ -368,7 +371,7 @@ function PausedMark({ timeline, replaying }) {
     );
 }
 
-PausedMark.propTypes = { timeline: PropTypes.object.isRequired, replaying: PropTypes.bool };
+PausedMark.propTypes = { timeline: PropTypes.object.isRequired, replaying: PropTypes.bool, aboveTour: PropTypes.bool };
 
 const LEGEND_GROUPS = [
     { keys: ['lan', 'punch', 'relay'] },
@@ -519,13 +522,16 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
             const focus = shown.shown();
             const focused = new Set(focus ? focus.flights.map(flight => flight.routeId) : []);
 
-            // Tier guides.
+            // Tier guides aligned with actual computed tier positions.
+            const natNode = scene.nodes.find(n => n.kind === 'nat');
+            const devNode = scene.nodes.find(n => n.kind === 'device');
+            const netGuideY = natNode ? natNode.y : height * TIER.net;
+            const devGuideY = devNode ? devNode.y : height * TIER.device;
             const bands = [
-                ['internet · discovery · relays', TIER.net],
-                ['devices · photos they hold', TIER.device],
+                ['internet · discovery · relays', netGuideY],
+                ['devices · photos they hold', devGuideY],
             ];
-            bands.forEach(([label, bandY]) => {
-                const y = height * bandY;
+            bands.forEach(([label, y]) => {
                 ctx.strokeStyle = faint;
                 ctx.lineWidth = 1;
                 ctx.setLineDash([]);
@@ -1141,7 +1147,14 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
         devices: master.deviceTimes.read(),
         peers: master.peers?.items || [],
         myPeerId: master.client?.peerId,
+        rtcConfig: master.creator?.iceServers,
+        trackerUrl: master.creator?.trackerWsUrl,
+        announceUrls: Array.isArray(window.WEBTORRENT_ANNOUNCE) ? window.WEBTORRENT_ANNOUNCE : undefined,
     }) : null;
+
+    const narrow = (size.width || 800) < 760;
+    const myNode = scene.byId.get(master.client?.peerId) || scene.nodes.find(item => item.kind === 'device');
+    const aloneTop = myNode ? Math.max(18, myNode.y - 54) : `calc(${TIER.device * 100}% - 64px)`;
 
     const arrival = useMemo(() => {
         const total = tiles.length;
@@ -1174,21 +1187,22 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                 sx={{
                     position: 'absolute', bottom: 8, right: 8, pointerEvents: 'none',
                     display: tour && size.width < 640 ? 'none' : 'flex',
-                    flexDirection: 'column', gap: 0.4,
-                    px: 1, py: 0.6, borderRadius: 1.5, border: 1, borderColor: 'divider',
+                    flexDirection: 'column', gap: narrow ? 0.25 : 0.4,
+                    maxWidth: narrow && !tour ? 'calc(100% - 172px)' : 'calc(100% - 16px)',
+                    px: narrow ? 0.75 : 1, py: narrow ? 0.45 : 0.6, borderRadius: 1.5, border: 1, borderColor: 'divider',
                     bgcolor: isDark ? 'rgba(13,17,24,0.82)' : 'rgba(255,255,255,0.88)',
                 }}
             >
                 {LEGEND_GROUPS.map((group, gIdx) => (
-                    <Stack key={gIdx} direction="row" spacing={1} sx={{ flexWrap: 'wrap', justifyContent: 'flex-end', rowGap: 0.25 }}>
+                    <Stack key={gIdx} direction="row" spacing={narrow ? 0.6 : 1} sx={{ flexWrap: 'wrap', justifyContent: 'flex-end', rowGap: 0.2 }}>
                         {group.keys.map(kind => {
                             const style = ROUTE_STYLE[kind];
                             if (!style) return null;
                             const rgb = inkRgb(style.rgb, isDark);
                             return (
-                                <Stack key={kind} direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-                                    <Box sx={{ width: 13, height: 0, borderTop: `${Math.max(2, style.width)}px ${style.dash.length ? 'dashed' : 'solid'} rgb(${rgb})` }} />
-                                    <Typography sx={{ fontFamily: mono, fontSize: '0.57rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
+                                <Stack key={kind} direction="row" spacing={0.4} sx={{ alignItems: 'center' }}>
+                                    <Box sx={{ width: narrow ? 10 : 13, height: 0, borderTop: `${Math.max(2, style.width)}px ${style.dash.length ? 'dashed' : 'solid'} rgb(${rgb})` }} />
+                                    <Typography sx={{ fontFamily: mono, fontSize: narrow ? '0.52rem' : '0.57rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
                                         {style.label}
                                     </Typography>
                                 </Stack>
@@ -1197,7 +1211,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                     </Stack>
                 ))}
                 <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center', justifyContent: 'flex-end' }}>
-                    <Typography sx={{ fontFamily: mono, fontSize: '0.56rem', color: 'text.secondary' }}>bytes in / out</Typography>
+                    <Typography sx={{ fontFamily: mono, fontSize: narrow ? '0.5rem' : '0.56rem', color: 'text.secondary' }}>bytes in / out</Typography>
                     <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: `rgb(${inkRgb(RX, isDark)})` }} />
                     <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: `rgb(${inkRgb(TX, isDark)})` }} />
                 </Stack>
@@ -1205,8 +1219,8 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
 
             {others === 0 && !tour && (
                 <Typography sx={{
-                    position: 'absolute', left: 0, right: 0, top: `calc(${TIER.device * 100}% - 64px)`, textAlign: 'center',
-                    fontFamily: mono, fontSize: '0.7rem', color: 'text.secondary', pointerEvents: 'none',
+                    position: 'absolute', left: 8, right: 8, top: aloneTop, textAlign: 'center',
+                    fontFamily: mono, fontSize: narrow ? '0.64rem' : '0.7rem', color: 'text.secondary', pointerEvents: 'none',
                 }}>
                     alone in this room · Invite someone to see the path between you
                 </Typography>
@@ -1231,7 +1245,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
             )}
 
             {paused && (
-                <PausedMark timeline={shown} replaying={replaying} />
+                <PausedMark timeline={shown} replaying={replaying} aboveTour={narrow && !tour} />
             )}
 
             {summary && !tour && !node && !thumb && !selectedRoute && (
@@ -1247,9 +1261,11 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                     data-testid="thumb-preview"
                     sx={{
                         position: 'absolute',
-                        left: Math.min(Math.max(8, thumb.x - 110), Math.max(8, size.width - 228)),
+                        left: Math.min(Math.max(8, thumb.x - 110), Math.max(8, (size.width || 800) - 228)),
                         top: Math.max(8, thumb.y - thumb.size / 2 - 300),
-                        width: 220,
+                        width: 'min(220px, calc(100% - 16px))',
+                        maxHeight: 'calc(100% - 16px)',
+                        overflow: 'auto',
                         p: 1,
                         borderRadius: 2,
                         border: 1,
@@ -1309,7 +1325,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                     className="glass"
                     data-testid="node-details"
                     sx={{
-                        position: 'absolute', left: 8, top: 8, maxWidth: 300, maxHeight: 'calc(100% - 16px)', overflow: 'auto', p: 1.25, borderRadius: 2,
+                        position: 'absolute', left: 8, top: 8, maxWidth: 'min(300px, calc(100% - 16px))', maxHeight: 'calc(100% - 16px)', overflow: 'auto', p: 1.25, borderRadius: 2,
                         border: 1, borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 6,
                     }}
                 >
@@ -1367,7 +1383,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                     className="glass"
                     data-testid="route-details"
                     sx={{
-                        position: 'absolute', left: 8, top: 8, maxWidth: 300, maxHeight: 'calc(100% - 16px)', overflow: 'auto', p: 1.25, borderRadius: 2,
+                        position: 'absolute', left: 8, top: 8, maxWidth: 'min(300px, calc(100% - 16px))', maxHeight: 'calc(100% - 16px)', overflow: 'auto', p: 1.25, borderRadius: 2,
                         border: 1, borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 6,
                     }}
                 >

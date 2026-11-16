@@ -3,8 +3,9 @@ import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import StringUtil from '../util/StringUtil';
+import { buildAnnounceList } from '../torrent/DiscoveryConfig';
 import {
-    NAT_LABELS, describeIceServers, forecastPath, summarizeChain, verdictFor,
+    NAT_LABELS, describeIceServers, describeTrackers, forecastPath, summarizeChain, verdictFor,
 } from './NetworkInsight';
 
 const mono = { fontFamily: 'var(--font-mono)' };
@@ -19,10 +20,17 @@ function readState(master) {
     const items = (master.peers && master.peers.items) || [];
     const mePeer = items.find(p => p.peerId === myPeerId);
     const myChain = mePeer && mePeer.networkChain && mePeer.networkChain.length ? mePeer.networkChain : master.localNetwork;
-    const rtc = master.creator && master.creator.iceServers;
+    const creator = master.creator || {};
+    const rtc = creator.iceServers;
+    const trackerUrl = creator.trackerWsUrl
+        || (typeof window !== 'undefined' && Array.isArray(window.WEBTORRENT_ANNOUNCE) ? window.WEBTORRENT_ANNOUNCE[0] : '');
+    const announceUrls = typeof window !== 'undefined' && Array.isArray(window.WEBTORRENT_ANNOUNCE) && window.WEBTORRENT_ANNOUNCE.length
+        ? window.WEBTORRENT_ANNOUNCE
+        : buildAnnounceList(trackerUrl);
     return {
         mine: summarizeChain(myChain),
         servers: describeIceServers(rtc),
+        trackers: describeTrackers(announceUrls, trackerUrl),
         others: items.filter(p => p.peerId !== myPeerId).map(p => ({
             peerId: p.peerId,
             name: p.name || StringUtil.peerDevice(p) || 'peer',
@@ -31,9 +39,20 @@ function readState(master) {
     };
 }
 
+function formatPcEvent(type, value) {
+    const text = String(value || '');
+    if (type === 'icecandidate' && text.startsWith('srflx')) {
+        return 'STUN lookup → ' + text;
+    }
+    if (type === 'icecandidate' && text.startsWith('relay')) {
+        return 'TURN allocate → ' + text;
+    }
+    return type.replace('statechange', '') + ' → ' + text;
+}
+
 function Row({ k, children }) {
     return (
-        <Box sx={{ display: 'grid', gridTemplateColumns: '4.5rem minmax(0, 1fr)', gap: 1, py: '2px' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '4.8rem minmax(0, 1fr)', sm: '5.5rem minmax(0, 1fr)' }, gap: 1, py: '2px' }}>
             <Typography variant="caption" sx={{ ...mono, fontSize: '0.6rem', color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.06em', pt: '1px' }}>
                 {k}
             </Typography>
@@ -60,24 +79,25 @@ function NetworkReadout({ master, sx }) {
         const onPcEvent = (type, value) => {
             if (!value) return;
             if (type === 'icegatheringstatechange' && value === 'complete') setStunDone(true);
-            const label = type.replace('statechange', '');
-            setEvents(prev => [...prev, { id: Date.now() + Math.random(), t: Date.now() - startRef.current, text: label + ' → ' + value }].slice(-MAX_EVENTS));
+            setEvents(prev => [...prev, { id: Date.now() + Math.random(), t: Date.now() - startRef.current, text: formatPcEvent(type, value) }].slice(-MAX_EVENTS));
         };
         const grace = setTimeout(() => setStunDone(true), STUN_GRACE_MS);
         emitter.on('localNetwork', refresh);
         emitter.on('peers', refresh);
         emitter.on('iceDone', refresh);
+        emitter.on('wtInitialized', refresh);
         emitter.on('pcEvent', onPcEvent);
         return () => {
             clearTimeout(grace);
             emitter.removeListener('localNetwork', refresh);
             emitter.removeListener('peers', refresh);
             emitter.removeListener('iceDone', refresh);
+            emitter.removeListener('wtInitialized', refresh);
             emitter.removeListener('pcEvent', onPcEvent);
         };
     }, [master]);
 
-    const { mine, servers, others } = state;
+    const { mine, servers, trackers, others } = state;
     const hasTurn = servers.turn.length > 0;
     const stunPending = !stunDone && mine.publicIps.length === 0;
     const verdict = verdictFor(mine, { hasTurn, stunPending });
@@ -118,11 +138,46 @@ function NetworkReadout({ master, sx }) {
                     ))}
             </Row>
             <Row k="nat">{stunPending ? 'measuring…' : NAT_LABELS[mine.nat]}</Row>
-            <Row k="stun">{servers.stun.length ? servers.stun.slice(0, 2).join(', ') + (servers.stun.length > 2 ? ' +' + (servers.stun.length - 2) : '') : '—'}</Row>
+            <Row k="stun">
+                {servers.stun.length ? (
+                    <>
+                        {servers.stun.slice(0, 2).join(', ') + (servers.stun.length > 2 ? ' +' + (servers.stun.length - 2) : '')}
+                        <Box component="span" sx={{ color: 'text.secondary' }}> · ICE discovery (IP:port only, no media)</Box>
+                    </>
+                ) : '—'}
+            </Row>
             <Row k="turn">
-                {hasTurn
-                    ? servers.turn.slice(0, 2).join(', ')
-                    : <Box component="span" sx={{ color: 'text.secondary' }}>none · the HTTPS server copy is the fallback</Box>}
+                {hasTurn ? (
+                    <>
+                        {servers.turn.slice(0, 2).join(', ') + (servers.turn.length > 2 ? ' +' + (servers.turn.length - 2) : '')}
+                        <Box component="span" sx={{ color: 'text.secondary' }}>
+                            {' · '}encrypted media relay fallback{mine.relay ? ' (relay allocated)' : ''}
+                        </Box>
+                    </>
+                ) : (
+                    <Box component="span" sx={{ color: 'text.secondary' }}>none · HTTPS server copy is the fallback</Box>
+                )}
+            </Row>
+            <Row k="pg tracker">
+                {trackers.primaryHost ? (
+                    <>
+                        {trackers.primaryHost}
+                        <Box component="span" sx={{ color: 'text.secondary' }}> · primary WS (SDP + topology)</Box>
+                    </>
+                ) : (
+                    <Box component="span" sx={{ color: 'text.secondary' }}>ws :9000 · primary WS (SDP + topology)</Box>
+                )}
+            </Row>
+            <Row k="public ws">
+                {trackers.external.length ? (
+                    <>
+                        {trackers.external.slice(0, 2).map(t => t.host).join(', ')
+                            + (trackers.external.length > 2 ? ' +' + (trackers.external.length - 2) : '')}
+                        <Box component="span" sx={{ color: 'text.secondary' }}> · backup WS (no DHT)</Box>
+                    </>
+                ) : (
+                    <Box component="span" sx={{ color: 'text.secondary' }}>none (primary WS only)</Box>
+                )}
             </Row>
             {(mine.transports.length > 0 || mine.ipv6) && (
                 <Row k="stack">{mine.transports.join(' + ').toUpperCase()}{mine.ipv6 ? ' · IPv6' : ' · IPv4 only'}</Row>

@@ -17,6 +17,7 @@ const PART_RGB = { p2p: ROUTE_STYLE.lan.rgb, relay: ROUTE_STYLE.relay.rgb, serve
  */
 function SessionSummary({ summary, onClose }) {
     const card = !!onClose;
+    const net = summary.network;
     return (
         <Box
             data-testid={card ? 'session-summary-card' : 'session-summary'}
@@ -24,7 +25,7 @@ function SessionSummary({ summary, onClose }) {
             sx={{
                 fontFamily: mono, fontSize: '0.68rem', display: 'flex', flexDirection: 'column', gap: 0.5,
                 ...(card
-                    ? { p: 1.25, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 6, width: 300, maxWidth: 'calc(100% - 16px)' }
+                    ? { p: 1.25, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 6, width: 'min(300px, calc(100% - 16px))', maxWidth: '100%' }
                     : { px: 1, py: 0.75, borderBottom: 1, borderColor: 'divider' }),
             }}
         >
@@ -32,7 +33,7 @@ function SessionSummary({ summary, onClose }) {
                 <Box component="span" sx={{ color: summary.done ? 'success.main' : 'text.disabled', letterSpacing: '0.06em', fontWeight: 700, flex: 'none' }}>
                     {summary.done ? 'SHARE DONE' : 'SHARE'}
                 </Box>
-                <Box component="span" sx={{ color: 'text.primary', fontWeight: 600, minWidth: 0 }}>{summary.headline}</Box>
+                <Box component="span" sx={{ color: 'text.primary', fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }}>{summary.headline}</Box>
                 {card && (
                     <IconButton size="small" aria-label="Close the summary" onClick={onClose} sx={{ ml: 'auto', my: -0.75, mr: -0.75, flex: 'none' }}>
                         <CloseRounded fontSize="small" />
@@ -46,10 +47,10 @@ function SessionSummary({ summary, onClose }) {
                             <Box key={part.kind} sx={{ width: `${part.percent}%`, bgcolor: `rgb(${PART_RGB[part.kind]})` }} />
                         ))}
                     </Box>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 1.25, fontSize: '0.62rem', color: 'text.secondary' }}>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 1.25, rowGap: 0.25, fontSize: '0.62rem', color: 'text.secondary' }}>
                         <Box component="span" sx={{ color: 'text.disabled' }}>this device</Box>
                         {summary.parts.map(part => (
-                            <Box component="span" key={part.kind} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                            <Box component="span" key={part.kind} title={part.note} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                                 <Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: `rgb(${PART_RGB[part.kind]})` }} />
                                 {`${part.label} ${part.percent}%`}
                             </Box>
@@ -57,6 +58,28 @@ function SessionSummary({ summary, onClose }) {
                         <Box component="span">{`${FileUtil.formatBytes(summary.bytes.total)} moved`}</Box>
                     </Box>
                 </>
+            )}
+            {net && (
+                <Box data-testid="summary-network-line" sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 1, rowGap: 0.25, fontSize: '0.58rem', color: 'text.secondary' }}>
+                    {net.stunLabel && (
+                        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
+                            <Box component="span" sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: `rgb(${ROUTE_STYLE.stun.rgb})` }} />
+                            {net.stunLabel}
+                        </Box>
+                    )}
+                    {net.turnLabel && (
+                        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
+                            <Box component="span" sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: `rgb(${net.hasTurn ? ROUTE_STYLE.relay.rgb : ROUTE_STYLE.copies.rgb})` }} />
+                            {net.turnLabel}
+                        </Box>
+                    )}
+                    {net.primaryTracker && (
+                        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
+                            <Box component="span" sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: `rgb(${ROUTE_STYLE.tracker.rgb})` }} />
+                            {`PG tracker${net.publicTrackers ? ` + ${net.publicTrackers} public WS` : ''}`}
+                        </Box>
+                    )}
+                </Box>
             )}
             {summary.devices.length > 0 && (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0,auto) minmax(0,1fr)', columnGap: 1, rowGap: 0.25, fontSize: '0.62rem' }}>

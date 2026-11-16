@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useReducer, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
+import { useTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
@@ -18,6 +19,8 @@ import NetworkStage from './NetworkStage';
 import TransfersView from './TransfersView';
 import Transport, { clock, useTimeline } from './Transport';
 import { createTimeline } from './timeline';
+import { ROUTE_STYLE } from './routeStyle';
+import { RX, TX } from './traffic';
 import { tourSteps } from './tour';
 import { replaySteps } from './replay';
 import { createTourPlayer } from './tourPlayer';
@@ -32,26 +35,45 @@ const MIN_OPEN = 150;
 const SHARE = 0.82;
 const DEFAULT_HEIGHT = { desktop: 220, mobile: 260 };
 
+const KIND_RGB = {
+    trk: ROUTE_STYLE.tracker.rgb,
+    pub: ROUTE_STYLE.pubtracker.rgb,
+    stun: ROUTE_STYLE.stun.rgb,
+    turn: ROUTE_STYLE.relay.rgb,
+    link: ROUTE_STYLE.punch.rgb,
+    sse: ROUTE_STYLE.sse.rgb,
+    copy: ROUTE_STYLE.copies.rgb,
+    rx: RX,
+    tx: TX,
+};
+
 const KIND_COLOR = {
     wire: 'primary.main',
-    trk: 'primary.main',
     path: 'success.main',
-    rx: 'success.main',
-    tx: 'info.main',
     peer: 'warning.main',
-    link: 'secondary.main',
     photo: 'text.primary',
     ice: 'text.secondary',
-    sse: 'text.secondary',
-    copy: 'secondary.main',
     pair: 'warning.main',
 };
+
+function kindColor(kind, isDark) {
+    const rgb = KIND_RGB[kind];
+    if (rgb) {
+        const scaled = isDark
+            ? rgb
+            : rgb.split(',').map(n => Math.max(20, Math.round(Number(n) * 0.68))).join(',');
+        return `rgb(${scaled})`;
+    }
+    return KIND_COLOR[kind] || 'text.secondary';
+}
 
 /**
  * The recording as a list. Each line is the same event the map is drawing, so
  * tapping one holds the map on that crossing and lights the route it took.
  */
 function PacketLog({ timeline }) {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
     useTimeline(timeline, { idle: 0 });
     const lines = timeline.recent();
     const shown = timeline.shown();
@@ -80,8 +102,8 @@ function PacketLog({ timeline }) {
                         title={line.flights.length ? 'Hold the map on this crossing' : undefined}
                         sx={{
                             display: 'grid',
-                            gridTemplateColumns: '6.4rem 3rem minmax(0, 1fr)',
-                            gap: 1,
+                            gridTemplateColumns: { xs: '5.3rem 3.2rem minmax(0, 1fr)', sm: '6.4rem 3.4rem minmax(0, 1fr)' },
+                            gap: { xs: 0.6, sm: 1 },
                             px: 1,
                             py: 0.25,
                             borderRadius: 1,
@@ -97,7 +119,7 @@ function PacketLog({ timeline }) {
                         }}
                     >
                         <Box component="span" sx={{ color: 'text.disabled' }}>{clock(line.at)}</Box>
-                        <Box component="span" sx={{ color: KIND_COLOR[line.kind], textTransform: 'uppercase' }}>{line.kind}</Box>
+                        <Box component="span" sx={{ color: kindColor(line.kind, isDark), textTransform: 'uppercase', fontWeight: 600 }}>{line.kind}</Box>
                         <Box component="span" sx={{ color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {line.text}
                         </Box>
@@ -306,7 +328,7 @@ function GeekStage({ master, tiles, isMobile }) {
 
     const count = timeline.entries.length;
     return (
-        <Box ref={stage} sx={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <Box ref={stage} sx={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, maxWidth: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: { xs: 'column-reverse', sm: 'row' } }}>
                 {touring && <TourCard player={player} onExit={exitTour} heading={replay ? `REPLAY · ${replay.name}` : undefined} />}
                 <Box sx={{ flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -323,7 +345,11 @@ function GeekStage({ master, tiles, isMobile }) {
                             onClick={startTour}
                             data-testid="start-tour"
                             sx={{
-                                position: 'absolute', zIndex: 1, left: '50%', transform: 'translateX(-50%)', bottom: 8,
+                                position: 'absolute', zIndex: 1,
+                                left: { xs: 8, sm: 8, md: '50%' },
+                                transform: { xs: 'none', sm: 'none', md: 'translateX(-50%)' },
+                                bottom: 8,
+                                whiteSpace: 'nowrap',
                                 textTransform: 'none', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
                                 bgcolor: 'background.paper', '&:hover': { bgcolor: 'background.paper' },
                             }}

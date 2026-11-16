@@ -135,10 +135,12 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     const others = list.filter(peer => peer.peerId !== myPeerId);
     const ordered = [...others.slice(0, Math.ceil(others.length / 2)), ...(mine ? [mine] : []), ...others.slice(Math.ceil(others.length / 2))];
 
-    // Phones are too narrow for wide sidebars; compact keeps everything inside bounds.
+    // Phones and narrow split-panes are too narrow for sidebars; tightY handles short
+    // unfolded foldables or viewports with the bottom log drawer open.
     const compact = width < 640;
-    const deviceY = height * TIER.device;
-    const netY = height * TIER.net;
+    const tightY = height < 520;
+    const hasCopiesOnShelf = photos.some(p => p.hasServerCopy || p.serverCopyUploader || p.serverCopyReceived > 0 || p.serverCopyRequestedAt)
+        || tiles.some(t => t.hasServerCopy || t.serverCopyUploader || t.serverCopyReceived > 0 || t.serverCopyRequestedAt);
 
     const ice = describeIceServers(rtcConfig);
     const hasTurn = ice.turn.length > 0;
@@ -157,6 +159,42 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         const forecast = forecastPath(mySummary, summary, { hasTurn });
         return [`path from you · ${forecast.label}`, forecast.why];
     };
+
+    // photogroup.network across the top middle: edge gateway above API, tracker and copies
+    // so ingress lines fan downward cleanly instead of piercing through sibling boxes.
+    const [edgeNode, apiNode, trackerNode, copiesNode] = infraNodes({ origin, trackerUrl, photos, trackerStates });
+    const rackLeft = compact ? width * 0.03 : width * 0.22;
+    const rackWidth = compact ? width * 0.94 : width * 0.56;
+    const edgeY = Math.round(Math.max(compact ? 38 : (tightY ? 42 : 48), height * (compact ? 0.07 : 0.082)));
+    const servicesY = Math.round(Math.max(edgeY + (compact ? (tightY ? 46 : 52) : (tightY ? 48 : 58)), height * (compact ? 0.165 : 0.19)));
+    const serviceNodes = [apiNode, trackerNode, copiesNode];
+
+    const effectiveAnnounce = announceUrls === undefined ? buildAnnounceList(trackerUrl) : announceUrls;
+    const trackerSummary = describeTrackers(effectiveAnnounce, trackerUrl);
+    const extTrackers = trackerSummary.external;
+
+    // Monotonic tier Y positions so STUN, Public trackers, TURN, NATs, and devices never overlap
+    // on short foldables (~880x420 with drawer open) or narrow phones (~360x640).
+    const compactExtY = Math.round(Math.max(servicesY + (hasCopiesOnShelf ? 94 : 68), height * 0.31));
+    const stunY = compact ? compactExtY : Math.round(Math.max(edgeY + (tightY ? 50 : 72), height * 0.22));
+    const pubY = compact ? compactExtY : Math.round(Math.max(stunY + (tightY ? 56 : 74), height * 0.34));
+    const turnY = compact ? compactExtY : Math.round(Math.max(edgeY + (tightY ? 56 : 80), height * 0.27));
+
+    const minNetY = compact
+        ? compactExtY + (tightY ? 56 : 70)
+        : Math.max(
+            servicesY + (hasCopiesOnShelf ? 96 : 56),
+            extTrackers.length ? pubY + (tightY ? 48 : 64) : stunY + (tightY ? 48 : 64),
+            turnY + (tightY ? 46 : 56),
+        );
+    const thumbReserve = tiles.length ? (tightY ? 72 : 96) : (tightY ? 46 : 64);
+    const maxDeviceY = Math.max(220, height - thumbReserve);
+    let deviceY = Math.round(Math.min(maxDeviceY, Math.max(height * TIER.device, minNetY + (tightY ? 52 : 76))));
+    let effectiveNetY = Math.round(Math.min(deviceY - (tightY ? 48 : 64), Math.max(height * TIER.net, minNetY)));
+    if (effectiveNetY < minNetY && deviceY < maxDeviceY) {
+        effectiveNetY = Math.round(minNetY);
+        deviceY = Math.round(Math.min(maxDeviceY, effectiveNetY + (tightY ? 48 : 64)));
+    }
 
     ordered.forEach((peer, index) => {
         const chain = peer.networkChain || [];
@@ -181,15 +219,6 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         });
     });
 
-    // photogroup.network across the top middle: edge gateway above API, tracker and copies
-    // so ingress lines fan downward cleanly instead of piercing through sibling boxes.
-    const [edgeNode, apiNode, trackerNode, copiesNode] = infraNodes({ origin, trackerUrl, photos, trackerStates });
-    const rackLeft = compact ? width * 0.04 : width * 0.21;
-    const rackWidth = compact ? width * 0.92 : width * 0.58;
-    const edgeY = compact ? Math.max(42, height * 0.075) : Math.max(46, height * 0.082);
-    const servicesY = compact ? Math.max(edgeY + 52, height * 0.165) : Math.max(edgeY + 58, height * 0.19);
-    const serviceNodes = [apiNode, trackerNode, copiesNode];
-
     add({
         ...edgeNode,
         x: width * 0.5,
@@ -200,18 +229,10 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         ...node,
         x: rackLeft + rackWidth * (index + 0.5) / serviceNodes.length,
         y: servicesY,
-        maxW: rackWidth / serviceNodes.length - (compact ? 8 : 14),
+        maxW: rackWidth / serviceNodes.length - (compact ? 6 : 14),
     }));
 
-    // External internet / discovery / relay services sit outside photogroup.network.
-    const effectiveAnnounce = announceUrls === undefined ? buildAnnounceList(trackerUrl) : announceUrls;
-    const trackerSummary = describeTrackers(effectiveAnnounce, trackerUrl);
-    const hasCopiesOnShelf = photos.some(p => p.hasServerCopy || p.serverCopyUploader || p.serverCopyReceived > 0 || p.serverCopyRequestedAt)
-        || tiles.some(t => t.hasServerCopy || t.serverCopyUploader || t.serverCopyReceived > 0 || t.serverCopyRequestedAt);
-    const compactExtY = Math.max(servicesY + (hasCopiesOnShelf ? 92 : 64), height * 0.30);
-
-    // NATs: one per public address, above the devices behind it (below external row on compact).
-    const effectiveNetY = compact ? Math.max(netY, compactExtY + 72) : netY;
+    // NATs: one per public address, above the devices behind it.
     const natOf = new Map();
     ordered.forEach(peer => {
         const reflexive = (peer.networkChain || []).find(isReflexive);
@@ -241,11 +262,13 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         nat.x = xs.reduce((a, b) => a + b, 0) / xs.length;
     });
 
-    const stunY = compact ? compactExtY : Math.max(134, height * 0.225);
+    const leftSideX = compact ? Math.max(width * 0.15, 44) : Math.max(60, Math.min(width * 0.105, rackLeft * 0.48));
+    const rightSideX = compact ? Math.min(width * 0.85, width - 44) : Math.min(width - 60, Math.max(width * 0.895, rackLeft + rackWidth + (width - (rackLeft + rackWidth)) * 0.52));
+
     const stun = add({
         id: 'stun', kind: 'stun',
-        x: compact ? Math.max(width * 0.16, 48) : Math.max(width * 0.095, 58),
-        y: stunY,
+        x: leftSideX,
+        y: compact ? Math.min(compactExtY, effectiveNetY - 46) : stunY,
         badge: 'ICE DISCOVERY',
         label: 'STUN',
         sub: ice.stun[0]
@@ -261,19 +284,15 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         ],
     });
 
-    const extTrackers = trackerSummary.external;
     let pubtrackers = null;
     if (extTrackers.length > 0) {
         const connectedCount = extTrackers.filter(item => trackerStateLabel(trackerStates, item.url) === 'connected').length;
         const waitingCount = extTrackers.filter(item => trackerStateLabel(trackerStates, item.url) === 'reconnecting').length;
-        const pubY = compact
-            ? compactExtY
-            : Math.min(effectiveNetY - 38, Math.max(stunY + 76, height * 0.345));
         pubtrackers = add({
             id: 'pubtrackers', kind: 'pubtracker',
-            x: compact ? width * 0.5 : Math.max(width * 0.105, 68),
-            y: pubY,
-            maxW: compact ? width * 0.31 : 156,
+            x: compact ? width * 0.5 : leftSideX,
+            y: compact ? Math.min(compactExtY, effectiveNetY - 46) : pubY,
+            maxW: compact ? Math.min(148, width * 0.34) : Math.min(156, Math.max(106, rackLeft - 24)),
             badge: 'BACKUP WS',
             label: 'Public trackers',
             sub: extTrackers.length === 1 ? extTrackers[0].host : `${extTrackers[0].host} +${extTrackers.length - 1}`,
@@ -296,11 +315,10 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     ordered.forEach(peer => (peer.networkChain || []).filter(isRelayCandidate).forEach(item => relayIps.add(item.ip)));
     const turnHere = ice.turn.length > 0 || relayIps.size > 0;
     const provider = ice.turn.some(host => /twilio/i.test(host)) ? 'Twilio' : null;
-    const turnY = compact ? compactExtY : Math.max(156, height * 0.27);
     const turn = add({
         id: 'turn', kind: 'turn',
-        x: compact ? Math.min(width * 0.84, width - 48) : Math.min(width * 0.905, width - 58),
-        y: turnY,
+        x: rightSideX,
+        y: compact ? Math.min(compactExtY, effectiveNetY - 46) : turnY,
         badge: turnHere ? 'MEDIA RELAY' : 'NO TURN',
         label: 'TURN',
         sub: turnHere ? (provider || ice.turn[0] || [...relayIps][0]) : 'none configured',
@@ -402,7 +420,7 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         const held = device.isMe ? tiles : tiles.filter(tile => has(tile) || getting(tile));
         const arriving = tile => (device.isMe ? !!tile.loading : getting(tile));
         const sorted = [...held.filter(arriving), ...held.filter(tile => !arriving(tile))];
-        shelf(device, sorted, 44, tile => ({ arriving: arriving(tile) }), fits);
+        shelf(device, sorted, tightY ? 30 : 44, tile => ({ arriving: arriving(tile) }), fits);
         device.photoCount = held.filter(tile => !arriving(tile)).length;
     });
     const copies = byId.get('copies');

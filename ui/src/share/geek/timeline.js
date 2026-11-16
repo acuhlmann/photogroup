@@ -3,6 +3,24 @@
 // footer read the same history. Pausing, scrubbing and clicking a log line are
 // then the same thing: moving the playhead.
 
+// Map log/timeline event kinds to the corresponding stage route style key.
+export const ROUTE_KIND_FOR_EVENT = {
+    rx: 'lan',
+    tx: 'lan',
+    path: 'punch',
+    link: 'punch',
+    stun: 'stun',
+    ice: 'stun',
+    turn: 'relay',
+    trk: 'tracker',
+    wire: 'tracker',
+    pub: 'pubtracker',
+    sse: 'sse',
+    peer: 'sse',
+    photo: 'sse',
+    copy: 'copies',
+};
+
 // A packet takes this long to cross its route when the caller gives no speed.
 export const FLIGHT_MS = 1400;
 // Traffic kept for scrubbing back.
@@ -84,6 +102,7 @@ export function createTimeline({ now = nowMs, history = HISTORY_MS, limit = MAX_
             id: ++seq,
             at,
             kind,
+            routeKind: ROUTE_KIND_FOR_EVENT[kind] || null,
             text,
             // What a route's label counts and quotes at this moment: pieces
             // moved on `route`, and the speed last reported for it.

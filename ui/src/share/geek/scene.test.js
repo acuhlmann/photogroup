@@ -210,6 +210,33 @@ describe('buildScene', () => {
         expect(noPublic.byId.get('pubtrackers')).toBeUndefined();
         expect(noPublic.routes.find(r => r.id === 'turnctl:me')).toBeUndefined();
     });
+
+    it('keeps all tiers strictly ordered without overlap on narrow phones and short unfolded foldables', () => {
+        const tiles = [{ infoHash: 'h1', peerId: 'me', owners: [{ peerId: 'me' }], hasServerCopy: true }];
+        for (const [w, h] of [[360, 640], [412, 480], [880, 420], [880, 720]]) {
+            const scene = room([], { width: w, height: h, tiles, photos: tiles });
+            const edge = scene.byId.get('edge');
+            const api = scene.byId.get('api');
+            const stun = scene.byId.get('stun');
+            const pub = scene.byId.get('pubtrackers');
+            const turn = scene.byId.get('turn');
+            const nat = scene.byId.get('nat:1.1.1.1');
+            const me = scene.byId.get('me');
+            expect(edge.y).toBeLessThan(api.y);
+            expect(api.y).toBeLessThan(stun.y);
+            expect(stun.y).toBeLessThan(nat.y);
+            expect(pub.y).toBeLessThan(nat.y);
+            expect(turn.y).toBeLessThan(nat.y);
+            expect(nat.y).toBeLessThan(me.y);
+            scene.nodes.forEach(node => {
+                expect(node.x).toBeGreaterThanOrEqual(20);
+                expect(node.x).toBeLessThanOrEqual(w - 20);
+            });
+            scene.thumbs.forEach(thumb => {
+                expect(thumb.y + thumb.size / 2).toBeLessThan(h);
+            });
+        }
+    });
 });
 
 describe('buildRouteGeometry', () => {

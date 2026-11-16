@@ -127,19 +127,27 @@ describe('attachTraffic', () => {
         expect(entry.flights.map(f => [f.label, f.reverse])).toEqual([['announce', false], ['peers', true]]);
     });
 
-    it('also sends a backup announce flight when public trackers are in the scene', () => {
+    it('also sends a separate pub log entry and backup announce flight when public trackers are in the scene', () => {
         const emitter = new EventEmitter();
         const timeline = createTimeline();
         const withPublic = () => ({ routes: [
-            { id: 'tracker:me', kind: 'tracker', path: ['me', 'edge', 'tracker'], peerId: 'me' },
-            { id: 'pubtracker:me', kind: 'pubtracker', path: ['me', 'pubtrackers'], peerId: 'me' },
+            { id: 'tracker:me', kind: 'tracker', path: ['me', 'edge', 'tracker'], peerId: 'me', sub: 'photogroup.network' },
+            { id: 'pubtracker:me', kind: 'pubtracker', path: ['me', 'pubtrackers'], peerId: 'me', sub: 'tracker.openwebtorrent.com +1' },
         ] });
         attachTraffic({ timeline, emitter, getScene: withPublic, getMyId: () => 'me' });
         emitter.emit('trackerAnnounce', { torrent });
-        const entry = timeline.entries.at(-1);
-        expect(entry.flights.map(f => [f.routeId, f.label])).toEqual([
+        const trk = timeline.entries.at(-2);
+        const pub = timeline.entries.at(-1);
+        expect(trk.kind).toBe('trk');
+        expect(trk.routeKind).toBe('tracker');
+        expect(trk.flights.map(f => [f.routeId, f.label])).toEqual([
             ['tracker:me', 'announce'],
             ['tracker:me', 'peers'],
+        ]);
+        expect(pub.kind).toBe('pub');
+        expect(pub.routeKind).toBe('pubtracker');
+        expect(pub.text).toContain('public WS announce');
+        expect(pub.flights.map(f => [f.routeId, f.label])).toEqual([
             ['pubtracker:me', 'backup announce'],
         ]);
     });

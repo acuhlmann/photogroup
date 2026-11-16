@@ -183,6 +183,11 @@ describe('explainEntry', () => {
             ['peerConnections', [[]]],
             ['photos', [{ type: 'add', item: [{ fileName: 'a.jpg' }] }]],
             ['pcEvent', ['icegatheringstatechange', 'gathering']],
+            ['pcEvent', ['icecandidate', 'srflx 203.0.113.5:5000']],
+            ['pcEvent', ['icecandidate', 'relay 192.0.2.9:49152']],
+            ['trackerAnnounce', [{ torrent: { name: 'a' }, isPublic: true, host: 'tracker.openwebtorrent.com' }]],
+            ['trackerStatus', [{ isPublic: true, host: 'tracker.btorrent.xyz', status: 'connected' }]],
+            ['linkStats', [{ changed: true, peerId: 'ana', local: 'relay', remote: 'srflx', relayProtocol: 'udp' }]],
             ['sseReconnected', []],
             ['serverCopy', [{ stage: 'queued', infoHash: 'h' }]],
         ];
@@ -191,6 +196,9 @@ describe('explainEntry', () => {
             expect(EXPLAINED_KINDS, name).toContain(line.kind);
             expect(explainEntry({ kind: line.kind }).sees).toBeTruthy();
         });
+        expect(explainEntry({ kind: 'stun' }).title).toContain('STUN');
+        expect(explainEntry({ kind: 'turn' }).title).toContain('TURN');
+        expect(explainEntry({ kind: 'pub' }).title).toContain('Public backup');
         // A change the log writes no line for still gets explained.
         expect(explainEntry({ kind: 'peers' }).title).toBe('Someone joined, left or changed');
         expect(explainEntry(null)).toBeNull();

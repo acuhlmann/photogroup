@@ -311,5 +311,28 @@ describe('NetworkStage drawing', () => {
         await act(async () => root.unmount());
         div.remove();
     });
+
+    it('renders cleanly on narrow mobile (360x640) and unfolded foldable (880x420) viewports', async () => {
+        for (const [w, h] of [[360, 640], [880, 420]]) {
+            Element.prototype.getBoundingClientRect = () => ({
+                left: 0, top: 0, right: w, bottom: h, width: w, height: h, x: 0, y: 0,
+            });
+            contexts.length = 0;
+            const master = room();
+            const div = document.createElement('div');
+            document.body.appendChild(div);
+            const root = createRoot(div);
+            await act(async () => root.render(
+                <NetworkStage master={master} tiles={[]} onOpenPhoto={() => {}} timeline={createTimeline()} />
+            ));
+            await runFrames(1);
+            expect(texts()).toContain('PHOTOGROUP.NETWORK');
+            expect(texts()).toContain('ICE DISCOVERY');
+            expect(texts()).toContain('BACKUP WS');
+            expect(div.querySelector('[data-testid="network-legend"]')).not.toBeNull();
+            await act(async () => root.unmount());
+            div.remove();
+        }
+    });
 });
 
