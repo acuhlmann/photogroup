@@ -99,7 +99,14 @@ describe('tourSteps', () => {
         expect(relayed.byId.get('turn').sub).toBe('Twilio');
         const turn = tourSteps(relayed, { myPeerId: 'me' }).find(step => step.id === 'turn');
         expect(turn.sees[0]).toEqual({ who: 'TURN sees', what: 'both IP addresses and encrypted bytes' });
+        expect(turn.routes).toContain('turnctl:me');
         expect(turn.packets.length).toBeGreaterThan(0);
+    });
+
+    it('includes public fallback trackers in the tracker step when present', () => {
+        const tracker = steps.find(step => step.id === 'tracker');
+        expect(tracker.nodes).toContain('pubtrackers');
+        expect(tracker.routes).toContain('pubtracker:me');
     });
 });
 

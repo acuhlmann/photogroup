@@ -166,13 +166,15 @@ export function attachTraffic({ timeline, emitter, getScene, getMyId, animate = 
     };
 
     // The tracker answered an announce: which photos this device has, and
-    // back come peers that want them.
+    // back come peers that want them. Primary tracker + public backup trackers.
     const onTracker = (event = {}) => {
         if (throttled('announce' + (event.torrent?.infoHash || ''), 1000)) return;
+        const pub = mine('pubtracker');
         record('trackerAnnounce', [event], {
             flights: [
                 flight(mine('tracker'), { label: 'announce' }),
                 flight(mine('tracker'), { reverse: true, label: 'peers', speed: SPEEDS.answer }),
+                pub && flight(pub, { label: 'backup announce' }),
             ],
         });
     };

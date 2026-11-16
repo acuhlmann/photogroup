@@ -127,6 +127,23 @@ describe('attachTraffic', () => {
         expect(entry.flights.map(f => [f.label, f.reverse])).toEqual([['announce', false], ['peers', true]]);
     });
 
+    it('also sends a backup announce flight when public trackers are in the scene', () => {
+        const emitter = new EventEmitter();
+        const timeline = createTimeline();
+        const withPublic = () => ({ routes: [
+            { id: 'tracker:me', kind: 'tracker', path: ['me', 'edge', 'tracker'], peerId: 'me' },
+            { id: 'pubtracker:me', kind: 'pubtracker', path: ['me', 'pubtrackers'], peerId: 'me' },
+        ] });
+        attachTraffic({ timeline, emitter, getScene: withPublic, getMyId: () => 'me' });
+        emitter.emit('trackerAnnounce', { torrent });
+        const entry = timeline.entries.at(-1);
+        expect(entry.flights.map(f => [f.routeId, f.label])).toEqual([
+            ['tracker:me', 'announce'],
+            ['tracker:me', 'peers'],
+            ['pubtracker:me', 'backup announce'],
+        ]);
+    });
+
     it('shows the STUN binding when the public address comes back, only for our own NAT', () => {
         const { emitter, timeline } = setup();
         emitter.emit('pcEvent', 'icecandidate', 'srflx 203.0.113.7:51234');

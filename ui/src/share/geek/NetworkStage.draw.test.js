@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import EventEmitter from 'eventemitter3';
 import NetworkStage from './NetworkStage';
 import { createTimeline } from './timeline';
@@ -236,6 +237,79 @@ describe('NetworkStage drawing', () => {
         const before = contexts.length;
         await runFrames(1);
         expect(contexts.length).toBe(before);
+    });
+
+    it('renders photogroup.network sub-cards, STUN, TURN, and public trackers in both dark and light themes', async () => {
+        const master = {
+            ...room(),
+            creator: {
+                trackerWsUrl: 'wss://photogroup.network/ws',
+                iceServers: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'turn:global.turn.twilio.com:3478', username: 'u', credential: 'c' },
+                    ],
+                },
+            },
+        };
+        for (const mode of ['dark', 'light']) {
+            contexts.length = 0;
+            const div = document.createElement('div');
+            document.body.appendChild(div);
+            const root = createRoot(div);
+            const theme = createTheme({ palette: { mode } });
+            await act(async () => root.render(
+                <ThemeProvider theme={theme}>
+                    <NetworkStage master={master} tiles={[]} onOpenPhoto={() => {}} timeline={createTimeline()} />
+                </ThemeProvider>
+            ));
+            await runFrames(1);
+            const allText = texts();
+            expect(allText).toContain('PHOTOGROUP.NETWORK');
+            expect(allText).toContain('DEV PROXY');
+            expect(allText).toContain('STATE · SSE');
+            expect(allText).toContain('PRIMARY WS');
+            expect(allText).toContain('TEMP RELAY');
+            expect(allText).toContain('ICE DISCOVERY');
+            expect(allText).toContain('MEDIA RELAY');
+            expect(allText).toContain('BACKUP WS');
+            expect(div.querySelector('[data-testid="network-legend"]').textContent).toContain('public trackers');
+            expect(div.querySelector('[data-testid="network-legend"]').textContent).toContain('TURN allocate');
+            await act(async () => root.unmount());
+            div.remove();
+        }
+    });
+
+    it('highlights a node on hover and shows route details when a route is clicked', async () => {
+        let capturedScene = null;
+        const master = room();
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        await act(async () => root.render(
+            <NetworkStage master={master} tiles={[]} onOpenPhoto={() => {}} timeline={createTimeline()} onScene={s => { capturedScene = s; }} />
+        ));
+        await runFrames(1);
+        const canvas = div.querySelector('[data-testid="network-stage"]');
+        const stun = capturedScene.byId.get('stun');
+        await act(async () => canvas.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: stun.x, clientY: stun.y })));
+        contexts.at(-1).painted.length = 0;
+        await runFrames(1);
+        // Hovering STUN surfaces its lookup route label.
+        expect(texts().some(t => t.includes('STUN lookup'))).toBe(true);
+
+        // Clicking a route midpoint opens route details.
+        const lan = capturedScene.routes.find(r => r.id === 'p2p:me|them');
+        const meNode = capturedScene.byId.get('me');
+        const themNode = capturedScene.byId.get('them');
+        const midX = (meNode.x + themNode.x) / 2;
+        const midY = (meNode.y + themNode.y) / 2 - 16;
+        await act(async () => canvas.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: midX, clientY: midY })));
+        const details = div.querySelector('[data-testid="route-details"]');
+        expect(details).not.toBeNull();
+        expect(details.textContent).toContain('P2P same LAN');
+        await act(async () => root.unmount());
+        div.remove();
     });
 });
 

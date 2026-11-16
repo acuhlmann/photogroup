@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildScene, routePoints, pointAlong, transferRoutesFor, TIER, hostOf } from './scene';
+import { buildScene, buildRouteGeometry, routePoints, pointAlong, transferRoutesFor, TIER, hostOf } from './scene';
 
 const chain = (lan, pub) => [
     { ip: lan, port: 50000, type: 'host', transport: 'udp' },
@@ -33,12 +33,22 @@ describe('buildScene', () => {
         expect(devices.every(node => node.y === 800 * TIER.device)).toBe(true);
         expect(scene.byId.get('me').label).toBe('you · Mine');
 
-        expect(['edge', 'api', 'tracker', 'copies'].map(id => scene.byId.get(id).y)).toEqual(Array(4).fill(800 * TIER.infra));
+        const [edge, api, tracker, copies] = ['edge', 'api', 'tracker', 'copies'].map(id => scene.byId.get(id));
+        expect(edge.y).toBeLessThan(api.y);
+        expect([api.y, tracker.y, copies.y]).toEqual([api.y, api.y, api.y]);
+        expect(api.y).toBeLessThan(800 * TIER.net);
+        expect([edge.badge, api.badge, tracker.badge, copies.badge]).toEqual([
+            'INGRESS', 'STATE · SSE', 'PRIMARY WS', 'TEMP RELAY',
+        ]);
         expect(scene.byId.get('edge').sub).toBe('Cloud Run wake → nginx');
         expect(scene.byId.get('tracker').sub).toBe('photogroup.network');
+        expect(scene.byId.get('stun')).toMatchObject({ badge: 'ICE DISCOVERY', caption: 'finds IP:port · no media' });
         expect(scene.byId.get('stun').sub).toContain('stun.l.google.com');
+        // Public fallback WebSocket trackers appear outside photogroup.network.
+        expect(scene.byId.get('pubtrackers')).toMatchObject({ kind: 'pubtracker', badge: 'BACKUP WS' });
+        expect(scene.byId.get('pubtrackers').info.join('\n')).toContain('tracker.openwebtorrent.com');
         // No TURN server and no relay candidates: TURN is still shown, as missing.
-        expect(scene.byId.get('turn')).toMatchObject({ sub: 'none configured', idle: true });
+        expect(scene.byId.get('turn')).toMatchObject({ sub: 'none configured', idle: true, badge: 'NO TURN' });
         expect(scene.byId.get('turn').info.join(' ')).toContain('server copy takes over');
         // What each server holds and never sees is spelled out on it.
         expect(scene.byId.get('api').info.join('\n')).toMatch(/never sees · the photos/);
@@ -176,6 +186,53 @@ describe('buildScene', () => {
         const scene = room([], { origin: 'http://localhost:3000' });
         expect(scene.byId.get('edge')).toMatchObject({ label: 'dev server', sub: 'localhost:3000' });
         expect(hostOf('not a url')).toBe('not a url');
+    });
+
+    it('separates PhotoGroup tracker from configurable announceUrls and shows TURN allocate when TURN exists', () => {
+        const states = new Map([
+            ['wss://photogroup.network/tracker', { connected: true, waiting: false }],
+            ['wss://custom.tracker.example/ws', { connected: true, waiting: false }],
+        ]);
+        const scene = room([], {
+            announceUrls: ['wss://photogroup.network/tracker', 'wss://custom.tracker.example/ws'],
+            trackerStates: states,
+            rtcConfig: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'turn:turn.example.com:3478', username: 'u', credential: 'c' }] },
+        });
+        expect(scene.byId.get('tracker').status).toBe('connected');
+        expect(scene.byId.get('pubtrackers')).toMatchObject({
+            sub: 'custom.tracker.example',
+            status: 'connected',
+        });
+        expect(scene.routes.find(r => r.id === 'pubtracker:me').path).toEqual(['me', 'nat:1.1.1.1', 'pubtrackers']);
+        expect(scene.routes.find(r => r.id === 'turnctl:me').path).toEqual(['me', 'nat:1.1.1.1', 'turn']);
+
+        const noPublic = room([], { announceUrls: ['wss://photogroup.network/tracker'] });
+        expect(noPublic.byId.get('pubtrackers')).toBeUndefined();
+        expect(noPublic.routes.find(r => r.id === 'turnctl:me')).toBeUndefined();
+    });
+});
+
+describe('buildRouteGeometry', () => {
+    it('fans shared segments into distinct curves and arcs LAN links clear of intermediate devices', () => {
+        const scene = room([
+            { fromPeerId: 'ana', toPeerId: 'ben', connectionType: 'p2p' },
+        ]);
+        const geo = buildRouteGeometry(scene);
+        const ssePts = geo.get('sse:me');
+        const trkPts = geo.get('tracker:me');
+        const pubPts = geo.get('pubtracker:me');
+        expect(ssePts.length).toBeGreaterThan(4);
+        expect(trkPts.length).toBeGreaterThan(4);
+        expect(pubPts.length).toBeGreaterThan(2);
+        // Midpoints on shared segments diverge into separate lanes rather than overlapping.
+        const sseMid = pointAlong(ssePts, 0.35);
+        const trkMid = pointAlong(trkPts, 0.35);
+        expect(Math.hypot(sseMid.x - trkMid.x, sseMid.y - trkMid.y)).toBeGreaterThan(2);
+
+        // Direct LAN route between Ana (left) and Ben (right) bows upward above Me (center).
+        const lanPts = geo.get('p2p:ana|ben');
+        const lanMid = pointAlong(lanPts, 0.5);
+        expect(lanMid.y).toBeLessThan(scene.byId.get('me').y - 15);
     });
 });
 
