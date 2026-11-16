@@ -39,8 +39,19 @@ function candidateLine(item) {
 function placeLine(network) {
     if (!network) return null;
     const isp = network.connection && (network.connection.isp || network.connection.org);
-    const where = [network.city, network.country].filter(Boolean).join(', ');
+    const where = [network.city, network.country_code || network.country].filter(Boolean).join(', ');
     return [where, isp].filter(Boolean).join(' · ') || null;
+}
+
+/** Human-readable NAT title: place → rDNS → ISP → stable fallback (never the raw IP). */
+export function natTitle(network) {
+    if (!network) return 'public address';
+    const where = [network.city, network.country_code || network.country].filter(Boolean).join(', ');
+    const isp = network.connection && (network.connection.isp || network.connection.org);
+    if (where) return [where, isp].filter(Boolean).join(' · ');
+    if (network.hostname) return network.hostname;
+    if (isp) return isp;
+    return 'public address';
 }
 
 function trackerStateLabel(states, url) {
@@ -272,7 +283,8 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         const nat = add({
             id, kind: 'nat', x: 0, y: effectiveNetY, members: [],
             natType: memberSummary.nat,
-            label: reflexive.ip, sub: reflexive.example ? 'example address' : placeLine(reflexive.network) || 'public address',
+            label: natTitle(reflexive.network),
+            sub: reflexive.example ? 'example address' : reflexive.ip,
             example: !!reflexive.example,
             info: [
                 `public ${reflexive.ip}${reflexive.port ? ':' + reflexive.port : ''}`,

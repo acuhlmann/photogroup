@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { buildScene, buildRouteGeometry, routePoints, pointAlong, transferRoutesFor, TIER, hostOf } from './scene';
+import { buildScene, buildRouteGeometry, routePoints, pointAlong, transferRoutesFor, TIER, hostOf, natTitle } from './scene';
 
-const chain = (lan, pub) => [
+const chain = (lan, pub, network) => [
     { ip: lan, port: 50000, type: 'host', transport: 'udp' },
-    ...(pub ? [{ ip: pub, port: 61000, type: 'srflx', transport: 'udp', network: { city: 'Vienna', country: 'AT', connection: { isp: 'A1' } } }] : []),
+    ...(pub ? [{
+        ip: pub, port: 61000, type: 'srflx', transport: 'udp',
+        network: network === undefined
+            ? { city: 'Vienna', country: 'AT', connection: { isp: 'A1' } }
+            : network,
+    }] : []),
 ];
 
 function room(connections = [], extra = {}) {
@@ -58,7 +63,63 @@ describe('buildScene', () => {
         const shared = scene.byId.get('nat:1.1.1.1');
         expect(shared.members.sort()).toEqual(['ana', 'me']);
         expect(shared.x).toBe((scene.byId.get('ana').x + scene.byId.get('me').x) / 2);
-        expect(shared.sub).toBe('Vienna, AT · A1');
+        expect(shared).toMatchObject({ label: 'Vienna, AT · A1', sub: '1.1.1.1' });
+        expect(shared.id).toBe('nat:1.1.1.1');
+    });
+
+    it('titles NAT nodes with place, then rDNS, then ISP; IP stays secondary', () => {
+        expect(natTitle({ city: 'Vienna', country: 'AT', connection: { isp: 'A1' } })).toBe('Vienna, AT · A1');
+        expect(natTitle({ hostname: 'dsl-1-2-3.example.net' })).toBe('dsl-1-2-3.example.net');
+        expect(natTitle({ connection: { org: 'Example ISP' } })).toBe('Example ISP');
+        expect(natTitle(null)).toBe('public address');
+        expect(natTitle({})).toBe('public address');
+
+        const place = room([], {
+            localNetwork: chain('192.168.1.2', '1.1.1.1'),
+            peers: [
+                { peerId: 'ana', name: 'Ana', networkChain: chain('192.168.1.3', '1.1.1.1') },
+                { peerId: 'ben', name: 'Ben', networkChain: chain('10.0.0.7', '2.2.2.2') },
+            ],
+        });
+        expect(place.byId.get('nat:1.1.1.1')).toMatchObject({ label: 'Vienna, AT · A1', sub: '1.1.1.1' });
+        expect(place.byId.get('nat:2.2.2.2')).toMatchObject({ label: 'Vienna, AT · A1', sub: '2.2.2.2' });
+
+        const hostOnly = room([], {
+            localNetwork: chain('192.168.1.2', '9.9.9.9', { hostname: 'nat.isp.example' }),
+            peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '8.8.8.8', { hostname: 'peer.isp.example' }) }],
+        });
+        expect(hostOnly.byId.get('nat:9.9.9.9')).toMatchObject({ label: 'nat.isp.example', sub: '9.9.9.9' });
+        expect(hostOnly.byId.get('nat:8.8.8.8')).toMatchObject({ label: 'peer.isp.example', sub: '8.8.8.8' });
+
+        const bare = room([], {
+            localNetwork: chain('192.168.1.2', '5.5.5.5', null),
+            peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '6.6.6.6', null) }],
+        });
+        expect(bare.byId.get('nat:5.5.5.5')).toMatchObject({ label: 'public address', sub: '5.5.5.5' });
+        expect(bare.byId.get('nat:5.5.5.5').label).not.toBe('5.5.5.5');
+        expect(bare.byId.get('nat:6.6.6.6')).toMatchObject({ id: 'nat:6.6.6.6', label: 'public address', sub: '6.6.6.6' });
+
+        const example = buildScene({
+            myPeerId: 'me',
+            me: { name: 'Mine' },
+            localNetwork: [
+                { ip: '192.168.1.2', port: 50000, type: 'host', transport: 'udp' },
+                { ip: '198.51.100.23', port: 61000, type: 'srflx', transport: 'udp', example: true },
+            ],
+            peers: [],
+            connections: [],
+            origin: 'https://photogroup.network',
+            trackerUrl: 'wss://photogroup.network/tracker',
+            rtcConfig: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] },
+            width: 1000,
+            height: 800,
+        });
+        expect(example.byId.get('nat:198.51.100.23')).toMatchObject({
+            id: 'nat:198.51.100.23',
+            label: 'public address',
+            sub: 'example address',
+            example: true,
+        });
     });
 
     it('puts what the old "This device" panel said on the nodes', () => {
