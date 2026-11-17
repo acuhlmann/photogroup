@@ -58,7 +58,7 @@ function Phases({ step, progress, held }) {
                 <Box data-testid="tour-picture" data-visual={step.visual} data-phase={phase} sx={{
                     mt: 0.5, mb: 0.75, mx: 'auto', width: '100%', maxWidth: 420,
                     '@keyframes pgFlow': { from: { offsetDistance: '0%' }, to: { offsetDistance: '100%' } },
-                    '@media (prefers-reduced-motion: reduce)': { '& g': { transition: 'none !important' }, '& .pg-flow': { display: 'none' } },
+                    '@media (prefers-reduced-motion: reduce)': { '& *': { transition: 'none !important' }, '& .pg-flow': { display: 'none' } },
                 }}>
                     <Picture phase={phase} held={held} data={step.data || {}} />
                 </Box>
