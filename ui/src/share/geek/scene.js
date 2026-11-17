@@ -43,6 +43,50 @@ function placeLine(network) {
     return [where, isp].filter(Boolean).join(' · ') || null;
 }
 
+/** True when enrichment has place, ISP, or reverse DNS worth showing on a NAT card. */
+export function isUsefulNetwork(network) {
+    if (!network || typeof network !== 'object') return false;
+    const isp = network.connection && (network.connection.isp || network.connection.org);
+    return !!(network.city || network.country || network.country_code || network.hostname || isp);
+}
+
+/** Last useful enrichment per public IP across scene rebuilds (SSE empty shells, new ports). */
+const stickyNatNetworkByIp = new Map();
+
+export function resetStickyNatNetwork() {
+    stickyNatNetworkByIp.clear();
+}
+
+/**
+ * Prefer the current enrichment; otherwise reuse a sticky / room-wide copy for the same IP
+ * so NAT titles do not flash back to "public address" when a later chain update is bare.
+ */
+export function networkForNat(ip, current, roomNetworksByIp = null) {
+    if (isUsefulNetwork(current)) {
+        if (ip) stickyNatNetworkByIp.set(ip, current);
+        return current;
+    }
+    if (ip && roomNetworksByIp?.has(ip) && isUsefulNetwork(roomNetworksByIp.get(ip))) {
+        const fromRoom = roomNetworksByIp.get(ip);
+        stickyNatNetworkByIp.set(ip, fromRoom);
+        return fromRoom;
+    }
+    if (ip && stickyNatNetworkByIp.has(ip)) return stickyNatNetworkByIp.get(ip);
+    return current || null;
+}
+
+function collectUsefulNetworksByIp(peers) {
+    const byIp = new Map();
+    (peers || []).forEach(peer => {
+        (peer.networkChain || []).forEach(item => {
+            if (item?.ip && isUsefulNetwork(item.network) && !byIp.has(item.ip)) {
+                byIp.set(item.ip, item.network);
+            }
+        });
+    });
+    return byIp;
+}
+
 /** Human-readable NAT title: place → rDNS → ISP → stable fallback (never the raw IP). */
 export function natTitle(network) {
     if (!network) return 'public address';
@@ -274,26 +318,35 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     }));
 
     // NATs: one per public address, above the devices behind it.
+    const roomNetworksByIp = collectUsefulNetworksByIp(ordered);
     const natOf = new Map();
     ordered.forEach(peer => {
         const reflexive = (peer.networkChain || []).find(isReflexive);
         if (!reflexive) return;
         const id = 'nat:' + reflexive.ip;
         const memberSummary = summarizeChain(peer.networkChain || []);
+        const network = networkForNat(reflexive.ip, reflexive.network, roomNetworksByIp);
+        const title = natTitle(network);
+        const info = [
+            `public ${reflexive.ip}${reflexive.port ? ':' + reflexive.port : ''}`,
+            network?.hostname ? `rdns ${network.hostname}` : null,
+            placeLine(network),
+            reflexive.typeDetail ? `seen as ${reflexive.typeDetail}` : null,
+            'discovered via STUN binding reply',
+        ].filter(Boolean);
         const nat = add({
             id, kind: 'nat', x: 0, y: effectiveNetY, members: [],
             natType: memberSummary.nat,
-            label: natTitle(reflexive.network),
+            label: title,
             sub: reflexive.example ? 'example address' : reflexive.ip,
             example: !!reflexive.example,
-            info: [
-                `public ${reflexive.ip}${reflexive.port ? ':' + reflexive.port : ''}`,
-                reflexive.network?.hostname ? `rdns ${reflexive.network.hostname}` : null,
-                placeLine(reflexive.network),
-                reflexive.typeDetail ? `seen as ${reflexive.typeDetail}` : null,
-                'discovered via STUN binding reply',
-            ].filter(Boolean),
+            info,
         });
+        // Same NAT, later peer: upgrade a bare card when this peer still has place/ISP.
+        if (title !== 'public address' && nat.label === 'public address') {
+            nat.label = title;
+            nat.info = info;
+        }
         nat.members.push(peer.peerId);
         if (memberSummary.nat === 'symmetric') nat.natType = 'symmetric';
         else if (!nat.natType || nat.natType === 'unknown') nat.natType = memberSummary.nat;

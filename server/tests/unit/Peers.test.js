@@ -2,6 +2,7 @@ import '../test-setup.js';
 import assert from 'assert';
 import { EventEmitter } from 'events';
 import Peers from '../../Peers.js';
+import IpTranslator from '../../IpTranslator.js';
 
 const GRACE_MS = 30;
 const AWAY_GRACE_MS = 150;
@@ -181,6 +182,65 @@ describe('Peers', () => {
             assert.strictEqual(peers.markAway('s1', 'phone', 'guess'), false);
             assert.strictEqual(peers.markAway('s2', 'phone', token), false);
             assert.strictEqual(peers.webPeers.get('phone').away, undefined);
+        });
+    });
+
+    describe('networkChain enrichment stickiness', () => {
+        const place = {
+            ip: '203.0.113.50',
+            city: 'Los Angeles',
+            country_code: 'US',
+            country: 'United States',
+            hostname: '',
+            connection: { isp: 'LogicWeb Inc', org: 'LogicWeb Inc', as: null },
+            location: { country_flag_emoji: null },
+        };
+
+        beforeEach(() => {
+            IpTranslator.reset();
+        });
+
+        it('adoptNetworkChain copies place/ISP onto a new port of the same IP', () => {
+            const previous = [
+                { ip: '10.0.0.1', port: 1, type: 'host', network: IpTranslator.createEmptyIpObj('10.0.0.1') },
+                { ip: '203.0.113.50', port: 40080, type: 'srflx', typeDetail: 'srflx', network: place },
+            ];
+            const next = [
+                { ip: '10.0.0.1', port: 1, type: 'host' },
+                { ip: '192.168.1.20', port: 2, type: 'host' },
+                { ip: '203.0.113.50', port: 35036, type: 'srflx', typeDetail: 'Symmetric NAT srflx' },
+            ];
+
+            const adopted = Peers.adoptNetworkChain(previous, next);
+            assert.strictEqual(adopted.length, 3);
+            assert.strictEqual(adopted[2].port, 35036);
+            assert.strictEqual(adopted[2].network.city, 'Los Angeles');
+            assert.strictEqual(adopted[2].network.connection.isp, 'LogicWeb Inc');
+        });
+
+        it('updatePeer replaces the chain by IP instead of lodash index-merge', () => {
+            const peer = peers.webPeers.get('phone');
+            peer.networkChain = [
+                { ip: '10.0.0.1', port: 1, type: 'host', network: IpTranslator.createEmptyIpObj('10.0.0.1') },
+                { ip: '203.0.113.50', port: 40080, type: 'srflx', network: { ...place } },
+            ];
+
+            peers.updatePeer(peer, {
+                networkChain: [
+                    { ip: '10.0.0.1', port: 1, type: 'host' },
+                    { ip: '192.168.1.20', port: 2, type: 'host' },
+                    { ip: '203.0.113.50', port: 35036, type: 'srflx', typeDetail: 'Symmetric NAT srflx' },
+                ],
+            });
+
+            const chain = peers.webPeers.get('phone').networkChain;
+            assert.strictEqual(chain.length, 3);
+            assert.strictEqual(chain[1].type, 'host');
+            assert.strictEqual(chain[1].ip, '192.168.1.20');
+            const srflx = chain.find(item => item.type === 'srflx');
+            assert.strictEqual(srflx.port, 35036);
+            assert.strictEqual(srflx.network.city, 'Los Angeles');
+            assert.strictEqual(srflx.network.connection.isp, 'LogicWeb Inc');
         });
     });
 });
