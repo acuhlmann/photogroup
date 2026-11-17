@@ -15,8 +15,11 @@ describe('SimpleHowItWorks', () => {
         await act(async () => root.render(<SimpleHowItWorks />));
         await act(async () => button('How does it work?').click());
         expect(title()).toBe('You share a photo');
+        // The phone reads the photo and makes its fingerprint, on the phone.
+        expect(document.body.querySelector('[data-testid="simple-fingerprint"]')).not.toBeNull();
         await act(async () => button('Next').click());
         expect(title()).toBe('The server connects the phones');
+        expect(document.body.querySelector('[data-testid="simple-fingerprint"]')).toBeNull();
         expect(document.body.textContent).toContain('helps them find your phone');
         await act(async () => button('Next').click());
         expect(title()).toBe('The photo goes from phone to phone');

@@ -273,9 +273,20 @@ describe('GeekStage', () => {
         // The arrows walk the tour while it is open, not the traffic.
         await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
         expect(title()).toBe('Share a photo: your device makes its fingerprint');
-        await act(async () => div.querySelector('[aria-label="Step 10"]').click());
+        // This step is a picture: phase 1 of 5 first, with its text in bold.
+        expect(div.querySelector('[data-testid="tour-picture"]').dataset.phase).toBe('0');
+        expect(div.querySelector('[data-testid="fingerprint-diagram"]')).not.toBeNull();
+        expect(div.querySelector('[data-testid="tour-phases"] [aria-current="step"]').textContent).toBe('Your browser cuts the photo into pieces of 16 KiB.');
+        expect(div.textContent).toContain('ON YOUR DEVICE ONLY');
+        // Every step has its picture.
+        for (let step = 1; step <= 10; step++) {
+            await act(async () => div.querySelector(`[aria-label="Step ${step}"]`).click());
+            expect(div.querySelector('[data-testid="tour-picture"] svg'), `step ${step}`).not.toBeNull();
+        }
         expect(title()).toBe('Who saw what');
-        expect(div.textContent).toContain('photogroup.network keeps');
+        // The last step's picture is the who-saw-what table.
+        expect(div.querySelector('[data-testid="tour-picture"]').dataset.visual).toBe('whoSaw');
+        expect(div.textContent).toContain('only a server copy, when P2P fails, 24 h at most');
 
         await act(async () => button('Done').click());
         expect(div.querySelector('[data-testid="tour-card"]')).toBeNull();
