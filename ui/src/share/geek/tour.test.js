@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildScene } from './scene';
 import { demoInputs, withDemoRoutes, tourSteps, tourFriend, GHOST_ID, EXAMPLE_PHOTO, fingerprintPhoto, pieceLengthFor } from './tour';
-import { phaseAt, PHASES } from './FingerprintDiagram';
+import { PHASES } from './FingerprintDiagram';
+import { phaseAt } from './diagramParts';
+import { PICTURES } from './stepPictures';
 import { createTimeline } from './timeline';
 import { createTourPlayer } from './tourPlayer';
 import { explainEntry, EXPLAINED_KINDS } from './explain';
@@ -97,7 +99,19 @@ describe('tourSteps', () => {
         expect(EXAMPLE_PHOTO.pieceLength).toBe(16384);
         expect(EXAMPLE_PHOTO.pieceCount).toBe(205);
         expect(pieceLengthFor(100 * 1024 * 1024)).toBe(131072);
-        expect([0, 0.19, 0.2, 0.5, 0.99, 1].map(phaseAt)).toEqual([0, 0, 1, 2, 4, 4]);
+        expect([0, 0.19, 0.2, 0.5, 0.99, 1].map(progress => phaseAt(progress, PHASES))).toEqual([0, 0, 1, 2, 4, 4]);
+    });
+
+    it('tells every step in phases, each with its picture', () => {
+        steps.forEach(step => {
+            expect(PICTURES[step.visual], step.id).toBeTruthy();
+            expect(step.phases.length, step.id).toBeGreaterThan(1);
+            expect(step.body).toBe(step.phases.join(' '));
+            // About two seconds or more per phase, so the picture can be read.
+            expect(step.duration / step.phases.length, step.id).toBeGreaterThanOrEqual(1800);
+        });
+        expect(steps.filter(step => step.seesInPicture).map(step => step.id)).toEqual(['hash', 'summary']);
+        expect(steps.find(step => step.id === 'stun').data).toMatchObject({ privateIp: '192.168.1.2', publicIp: '198.51.100.23' });
     });
 
     it('shows a real photo in the fingerprint step, the one you shared first', () => {

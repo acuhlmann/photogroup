@@ -14,7 +14,8 @@ import SlowMotionVideoRounded from '@mui/icons-material/SlowMotionVideoRounded';
 
 import { SPEEDS } from './tourPlayer';
 import { explainEntry } from './explain';
-import FingerprintDiagram, { phaseAt } from './FingerprintDiagram';
+import { PICTURES } from './stepPictures';
+import { phaseAt } from './diagramParts';
 
 const mono = 'var(--font-mono)';
 const TONE = { good: 'success.main' };
@@ -48,11 +49,20 @@ Sees.propTypes = { sees: PropTypes.array };
  * the other, and the text of the phase it shows is in bold (on a phone, it is
  * the only text shown).
  */
-function Phases({ step, progress }) {
-    const phase = phaseAt(progress);
+function Phases({ step, progress, held }) {
+    const phase = phaseAt(progress, step.phases.length);
+    const Picture = PICTURES[step.visual];
     return (
         <>
-            {step.visual === 'fingerprint' && <FingerprintDiagram photo={step.photo} phase={phase} />}
+            {Picture && (
+                <Box data-testid="tour-picture" data-visual={step.visual} data-phase={phase} sx={{
+                    mt: 0.5, mb: 0.75, mx: 'auto', width: '100%', maxWidth: 420,
+                    '@keyframes pgFlow': { from: { offsetDistance: '0%' }, to: { offsetDistance: '100%' } },
+                    '@media (prefers-reduced-motion: reduce)': { '& g': { transition: 'none !important' }, '& .pg-flow': { display: 'none' } },
+                }}>
+                    <Picture phase={phase} held={held} data={step.data || {}} />
+                </Box>
+            )}
             <Box component="ol" data-testid="tour-phases" sx={{ m: 0, pl: 2.25, fontSize: '0.8rem', lineHeight: 1.5 }}>
                 {step.phases.map((text, index) => (
                     <Box component="li" key={index} value={index + 1} aria-current={index === phase ? 'step' : undefined}
@@ -69,7 +79,7 @@ function Phases({ step, progress }) {
     );
 }
 
-Phases.propTypes = { step: PropTypes.object.isRequired, progress: PropTypes.number };
+Phases.propTypes = { step: PropTypes.object.isRequired, progress: PropTypes.number, held: PropTypes.bool };
 
 const card = {
     position: 'absolute', zIndex: 2, p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider',
@@ -114,10 +124,10 @@ export function TourCard({ player, onExit, heading = 'HOW A SHARE WORKS' }) {
                 {step.title}
             </Typography>
             {step.phases?.length
-                ? <Phases step={step} progress={player.progress} />
+                ? <Phases step={step} progress={player.progress} held={player.held} />
                 : <Typography sx={{ fontSize: '0.8rem', lineHeight: 1.55 }}>{step.body}</Typography>}
-            {/* A picture frames who sees what itself. */}
-            {!step.visual && <Sees sees={step.sees} />}
+            {/* Some pictures show who sees what themselves. */}
+            {!step.seesInPicture && <Sees sees={step.sees} />}
 
             <Box aria-hidden="true" sx={{ mt: 1.25, height: 3, borderRadius: 3, bgcolor: 'action.hover', overflow: 'hidden' }}>
                 <Box sx={{ height: '100%', width: `${Math.round(player.progress * 100)}%`, bgcolor: 'primary.main' }} />

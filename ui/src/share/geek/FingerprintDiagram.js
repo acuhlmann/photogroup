@@ -5,6 +5,7 @@ import { useTheme } from '@mui/material/styles';
 
 import { TX } from './traffic';
 import { EXAMPLE_PHOTO } from './tour';
+import { Reveal, mono } from './diagramParts';
 
 // The tour's fingerprint step as a picture: the photo, cut into pieces, a
 // SHA-1 hash per piece, the list of these hashes and its own SHA-1 (the
@@ -14,35 +15,10 @@ import { EXAMPLE_PHOTO } from './tour';
 // it moves only opacity and transform (no layout, no timers of its own).
 
 export const PHASES = 5;
-const FADE = 'opacity .35s ease, transform .35s ease';
-const mono = 'var(--font-mono, ui-monospace, monospace)';
-
-/** Which phase a step's progress (0..1) is in. */
-export const phaseAt = progress => Math.max(0, Math.min(PHASES - 1, Math.floor((progress || 0) * PHASES)));
 
 const shortHash = hash => (hash.length > 26 ? `${hash.slice(0, 16)}…${hash.slice(-8)}` : hash);
 const shortName = name => (name.length > 12 ? `${name.slice(0, 5)}…${name.slice(-6)}` : name);
 const sizeText = bytes => (bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} kB`);
-
-/** Shows `children` from phase `from` on, sliding in from `dx`. */
-function Reveal({ phase, from, dx = 0, dy = 0, delay = 0, children }) {
-    const shown = phase >= from;
-    return (
-        <g style={{
-            opacity: shown ? 1 : 0,
-            transform: shown ? 'none' : `translate(${dx}px, ${dy}px)`,
-            transition: FADE,
-            transitionDelay: shown ? `${delay}ms` : '0ms',
-        }}>
-            {children}
-        </g>
-    );
-}
-
-Reveal.propTypes = {
-    phase: PropTypes.number.isRequired, from: PropTypes.number.isRequired,
-    dx: PropTypes.number, dy: PropTypes.number, delay: PropTypes.number, children: PropTypes.node,
-};
 
 /** Rows the diagram draws for the pieces: up to four, with "⋮" before the last of many. */
 function pieceRows(photo) {
@@ -76,8 +52,7 @@ export default function FingerprintDiagram({ photo = EXAMPLE_PHOTO, phase }) {
             data-testid="fingerprint-diagram"
             data-phase={phase}
             sx={{
-                mt: 0.5, mb: 0.75, width: '100%', maxWidth: 420,
-                '@media (prefers-reduced-motion: reduce)': { '& g': { transition: 'none !important' } },
+                width: '100%', maxWidth: 420,
             }}
         >
             <svg viewBox="0 0 340 196" width="100%" role="img"
