@@ -51,6 +51,40 @@ function Mover({ from, to, delay = 0, color }) {
 
 Mover.propTypes = { from: PropTypes.object, to: PropTypes.object, delay: PropTypes.number, color: PropTypes.string };
 
+const PRIMARY = 'var(--mui-palette-primary-main, #0f766e)';
+const SUN = '#f5b942';
+
+/**
+ * Step 1 up close, next to your phone: the phone reads the photo and makes
+ * its fingerprint, over and over. All of it is drawn inside a frame tied to your
+ * phone, because none of it leaves the phone.
+ */
+function Fingerprint() {
+    return (
+        <g data-testid="simple-fingerprint">
+            <path d="M64 112 L84 104 L84 120 Z" fill="currentColor" opacity="0.12" />
+            <rect x="84" y="70" width="116" height="80" rx="8" fill="none" stroke="currentColor" strokeDasharray="4 3" opacity="0.6" />
+            <text x="142" y="143" textAnchor="middle" fontSize="11" fill="currentColor" opacity="0.8">on your phone</text>
+            {/* The photo. */}
+            <rect x="92" y="84" width="28" height="36" rx="3" fill="currentColor" opacity="0.15" />
+            <circle cx="100" cy="94" r="3.5" fill={SUN} />
+            <path d="M94 118 l8 -11 l6 6 l4 -4 l7 9 z" fill="currentColor" opacity="0.45" />
+            <path d="M123 102 h5" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
+            {/* The phone reads it... */}
+            <rect x="92" y="84" width="28" height="3" rx="1.5" fill={PRIMARY} style={{ animation: 'howScan 3.6s ease-in-out infinite' }} />
+            <path d="M126 102 h28" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.6" />
+            <path d="M150 98 l5 4 l-5 4" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
+            {/* ...and makes its fingerprint. */}
+            <g fill="none" stroke={PRIMARY} strokeWidth="2" strokeLinecap="round" style={{ animation: 'howPrint 3.6s ease-out infinite' }}>
+                <path d="M171 112 a9 9 0 1 1 18 0" />
+                <path d="M175 114 a5 5 0 1 1 10 0 v2" />
+                <path d="M180 110 v8" />
+                <path d="M168 104 a13 13 0 0 1 24 0" />
+            </g>
+        </g>
+    );
+}
+
 /** Two phones and the server, with what moves between them at this step. */
 function Diagram({ step }) {
     const serverLit = step === 1;
@@ -58,8 +92,9 @@ function Diagram({ step }) {
         <Box sx={{
             color: 'text.primary', mx: 'auto', width: '100%', maxWidth: 300,
             '@keyframes howMove': { from: { offsetDistance: '0%' }, to: { offsetDistance: '100%' } },
-            '@keyframes howPulse': { '50%': { opacity: 0.25 } },
-            '@media (prefers-reduced-motion: reduce)': { '& circle': { animation: 'none !important' } },
+            '@keyframes howScan': { '0%': { opacity: 0, transform: 'none' }, '8%': { opacity: 1 }, '45%': { opacity: 1, transform: 'translateY(33px)' }, '55%, 100%': { opacity: 0, transform: 'translateY(33px)' } },
+            '@keyframes howPrint': { '0%, 45%': { opacity: 0 }, '60%, 92%': { opacity: 1 }, '100%': { opacity: 0 } },
+            '@media (prefers-reduced-motion: reduce)': { '& circle, & rect, & g': { animation: 'none !important' } },
         }}>
             <svg viewBox="0 0 280 172" width="100%" role="img" aria-label={SIMPLE_STEPS[step].title}>
                 <g opacity={serverLit ? 1 : 0.35}>
@@ -71,10 +106,7 @@ function Diagram({ step }) {
                 <text x={LEFT.x} y={166} textAnchor="middle" fontSize="12" fill="currentColor">you</text>
                 <text x={RIGHT.x} y={166} textAnchor="middle" fontSize="12" fill="currentColor" opacity={step ? 1 : 0.35}>friend</text>
 
-                {step === 0 && (
-                    <circle cx={LEFT.x} cy={LEFT.y - 4} r="8" fill="var(--mui-palette-primary-main, #0f766e)"
-                        style={{ animation: 'howPulse 1.4s ease-in-out infinite' }} />
-                )}
+                {step === 0 && <Fingerprint />}
                 {step === 1 && (
                     <>
                         <line x1={LEFT.x} y1={LEFT.y - 30} x2={SERVER.x - 20} y2={SERVER.y + 18} stroke="currentColor" strokeDasharray="4 4" opacity="0.5" />

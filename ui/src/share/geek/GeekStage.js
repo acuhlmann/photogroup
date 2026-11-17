@@ -21,7 +21,7 @@ import Transport, { clock, useTimeline } from './Transport';
 import { createTimeline } from './timeline';
 import { ROUTE_STYLE } from './routeStyle';
 import { RX, TX } from './traffic';
-import { tourSteps } from './tour';
+import { tourSteps, fingerprintPhoto } from './tour';
 import { replaySteps } from './replay';
 import { createTourPlayer } from './tourPlayer';
 import { TourCard, ExplainCard } from './TourCard';
@@ -170,8 +170,9 @@ function GeekStage({ master, tiles, isMobile }) {
         const myPeerId = master.client?.peerId;
         player.load(replay
             ? replaySteps(scene, master.ledger?.get?.(replay.infoHash), { myPeerId, peers: master.peers?.items || [] })
-            : tourSteps(scene, { myPeerId, rtcConfig: master.creator?.iceServers }));
-    }, [touring, replay, scene, player, master]);
+            : tourSteps(scene, { myPeerId, rtcConfig: master.creator?.iceServers,
+                photo: fingerprintPhoto(master.client?.torrents, tiles, myPeerId) }));
+    }, [touring, replay, scene, player, master, tiles]);
     useEffect(() => {
         if (!touring) return undefined;
         const timer = setInterval(() => player.tick(), 50);

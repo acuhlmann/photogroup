@@ -90,6 +90,59 @@ function transferRoute(scene, myPeerId, friend) {
 const HOLDS = 'photogroup.network keeps';
 const NEVER = 'never sees';
 
+// WebTorrent's piece size for a file of this many bytes (the piece-length
+// package that create-torrent uses): 16 KiB for a phone photo.
+export const pieceLengthFor = bytes => Math.max(16384, 1 << ((Math.log2(bytes < 1024 ? 1 : bytes / 1024) + 0.5) | 0));
+
+const EXAMPLE_SIZE = 3355443;
+/** The photo the fingerprint step shows when this device has none. */
+export const EXAMPLE_PHOTO = {
+    example: true,
+    name: 'photo.jpg',
+    length: EXAMPLE_SIZE,
+    pieceLength: pieceLengthFor(EXAMPLE_SIZE),
+    pieceCount: Math.ceil(EXAMPLE_SIZE / pieceLengthFor(EXAMPLE_SIZE)),
+    pieceHashes: ['a3f91c07', '5e0b2d94', 'c48a7f13', '19d6e2b8'],
+    infoHash: '9c1e42d87fa03b5e61c9d2a48e7f0b3c5d6a07b3',
+};
+
+const kib = bytes => `${Math.round(bytes / 1024)} KiB`;
+
+/** The fingerprint step in short sentences, one group per phase of the diagram. */
+export function fingerprintPhases(photo = EXAMPLE_PHOTO) {
+    return [
+        `Your browser cuts the photo into pieces of ${kib(photo.pieceLength)}.`,
+        'It calculates a SHA-1 hash for each piece.',
+        'It puts the file name, the size and all piece hashes in one list. The SHA-1 hash of this list is the infohash.',
+        'The infohash is the name of the photo on the network. Other devices use it to find the photo and to check each piece.',
+        'It also makes a fingerprint: the size and a SHA-256 hash of three parts of the file. With it, other devices see that they already have the photo. Private rooms get no fingerprint.',
+    ];
+}
+
+/**
+ * A real photo for the fingerprint step: one this device shared if it can
+ * tell, else any photo with its piece hashes known. Null when there is none.
+ */
+export function fingerprintPhoto(torrents = [], tiles = [], myPeerId) {
+    const usable = torrents.filter(torrent => torrent && torrent.infoHash && torrent.length > 0
+        && torrent.pieceLength > 0 && Array.isArray(torrent._hashes) && typeof torrent._hashes[0] === 'string');
+    if (!usable.length) return null;
+    const mine = new Set(tiles.filter(tile => tile && tile.peerId && tile.peerId === myPeerId)
+        .map(tile => String(tile.infoHash || '').toLowerCase()));
+    const torrent = usable.find(item => mine.has(String(item.infoHash).toLowerCase())) || usable[0];
+    const hashes = torrent._hashes;
+    return {
+        example: false,
+        name: torrent.name || torrent.files?.[0]?.name || 'photo',
+        length: torrent.length,
+        pieceLength: torrent.pieceLength,
+        pieceCount: hashes.length,
+        // All of them up to four, else the first three and the last: the diagram draws four rows.
+        pieceHashes: (hashes.length <= 4 ? hashes : [...hashes.slice(0, 3), hashes[hashes.length - 1]]).map(hash => hash.slice(0, 8)),
+        infoHash: String(torrent.infoHash).toLowerCase(),
+    };
+}
+
 /**
  * The tour's steps for this scene. Each step:
  *   { id, title, body, nodes: [ids], routes: [ids], packets: [{ route, label, reverse, rgb, at }],
@@ -97,7 +150,8 @@ const NEVER = 'never sees';
  * `at` is when in the step a packet leaves (ms); `duration` is how long the
  * step runs before it loops or moves on.
  */
-export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
+export function tourSteps(scene, { myPeerId, rtcConfig, photo } = {}) {
+    const fingerprint = photo || EXAMPLE_PHOTO;
     const friend = tourFriend(scene, myPeerId);
     const friendNode = scene.byId.get(friend);
     const friendName = friendNode?.example ? 'your friend' : (friendNode?.peer?.name || 'your friend');
@@ -159,12 +213,16 @@ export function tourSteps(scene, { myPeerId, rtcConfig } = {}) {
         {
             id: 'hash',
             title: 'Share a photo: your device makes its fingerprint',
-            body: 'Your browser cuts the file into pieces. It calculates a SHA-1 hash for each piece. The hash of all these hashes is the infohash. The infohash is the fingerprint and the name of the photo on the network. The photo stays on your device.',
+            // FingerprintDiagram draws these phases one after the other.
+            visual: 'fingerprint',
+            photo: fingerprint,
+            phases: fingerprintPhases(fingerprint),
+            body: fingerprintPhases(fingerprint).join(' '),
             nodes: [myPeerId],
             routes: [],
             packets: [],
             sees: [{ who: 'on your device only', what: 'the photo, its pieces and their hashes', tone: 'good' }],
-            duration: 3500,
+            duration: 9000,
         },
         {
             id: 'publish',

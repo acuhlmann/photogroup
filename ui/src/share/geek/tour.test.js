@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildScene } from './scene';
-import { demoInputs, withDemoRoutes, tourSteps, tourFriend, GHOST_ID } from './tour';
+import { demoInputs, withDemoRoutes, tourSteps, tourFriend, GHOST_ID, EXAMPLE_PHOTO, fingerprintPhoto, pieceLengthFor } from './tour';
+import { phaseAt, PHASES } from './FingerprintDiagram';
 import { createTimeline } from './timeline';
 import { createTourPlayer } from './tourPlayer';
 import { explainEntry, EXPLAINED_KINDS } from './explain';
@@ -82,6 +83,37 @@ describe('tourSteps', () => {
             step.routes.forEach(id => expect(routes.has(id), `${step.id} route ${id}`).toBe(true));
             step.packets.forEach(packet => expect(routes.has(packet.route), `${step.id} packet ${packet.route}`).toBe(true));
         });
+    });
+
+    it('tells the fingerprint step in phases, with an example photo when there is none', () => {
+        const hash = steps.find(step => step.id === 'hash');
+        expect(hash.visual).toBe('fingerprint');
+        expect(hash.photo).toBe(EXAMPLE_PHOTO);
+        expect(hash.phases).toHaveLength(PHASES);
+        expect(hash.phases[0]).toBe('Your browser cuts the photo into pieces of 16 KiB.');
+        expect(hash.body).toBe(hash.phases.join(' '));
+        expect(hash.sees).toEqual([{ who: 'on your device only', what: 'the photo, its pieces and their hashes', tone: 'good' }]);
+        // The example adds up the way WebTorrent cuts a 3.4 MB photo.
+        expect(EXAMPLE_PHOTO.pieceLength).toBe(16384);
+        expect(EXAMPLE_PHOTO.pieceCount).toBe(205);
+        expect(pieceLengthFor(100 * 1024 * 1024)).toBe(131072);
+        expect([0, 0.19, 0.2, 0.5, 0.99, 1].map(phaseAt)).toEqual([0, 0, 1, 2, 4, 4]);
+    });
+
+    it('shows a real photo in the fingerprint step, the one you shared first', () => {
+        const hashes = n => Array.from({ length: n }, (_, i) => String(i).padStart(40, String(i % 10)));
+        const theirs = { infoHash: 'AAA', name: 'theirs.jpg', length: 50000, pieceLength: 16384, _hashes: hashes(4) };
+        const mine = { infoHash: 'BBB', name: 'IMG_2041.jpg', length: 3100000, pieceLength: 16384, _hashes: hashes(190) };
+        const loading = { infoHash: 'CCC', length: 0, pieceLength: 0 };
+        const photo = fingerprintPhoto([loading, theirs, mine], [{ infoHash: 'bbb', peerId: 'me' }], 'me');
+        expect(photo).toMatchObject({ example: false, name: 'IMG_2041.jpg', pieceCount: 190, infoHash: 'bbb' });
+        // The first three pieces and the last.
+        expect(photo.pieceHashes).toEqual([hashes(190)[0], hashes(190)[1], hashes(190)[2], hashes(190)[189]].map(h => h.slice(0, 8)));
+        expect(fingerprintPhoto([theirs], [], 'me').pieceHashes).toHaveLength(4);
+        expect(fingerprintPhoto([loading], [], 'me')).toBeNull();
+        expect(fingerprintPhoto(undefined, undefined, 'me')).toBeNull();
+        const real = tourSteps(scene, { myPeerId: 'me', photo }).find(step => step.id === 'hash');
+        expect(real.photo).toBe(photo);
     });
 
     it('says plainly what the server keeps and what it never sees', () => {

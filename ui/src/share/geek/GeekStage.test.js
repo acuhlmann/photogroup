@@ -273,6 +273,10 @@ describe('GeekStage', () => {
         // The arrows walk the tour while it is open, not the traffic.
         await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
         expect(title()).toBe('Share a photo: your device makes its fingerprint');
+        // This step is a picture: phase 1 of 5 first, with its text in bold.
+        expect(div.querySelector('[data-testid="fingerprint-diagram"]').dataset.phase).toBe('0');
+        expect(div.querySelector('[data-testid="tour-phases"] [aria-current="step"]').textContent).toBe('Your browser cuts the photo into pieces of 16 KiB.');
+        expect(div.textContent).toContain('ON YOUR DEVICE ONLY');
         await act(async () => div.querySelector('[aria-label="Step 10"]').click());
         expect(title()).toBe('Who saw what');
         expect(div.textContent).toContain('photogroup.network keeps');
