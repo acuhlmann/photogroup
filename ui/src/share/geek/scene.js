@@ -391,9 +391,12 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
             example: !!reflexive.example,
             info,
         });
-        // Same NAT, later peer: upgrade a bare / looking-up card when this peer still has place/ISP.
-        const bareNat = nat.label === 'public address' || nat.label === 'looking up…';
-        if (title !== 'public address' && title !== 'looking up…' && bareNat) {
+        // Same NAT, later peer: prefer useful enrichment; also let a settled
+        // empty clear a still-pending "looking up…" card (not the reverse).
+        if (title !== 'looking up…' && (
+            (title !== 'public address' && (nat.label === 'public address' || nat.label === 'looking up…'))
+            || (title === 'public address' && nat.label === 'looking up…')
+        )) {
             nat.label = title;
             nat.info = info;
         }

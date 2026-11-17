@@ -183,6 +183,21 @@ describe('buildScene', () => {
             peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '203.0.113.77', pendingEmpty('203.0.113.77')) }],
         });
         expect(againPending.byId.get('nat:203.0.113.77').label).toBe('Los Angeles, US · LogicWeb Inc');
+
+        // Shared NAT: a later settled-empty peer clears an earlier looking-up card.
+        resetStickyNatNetwork();
+        const settledClearsPending = room([], {
+            localNetwork: chain('192.168.1.2', '203.0.113.99', settledEmpty('203.0.113.99')),
+            peers: [{
+                peerId: 'ana', name: 'Ana',
+                networkChain: chain('10.0.0.3', '203.0.113.99', pendingEmpty('203.0.113.99')),
+            }],
+        });
+        expect(settledClearsPending.byId.get('nat:203.0.113.99')).toMatchObject({
+            label: 'public address',
+            sub: '203.0.113.99',
+        });
+        expect(settledClearsPending.byId.get('nat:203.0.113.99').info).not.toContain('looking up place…');
     });
 
     it('titles STUN/TURN with provider or place primary and host secondary', () => {
