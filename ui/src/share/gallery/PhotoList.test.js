@@ -114,6 +114,27 @@ describe('PhotoList', () => {
         expect(div.querySelector('[data-testid="details-of"]').textContent).toBe('a.jpg');
     });
 
+    it('leaves the list as it is while a photo is full screen, then picks the one seen last', () => {
+        matchMedia(false);
+        const render = openKey => act(() => root.render(
+            <ThemeProvider theme={createAppTheme('light')}>
+                <PhotoList master={master} tiles={[a, b]} facts={facts} roomTiles={[a, b]} sort="added"
+                    onSort={() => {}} onOpen={() => {}} onRemove={() => {}} openKey={openKey} />
+            </ThemeProvider>));
+        show();
+        const rows = () => [...div.querySelectorAll('[data-testid="photo-row"] [aria-expanded]')].map(row => row.getAttribute('aria-expanded'));
+        // Opening a photo, and swiping to the next, opens no row behind it:
+        // a row opening under the fading-in photo was the flicker.
+        render('a');
+        expect(rows()).toEqual(['false', 'false']);
+        render('b');
+        expect(rows()).toEqual(['false', 'false']);
+        expect(div.querySelector('[data-testid="details-of"]')).toBeNull();
+        // Back in the list, the photo seen last is open.
+        render(null);
+        expect(rows()).toEqual(['false', 'true']);
+    });
+
     it('keeps the same rows when the width jitters over the fold breakpoint, and switches on a real crossing', () => {
         // Unfolded foldable: about 880 CSS px, just under the 900 px breakpoint.
         matchMedia(false);

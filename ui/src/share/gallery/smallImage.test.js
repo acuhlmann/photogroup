@@ -69,6 +69,17 @@ describe('smallImage', () => {
         expect(copySize({ width: 300, height: 200 }, 640)).toEqual({});
     });
 
+    it('uses the photo itself when it is no bigger than the copy asked for', async () => {
+        photoOfSize(1200, 900);
+        const make = vi.fn();
+        vi.stubGlobal('createImageBitmap', make);
+        const tile = { infoHash: 'u', isImage: true, img: 'blob:photo', elem: new Blob(['photo'], { type: 'image/jpeg' }) };
+        await expect(loadSmallImage(tile, 2048)).resolves.toBe('blob:photo');
+        expect(make).not.toHaveBeenCalled();
+        expect(smallImageOf(tile, 2048)).toBe('blob:photo');
+        await expect(loadSmallImage(tile, 2048)).resolves.toBe('blob:photo');
+    });
+
     it('keeps a see-through photo see-through', async () => {
         photoOfSize(1000, 1000);
         vi.stubGlobal('createImageBitmap', async () => ({ width: 256, height: 256, close: () => {} }));

@@ -523,9 +523,19 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
     const tilesRef = useRef(tiles);
     tilesRef.current = tiles;
 
-    // Back from full screen, the photo seen last is the one picked.
+    // Back from full screen, the photo seen last is the one picked. Not
+    // before: picking it while full screen opened, opened its row under the
+    // fading-in photo (the rows under it went blank, then its preview came),
+    // which is the flicker seen on an unfolded foldable; and every swipe
+    // opened another row behind the photo.
+    const lastOpen = useRef(null);
     useEffect(() => {
-        if (openKey != null) setPicked(openKey);
+        if (openKey != null) {
+            lastOpen.current = openKey;
+        } else if (lastOpen.current != null) {
+            setPicked(lastOpen.current);
+            lastOpen.current = null;
+        }
     }, [openKey]);
 
     const pickedTile = tiles.find(tile => keyOf(tile) === picked);
