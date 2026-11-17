@@ -76,10 +76,19 @@ export default class IpTranslator {
             || network.hostname || isp);
     }
 
+    /** True while IpTranslator has not finished (or soft-failed) a lookup for this IP. */
+    static isLookupPending(network) {
+        return !!(network && network.lookupPending);
+    }
+
     /** Keep a prior useful enrichment when a later lookup returns an empty shell. */
     static preferNetwork(existing, incoming) {
         if (IpTranslator.isUsefulNetwork(incoming)) return incoming;
         if (IpTranslator.isUsefulNetwork(existing)) return existing;
+        // A settled empty (lookup finished, nothing useful) beats a still-pending shell.
+        if (existing && !IpTranslator.isLookupPending(existing) && IpTranslator.isLookupPending(incoming)) {
+            return existing;
+        }
         return incoming || existing || null;
     }
 
@@ -131,9 +140,9 @@ export default class IpTranslator {
         if (IpTranslator.rateLimitCooldownUntil > now) {
             const remainingSecs = Math.ceil((IpTranslator.rateLimitCooldownUntil - now) / 1000);
             console.log(`[IpTranslator] Rate limit cooldown active for ${ip}, ${remainingSecs}s remaining`);
-            // Fail soft: empty shell, not cached — callers must not clobber a
+            // Fail soft: pending empty shell, not cached — callers must not clobber a
             // previously useful item.network (see preferNetwork in enrich*).
-            return Promise.resolve(IpTranslator.createEmptyIpObj(ip));
+            return Promise.resolve(IpTranslator.createEmptyIpObj(ip, { pending: true }));
         }
 
         // Using ip-api.com (free tier: 45 requests/minute, no API key required)
@@ -202,6 +211,8 @@ export default class IpTranslator {
                 if (isRateLimit) {
                     IpTranslator.rateLimitCooldownUntil = Date.now() + IpTranslator.RATE_LIMIT_COOLDOWN_MS;
                     console.log(`[IpTranslator] Rate limit hit! Pausing all API calls for ${IpTranslator.RATE_LIMIT_COOLDOWN_MS / 1000} seconds`);
+                    // Soft-fail as still pending so the UI can keep "looking up…"
+                    ipObj.lookupPending = true;
                 } else {
                     // Only cache the result if it's NOT a rate limit error
                     // Rate limited requests should be retried later
@@ -217,8 +228,13 @@ export default class IpTranslator {
         return lookupPromise;
     }
 
-    static createEmptyIpObj(ip) {
-        return {
+    /**
+     * @param {string} ip
+     * @param {{ pending?: boolean }} [opts] pending=true → UI may show "looking up…"
+     *   (pre-enrich / rate-limit). Settled empties omit the flag or set it false.
+     */
+    static createEmptyIpObj(ip, { pending = false } = {}) {
+        const ipObj = {
             "ip": ip,
             "hostname": isLocal(ip) ? 'localhost' : '',
             "country_code": null,
@@ -235,6 +251,8 @@ export default class IpTranslator {
                 "as": null
             }
         };
+        if (pending) ipObj.lookupPending = true;
+        return ipObj;
     }
 
     static getCountryFlagEmoji(countryCode) {

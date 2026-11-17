@@ -375,6 +375,15 @@ describe('IpTranslator', () => {
       assert.strictEqual(IpTranslator.preferNetwork(null, useful), useful);
     });
 
+    it('marks pending empties and prefers settled empty over still-pending', () => {
+      const pending = IpTranslator.createEmptyIpObj('203.0.113.50', { pending: true });
+      const settled = IpTranslator.createEmptyIpObj('203.0.113.50');
+      assert.strictEqual(IpTranslator.isLookupPending(pending), true);
+      assert.strictEqual(IpTranslator.isLookupPending(settled), false);
+      assert.strictEqual(IpTranslator.preferNetwork(settled, pending), settled);
+      assert.strictEqual(IpTranslator.preferNetwork(pending, settled), settled);
+    });
+
     it('does not overwrite a useful chain enrichment when rate-limited', async () => {
       originalGet = axios.get;
       axios.get = () => {

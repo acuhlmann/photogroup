@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { buildScene, buildRouteGeometry, routePoints, pointAlong, transferRoutesFor, TIER, hostOf, natTitle, networkForNat, resetStickyNatNetwork } from './scene';
+import {
+    buildScene, buildRouteGeometry, routePoints, pointAlong, transferRoutesFor, TIER, hostOf,
+    natTitle, networkForNat, resetStickyNatNetwork, iceProviderName, iceServiceLabels,
+} from './scene';
+
+const settledEmpty = ip => ({
+    ip,
+    hostname: '',
+    city: null,
+    country: null,
+    country_code: null,
+    connection: { isp: null, org: null },
+});
+
+const pendingEmpty = ip => ({ ...settledEmpty(ip), lookupPending: true });
 
 const chain = (lan, pub, network) => [
     { ip: lan, port: 50000, type: 'host', transport: 'udp' },
@@ -47,13 +61,18 @@ describe('buildScene', () => {
         ]);
         expect(scene.byId.get('edge').sub).toBe('Cloud Run wake → nginx');
         expect(scene.byId.get('tracker').sub).toBe('photogroup.network');
-        expect(scene.byId.get('stun')).toMatchObject({ badge: 'ICE DISCOVERY', caption: 'finds IP:port · no media' });
-        expect(scene.byId.get('stun').sub).toContain('stun.l.google.com');
+        expect(scene.byId.get('stun')).toMatchObject({
+            badge: 'ICE DISCOVERY',
+            caption: 'finds IP:port · no media',
+            label: 'Google',
+            sub: 'stun.l.google.com',
+        });
+        expect(scene.byId.get('stun').info).toContain('provider · Google');
         // Public fallback WebSocket trackers appear outside photogroup.network.
         expect(scene.byId.get('pubtrackers')).toMatchObject({ kind: 'pubtracker', badge: 'BACKUP WS' });
         expect(scene.byId.get('pubtrackers').info.join('\n')).toContain('tracker.openwebtorrent.com');
         // No TURN server and no relay candidates: TURN is still shown, as missing.
-        expect(scene.byId.get('turn')).toMatchObject({ sub: 'none configured', idle: true, badge: 'NO TURN' });
+        expect(scene.byId.get('turn')).toMatchObject({ label: 'none configured', idle: true, badge: 'NO TURN' });
         expect(scene.byId.get('turn').info.join(' ')).toContain('server copy takes over');
         // What each server holds and never sees is spelled out on it.
         expect(scene.byId.get('api').info.join('\n')).toMatch(/never sees · the photos/);
@@ -74,6 +93,10 @@ describe('buildScene', () => {
         expect(natTitle({ connection: { org: 'Example ISP' } })).toBe('Example ISP');
         expect(natTitle(null)).toBe('public address');
         expect(natTitle({})).toBe('public address');
+        expect(natTitle(pendingEmpty('1.2.3.4'))).toBe('looking up…');
+        expect(natTitle(settledEmpty('1.2.3.4'))).toBe('public address');
+        expect(natTitle(null, { pending: true })).toBe('looking up…');
+        expect(natTitle(null, { pending: true, example: true })).toBe('public address');
 
         const place = room([], {
             localNetwork: chain('192.168.1.2', '1.1.1.1'),
@@ -95,8 +118,8 @@ describe('buildScene', () => {
 
         resetStickyNatNetwork();
         const bare = room([], {
-            localNetwork: chain('192.168.1.2', '5.5.5.5', null),
-            peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '6.6.6.6', null) }],
+            localNetwork: chain('192.168.1.2', '5.5.5.5', settledEmpty('5.5.5.5')),
+            peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '6.6.6.6', settledEmpty('6.6.6.6')) }],
         });
         expect(bare.byId.get('nat:5.5.5.5')).toMatchObject({ label: 'public address', sub: '5.5.5.5' });
         expect(bare.byId.get('nat:5.5.5.5').label).not.toBe('5.5.5.5');
@@ -124,6 +147,105 @@ describe('buildScene', () => {
             sub: 'example address',
             example: true,
         });
+    });
+
+    it('shows looking up… while NAT enrichment is pending, then settles', () => {
+        resetStickyNatNetwork();
+        const pending = room([], {
+            localNetwork: chain('192.168.1.2', '203.0.113.77', pendingEmpty('203.0.113.77')),
+            peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '203.0.113.77', pendingEmpty('203.0.113.77')) }],
+        });
+        expect(pending.byId.get('nat:203.0.113.77')).toMatchObject({
+            label: 'looking up…',
+            sub: '203.0.113.77',
+        });
+        expect(pending.byId.get('nat:203.0.113.77').info).toContain('looking up place…');
+        expect(pending.byId.get('nat:203.0.113.77').label).not.toBe('public address');
+
+        resetStickyNatNetwork();
+        const missing = room([], {
+            localNetwork: chain('192.168.1.2', '203.0.113.88', null),
+            peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '203.0.113.88', null) }],
+        });
+        expect(missing.byId.get('nat:203.0.113.88').label).toBe('looking up…');
+
+        resetStickyNatNetwork();
+        const la = { city: 'Los Angeles', country_code: 'US', connection: { isp: 'LogicWeb Inc' } };
+        const enriched = room([], {
+            localNetwork: chain('192.168.1.2', '203.0.113.77', la),
+            peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '203.0.113.77', la) }],
+        });
+        expect(enriched.byId.get('nat:203.0.113.77').label).toBe('Los Angeles, US · LogicWeb Inc');
+
+        // Sticky useful wins over a later pending empty shell (no regression of PR #175).
+        const againPending = room([], {
+            localNetwork: chain('192.168.1.2', '203.0.113.77', pendingEmpty('203.0.113.77')),
+            peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '203.0.113.77', pendingEmpty('203.0.113.77')) }],
+        });
+        expect(againPending.byId.get('nat:203.0.113.77').label).toBe('Los Angeles, US · LogicWeb Inc');
+    });
+
+    it('titles STUN/TURN with provider or place primary and host secondary', () => {
+        expect(iceProviderName(['stun.l.google.com'])).toBe('Google');
+        expect(iceProviderName(['global.turn.twilio.com'])).toBe('Twilio');
+        expect(iceProviderName(['stun.cloudflare.com'])).toBe('Cloudflare');
+        expect(iceProviderName(['turn.example.com'])).toBe(null);
+        expect(iceServiceLabels({ hosts: ['stun.l.google.com'], provider: 'Google' })).toEqual({
+            label: 'Google', sub: 'stun.l.google.com',
+        });
+        expect(iceServiceLabels({ hosts: ['turn.example.com'] })).toEqual({
+            label: 'turn.example.com', sub: null,
+        });
+
+        resetStickyNatNetwork();
+        const twilio = room([], {
+            rtcConfig: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'turn:global.turn.twilio.com:3478', username: 'u', credential: 'c' },
+                ],
+            },
+        });
+        expect(twilio.byId.get('stun')).toMatchObject({ label: 'Google', sub: 'stun.l.google.com' });
+        expect(twilio.byId.get('turn')).toMatchObject({
+            label: 'Twilio',
+            sub: 'global.turn.twilio.com',
+            badge: 'MEDIA RELAY',
+            idle: false,
+        });
+        expect(twilio.byId.get('turn').info).toEqual(expect.arrayContaining([
+            'provider · Twilio',
+            'turn global.turn.twilio.com',
+        ]));
+
+        resetStickyNatNetwork();
+        const relayPlace = {
+            city: 'Ashburn', country_code: 'US', connection: { isp: 'Amazon.com' },
+        };
+        const relayed = room([{ fromPeerId: 'me', toPeerId: 'ben', connectionType: 'relay udp' }], {
+            rtcConfig: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] },
+            localNetwork: [
+                { ip: '192.168.1.2', port: 50000, type: 'host', transport: 'udp' },
+                { ip: '1.1.1.1', port: 61000, type: 'srflx', transport: 'udp', network: { city: 'Vienna', country: 'AT', connection: { isp: 'A1' } } },
+                { ip: '198.51.100.9', port: 3478, type: 'relay', transport: 'udp', network: relayPlace },
+            ],
+            peers: [
+                { peerId: 'ana', name: 'Ana', networkChain: chain('192.168.1.3', '1.1.1.1') },
+                {
+                    peerId: 'ben', name: 'Ben',
+                    networkChain: [
+                        { ip: '10.0.0.7', port: 50000, type: 'host', transport: 'udp' },
+                        { ip: '2.2.2.2', port: 61000, type: 'srflx', transport: 'udp', network: { city: 'Vienna', country: 'AT', connection: { isp: 'A1' } } },
+                    ],
+                },
+            ],
+        });
+        expect(relayed.byId.get('turn')).toMatchObject({
+            label: 'Ashburn, US · Amazon.com',
+            sub: '198.51.100.9',
+            idle: false,
+        });
+        expect(relayed.byId.get('turn').info).toContain('Ashburn, US · Amazon.com');
     });
 
     it('keeps NAT place/ISP across enrichment → empty shell → new port', () => {
@@ -206,7 +328,7 @@ describe('buildScene', () => {
         const relayed = room([{ fromPeerId: 'me', toPeerId: 'ben', connectionType: 'relay udp' }], {
             rtcConfig: { iceServers: [{ urls: 'turn:turn.example.com:3478', username: 'u', credential: 'c' }] },
         });
-        expect(relayed.byId.get('turn').sub).toContain('turn.example.com');
+        expect(relayed.byId.get('turn').label).toContain('turn.example.com');
         expect(relayed.routes.find(route => route.peers)).toMatchObject({
             kind: 'relay', path: ['me', 'nat:1.1.1.1', 'turn', 'nat:2.2.2.2', 'ben'], label: 'relay udp',
         });
