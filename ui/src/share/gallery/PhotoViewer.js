@@ -76,9 +76,12 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
     // fingers, the whole photo comes in, and stays for that photo.
     const [side] = useState(screenSide);
     const shownImage = !!(tile && tile.isImage && tile.img && !tile.loading);
-    const screenCopy = useSmallImage(shownImage ? tile : null, side);
+    // Urgent: on quick swipes, the photo on screen goes before the ones swiped past.
+    const screenCopy = useSmallImage(shownImage ? tile : null, side, { urgent: true });
     const pinched = usePinched();
     const [wholeFor, setWholeFor] = useState(null);
+    // The source a see-through photo was last drawn from: nothing goes behind it again.
+    const [drawn, setDrawn] = useState(null);
     const tileKey = keyOfTile(tile);
     useEffect(() => {
         if (pinched && tileKey != null) setWholeFor(tileKey);
@@ -165,6 +168,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
     // the black box. A see-through photo drops it once drawn.
     const behind = whole ? (screenCopy || preview) : preview;
     const clear = seeThrough(tile);
+    const showBehind = !!behind && behind !== src && !(clear && drawn === src);
     const mediaPreview = isImage && tile.img ? (
         <img
             // One element per photo: a sharper source for the same photo
@@ -180,7 +184,7 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                 width: '100%',
                 height: '100%',
                 objectFit: 'contain',
-                ...(behind && behind !== src ? {
+                ...(showBehind ? {
                     backgroundImage: `url(${behind})`,
                     backgroundSize: 'contain',
                     backgroundPosition: 'center',
@@ -189,7 +193,9 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
             }}
             onLoad={clear ? event => {
                 const img = event.currentTarget;
-                const done = () => { img.style.backgroundImage = 'none'; };
+                const loaded = img.getAttribute('src');
+                // Noted by source, so a copy that comes in later does not go back behind it.
+                const done = () => setDrawn(loaded);
                 // A failed decode keeps the preview, so the screen is never blank.
                 if (typeof img.decode === 'function') img.decode().then(done, () => {});
                 else done();

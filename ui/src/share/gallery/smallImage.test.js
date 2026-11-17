@@ -91,6 +91,36 @@ describe('smallImage', () => {
         expect(types).toEqual(['image/webp']);
     });
 
+    it('makes the copy of the photo on screen before copies asked for earlier', async () => {
+        photoOfSize(8000, 6000);
+        const started = [];
+        vi.stubGlobal('createImageBitmap', blob => new Promise(resolve => started.push({ name: blob.name, done: resolve })));
+        HTMLCanvasElement.prototype.getContext = () => ({ drawImage: () => {} });
+        HTMLCanvasElement.prototype.toBlob = function (done) { done(new Blob(['x'])); };
+        URL.createObjectURL = vi.fn(() => 'blob:copy');
+        const tile = name => ({ infoHash: 'queue-' + name, isImage: true, elem: Object.assign(new Blob([name]), { name }) });
+        const settle = () => new Promise(resolve => setTimeout(resolve, 10));
+        const finish = async name => {
+            started.find(job => job.name === name).done({ width: 10, height: 10, close: () => {} });
+            await settle();
+        };
+        // Two at a time: a and b start, c and d wait.
+        ['a', 'b', 'c', 'd'].forEach(name => loadSmallImage(tile(name), 1024));
+        await settle();
+        expect(started.map(job => job.name)).toEqual(['a', 'b']);
+        // d is now on screen: it goes before c.
+        loadSmallImage(tile('d'), 1024, { urgent: true });
+        // e is new and on screen: it goes first of all.
+        loadSmallImage(tile('e'), 1024, { urgent: true });
+        await finish('a');
+        await finish('b');
+        expect(started.map(job => job.name)).toEqual(['a', 'b', 'e', 'd']);
+        await finish('e');
+        expect(started.map(job => job.name)).toEqual(['a', 'b', 'e', 'd', 'c']);
+        await finish('d');
+        await finish('c');
+    });
+
     it('makes no copy when the size cannot be read', async () => {
         vi.stubGlobal('Image', class {
             set src(value) { setTimeout(() => this.onerror && this.onerror()); }

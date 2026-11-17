@@ -37,11 +37,24 @@ function runNext() {
     }
 }
 
-function queued(task) {
+/**
+ * Run `task` when one of the AT_ONCE places is free. `urgent` puts it first:
+ * the photo on screen goes before copies asked for photos swiped past.
+ */
+function queued(key, task, urgent) {
     return new Promise((resolve, reject) => {
-        waiting.push(() => task().then(resolve, reject));
+        const job = () => task().then(resolve, reject);
+        job.key = key;
+        if (urgent) waiting.unshift(job);
+        else waiting.push(job);
         runNext();
     });
+}
+
+/** Move a copy still waiting to the front, as the photo now on screen needs it. */
+function hurry(key) {
+    const at = waiting.findIndex(job => job.key === key);
+    if (at > 0) waiting.unshift(...waiting.splice(at, 1));
 }
 
 // Formats that can be see-through: their copy keeps that (a JPEG would turn it black).
@@ -165,16 +178,21 @@ export function smallImageOf(tile, side = SIDE) {
     return copy || null;
 }
 
-/** The small copy, made from the photo on this device when needed. Resolves to a URL, or null. */
-export function loadSmallImage(tile, side = SIDE) {
+/**
+ * The small copy, made from the photo on this device when needed. Resolves to
+ * a URL, or null. `urgent` makes it before copies asked for earlier.
+ */
+export function loadSmallImage(tile, side = SIDE, { urgent = false } = {}) {
     const ready = smallImageOf(tile, side);
     if (ready) return Promise.resolve(ready);
     const blob = tile && (tile.elem || tile.file);
     if (!tile || !tile.isImage || !(blob instanceof Blob) || keyOf(tile) == null) return Promise.resolve(null);
     const key = madeKey(tile, side);
     if (made.get(key) === AS_IS) return Promise.resolve(tile.img || null);
-    if (!making.has(key)) {
-        making.set(key, queued(() => shrink(tile, blob, side))
+    if (making.has(key)) {
+        if (urgent) hurry(key);
+    } else {
+        making.set(key, queued(key, () => shrink(tile, blob, side), urgent)
             .then(url => {
                 if (url) made.set(key, url);
                 return url === AS_IS ? tile.img || null : url;
@@ -193,7 +211,7 @@ export function loadSmallImage(tile, side = SIDE) {
  * browser cannot make one, the full photo (as before), so the row is never
  * left empty.
  */
-export function useSmallImage(tile, side = SIDE) {
+export function useSmallImage(tile, side = SIDE, { urgent = false } = {}) {
     const ready = smallImageOf(tile, side);
     const key = keyOf(tile) + '@' + side;
     const blob = tile && (tile.elem || tile.file);
@@ -201,7 +219,7 @@ export function useSmallImage(tile, side = SIDE) {
     useEffect(() => {
         if (ready || !tile || !tile.isImage || !(blob instanceof Blob) || typeof createImageBitmap !== 'function') return undefined;
         let live = true;
-        loadSmallImage(tile, side).then(url => {
+        loadSmallImage(tile, side, { urgent }).then(url => {
             if (live) setFound({ key, url: url || tile.img || null });
         });
         return () => { live = false; };

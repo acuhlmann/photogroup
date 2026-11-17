@@ -337,4 +337,60 @@ describe('PhotoViewer', () => {
         URL.createObjectURL = createUrl;
         URL.revokeObjectURL = revokeUrl;
     });
+
+    it('puts nothing back behind a see-through photo once it is drawn, even when its copy comes later', async () => {
+        vi.stubGlobal('Image', class {
+            set src(value) {
+                this.naturalWidth = 8000;
+                this.naturalHeight = 6000;
+                setTimeout(() => this.onload && this.onload());
+            }
+        });
+        let finishCopy;
+        vi.stubGlobal('createImageBitmap', () => new Promise(resolve => { finishCopy = resolve; }));
+        HTMLCanvasElement.prototype.getContext = () => ({ drawImage: () => {} });
+        HTMLCanvasElement.prototype.toBlob = function (done) { done(new Blob(['x'], { type: 'image/webp' })); };
+        const createUrl = URL.createObjectURL;
+        const revokeUrl = URL.revokeObjectURL;
+        URL.createObjectURL = vi.fn(() => 'blob:screen-png');
+        URL.revokeObjectURL = vi.fn();
+        // Zoomed in from the start: the whole photo is asked for before its copy is made.
+        const viewport = new EventTarget();
+        viewport.scale = 2;
+        vi.stubGlobal('visualViewport', viewport);
+        const png = { ...tile, infoHash: 'clear-png', fileType: 'image/png', previewUrl: 'blob:preview-png',
+            elem: new Blob(['png'], { type: 'image/png' }) };
+
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        await act(async () => {
+            root.render(
+                <ThemeProvider theme={createAppTheme('dark')}>
+                    <PhotoViewer master={master} tiles={[png]} index={0} details={false}
+                        onClose={() => {}} onIndexChange={() => {}} />
+                </ThemeProvider>
+            );
+        });
+        await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+        const photo = () => document.body.querySelector('[data-testid="viewer-photo"]');
+        expect(photo().getAttribute('src')).toBe('blob:harbor');
+        expect(photo().style.backgroundImage).toContain('blob:preview-png');
+        // The whole photo is drawn: nothing shows behind its see-through parts.
+        await act(async () => { photo().dispatchEvent(new Event('load')); });
+        expect(photo().style.backgroundImage).toBe('');
+        // The screen copy comes in afterwards; it must not go behind the photo.
+        await act(async () => {
+            finishCopy({ width: 2048, height: 1536, close: () => {} });
+            await new Promise(resolve => setTimeout(resolve, 20));
+        });
+        expect(photo().getAttribute('src')).toBe('blob:harbor');
+        expect(photo().style.backgroundImage).toBe('');
+
+        await act(async () => root.unmount());
+        div.remove();
+        vi.unstubAllGlobals();
+        URL.createObjectURL = createUrl;
+        URL.revokeObjectURL = revokeUrl;
+    });
 });

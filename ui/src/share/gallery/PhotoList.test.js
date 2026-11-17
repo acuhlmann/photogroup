@@ -241,6 +241,34 @@ describe('PhotoList selection', () => {
         expect(bar().textContent).toContain('1 photo is still arriving. It is not included.');
     });
 
+    it('keeps saying which photos were not included after the save', async () => {
+        matchMedia(false);
+        saveToDevice.mockClear();
+        const arriving = { ...b, loading: true };
+        show({ tiles: [ha, arriving], roomTiles: [ha, arriving], facts: new Map([[ha, facts.get(a)], [arriving, facts.get(b)]]) });
+        click(box('a.jpg'));
+        click(box('b.jpg'));
+        const save = [...bar().querySelectorAll('button')].find(button => button.textContent === 'Save 1');
+        await act(async () => { save.click(); });
+        expect(bar().textContent).toContain('Saved');
+        expect(bar().textContent).toContain('1 photo is still arriving. It is not included.');
+    });
+
+    it('does not say "Saved" for a selection that changed while the save ran', async () => {
+        matchMedia(true);
+        let finish;
+        saveToDevice.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+        showThree();
+        click(box('a.jpg'));
+        const save = [...bar().querySelectorAll('button')].find(button => button.textContent === 'Save 1');
+        await act(async () => { save.click(); });
+        click(box('b.jpg'));
+        await act(async () => { finish('saved'); });
+        expect(bar().textContent).toContain('2 selected');
+        expect(bar().textContent).not.toContain('Saved');
+        expect(bar().textContent).toContain('Save 2');
+    });
+
     it('toggles the focused row with Space on a wide screen', () => {
         matchMedia(true);
         showThree();

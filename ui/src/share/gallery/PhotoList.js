@@ -368,19 +368,25 @@ function SelectionBar({ count, ready, arriving, master, onClear }) {
     const [saved, setSaved] = useState(0);
     // A different selection is a new save.
     const which = ready.map(keyOf).join('\n');
+    const current = useRef(which);
     useEffect(() => {
+        current.current = which;
         setSaved(0);
     }, [which]);
     const save = () => {
         setSaving(true);
+        const started = which;
+        const count = ready.length;
         saveToDevice(ready, { roomId: master.service && master.service.id })
-            .then(result => setSaved(result === 'cancelled' ? 0 : ready.length))
+            // A save of a selection that changed meanwhile says nothing about this one.
+            .then(result => {
+                if (current.current === started) setSaved(result === 'cancelled' ? 0 : count);
+            })
             .catch(err => Logger.error('save selected: ' + (err && err.message ? err.message : err)))
             .finally(() => setSaving(false));
     };
-    const note = saved
-        ? savedWhereText(saved, { done: true })
-        : [ready.length ? savedWhereText(ready.length) : '', notIncludedText(arriving)].filter(Boolean).join(' ');
+    const where = saved ? savedWhereText(saved, { done: true }) : (ready.length ? savedWhereText(ready.length) : '');
+    const note = [where, notIncludedText(arriving)].filter(Boolean).join(' ');
     let label = `Save ${ready.length}`;
     if (saving) label = 'Saving…';
     else if (saved) label = 'Saved';
