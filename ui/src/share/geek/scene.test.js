@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildScene, buildRouteGeometry, routePoints, pointAlong, transferRoutesFor, TIER, hostOf, natTitle } from './scene';
+import { buildScene, buildRouteGeometry, routePoints, pointAlong, transferRoutesFor, TIER, hostOf, natTitle, networkForNat, resetStickyNatNetwork } from './scene';
 
 const chain = (lan, pub, network) => [
     { ip: lan, port: 50000, type: 'host', transport: 'udp' },
@@ -68,6 +68,7 @@ describe('buildScene', () => {
     });
 
     it('titles NAT nodes with place, then rDNS, then ISP; IP stays secondary', () => {
+        resetStickyNatNetwork();
         expect(natTitle({ city: 'Vienna', country: 'AT', connection: { isp: 'A1' } })).toBe('Vienna, AT · A1');
         expect(natTitle({ hostname: 'dsl-1-2-3.example.net' })).toBe('dsl-1-2-3.example.net');
         expect(natTitle({ connection: { org: 'Example ISP' } })).toBe('Example ISP');
@@ -84,6 +85,7 @@ describe('buildScene', () => {
         expect(place.byId.get('nat:1.1.1.1')).toMatchObject({ label: 'Vienna, AT · A1', sub: '1.1.1.1' });
         expect(place.byId.get('nat:2.2.2.2')).toMatchObject({ label: 'Vienna, AT · A1', sub: '2.2.2.2' });
 
+        resetStickyNatNetwork();
         const hostOnly = room([], {
             localNetwork: chain('192.168.1.2', '9.9.9.9', { hostname: 'nat.isp.example' }),
             peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '8.8.8.8', { hostname: 'peer.isp.example' }) }],
@@ -91,6 +93,7 @@ describe('buildScene', () => {
         expect(hostOnly.byId.get('nat:9.9.9.9')).toMatchObject({ label: 'nat.isp.example', sub: '9.9.9.9' });
         expect(hostOnly.byId.get('nat:8.8.8.8')).toMatchObject({ label: 'peer.isp.example', sub: '8.8.8.8' });
 
+        resetStickyNatNetwork();
         const bare = room([], {
             localNetwork: chain('192.168.1.2', '5.5.5.5', null),
             peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '6.6.6.6', null) }],
@@ -99,6 +102,7 @@ describe('buildScene', () => {
         expect(bare.byId.get('nat:5.5.5.5').label).not.toBe('5.5.5.5');
         expect(bare.byId.get('nat:6.6.6.6')).toMatchObject({ id: 'nat:6.6.6.6', label: 'public address', sub: '6.6.6.6' });
 
+        resetStickyNatNetwork();
         const example = buildScene({
             myPeerId: 'me',
             me: { name: 'Mine' },
@@ -120,6 +124,47 @@ describe('buildScene', () => {
             sub: 'example address',
             example: true,
         });
+    });
+
+    it('keeps NAT place/ISP across enrichment → empty shell → new port', () => {
+        resetStickyNatNetwork();
+        const la = { city: 'Los Angeles', country_code: 'US', connection: { isp: 'LogicWeb Inc' } };
+        const enriched = room([], {
+            localNetwork: chain('192.168.1.2', '203.0.113.50', la),
+            peers: [{ peerId: 'ana', name: 'Ana', networkChain: chain('10.0.0.3', '203.0.113.50', la) }],
+        });
+        expect(enriched.byId.get('nat:203.0.113.50')).toMatchObject({
+            label: 'Los Angeles, US · LogicWeb Inc',
+            sub: '203.0.113.50',
+        });
+        expect(enriched.byId.get('nat:203.0.113.50').info).toEqual(expect.arrayContaining([
+            expect.stringMatching(/^public 203\.0\.113\.50/),
+            'Los Angeles, US · LogicWeb Inc',
+        ]));
+
+        const emptyShell = { ip: '203.0.113.50', hostname: '', city: null, country: null, country_code: null, connection: { isp: null, org: null } };
+        expect(networkForNat('203.0.113.50', emptyShell).city).toBe('Los Angeles');
+
+        const reverted = room([], {
+            localNetwork: [
+                { ip: '192.168.1.2', port: 50000, type: 'host', transport: 'udp' },
+                { ip: '203.0.113.50', port: 35036, type: 'srflx', transport: 'udp', network: emptyShell },
+            ],
+            peers: [{
+                peerId: 'ana',
+                name: 'Ana',
+                networkChain: [
+                    { ip: '10.0.0.3', port: 50000, type: 'host', transport: 'udp' },
+                    { ip: '203.0.113.50', port: 35036, type: 'srflx', transport: 'udp', network: emptyShell },
+                ],
+            }],
+        });
+        expect(reverted.byId.get('nat:203.0.113.50')).toMatchObject({
+            label: 'Los Angeles, US · LogicWeb Inc',
+            sub: '203.0.113.50',
+        });
+        expect(reverted.byId.get('nat:203.0.113.50').info[0]).toBe('public 203.0.113.50:35036');
+        expect(reverted.byId.get('nat:203.0.113.50').info).toContain('Los Angeles, US · LogicWeb Inc');
     });
 
     it('puts what the old "This device" panel said on the nodes', () => {
