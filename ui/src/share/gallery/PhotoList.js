@@ -13,9 +13,13 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Paper from '@mui/material/Paper';
 import { useTheme } from '@mui/material/styles';
 import { useStickyUp } from '../useStickyMedia';
 import CloudDownloadRounded from '@mui/icons-material/CloudDownloadRounded';
+import CloseRounded from '@mui/icons-material/CloseRounded';
 import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import FullscreenRounded from '@mui/icons-material/FullscreenRounded';
 import LockRounded from '@mui/icons-material/LockRounded';
@@ -30,7 +34,8 @@ import TileErrorBoundary from './TileErrorBoundary';
 import LoadingTile from './LoadingTile';
 import { RatingStars } from './metadata/MediaMetadataPanel';
 import { saveLabel } from './savePhoto';
-import { saveToDevice } from './saveToDevice';
+import { saveToDevice, savedWhereText } from './saveToDevice';
+import { notIncludedText, ratedKeys, selectedPhotos, toggleSelection } from './selection';
 import { canReadTorrentFile } from './saveRoom';
 import { removeLabel } from './removeLabel';
 import { keyOf, useArriving, usePreview } from './mediaView';
@@ -318,6 +323,93 @@ const reveal = {
     '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
 };
 
+/** A row's box to select its photo. With Shift held, the photos since the last tap get the same state. */
+function SelectBox({ tile, checked, onCheck }) {
+    // A change event says nothing about Shift, so the click before it notes it.
+    const shift = useRef(false);
+    return (
+        <Checkbox size="small" checked={checked}
+            onClick={event => {
+                event.stopPropagation();
+                shift.current = event.shiftKey;
+            }}
+            onChange={() => onCheck(tile, shift.current)}
+            slotProps={{ input: { 'aria-label': `Select ${tile.fileName || 'photo'}` } }}
+            sx={{ flexShrink: 0 }} />
+    );
+}
+
+/** Above the list: select all the photos shown, or the rated ones. */
+function SelectRow({ total, count, rated, allRatedOn, onAll, onRated }) {
+    const all = total > 0 && count === total;
+    return (
+        <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', px: 0.5, mb: 0.5 }}>
+            <FormControlLabel
+                control={<Checkbox size="small" checked={all} indeterminate={count > 0 && !all}
+                    onChange={() => onAll(!all)} />}
+                label={<Typography variant="body2">Select all {total}</Typography>}
+                sx={{ mr: 0 }} />
+            {rated > 0 && !allRatedOn && (
+                <Button size="small" onClick={onRated} sx={{ textTransform: 'none' }}>
+                    Select rated photos ({rated})
+                </Button>
+            )}
+        </Stack>
+    );
+}
+
+/**
+ * At the bottom of the screen while photos are selected: how many, one Save
+ * for all of them, and where they go. Saving goes the way a single Save goes
+ * on this device: the share sheet, one download each, or one zip.
+ */
+function SelectionBar({ count, ready, arriving, master, onClear }) {
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(0);
+    // A different selection is a new save.
+    const which = ready.map(keyOf).join('\n');
+    const current = useRef(which);
+    useEffect(() => {
+        current.current = which;
+        setSaved(0);
+    }, [which]);
+    const save = () => {
+        setSaving(true);
+        const started = which;
+        const count = ready.length;
+        saveToDevice(ready, { roomId: master.service && master.service.id })
+            // A save of a selection that changed meanwhile says nothing about this one.
+            .then(result => {
+                if (current.current === started) setSaved(result === 'cancelled' ? 0 : count);
+            })
+            .catch(err => Logger.error('save selected: ' + (err && err.message ? err.message : err)))
+            .finally(() => setSaving(false));
+    };
+    const where = saved ? savedWhereText(saved, { done: true }) : (ready.length ? savedWhereText(ready.length) : '');
+    const note = [where, notIncludedText(arriving)].filter(Boolean).join(' ');
+    let label = `Save ${ready.length}`;
+    if (saving) label = 'Saving…';
+    else if (saved) label = 'Saved';
+    return (
+        <Paper elevation={8} role="region" aria-label="Selected photos" data-testid="selection-bar"
+            sx={{ position: 'fixed', zIndex: 'appBar', left: '50%', transform: 'translateX(-50%)',
+                bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))', width: 'min(560px, calc(100vw - 24px))',
+                px: 1.5, py: 1, borderRadius: 2 }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }} role="status">{count} selected</Typography>
+                <Button variant="contained" size="small" startIcon={<CloudDownloadRounded />}
+                    disabled={!ready.length || saving} onClick={save}>
+                    {label}
+                </Button>
+                <IconButton size="small" aria-label="Clear the selection" onClick={onClear}>
+                    <CloseRounded fontSize="small" />
+                </IconButton>
+            </Stack>
+            {note && <Typography variant="caption" component="div" sx={{ ...muted, mt: 0.5 }}>{note}</Typography>}
+        </Paper>
+    );
+}
+
 /**
  * Row props are the same: the same objects, except the facts, which are
  * worked out afresh whenever any photo changes and so are compared by value.
@@ -333,7 +425,7 @@ export function sameRow(before, after) {
  * under it. Memoized, so picking a row draws two rows, not the whole list.
  * Props are the tile and plain values; `roomTiles` only reaches the open row.
  */
-const PhoneRow = React.memo(function PhoneRow({ tile, fact, open, master, roomTiles, onOpen, onPick, onMove, onRemove, setRowRef }) {
+const PhoneRow = React.memo(function PhoneRow({ tile, fact, open, checked, master, roomTiles, onOpen, onPick, onMove, onRemove, onCheck, setRowRef }) {
     const theme = useTheme();
     const key = keyOf(tile);
     const line2 = fact?.exposure || '';
@@ -343,7 +435,8 @@ const PhoneRow = React.memo(function PhoneRow({ tile, fact, open, master, roomTi
             sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: open ? 'action.selected' : 'transparent',
                 // Rows off screen skip layout and paint until scrolled to.
                 contentVisibility: 'auto', containIntrinsicSize: 'auto 82px' }}>
-            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', p: 1 }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', p: 1, pl: 0 }}>
+                <SelectBox tile={tile} checked={checked} onCheck={onCheck} />
                 <Thumb tile={tile} master={master} size={64} onOpen={() => onOpen(tile)} onPick={() => onPick(key)} />
                 <ButtonBase aria-expanded={open}
                     ref={node => setRowRef(key, node)}
@@ -373,7 +466,7 @@ const PhoneRow = React.memo(function PhoneRow({ tile, fact, open, master, roomTi
 }, sameRow);
 
 /** One photo as a table row on a wide screen. Memoized like PhoneRow. */
-const WideRow = React.memo(function WideRow({ tile, fact, from, selected, roomy, master, onOpen, onPick, onMove, setRowRef }) {
+const WideRow = React.memo(function WideRow({ tile, fact, from, selected, checked, roomy, master, onOpen, onPick, onMove, onCheck, setRowRef }) {
     const theme = useTheme();
     const key = keyOf(tile);
     const onKeyDown = event => {
@@ -381,6 +474,7 @@ const WideRow = React.memo(function WideRow({ tile, fact, from, selected, roomy,
         if (event.key === 'Enter') { event.preventDefault(); if (!tile.loading) onOpen(tile); }
         else if (event.key === 'ArrowDown') { event.preventDefault(); onMove(tile, 1); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); onMove(tile, -1); }
+        else if (event.key === ' ') { event.preventDefault(); onCheck(tile, event.shiftKey); }
     };
     return (
         <TableRow hover selected={selected}
@@ -394,6 +488,7 @@ const WideRow = React.memo(function WideRow({ tile, fact, from, selected, roomy,
             onClick={() => onPick(key)}
             sx={{ cursor: 'pointer', outline: 'none',
                 '&:focus-visible': { boxShadow: `inset 0 0 0 2px ${theme.palette.primary.main}` } }}>
+            <TableCell sx={{ px: '0 !important' }}><SelectBox tile={tile} checked={checked} onCheck={onCheck} /></TableCell>
             <TableCell><Thumb tile={tile} master={master} size={60} onOpen={() => onOpen(tile)} onPick={() => onPick(key)} /></TableCell>
             <TableCell><TitleCell tile={tile} facts={fact} /></TableCell>
             <TableCell>{fact?.rating > 0 ? <RatingStars value={fact.rating} size={14} />
@@ -416,7 +511,8 @@ const WideRow = React.memo(function WideRow({ tile, fact, from, selected, roomy,
  * date taken, camera, lens, exposure, place, size and who shared it. The
  * selected photo's details (editable) sit beside the list on a wide screen
  * and open under the row on a phone. A tap on a thumbnail shows the photo
- * full screen.
+ * full screen. Each row's box selects its photo (Shift for a range, Space on
+ * a wide row), and a bar at the bottom saves all selected photos at once.
  */
 function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onOpen, onRemove }) {
     const theme = useTheme();
@@ -427,13 +523,25 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
     const wide = useStickyUp(theme.breakpoints.values.md);
     const roomy = useStickyUp(theme.breakpoints.values.lg);
     const [picked, setPicked] = useState(null);
+    const [checked, setChecked] = useState(() => new Set());
+    const anchor = useRef(null);
     const rowRefs = useRef(new Map());
     const tilesRef = useRef(tiles);
     tilesRef.current = tiles;
 
-    // Back from full screen, the photo seen last is the one picked.
+    // Back from full screen, the photo seen last is the one picked. Not
+    // before: picking it while full screen opened, opened its row under the
+    // fading-in photo (the rows under it went blank, then its preview came),
+    // which is the flicker seen on an unfolded foldable; and every swipe
+    // opened another row behind the photo.
+    const lastOpen = useRef(null);
     useEffect(() => {
-        if (openKey != null) setPicked(openKey);
+        if (openKey != null) {
+            lastOpen.current = openKey;
+        } else if (lastOpen.current != null) {
+            setPicked(lastOpen.current);
+            lastOpen.current = null;
+        }
     }, [openKey]);
 
     const pickedTile = tiles.find(tile => keyOf(tile) === picked);
@@ -456,9 +564,32 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
         if (row && typeof row.focus === 'function') row.focus();
     }, []);
 
+    // Stable too: a tap on a box redraws only the rows whose box changed.
+    const check = useCallback((tile, range) => {
+        const key = keyOf(tile);
+        const from = anchor.current;
+        anchor.current = key;
+        setChecked(before => toggleSelection(before, tilesRef.current.map(keyOf), key, { range, anchor: from }));
+    }, []);
+    const keysShown = tiles.map(keyOf);
+    const rated = ratedKeys(tiles, facts, keyOf);
+    const { chosen, ready, arriving } = selectedPhotos(tiles, checked, keyOf);
+    const selecting = chosen.length > 0;
+    const selectRow = tiles.length > 1 && (
+        <SelectRow total={tiles.length} count={chosen.length} rated={rated.length}
+            allRatedOn={rated.every(key => checked.has(key))}
+            onAll={on => setChecked(on ? new Set(keysShown) : new Set())}
+            onRated={() => setChecked(before => new Set([...before, ...rated]))} />
+    );
+    const bar = selecting && (
+        <SelectionBar count={chosen.length} ready={ready} arriving={arriving} master={master}
+            onClear={() => setChecked(new Set())} />
+    );
+
     if (!wide) {
         return (
-            <Box component="section" aria-label="Photos" sx={{ pb: 3 }}>
+            <Box component="section" aria-label="Photos" sx={{ pb: selecting ? 14 : 3 }}>
+                {selectRow}
                 {groups.map(group => (
                     <Box key={group.label || 'all'}>
                         {group.label && <DayHeading label={group.label} count={group.tiles.length} />}
@@ -466,24 +597,29 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
                             const open = keyOf(tile) === shownKey;
                             return (
                                 <PhoneRow key={keyOf(tile)} tile={tile} fact={facts.get(tile)} open={open} master={master}
+                                    checked={checked.has(keyOf(tile))}
                                     roomTiles={open ? roomTiles : null} onOpen={onOpen} onPick={setPicked} onMove={move}
-                                    onRemove={onRemove} setRowRef={setRowRef} />
+                                    onRemove={onRemove} onCheck={check} setRowRef={setRowRef} />
                             );
                         })}
                     </Box>
                 ))}
+                {bar}
             </Box>
         );
     }
 
-    const cols = roomy ? 9 : 7;
+    const cols = roomy ? 10 : 8;
     return (
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: 2, alignItems: 'start', pb: 3 }}>
+        <>
+        {selectRow}
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: 2, alignItems: 'start', pb: selecting ? 12 : 3 }}>
             <Box component="section" aria-label="Photos" sx={{ border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden', bgcolor: 'background.paper' }}>
                 <Table size="small" stickyHeader aria-label="Photos and their details"
                     sx={{ tableLayout: 'fixed', '& td, & th': { px: 1, py: 0.75 } }}>
                     <TableHead>
                         <TableRow>
+                            <TableCell sx={{ width: 40 }}><Box component="span" sx={visuallyHidden}>Select</Box></TableCell>
                             <TableCell sx={{ width: 76 }}><Box component="span" sx={visuallyHidden}>Photo</Box></TableCell>
                             <HeadCell id="title" label="Title" sort={sort} onSort={onSort} />
                             <HeadCell id="rating" label="Rating" sort={sort} onSort={onSort} sx={{ width: 96 }} />
@@ -507,7 +643,8 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
                                 )}
                                 {group.tiles.map(tile => (
                                     <WideRow key={keyOf(tile)} tile={tile} fact={facts.get(tile)} from={roomy ? sharerLabel(tile, master) : ''} selected={keyOf(tile) === shownKey}
-                                        roomy={roomy} master={master} onOpen={onOpen} onPick={setPicked} onMove={move} setRowRef={setRowRef} />
+                                        checked={checked.has(keyOf(tile))}
+                                        roomy={roomy} master={master} onOpen={onOpen} onPick={setPicked} onMove={move} onCheck={check} setRowRef={setRowRef} />
                                 ))}
                             </React.Fragment>
                         ))}
@@ -515,11 +652,14 @@ function PhotoList({ master, tiles, facts, roomTiles, sort, onSort, openKey, onO
                 </Table>
             </Box>
             <Box component="aside" aria-label="Details of the selected photo" data-testid="list-details"
-                sx={{ position: 'sticky', top: 72, maxHeight: 'calc(100vh - 88px)', overflow: 'auto',
+                // While photos are selected, the bar at the bottom would cover its end.
+                sx={{ position: 'sticky', top: 72, maxHeight: selecting ? 'calc(100vh - 176px)' : 'calc(100vh - 88px)', overflow: 'auto',
                     border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
                 {shown ? <Details tile={shown} master={master} roomTiles={roomTiles} wide onOpen={onOpen} onRemove={onRemove} /> : null}
             </Box>
         </Box>
+        {bar}
+        </>
     );
 }
 

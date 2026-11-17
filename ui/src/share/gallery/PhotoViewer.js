@@ -22,13 +22,30 @@ import { saveLabel } from './savePhoto';
 import { saveToDevice, savedWhereText } from './saveToDevice';
 import { useSwipe } from './mediaView';
 import { previewUrlOf } from './tilePreview';
-import { GRID_SIDE, PREVIEW_COPY, smallImageOf } from './smallImage';
+import { GRID_SIDE, PREVIEW_COPY, loadSmallImage, screenSide, seeThrough, smallImageOf, useSmallImage } from './smallImage';
 import { primePhotoCopy, replaceFailureMessage, replaceHint, replaceKind, replaceLabel, replaceOriginal } from './replaceOriginal';
 import { canReadTorrentFile } from './saveRoom';
 import { removeLabel } from './removeLabel';
 
 // Loads with its code maker on first use.
 const LightSend = React.lazy(() => import('../nearby/LightSend'));
+
+const keyOfTile = tile => tile && (tile.tileKey || tile.infoHash || tile.img);
+
+/** Whether the page is pinch-zoomed in (a phone's two-finger zoom). */
+function usePinched() {
+    const scaled = () => typeof window !== 'undefined' && !!window.visualViewport && window.visualViewport.scale > 1.05;
+    const [pinched, setPinched] = useState(scaled);
+    useEffect(() => {
+        const viewport = typeof window !== 'undefined' && window.visualViewport;
+        if (!viewport) return undefined;
+        // A boolean, so the many resizes of one pinch redraw at most once.
+        const onResize = () => setPinched(viewport.scale > 1.05);
+        viewport.addEventListener('resize', onResize);
+        return () => viewport.removeEventListener('resize', onResize);
+    }, []);
+    return pinched;
+}
 
 /**
  * Display the selected media full screen with navigation (swipe, arrows,
@@ -54,6 +71,22 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
     const [replacing, setReplacing] = useState(false);
     const [replaced, setReplaced] = useState(null);
     const [replaceError, setReplaceError] = useState('');
+    // The photo shows as a copy the size of this screen, made off the main
+    // thread, not the whole photo (see screenSide). Zoomed in with two
+    // fingers, the whole photo comes in, and stays for that photo.
+    const [side] = useState(screenSide);
+    const shownImage = !!(tile && tile.isImage && tile.img && !tile.loading);
+    // Urgent: on quick swipes, the photo on screen goes before the ones swiped past.
+    const screenCopy = useSmallImage(shownImage ? tile : null, side, { urgent: true });
+    const pinched = usePinched();
+    const [wholeFor, setWholeFor] = useState(null);
+    // The source a see-through photo was last drawn from: nothing goes behind it again.
+    const [drawn, setDrawn] = useState(null);
+    const tileKey = keyOfTile(tile);
+    useEffect(() => {
+        if (pinched && tileKey != null) setWholeFor(tileKey);
+    }, [pinched, tileKey]);
+    const whole = pinched || (wholeFor != null && wholeFor === tileKey);
 
     useEffect(() => {
         if (tile) primePhotoCopy(tile);
@@ -81,21 +114,18 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
         return () => window.removeEventListener('keydown', onKey);
     }, [index, tiles.length, onIndexChange]);
 
-    // Decode the photos either side ahead of time, so a swipe shows the next one at once.
-    // On the next swipe the ones not needed any more are let go, so quick
-    // swipes never pile up decodes in front of the photo shown.
+    // Make the copies of the photos either side once this one's is here, so
+    // a swipe shows the next one sharp at once. Not before: quick swipes
+    // never pile up work in front of the photo shown. (These used to decode
+    // the whole photos either side: 600 MB of pixels for three 50 MP photos,
+    // more than a phone's browser keeps, so it let go of the one shown.)
+    const copyReady = !!screenCopy;
     useEffect(() => {
-        const ahead = [tiles[index + 1], tiles[index - 1]]
+        if (!copyReady) return;
+        [tiles[index + 1], tiles[index - 1]]
             .filter(next => next && next.isImage && next.img && !next.loading)
-            .map(next => {
-                const img = new Image();
-                img.decoding = 'async';
-                img.src = next.img;
-                if (typeof img.decode === 'function') img.decode().catch(() => {});
-                return img;
-            });
-        return () => ahead.forEach(img => img.removeAttribute('src'));
-    }, [tiles, index]);
+            .forEach(next => { loadSmallImage(next, side).catch(() => {}); });
+    }, [tiles, index, copyReady, side]);
 
     const swipe = useSwipe(step => {
         const next = index + step;
@@ -130,11 +160,23 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
 
     // The sharpest small copy already made (the simple grid's, the list's), else the share's preview.
     const preview = isImage ? (smallImageOf(tile, Math.max(GRID_SIDE, PREVIEW_COPY)) || smallImageOf(tile, Math.min(GRID_SIDE, PREVIEW_COPY)) || previewUrlOf(tile)) : null;
+    // The screen's copy, else the small one until it is made; the whole photo
+    // when zoomed in, or when there is nothing smaller.
+    const src = whole ? tile.img : (screenCopy || preview || tile.img);
+    // What shows behind while that decodes. It stays behind an opaque photo,
+    // so a moment the browser has not drawn the photo shows the copy, never
+    // the black box. A see-through photo drops it once drawn.
+    const behind = whole ? (screenCopy || preview) : preview;
+    const clear = seeThrough(tile);
+    const showBehind = !!behind && behind !== src && !(clear && drawn === src);
     const mediaPreview = isImage && tile.img ? (
         <img
-            key={tile.img}
-            src={tile.img}
+            // One element per photo: a sharper source for the same photo
+            // replaces the softer one in place, with no empty frame between.
+            key={tileKey}
+            src={src}
             alt={tile.fileName || 'Shared photo'}
+            data-testid="viewer-photo"
             // Decoded on another thread; the small preview shows meanwhile,
             // so the viewer opens at once instead of on a blank screen.
             decoding="async"
@@ -142,21 +184,22 @@ function PhotoViewer({ master, tiles, roomTiles, index, onClose, onIndexChange, 
                 width: '100%',
                 height: '100%',
                 objectFit: 'contain',
-                ...(preview ? {
-                    backgroundImage: `url(${preview})`,
+                ...(showBehind ? {
+                    backgroundImage: `url(${behind})`,
                     backgroundSize: 'contain',
                     backgroundPosition: 'center',
                     backgroundRepeat: 'no-repeat',
                 } : null),
             }}
-            onLoad={event => {
-                // The preview stays until the photo is ready to paint.
+            onLoad={clear ? event => {
                 const img = event.currentTarget;
-                const done = () => { img.style.backgroundImage = 'none'; };
+                const loaded = img.getAttribute('src');
+                // Noted by source, so a copy that comes in later does not go back behind it.
+                const done = () => setDrawn(loaded);
                 // A failed decode keeps the preview, so the screen is never blank.
                 if (typeof img.decode === 'function') img.decode().then(done, () => {});
                 else done();
-            }}
+            } : undefined}
         />
     ) : (
         <Box sx={{ width: '100%', maxWidth: '100%', px: 1 }}>

@@ -37,11 +37,24 @@ function runNext() {
     }
 }
 
-function queued(task) {
+/**
+ * Run `task` when one of the AT_ONCE places is free. `urgent` puts it first:
+ * the photo on screen goes before copies asked for photos swiped past.
+ */
+function queued(key, task, urgent) {
     return new Promise((resolve, reject) => {
-        waiting.push(() => task().then(resolve, reject));
+        const job = () => task().then(resolve, reject);
+        job.key = key;
+        if (urgent) waiting.unshift(job);
+        else waiting.push(job);
         runNext();
     });
+}
+
+/** Move a copy still waiting to the front, as the photo now on screen needs it. */
+function hurry(key) {
+    const at = waiting.findIndex(job => job.key === key);
+    if (at > 0) waiting.unshift(...waiting.splice(at, 1));
 }
 
 // Formats that can be see-through: their copy keeps that (a JPEG would turn it black).
@@ -87,14 +100,20 @@ export function copySize(size, side) {
     return panorama === wide ? { resizeWidth: target } : { resizeHeight: target };
 }
 
+// Asked-for copies the photo is no bigger than: the photo itself is used.
+const AS_IS = Symbol('as is');
+
 async function shrink(tile, blob, side) {
     if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null;
     const size = await sizeOf(blob);
     // Without the size a panorama could make a huge bitmap: no copy, the full photo shows.
     if (!size) return null;
+    const scale = copySize(size, side);
+    // A copy as big as the photo would only lose quality in the JPEG.
+    if (!scale.resizeWidth && !scale.resizeHeight) return AS_IS;
     let bitmap;
     try {
-        bitmap = await createImageBitmap(blob, { ...copySize(size, side), resizeQuality: 'medium', imageOrientation: 'from-image' });
+        bitmap = await createImageBitmap(blob, { ...scale, resizeQuality: 'medium', imageOrientation: 'from-image' });
     } catch {
         return null;
     }
@@ -121,6 +140,28 @@ export function sideFor(cssPx) {
     return Math.min(2048, Math.max(128, Math.ceil((cssPx * ratio) / 128) * 128));
 }
 
+/**
+ * The copy side for a photo shown as large as this screen: its short side.
+ * At most 2048 (sideFor), about 4 to 6 megapixels: sharp on any phone. A
+ * 50 megapixel photo is 200 MB of pixels once decoded; drawn whole full
+ * screen on a big phone (an unfolded Honor Magic V5 is 2112 x 2352 device
+ * pixels), the browser has to decode it again whenever it lets go of it,
+ * and the photo blinks out until that is done.
+ */
+export function screenSide() {
+    const screen = typeof window !== 'undefined' ? window.screen : null;
+    const short = screen && screen.width > 0 && screen.height > 0
+        ? Math.min(screen.width, screen.height)
+        : Math.min((typeof window !== 'undefined' && window.innerWidth) || 1024, (typeof window !== 'undefined' && window.innerHeight) || 1024);
+    return sideFor(short);
+}
+
+/** Whether the photo can be see-through, so nothing must show behind it. */
+export function seeThrough(tile) {
+    const type = (tile && ((tile.elem && tile.elem.type) || tile.fileType)) || '';
+    return SEE_THROUGH.test(type);
+}
+
 /** The height of the photographer list's preview box, and the side of its copies on this screen. */
 export const PREVIEW_HEIGHT = 300;
 export const PREVIEW_COPY = sideFor(PREVIEW_HEIGHT);
@@ -131,21 +172,30 @@ const madeKey = (tile, side) => keyOf(tile) + '@' + side;
 /** The small copy if this device already has one, else null. */
 export function smallImageOf(tile, side = SIDE) {
     if (!tile) return null;
-    return (side <= SIDE && previewUrlOf(tile)) || made.get(madeKey(tile, side)) || null;
+    if (side <= SIDE && previewUrlOf(tile)) return previewUrlOf(tile);
+    const copy = made.get(madeKey(tile, side));
+    if (copy === AS_IS) return tile.img || null;
+    return copy || null;
 }
 
-/** The small copy, made from the photo on this device when needed. Resolves to a URL, or null. */
-export function loadSmallImage(tile, side = SIDE) {
+/**
+ * The small copy, made from the photo on this device when needed. Resolves to
+ * a URL, or null. `urgent` makes it before copies asked for earlier.
+ */
+export function loadSmallImage(tile, side = SIDE, { urgent = false } = {}) {
     const ready = smallImageOf(tile, side);
     if (ready) return Promise.resolve(ready);
     const blob = tile && (tile.elem || tile.file);
     if (!tile || !tile.isImage || !(blob instanceof Blob) || keyOf(tile) == null) return Promise.resolve(null);
     const key = madeKey(tile, side);
-    if (!making.has(key)) {
-        making.set(key, queued(() => shrink(tile, blob, side))
+    if (made.get(key) === AS_IS) return Promise.resolve(tile.img || null);
+    if (making.has(key)) {
+        if (urgent) hurry(key);
+    } else {
+        making.set(key, queued(key, () => shrink(tile, blob, side), urgent)
             .then(url => {
                 if (url) made.set(key, url);
-                return url;
+                return url === AS_IS ? tile.img || null : url;
             })
             .catch(err => {
                 Logger.warn('small copy ' + (tile.fileName || '') + ': ' + (err?.message || err));
@@ -161,7 +211,7 @@ export function loadSmallImage(tile, side = SIDE) {
  * browser cannot make one, the full photo (as before), so the row is never
  * left empty.
  */
-export function useSmallImage(tile, side = SIDE) {
+export function useSmallImage(tile, side = SIDE, { urgent = false } = {}) {
     const ready = smallImageOf(tile, side);
     const key = keyOf(tile) + '@' + side;
     const blob = tile && (tile.elem || tile.file);
@@ -169,7 +219,7 @@ export function useSmallImage(tile, side = SIDE) {
     useEffect(() => {
         if (ready || !tile || !tile.isImage || !(blob instanceof Blob) || typeof createImageBitmap !== 'function') return undefined;
         let live = true;
-        loadSmallImage(tile, side).then(url => {
+        loadSmallImage(tile, side, { urgent }).then(url => {
             if (live) setFound({ key, url: url || tile.img || null });
         });
         return () => { live = false; };
