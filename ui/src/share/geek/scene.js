@@ -43,15 +43,97 @@ function placeLine(network) {
     return [where, isp].filter(Boolean).join(' · ') || null;
 }
 
-/** Human-readable NAT title: place → rDNS → ISP → stable fallback (never the raw IP). */
-export function natTitle(network) {
-    if (!network) return 'public address';
-    const where = [network.city, network.country_code || network.country].filter(Boolean).join(', ');
+/** True when enrichment has place, ISP, or reverse DNS worth showing on a NAT card. */
+export function isUsefulNetwork(network) {
+    if (!network || typeof network !== 'object') return false;
     const isp = network.connection && (network.connection.isp || network.connection.org);
-    if (where) return [where, isp].filter(Boolean).join(' · ');
-    if (network.hostname) return network.hostname;
-    if (isp) return isp;
+    return !!(network.city || network.country || network.country_code || network.hostname || isp);
+}
+
+/** Server marks empty shells with lookupPending until IpTranslator settles. */
+export function isLookupPending(network) {
+    return !!(network && network.lookupPending);
+}
+
+/** Last useful enrichment per public IP across scene rebuilds (SSE empty shells, new ports). */
+const stickyNatNetworkByIp = new Map();
+
+export function resetStickyNatNetwork() {
+    stickyNatNetworkByIp.clear();
+}
+
+/**
+ * Prefer the current enrichment; otherwise reuse a sticky / room-wide copy for the same IP
+ * so NAT titles do not flash back to "public address" when a later chain update is bare.
+ */
+export function networkForNat(ip, current, roomNetworksByIp = null) {
+    if (isUsefulNetwork(current)) {
+        if (ip) stickyNatNetworkByIp.set(ip, current);
+        return current;
+    }
+    if (ip && roomNetworksByIp?.has(ip) && isUsefulNetwork(roomNetworksByIp.get(ip))) {
+        const fromRoom = roomNetworksByIp.get(ip);
+        stickyNatNetworkByIp.set(ip, fromRoom);
+        return fromRoom;
+    }
+    if (ip && stickyNatNetworkByIp.has(ip)) return stickyNatNetworkByIp.get(ip);
+    return current || null;
+}
+
+function collectUsefulNetworksByIp(peers) {
+    const byIp = new Map();
+    (peers || []).forEach(peer => {
+        (peer.networkChain || []).forEach(item => {
+            if (item?.ip && isUsefulNetwork(item.network) && !byIp.has(item.ip)) {
+                byIp.set(item.ip, item.network);
+            }
+        });
+    });
+    return byIp;
+}
+
+/**
+ * Human-readable NAT title: place → rDNS → ISP → soft "looking up…" while pending →
+ * stable fallback (never the raw IP).
+ */
+export function natTitle(network, { pending = false, example = false } = {}) {
+    if (isUsefulNetwork(network)) {
+        const where = [network.city, network.country_code || network.country].filter(Boolean).join(', ');
+        const isp = network.connection && (network.connection.isp || network.connection.org);
+        if (where) return [where, isp].filter(Boolean).join(' · ');
+        if (network.hostname) return network.hostname;
+        if (isp) return isp;
+    }
+    if (!example && (pending || isLookupPending(network))) return 'looking up…';
     return 'public address';
+}
+
+/**
+ * Provider name inferred only from real ICE hostnames (never invented geo).
+ * Twilio is the production TURN; Google/Cloudflare/Nextcloud appear in STUN fallbacks.
+ */
+export function iceProviderName(hosts) {
+    const list = Array.isArray(hosts) ? hosts : [];
+    if (list.some(host => /twilio/i.test(host))) return 'Twilio';
+    if (list.some(host => /(^|\.)l\.google\.com$/i.test(host) || /(^|\.)google\.com$/i.test(host))) return 'Google';
+    if (list.some(host => /cloudflare/i.test(host))) return 'Cloudflare';
+    if (list.some(host => /nextcloud/i.test(host))) return 'Nextcloud';
+    return null;
+}
+
+function iceHostLine(hosts) {
+    if (!hosts || !hosts.length) return null;
+    return hosts.length > 1 ? `${hosts[0]} +${hosts.length - 1}` : hosts[0];
+}
+
+/** Descriptive primary + host secondary for STUN/TURN, matching NAT title/sub. */
+export function iceServiceLabels({ hosts = [], provider = null, place = null, empty = 'none configured' } = {}) {
+    const hostLine = iceHostLine(hosts);
+    const label = provider || place || hostLine || empty;
+    let sub = null;
+    if (hostLine && (provider || place)) sub = hostLine;
+    else if (hosts.length > 1 && !provider && !place) sub = `+${hosts.length - 1} more`;
+    return { label, sub };
 }
 
 function trackerStateLabel(states, url) {
@@ -274,26 +356,50 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     }));
 
     // NATs: one per public address, above the devices behind it.
+    const roomNetworksByIp = collectUsefulNetworksByIp(ordered);
     const natOf = new Map();
     ordered.forEach(peer => {
         const reflexive = (peer.networkChain || []).find(isReflexive);
         if (!reflexive) return;
         const id = 'nat:' + reflexive.ip;
         const memberSummary = summarizeChain(peer.networkChain || []);
+        const network = networkForNat(reflexive.ip, reflexive.network, roomNetworksByIp);
+        // Pending: server lookupPending shell, or no network object yet (client chain
+        // before enrichment). Settled empty shells (lookup finished, nothing useful)
+        // fall through to "public address". Sticky useful data wins via networkForNat.
+        const title = natTitle(network, {
+            pending: !isUsefulNetwork(network) && (
+                isLookupPending(network)
+                || isLookupPending(reflexive.network)
+                || reflexive.network == null
+            ),
+            example: !!reflexive.example,
+        });
+        const info = [
+            `public ${reflexive.ip}${reflexive.port ? ':' + reflexive.port : ''}`,
+            network?.hostname ? `rdns ${network.hostname}` : null,
+            placeLine(network),
+            title === 'looking up…' ? 'looking up place…' : null,
+            reflexive.typeDetail ? `seen as ${reflexive.typeDetail}` : null,
+            'discovered via STUN binding reply',
+        ].filter(Boolean);
         const nat = add({
             id, kind: 'nat', x: 0, y: effectiveNetY, members: [],
             natType: memberSummary.nat,
-            label: natTitle(reflexive.network),
+            label: title,
             sub: reflexive.example ? 'example address' : reflexive.ip,
             example: !!reflexive.example,
-            info: [
-                `public ${reflexive.ip}${reflexive.port ? ':' + reflexive.port : ''}`,
-                reflexive.network?.hostname ? `rdns ${reflexive.network.hostname}` : null,
-                placeLine(reflexive.network),
-                reflexive.typeDetail ? `seen as ${reflexive.typeDetail}` : null,
-                'discovered via STUN binding reply',
-            ].filter(Boolean),
+            info,
         });
+        // Same NAT, later peer: prefer useful enrichment; also let a settled
+        // empty clear a still-pending "looking up…" card (not the reverse).
+        if (title !== 'looking up…' && (
+            (title !== 'public address' && (nat.label === 'public address' || nat.label === 'looking up…'))
+            || (title === 'public address' && nat.label === 'looking up…')
+        )) {
+            nat.label = title;
+            nat.info = info;
+        }
         nat.members.push(peer.peerId);
         if (memberSummary.nat === 'symmetric') nat.natType = 'symmetric';
         else if (!nat.natType || nat.natType === 'unknown') nat.natType = memberSummary.nat;
@@ -308,23 +414,28 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
     const rightSideX = compact ? Math.min(width * 0.85, width - 44) : Math.min(width - 60, Math.max(width * 0.895, rackLeft + rackWidth + (width - (rackLeft + rackWidth)) * 0.52));
 
     const extClampY = Math.min(compactExtY, effectiveNetY - (veryShort ? 20 : 46));
+    const stunProvider = iceProviderName(ice.stun);
+    const stunLabels = iceServiceLabels({
+        hosts: ice.stun,
+        provider: stunProvider,
+        empty: 'none configured',
+    });
     const stun = add({
         id: 'stun', kind: 'stun',
         x: leftSideX,
         y: compact ? extClampY : stunY,
         badge: 'ICE DISCOVERY',
-        label: 'STUN',
-        sub: ice.stun[0]
-            ? (ice.stun.length > 1 ? `${ice.stun[0]} +${ice.stun.length - 1}` : ice.stun[0])
-            : 'none configured',
+        label: stunLabels.label,
+        sub: stunLabels.sub,
         caption: 'finds IP:port · no media',
         info: [
             'tells each device its public IP address and port (srflx candidate)',
             'public server, not photogroup.network',
+            stunProvider ? `provider · ${stunProvider}` : null,
             'no photo or media bytes ever pass through STUN',
             'sees · your public IP address and port only',
             ...ice.stun.map(host => `stun ${host}`),
-        ],
+        ].filter(Boolean),
     });
 
     let pubtrackers = null;
@@ -354,28 +465,52 @@ export function buildScene({ myPeerId, peers = [], connections = [], localNetwor
         });
     }
 
-    const relayIps = new Set();
-    ordered.forEach(peer => (peer.networkChain || []).filter(isRelayCandidate).forEach(item => relayIps.add(item.ip)));
-    const turnHere = ice.turn.length > 0 || relayIps.size > 0;
-    const provider = ice.turn.some(host => /twilio/i.test(host)) ? 'Twilio' : null;
+    const relayItems = [];
+    ordered.forEach(peer => (peer.networkChain || []).filter(isRelayCandidate).forEach(item => {
+        if (item?.ip) relayItems.push(item);
+    }));
+    const relayIps = [...new Set(relayItems.map(item => item.ip))];
+    const turnHere = ice.turn.length > 0 || relayIps.length > 0;
+    const provider = iceProviderName(ice.turn);
+    // Real IpTranslator enrichment on relay candidates (same path as NAT), never invented geo.
+    let relayPlace = null;
+    let relayNetwork = null;
+    for (const item of relayItems) {
+        const network = networkForNat(item.ip, item.network, roomNetworksByIp);
+        if (isUsefulNetwork(network)) {
+            relayNetwork = network;
+            relayPlace = natTitle(network);
+            break;
+        }
+    }
+    const turnHosts = ice.turn.length ? ice.turn : relayIps;
+    const turnLabels = iceServiceLabels({
+        hosts: turnHosts,
+        provider,
+        place: provider ? null : relayPlace,
+        empty: 'none configured',
+    });
     const turn = add({
         id: 'turn', kind: 'turn',
         x: rightSideX,
         y: compact ? extClampY : turnY,
         badge: turnHere ? 'MEDIA RELAY' : 'NO TURN',
-        label: 'TURN',
-        sub: turnHere ? (provider || ice.turn[0] || [...relayIps][0]) : 'none configured',
+        label: turnLabels.label,
+        sub: turnLabels.sub,
         caption: turnHere ? 'encrypted relay fallback' : 'server copy fallback',
         idle: !turnHere,
         info: turnHere
             ? [
                 'forwards encrypted WebRTC bytes when direct / hole-punch P2P fails',
                 `a ${provider ? provider + ' ' : ''}relay, not photogroup.network`,
+                provider ? `provider · ${provider}` : null,
+                placeLine(relayNetwork),
+                relayNetwork?.hostname ? `rdns ${relayNetwork.hostname}` : null,
                 'first receives Allocate Request during ICE gathering, then relays media if needed',
                 'sees · both IP addresses and encrypted DTLS bytes; cannot read the photo',
                 ...ice.turn.map(host => `turn ${host}`),
-                ...[...relayIps].map(ip => `relay candidate ${ip}`),
-            ]
+                ...relayIps.map(ip => `relay candidate ${ip}`),
+            ].filter(Boolean)
             : [
                 'forwards encrypted WebRTC data when no direct path works',
                 'not configured on this server',

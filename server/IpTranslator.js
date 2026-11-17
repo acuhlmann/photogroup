@@ -68,6 +68,43 @@ export default class IpTranslator {
         return false;
     }
 
+    /** True when a network object carries place, ISP, or reverse DNS. */
+    static isUsefulNetwork(network) {
+        if (!network || typeof network !== 'object') return false;
+        const isp = network.connection && (network.connection.isp || network.connection.org);
+        return !!(network.city || network.country || network.country_code
+            || network.hostname || isp);
+    }
+
+    /** True while IpTranslator has not finished (or soft-failed) a lookup for this IP. */
+    static isLookupPending(network) {
+        return !!(network && network.lookupPending);
+    }
+
+    /** Keep a prior useful enrichment when a later lookup returns an empty shell. */
+    static preferNetwork(existing, incoming) {
+        if (IpTranslator.isUsefulNetwork(incoming)) return incoming;
+        if (IpTranslator.isUsefulNetwork(existing)) return existing;
+        // A settled empty (lookup finished, nothing useful) beats a still-pending shell.
+        if (existing && !IpTranslator.isLookupPending(existing) && IpTranslator.isLookupPending(incoming)) {
+            return existing;
+        }
+        return incoming || existing || null;
+    }
+
+    /** Remember a useful enrichment so later rate-limit skips still resolve it. */
+    static rememberNetwork(ip, network) {
+        if (!ip || !IpTranslator.isUsefulNetwork(network)) return;
+        const cached = IpTranslator.lookedUpIPs.get(ip);
+        if (!IpTranslator.isUsefulNetwork(cached)) {
+            IpTranslator.lookedUpIPs.set(ip, network);
+        }
+    }
+
+    static getCachedIp(ip) {
+        return IpTranslator.lookedUpIPs.get(ip) || null;
+    }
+
     static getLookupIp(ip) {
         // Check if already cached
         if (IpTranslator.lookedUpIPs.has(ip)) {
@@ -103,9 +140,9 @@ export default class IpTranslator {
         if (IpTranslator.rateLimitCooldownUntil > now) {
             const remainingSecs = Math.ceil((IpTranslator.rateLimitCooldownUntil - now) / 1000);
             console.log(`[IpTranslator] Rate limit cooldown active for ${ip}, ${remainingSecs}s remaining`);
-            const ipObj = IpTranslator.createEmptyIpObj(ip);
-            // Don't cache - we'll retry after cooldown expires
-            return Promise.resolve(ipObj);
+            // Fail soft: pending empty shell, not cached — callers must not clobber a
+            // previously useful item.network (see preferNetwork in enrich*).
+            return Promise.resolve(IpTranslator.createEmptyIpObj(ip, { pending: true }));
         }
 
         // Using ip-api.com (free tier: 45 requests/minute, no API key required)
@@ -174,6 +211,8 @@ export default class IpTranslator {
                 if (isRateLimit) {
                     IpTranslator.rateLimitCooldownUntil = Date.now() + IpTranslator.RATE_LIMIT_COOLDOWN_MS;
                     console.log(`[IpTranslator] Rate limit hit! Pausing all API calls for ${IpTranslator.RATE_LIMIT_COOLDOWN_MS / 1000} seconds`);
+                    // Soft-fail as still pending so the UI can keep "looking up…"
+                    ipObj.lookupPending = true;
                 } else {
                     // Only cache the result if it's NOT a rate limit error
                     // Rate limited requests should be retried later
@@ -189,8 +228,13 @@ export default class IpTranslator {
         return lookupPromise;
     }
 
-    static createEmptyIpObj(ip) {
-        return {
+    /**
+     * @param {string} ip
+     * @param {{ pending?: boolean }} [opts] pending=true → UI may show "looking up…"
+     *   (pre-enrich / rate-limit). Settled empties omit the flag or set it false.
+     */
+    static createEmptyIpObj(ip, { pending = false } = {}) {
+        const ipObj = {
             "ip": ip,
             "hostname": isLocal(ip) ? 'localhost' : '',
             "country_code": null,
@@ -207,6 +251,8 @@ export default class IpTranslator {
                 "as": null
             }
         };
+        if (pending) ipObj.lookupPending = true;
+        return ipObj;
     }
 
     static getCountryFlagEmoji(countryCode) {
@@ -232,6 +278,12 @@ export default class IpTranslator {
         const ips = chain.map(item => item?.ip).filter(Boolean);
         console.log(`[IpTranslator] enrichNetworkChainIPs: IPs to lookup: ${ips.join(', ')}`);
 
+        // Seed the cache from any useful enrichment already on the chain so a
+        // rate-limit skip still resolves the same IP to place/ISP.
+        chain.forEach(item => {
+            if (item?.ip) IpTranslator.rememberNetwork(item.ip, item.network);
+        });
+
         return Promise.all(chain.map(item => {
             if (!item || !item.ip) {
                 return Promise.resolve(null);
@@ -242,16 +294,16 @@ export default class IpTranslator {
                 if (!item || !item.ip) {
                     return item;
                 }
+                const previous = item.network;
                 // Match by index since we process them in the same order
-                const result = results[index];
-                if (result && result.ip === item.ip) {
-                    item.network = result;
-                } else if (result) {
-                    // Fallback: try to find by IP match
-                    item.network = results.find(r => r && r.ip === item.ip) || result;
-                } else {
-                    item.network = IpTranslator.createEmptyIpObj(item.ip);
+                let result = results[index];
+                if (!(result && result.ip === item.ip)) {
+                    result = (results.find(r => r && r.ip === item.ip) || result
+                        || IpTranslator.createEmptyIpObj(item.ip));
                 }
+                item.network = IpTranslator.preferNetwork(previous, result)
+                    || IpTranslator.createEmptyIpObj(item.ip);
+                IpTranslator.rememberNetwork(item.ip, item.network);
                 
                 // Always log enrichment results (not just in debug mode)
                 if (item.network && (item.network.city || item.network.connection?.isp)) {
@@ -273,6 +325,10 @@ export default class IpTranslator {
             return Promise.resolve([]);
         }
 
+        candidates.forEach(item => {
+            if (item?.ip) IpTranslator.rememberNetwork(item.ip, item.network);
+        });
+
         return Promise.all(candidates.map(item => {
             if (!item || !item.ip) {
                 return Promise.resolve(null);
@@ -283,16 +339,15 @@ export default class IpTranslator {
                 if (!item || !item.ip) {
                     return item;
                 }
-                // Match by index since we process them in the same order
-                const result = results[index];
-                if (result && result.ip === item.ip) {
-                    item.network = result;
-                } else if (result) {
-                    // Fallback: try to find by IP match
-                    item.network = results.find(r => r && r.ip === item.ip) || result;
-                } else {
-                    item.network = IpTranslator.createEmptyIpObj(item.ip);
+                const previous = item.network;
+                let result = results[index];
+                if (!(result && result.ip === item.ip)) {
+                    result = (results.find(r => r && r.ip === item.ip) || result
+                        || IpTranslator.createEmptyIpObj(item.ip));
                 }
+                item.network = IpTranslator.preferNetwork(previous, result)
+                    || IpTranslator.createEmptyIpObj(item.ip);
+                IpTranslator.rememberNetwork(item.ip, item.network);
                 return item;
             });
 

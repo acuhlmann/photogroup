@@ -348,5 +348,95 @@ describe('IpTranslator', () => {
       assert(result[2].network);
     });
   });
+
+  describe('sticky enrichment / rate-limit fail-soft', () => {
+    let originalGet;
+
+    const useful = {
+      ip: '203.0.113.50',
+      hostname: '',
+      country_code: 'US',
+      country: 'United States',
+      city: 'Los Angeles',
+      region: 'CA',
+      region_name: 'California',
+      location: { country_flag_emoji: '🇺🇸' },
+      connection: { isp: 'LogicWeb Inc', org: 'LogicWeb Inc', as: null }
+    };
+
+    afterEach(() => {
+      if (originalGet) axios.get = originalGet;
+    });
+
+    it('isUsefulNetwork / preferNetwork keep place over empty shells', () => {
+      assert.strictEqual(IpTranslator.isUsefulNetwork(useful), true);
+      assert.strictEqual(IpTranslator.isUsefulNetwork(IpTranslator.createEmptyIpObj('203.0.113.50')), false);
+      assert.strictEqual(IpTranslator.preferNetwork(useful, IpTranslator.createEmptyIpObj('203.0.113.50')), useful);
+      assert.strictEqual(IpTranslator.preferNetwork(null, useful), useful);
+    });
+
+    it('marks pending empties and prefers settled empty over still-pending', () => {
+      const pending = IpTranslator.createEmptyIpObj('203.0.113.50', { pending: true });
+      const settled = IpTranslator.createEmptyIpObj('203.0.113.50');
+      assert.strictEqual(IpTranslator.isLookupPending(pending), true);
+      assert.strictEqual(IpTranslator.isLookupPending(settled), false);
+      assert.strictEqual(IpTranslator.preferNetwork(settled, pending), settled);
+      assert.strictEqual(IpTranslator.preferNetwork(pending, settled), settled);
+    });
+
+    it('enrichCandidateIPs keeps lookupPending when rate-limited after a pending placeholder', async () => {
+      originalGet = axios.get;
+      axios.get = () => {
+        const err = new Error('Request failed with status code 403');
+        err.response = { status: 403 };
+        return Promise.reject(err);
+      };
+      IpTranslator.rateLimitCooldownUntil = Date.now() + 60000;
+
+      const candidates = [{
+        ip: '198.51.100.20',
+        port: 3478,
+        type: 'relay',
+        network: IpTranslator.createEmptyIpObj('198.51.100.20', { pending: true }),
+      }];
+      const result = await IpTranslator.enrichCandidateIPs(candidates);
+      assert.strictEqual(IpTranslator.isLookupPending(result[0].network), true);
+    });
+
+    it('does not overwrite a useful chain enrichment when rate-limited', async () => {
+      originalGet = axios.get;
+      axios.get = () => {
+        const err = new Error('Request failed with status code 403');
+        err.response = { status: 403 };
+        return Promise.reject(err);
+      };
+
+      const chain = [{
+        ip: '203.0.113.50',
+        port: 35036,
+        type: 'srflx',
+        network: { ...useful }
+      }];
+
+      IpTranslator.rateLimitCooldownUntil = Date.now() + 60000;
+      const result = await IpTranslator.enrichNetworkChainIPs(chain);
+
+      assert.strictEqual(result[0].network.city, 'Los Angeles');
+      assert.strictEqual(result[0].network.connection.isp, 'LogicWeb Inc');
+      assert.strictEqual(IpTranslator.getCachedIp('203.0.113.50').city, 'Los Angeles');
+    });
+
+    it('reuses cached place/ISP for a new port of the same IP under cooldown', async () => {
+      IpTranslator.lookedUpIPs.set('203.0.113.50', useful);
+      IpTranslator.rateLimitCooldownUntil = Date.now() + 60000;
+
+      const chain = [{ ip: '203.0.113.50', port: 40080, type: 'srflx' }];
+      const result = await IpTranslator.enrichNetworkChainIPs(chain);
+
+      assert.strictEqual(result[0].port, 40080);
+      assert.strictEqual(result[0].network.city, 'Los Angeles');
+      assert.strictEqual(result[0].network.connection.isp, 'LogicWeb Inc');
+    });
+  });
 });
 

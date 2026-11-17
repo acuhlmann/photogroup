@@ -60,6 +60,33 @@ export default class Peers {
         return token === known ? known : null;
     }
 
+    /**
+     * Apply a fresh ICE chain without lodash index-merge. Port/order changes
+     * must not drop a previously useful network object for the same IP, and
+     * must not leave enrichment stuck on the wrong candidate after a reshape.
+     */
+    static adoptNetworkChain(previous = [], next = []) {
+        const byIp = new Map();
+        (previous || []).forEach(item => {
+            if (item?.ip && IpTranslator.isUsefulNetwork(item.network)) {
+                byIp.set(item.ip, item.network);
+            }
+        });
+        return (next || []).map(item => {
+            if (!item || !item.ip) return item;
+            const cached = IpTranslator.getCachedIp(item.ip);
+            const network = IpTranslator.preferNetwork(
+                IpTranslator.preferNetwork(item.network, byIp.get(item.ip)),
+                cached
+            ) || IpTranslator.createEmptyIpObj(item.ip, {
+                // No cache yet → enrichment has not settled; UI shows "looking up…".
+                pending: true,
+            });
+            IpTranslator.rememberNetwork(item.ip, network);
+            return { ...item, network };
+        });
+    }
+
     create(peer, ownsSession = false) {
 
         if(!peer.networkChain) {
@@ -68,11 +95,7 @@ export default class Peers {
         console.log(`[Peers] create: peer ${peer.peerId} with ${peer.networkChain?.length || 0} networkChain items`);
         // Initialize network property for all chain items immediately
         // This ensures the UI has the structure even before enrichment completes
-        peer.networkChain.forEach(item => {
-            if (item && item.ip && !item.network) {
-                item.network = IpTranslator.createEmptyIpObj(item.ip);
-            }
-        });
+        peer.networkChain = Peers.adoptNetworkChain([], peer.networkChain);
         if(ownsSession) {
             this.replaceSession(peer);
         }
@@ -125,14 +148,14 @@ export default class Peers {
     }
 
     updatePeer(peer, update) {
-        const newPeer = _.merge(peer, update);
-        // Initialize network property for any new chain items
-        if(newPeer.networkChain) {
-            newPeer.networkChain.forEach(item => {
-                if (item && item.ip && !item.network) {
-                    item.network = IpTranslator.createEmptyIpObj(item.ip);
-                }
-            });
+        // networkChain must replace (not _.merge by index): a later ICE gather
+        // often inserts host/relay candidates and changes srflx ports, which
+        // would otherwise overlay the wrong type onto an enriched slot and leave
+        // a new unenriched srflx as the first reflexive the UI finds.
+        const { networkChain, ...rest } = update || {};
+        const newPeer = _.merge(peer, rest);
+        if(networkChain) {
+            newPeer.networkChain = Peers.adoptNetworkChain(peer.networkChain, networkChain);
         }
         this.webPeers.set(peer.peerId, newPeer);
         this.sendWebPeers('update', newPeer);
@@ -147,13 +170,8 @@ export default class Peers {
     }
 
     createPeer(peerId, update) {
-        // Initialize network property for all chain items immediately
         if(update.networkChain) {
-            update.networkChain.forEach(item => {
-                if (item && item.ip && !item.network) {
-                    item.network = IpTranslator.createEmptyIpObj(item.ip);
-                }
-            });
+            update.networkChain = Peers.adoptNetworkChain([], update.networkChain);
         }
         this.webPeers.set(peerId, update);
         this.sendWebPeers('add', update);
@@ -312,7 +330,8 @@ export default class Peers {
                 event.sdp.forEach(sdp => {
                     const found = peer.networkChain.find(item => item.ip === sdp.ip);
                     if(!found) {
-                        peer.networkChain.push(sdp);
+                        const adopted = Peers.adoptNetworkChain(peer.networkChain, [sdp])[0];
+                        peer.networkChain.push(adopted);
                         foundAny = true;
                     }
                 });

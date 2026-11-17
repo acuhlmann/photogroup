@@ -844,13 +844,14 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
 
                     ctx.font = `700 7.5px ${mono}`;
                     ctx.fillText(node.badge || 'ICE DISCOVERY', node.x, node.y - 28);
+                    // Match NAT: descriptive primary (provider/host), ICE host secondary.
                     ctx.font = `600 9.5px ${mono}`;
                     ctx.fillStyle = text;
-                    ctx.fillText(fit(ctx, node.sub || 'STUN', 140), node.x, node.y + 30);
-                    if (node.caption) {
+                    ctx.fillText(fit(ctx, node.label || 'STUN', 140), node.x, node.y + 30);
+                    if (node.sub) {
                         ctx.font = `8.5px ${mono}`;
                         ctx.fillStyle = muted;
-                        ctx.fillText(node.caption, node.x, node.y + 41);
+                        ctx.fillText(fit(ctx, node.sub, 140), node.x, node.y + 41);
                     }
                     ctx.globalAlpha = 1;
                     return;
@@ -884,13 +885,14 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
 
                     ctx.font = `700 7.5px ${mono}`;
                     ctx.fillText(node.badge || 'MEDIA RELAY', node.x, node.y - 27);
+                    // Match NAT: descriptive primary (provider/place), host secondary.
                     ctx.font = `600 9.5px ${mono}`;
                     ctx.fillStyle = text;
-                    ctx.fillText(fit(ctx, node.sub || 'TURN', 140), node.x, node.y + 29);
-                    if (node.caption) {
+                    ctx.fillText(fit(ctx, node.label || 'TURN', 140), node.x, node.y + 29);
+                    if (node.sub) {
                         ctx.font = `8.5px ${mono}`;
                         ctx.fillStyle = muted;
-                        ctx.fillText(node.caption, node.x, node.y + 40);
+                        ctx.fillText(fit(ctx, node.sub, 140), node.x, node.y + 40);
                     }
                     ctx.globalAlpha = 1;
                     return;
