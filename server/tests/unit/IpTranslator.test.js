@@ -375,6 +375,34 @@ describe('IpTranslator', () => {
       assert.strictEqual(IpTranslator.preferNetwork(null, useful), useful);
     });
 
+    it('marks pending empties and prefers settled empty over still-pending', () => {
+      const pending = IpTranslator.createEmptyIpObj('203.0.113.50', { pending: true });
+      const settled = IpTranslator.createEmptyIpObj('203.0.113.50');
+      assert.strictEqual(IpTranslator.isLookupPending(pending), true);
+      assert.strictEqual(IpTranslator.isLookupPending(settled), false);
+      assert.strictEqual(IpTranslator.preferNetwork(settled, pending), settled);
+      assert.strictEqual(IpTranslator.preferNetwork(pending, settled), settled);
+    });
+
+    it('enrichCandidateIPs keeps lookupPending when rate-limited after a pending placeholder', async () => {
+      originalGet = axios.get;
+      axios.get = () => {
+        const err = new Error('Request failed with status code 403');
+        err.response = { status: 403 };
+        return Promise.reject(err);
+      };
+      IpTranslator.rateLimitCooldownUntil = Date.now() + 60000;
+
+      const candidates = [{
+        ip: '198.51.100.20',
+        port: 3478,
+        type: 'relay',
+        network: IpTranslator.createEmptyIpObj('198.51.100.20', { pending: true }),
+      }];
+      const result = await IpTranslator.enrichCandidateIPs(candidates);
+      assert.strictEqual(IpTranslator.isLookupPending(result[0].network), true);
+    });
+
     it('does not overwrite a useful chain enrichment when rate-limited', async () => {
       originalGet = axios.get;
       axios.get = () => {

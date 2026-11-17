@@ -78,7 +78,10 @@ export default class Peers {
             const network = IpTranslator.preferNetwork(
                 IpTranslator.preferNetwork(item.network, byIp.get(item.ip)),
                 cached
-            ) || IpTranslator.createEmptyIpObj(item.ip);
+            ) || IpTranslator.createEmptyIpObj(item.ip, {
+                // No cache yet → enrichment has not settled; UI shows "looking up…".
+                pending: true,
+            });
             IpTranslator.rememberNetwork(item.ip, network);
             return { ...item, network };
         });

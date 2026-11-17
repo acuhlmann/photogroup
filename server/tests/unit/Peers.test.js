@@ -218,6 +218,15 @@ describe('Peers', () => {
             assert.strictEqual(adopted[2].network.connection.isp, 'LogicWeb Inc');
         });
 
+        it('adoptNetworkChain marks unknown IPs as lookupPending until enrichment settles', () => {
+            IpTranslator.reset();
+            const adopted = Peers.adoptNetworkChain([], [
+                { ip: '198.51.100.10', port: 61000, type: 'srflx' },
+            ]);
+            assert.strictEqual(adopted[0].network.lookupPending, true);
+            assert.strictEqual(IpTranslator.isUsefulNetwork(adopted[0].network), false);
+        });
+
         it('updatePeer replaces the chain by IP instead of lodash index-merge', () => {
             const peer = peers.webPeers.get('phone');
             peer.networkChain = [

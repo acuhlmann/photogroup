@@ -96,7 +96,10 @@ describe('tourSteps', () => {
 
     it('describes a configured TURN relay as seeing only encrypted bytes', () => {
         const relayed = tourScene(base({ rtcConfig: { iceServers: [{ urls: 'turn:global.turn.twilio.com:3478', username: 'u', credential: 'c' }] } }));
-        expect(relayed.byId.get('turn').sub).toBe('Twilio');
+        expect(relayed.byId.get('turn')).toMatchObject({
+            label: 'Twilio',
+            sub: 'global.turn.twilio.com',
+        });
         const turn = tourSteps(relayed, { myPeerId: 'me' }).find(step => step.id === 'turn');
         expect(turn.sees[0]).toEqual({ who: 'TURN sees', what: 'both IP addresses and encrypted bytes' });
         expect(turn.routes).toContain('turnctl:me');

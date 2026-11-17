@@ -246,7 +246,8 @@ export default class Tracker {
                 ip.typeDetail = ip.type;
                 ip.transportsLabel = ip.transport;
                 ip.ports = [ip.port];
-                ip.network = IpTranslator.createEmptyIpObj(ip.ip);
+                // Pending until enrichCandidateIPs settles (or soft-fails still-pending).
+                ip.network = IpTranslator.createEmptyIpObj(ip.ip, { pending: true });
                 return ip;
             });
             IpTranslator.enrichCandidateIPs(withIpObj).then(sdp => {
