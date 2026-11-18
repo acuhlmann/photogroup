@@ -155,7 +155,7 @@ export function LookThrough({ tiles, keys, roomId, device, onClose }) {
 
             {tile ? (
                 <>
-                    <MediaStage key={keyOf(tile)} tile={tile} onStep={step} hasPrev={index > 0} hasNext={index < list.length - 1}>
+                    <MediaStage key={keyOf(tile)} tile={tile} neighbours={[list[index + 1], list[index - 1]]} onStep={step} hasPrev={index > 0} hasNext={index < list.length - 1}>
                         {isKept && (
                             <Box sx={{
                                 position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 0.5,

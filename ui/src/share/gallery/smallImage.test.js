@@ -92,7 +92,7 @@ describe('smallImage', () => {
     });
 
     it('makes the copy of the photo on screen before copies asked for earlier', async () => {
-        photoOfSize(8000, 6000);
+        photoOfSize(4000, 3000);
         const started = [];
         vi.stubGlobal('createImageBitmap', blob => new Promise(resolve => started.push({ name: blob.name, done: resolve })));
         HTMLCanvasElement.prototype.getContext = () => ({ drawImage: () => {} });
@@ -119,6 +119,54 @@ describe('smallImage', () => {
         expect(started.map(job => job.name)).toEqual(['a', 'b', 'e', 'd', 'c']);
         await finish('d');
         await finish('c');
+    });
+
+    // Each is 200 MB of pixels while it decodes: two at once made a phone let go of the photo shown.
+    it('decodes photos over 24 megapixels one at a time', async () => {
+        photoOfSize(8160, 6120);
+        const started = [];
+        vi.stubGlobal('createImageBitmap', blob => new Promise(resolve => started.push({ name: blob.name, done: resolve })));
+        HTMLCanvasElement.prototype.getContext = () => ({ drawImage: () => {} });
+        HTMLCanvasElement.prototype.toBlob = function (done) { done(new Blob(['x'])); };
+        URL.createObjectURL = vi.fn(() => 'blob:copy');
+        const tile = name => ({ infoHash: 'big-' + name, isImage: true, elem: Object.assign(new Blob([name]), { name }) });
+        const settle = () => new Promise(resolve => setTimeout(resolve, 10));
+        const copies = ['a', 'b'].map(name => loadSmallImage(tile(name), 2048));
+        await settle();
+        expect(started.map(job => job.name)).toEqual(['a']);
+        started[0].done({ width: 10, height: 10, close: () => {} });
+        await settle();
+        expect(started.map(job => job.name)).toEqual(['a', 'b']);
+        started[1].done({ width: 10, height: 10, close: () => {} });
+        await expect(Promise.all(copies)).resolves.toEqual(['blob:copy', 'blob:copy']);
+    });
+
+    it('lets the photo on screen go first among big photos waiting to decode', async () => {
+        photoOfSize(8160, 6120);
+        const started = [];
+        vi.stubGlobal('createImageBitmap', blob => new Promise(resolve => started.push({ name: blob.name, done: resolve })));
+        HTMLCanvasElement.prototype.getContext = () => ({ drawImage: () => {} });
+        HTMLCanvasElement.prototype.toBlob = function (done) { done(new Blob(['x'])); };
+        URL.createObjectURL = vi.fn(() => 'blob:copy');
+        const tile = name => ({ infoHash: 'big-urgent-' + name, isImage: true, elem: Object.assign(new Blob([name]), { name }) });
+        const settle = () => new Promise(resolve => setTimeout(resolve, 10));
+        const finish = async name => {
+            started.find(job => job.name === name).done({ width: 10, height: 10, close: () => {} });
+            await settle();
+        };
+        // a decodes, b waits for it (the photos either side).
+        loadSmallImage(tile('a'), 2048);
+        loadSmallImage(tile('b'), 2048);
+        await settle();
+        expect(started.map(job => job.name)).toEqual(['a']);
+        // c is swiped to: it is decoded before b.
+        loadSmallImage(tile('c'), 2048, { urgent: true });
+        await settle();
+        await finish('a');
+        expect(started.map(job => job.name)).toEqual(['a', 'c']);
+        await finish('c');
+        expect(started.map(job => job.name)).toEqual(['a', 'c', 'b']);
+        await finish('b');
     });
 
     it('makes no copy when the size cannot be read', async () => {
