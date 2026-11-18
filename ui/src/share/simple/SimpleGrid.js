@@ -24,12 +24,9 @@ import ChooseFolderButton from '../gallery/saveToChosenFolder';
 import { canChooseFolder, replaceFailureMessage, replaceHint, replaceOriginal } from '../gallery/replaceOriginal';
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
 import MediaStage from '../gallery/MediaStage';
-import { GRID_SIDE, sideFor, useSmallImage } from '../gallery/smallImage';
+import { ALONE_SIDE, GRID_SIDE, useSmallImage } from '../gallery/smallImage';
 
 import { removeLabel } from '../gallery/removeLabel';
-
-// The side of the copy for a photo alone in the room, shown at most 480 px wide.
-const ALONE_SIDE = sideFor(480);
 
 // Loads with its code maker on first use.
 const LightSend = React.lazy(() => import('../nearby/LightSend'));

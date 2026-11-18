@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { previewUrlOf } from './tilePreview';
-import { GRID_SIDE, PREVIEW_COPY, loadSmallImage, screenSide, seeThrough, smallImageOf, useSmallImage } from './smallImage';
+import { ALONE_SIDE, GRID_SIDE, PREVIEW_COPY, loadSmallImage, screenSide, seeThrough, smallImageOf, useSmallImage } from './smallImage';
 
 const keyOfTile = tile => tile && (tile.tileKey || tile.infoHash || tile.img);
 
@@ -19,6 +19,9 @@ function usePinched() {
     }, []);
     return pinched;
 }
+
+/** A GIF can move; a copy of it would keep only its first frame. */
+const isAnimated = tile => /^image\/gif$/.test((tile && ((tile.elem && tile.elem.type) || tile.fileType)) || '');
 
 // The copies decoded ahead, kept so the browser keeps their pixels: at most
 // the photos either side of the one shown.
@@ -49,13 +52,15 @@ function warm(url) {
  */
 function ScreenPhoto({ tile, neighbours = [], preview: fallback = null, alt, testId, style }) {
     const [side] = useState(screenSide);
-    const shown = !!(tile && tile.img && !tile.loading);
+    const shown = !!(tile && tile.img);
+    // A copy keeps one frame only: a GIF shows as it is, so it still moves.
+    const animated = isAnimated(tile);
     // Urgent: on quick swipes, the photo on screen goes before the ones swiped past.
-    const screenCopy = useSmallImage(shown ? tile : null, side, { urgent: true });
+    const screenCopy = useSmallImage(shown && !tile.loading && !animated ? tile : null, side, { urgent: true });
     const pinched = usePinched();
     const [wholeFor, setWholeFor] = useState(null);
-    // The source a see-through photo was last drawn from: nothing goes behind it again.
-    const [drawn, setDrawn] = useState(null);
+    // The sources of see-through photos already drawn: nothing goes behind them again.
+    const [drawn, setDrawn] = useState(() => new Set());
     const tileKey = keyOfTile(tile);
     useEffect(() => {
         if (pinched && tileKey != null) setWholeFor(tileKey);
@@ -70,7 +75,7 @@ function ScreenPhoto({ tile, neighbours = [], preview: fallback = null, alt, tes
     useEffect(() => {
         if (!copyReady) return;
         [next, previous]
-            .filter(near => near && near.isImage && near.img && !near.loading)
+            .filter(near => near && near.isImage && near.img && !near.loading && !isAnimated(near))
             .forEach(near => { loadSmallImage(near, side).then(warm, () => {}); });
     }, [next, previous, copyReady, side]);
 
@@ -78,13 +83,14 @@ function ScreenPhoto({ tile, neighbours = [], preview: fallback = null, alt, tes
 
     const preview = smallImageOf(tile, Math.max(GRID_SIDE, PREVIEW_COPY))
         || smallImageOf(tile, Math.min(GRID_SIDE, PREVIEW_COPY))
+        || smallImageOf(tile, ALONE_SIDE)
         || previewUrlOf(tile) || fallback;
     // The screen's copy, else the small one until it is made; the whole photo
     // when zoomed in, or when there is nothing smaller.
-    const src = whole ? tile.img : (screenCopy || preview || tile.img);
+    const src = whole || animated ? tile.img : (screenCopy || preview || tile.img);
     const behind = whole ? (screenCopy || preview) : preview;
     const clear = seeThrough(tile);
-    const showBehind = !!behind && behind !== src && !(clear && drawn === src);
+    const showBehind = !!behind && behind !== src && !(clear && drawn.has(src));
     return (
         <img
             // One element per photo: a sharper source for the same photo
@@ -113,7 +119,8 @@ function ScreenPhoto({ tile, neighbours = [], preview: fallback = null, alt, tes
                 const img = event.currentTarget;
                 const loaded = img.getAttribute('src');
                 // Noted by source, so a copy that comes in later does not go back behind it.
-                const done = () => setDrawn(loaded);
+                // Kept for each source, so a decode that ends late adds to the list, never undoes it.
+                const done = () => setDrawn(before => (before.has(loaded) ? before : new Set(before).add(loaded)));
                 // A failed decode keeps the preview, so the screen is never blank.
                 if (typeof img.decode === 'function') img.decode().then(done, () => {});
                 else done();

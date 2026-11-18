@@ -30,10 +30,16 @@ function runNext() {
     while (running < AT_ONCE && waiting.length) {
         const job = waiting.shift();
         running += 1;
-        job().finally(() => {
+        let held = true;
+        // A job gives its place back when done, or earlier when it waits for
+        // its turn at a big decode (see oneBigAtATime).
+        const release = () => {
+            if (!held) return;
+            held = false;
             running -= 1;
             runNext();
-        });
+        };
+        job(release).finally(release);
     }
 }
 
@@ -43,8 +49,9 @@ function runNext() {
  */
 function queued(key, task, urgent) {
     return new Promise((resolve, reject) => {
-        const job = () => task().then(resolve, reject);
+        const job = release => task(release, job).then(resolve, reject);
         job.key = key;
+        job.urgent = !!urgent;
         if (urgent) waiting.unshift(job);
         else waiting.push(job);
         runNext();
@@ -53,8 +60,12 @@ function queued(key, task, urgent) {
 
 /** Move a copy still waiting to the front, as the photo now on screen needs it. */
 function hurry(key) {
-    const at = waiting.findIndex(job => job.key === key);
-    if (at > 0) waiting.unshift(...waiting.splice(at, 1));
+    [waiting, bigWaiting].forEach(list => {
+        const at = list.findIndex(job => job.key === key);
+        if (at < 0) return;
+        list[at].urgent = true;
+        if (at > 0) list.unshift(...list.splice(at, 1));
+    });
 }
 
 // Formats that can be see-through: their copy keeps that (a JPEG would turn it black).
@@ -111,14 +122,37 @@ const AS_IS = Symbol('as is');
  * which then blinked while it was drawn again.
  */
 export const BIG_PIXELS = 24e6;
-let bigTurn = Promise.resolve();
-function oneBigAtATime(task) {
-    const turn = bigTurn.then(task, task);
-    bigTurn = turn.then(() => {}, () => {});
-    return turn;
+const bigWaiting = [];
+let bigRunning = false;
+
+function nextBig() {
+    if (bigRunning || !bigWaiting.length) return;
+    bigRunning = true;
+    bigWaiting.shift()().finally(() => {
+        bigRunning = false;
+        nextBig();
+    });
 }
 
-async function shrink(tile, blob, side) {
+/**
+ * Run a big decode when no other runs. While it waits it gives its place
+ * in the queue back, so the photo on screen can still come in and go first
+ * (urgent decodes wait in front of the others).
+ */
+function oneBigAtATime(task, ticket, release) {
+    release();
+    return new Promise((resolve, reject) => {
+        const job = () => task().then(resolve, reject);
+        job.key = ticket.key;
+        job.urgent = ticket.urgent;
+        // After the other urgent ones, before the rest.
+        const at = ticket.urgent ? bigWaiting.filter(other => other.urgent).length : bigWaiting.length;
+        bigWaiting.splice(at, 0, job);
+        nextBig();
+    });
+}
+
+async function shrink(tile, blob, side, release = () => {}, ticket = {}) {
     if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null;
     const size = await sizeOf(blob);
     // Without the size a panorama could make a huge bitmap: no copy, the full photo shows.
@@ -129,7 +163,7 @@ async function shrink(tile, blob, side) {
     let bitmap;
     try {
         const decode = () => createImageBitmap(blob, { ...scale, resizeQuality: 'medium', imageOrientation: 'from-image' });
-        bitmap = await (size.width * size.height > BIG_PIXELS ? oneBigAtATime(decode) : decode());
+        bitmap = await (size.width * size.height > BIG_PIXELS ? oneBigAtATime(decode, ticket, release) : decode());
     } catch {
         return null;
     }
@@ -178,6 +212,9 @@ export function seeThrough(tile) {
     return SEE_THROUGH.test(type);
 }
 
+/** The side of the copy for a photo alone in a simple room, shown at most 480 px wide. */
+export const ALONE_SIDE = sideFor(480);
+
 /** The height of the photographer list's preview box, and the side of its copies on this screen. */
 export const PREVIEW_HEIGHT = 300;
 export const PREVIEW_COPY = sideFor(PREVIEW_HEIGHT);
@@ -208,7 +245,7 @@ export function loadSmallImage(tile, side = SIDE, { urgent = false } = {}) {
     if (making.has(key)) {
         if (urgent) hurry(key);
     } else {
-        making.set(key, queued(key, () => shrink(tile, blob, side), urgent)
+        making.set(key, queued(key, (release, ticket) => shrink(tile, blob, side, release, ticket), urgent)
             .then(url => {
                 if (url) made.set(key, url);
                 return url === AS_IS ? tile.img || null : url;
