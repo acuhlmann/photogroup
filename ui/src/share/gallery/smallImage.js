@@ -103,6 +103,21 @@ export function copySize(size, side) {
 // Asked-for copies the photo is no bigger than: the photo itself is used.
 const AS_IS = Symbol('as is');
 
+/**
+ * Photos over this many pixels are decoded one at a time. The browser
+ * decodes the whole photo before it scales it: a 50 MP photo is 200 MB of
+ * pixels for a moment. Two at once (the photos either side of the one on
+ * screen) made a phone's browser let go of the pixels of the photo shown,
+ * which then blinked while it was drawn again.
+ */
+export const BIG_PIXELS = 24e6;
+let bigTurn = Promise.resolve();
+function oneBigAtATime(task) {
+    const turn = bigTurn.then(task, task);
+    bigTurn = turn.then(() => {}, () => {});
+    return turn;
+}
+
 async function shrink(tile, blob, side) {
     if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null;
     const size = await sizeOf(blob);
@@ -113,7 +128,8 @@ async function shrink(tile, blob, side) {
     if (!scale.resizeWidth && !scale.resizeHeight) return AS_IS;
     let bitmap;
     try {
-        bitmap = await createImageBitmap(blob, { ...scale, resizeQuality: 'medium', imageOrientation: 'from-image' });
+        const decode = () => createImageBitmap(blob, { ...scale, resizeQuality: 'medium', imageOrientation: 'from-image' });
+        bitmap = await (size.width * size.height > BIG_PIXELS ? oneBigAtATime(decode) : decode());
     } catch {
         return null;
     }

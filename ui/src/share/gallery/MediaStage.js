@@ -8,16 +8,17 @@ import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import AudiotrackRounded from '@mui/icons-material/AudiotrackRounded';
 import { keyOf, playableClip, useArriving, useClipUrl, usePreview, useSwipe } from './mediaView';
-import { GRID_SIDE, smallImageOf } from './smallImage';
+import ScreenPhoto from './ScreenPhoto';
 
 const roundButton = { position: 'absolute', color: '#fff', bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' } };
 
 /**
  * One photo or clip as large as the space allows, on black. Swipe, the
  * arrow buttons or the arrow keys go to the previous or next one. A photo
- * still arriving shows its preview and how far along it is.
+ * still arriving shows its preview and how far along it is. `neighbours`
+ * (the next and previous tiles) get their screen copies made ahead.
  */
-function MediaStage({ tile, onStep, hasPrev, hasNext, children }) {
+function MediaStage({ tile, neighbours, onStep, hasPrev, hasNext, children }) {
     const clipUrl = useClipUrl(tile);
     const poster = usePreview(tile);
     const percent = useArriving(tile);
@@ -39,23 +40,11 @@ function MediaStage({ tile, onStep, hasPrev, hasNext, children }) {
     const fit = { width: '100%', height: '100%', objectFit: 'contain', display: 'block' };
     let media;
     if (!tile.loading && tile.img) {
-        // The grid's copy (or the share's preview) shows until the photo is
-        // decoded, off the main thread. Without it the stage stayed black for
-        // as long as a big photo took to decode, then the photo popped in.
-        const behind = smallImageOf(tile, GRID_SIDE) || poster;
-        media = (
-            <Box component="img" key={tile.img} src={tile.img} alt={tile.fileName || 'Photo'} decoding="async"
-                onLoad={event => {
-                    const img = event.currentTarget;
-                    const done = () => { img.style.backgroundImage = 'none'; };
-                    if (typeof img.decode === 'function') img.decode().then(done, () => {});
-                    else done();
-                }}
-                sx={{ ...fit, ...(behind ? {
-                    backgroundImage: `url(${behind})`, backgroundSize: 'contain',
-                    backgroundRepeat: 'no-repeat', backgroundPosition: 'center',
-                } : null) }} />
-        );
+        // A copy the size of the screen with the grid's copy behind, as in
+        // the other modes' full screen (see ScreenPhoto). The whole photo
+        // here, with nothing behind once decoded, blinked black on an
+        // unfolded foldable whenever the browser let go of its pixels.
+        media = <ScreenPhoto tile={tile} neighbours={neighbours} preview={poster} alt={tile.fileName || 'Photo'} />;
     } else if (playableClip(tile)) {
         media = (
             <Box component="video" key={keyOf(tile)} src={clipUrl || undefined}
@@ -101,6 +90,7 @@ function MediaStage({ tile, onStep, hasPrev, hasNext, children }) {
 
 MediaStage.propTypes = {
     tile: PropTypes.object.isRequired,
+    neighbours: PropTypes.array,
     onStep: PropTypes.func.isRequired,
     hasPrev: PropTypes.bool,
     hasNext: PropTypes.bool,

@@ -24,9 +24,12 @@ import ChooseFolderButton from '../gallery/saveToChosenFolder';
 import { canChooseFolder, replaceFailureMessage, replaceHint, replaceOriginal } from '../gallery/replaceOriginal';
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
 import MediaStage from '../gallery/MediaStage';
-import { GRID_SIDE, useSmallImage } from '../gallery/smallImage';
+import { GRID_SIDE, sideFor, useSmallImage } from '../gallery/smallImage';
 
 import { removeLabel } from '../gallery/removeLabel';
+
+// The side of the copy for a photo alone in the room, shown at most 480 px wide.
+const ALONE_SIDE = sideFor(480);
 
 // Loads with its code maker on first use.
 const LightSend = React.lazy(() => import('../nearby/LightSend'));
@@ -102,8 +105,9 @@ function SimpleTile({ tile, roomId, onOpen, onError, onRemove, alone }) {
     // A 640 px copy, not the full photo: a phone would decode ~48 MB for each square.
     // A photo alone gets the whole width, so it shows in full.
     // Tiles are at most about half a phone wide; 640 px stays sharp on a 3x screen.
-    const square = useSmallImage(showImage && !alone ? tile : null, GRID_SIDE);
-    const picture = showImage ? (alone ? tile.img : square || poster) : (tile.isVideo || previewOnly || tile.loading ? poster : null);
+    // A photo alone is at most 480 px wide: a copy that size, not the whole photo either.
+    const square = useSmallImage(showImage ? tile : null, alone ? ALONE_SIDE : GRID_SIDE);
+    const picture = showImage ? (square || poster) : (tile.isVideo || previewOnly || tile.loading ? poster : null);
     const Icon = tile.isAudio ? AudiotrackRounded : PlayCircleRounded;
     return (
         <Stack spacing={1} data-testid="simple-tile">
@@ -175,10 +179,11 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError, m
     }, [index, tiles.length, onIndexChange]);
 
     if (!tile) return null;
+    const sendable = !tile.loading && isReadyToSave(tile);
     return (
         <Dialog open fullScreen onClose={onClose}
             slotProps={{ paper: { sx: { bgcolor: '#000', color: '#fff' } } }}>
-            <MediaStage tile={tile} onStep={go} hasPrev={index > 0} hasNext={index < tiles.length - 1}>
+            <MediaStage tile={tile} neighbours={[tiles[index + 1], tiles[index - 1]]} onStep={go} hasPrev={index > 0} hasNext={index < tiles.length - 1}>
                 <IconButton aria-label="Close" onClick={onClose}
                     sx={{ position: 'absolute', top: 12, right: 12, color: '#fff', bgcolor: 'rgba(0,0,0,0.5)' }}>
                     <CloseRounded />
@@ -194,9 +199,12 @@ function SimpleViewer({ tiles, index, onIndexChange, onClose, roomId, onError, m
                 <Typography variant="caption" component="p" sx={{ mt: 1, textAlign: 'center', color: 'rgba(255,255,255,0.7)' }}>
                     {whereText(1)}
                 </Typography>
-                {master && !tile.loading && isReadyToSave(tile) && (
+                {/* Its place stays while a photo is not ready, so the photo above
+                    keeps its size when you swipe between photos. */}
+                {master && (
                     <Button fullWidth size="small" startIcon={<QrCode2Rounded />} onClick={() => setLightSend(true)}
-                        sx={{ mt: 0.5, textTransform: 'none', color: 'rgba(255,255,255,0.85)' }}>
+                        disabled={!sendable} aria-hidden={!sendable || undefined}
+                        sx={{ mt: 0.5, textTransform: 'none', color: 'rgba(255,255,255,0.85)', visibility: sendable ? 'visible' : 'hidden' }}>
                         Send by camera
                     </Button>
                 )}
