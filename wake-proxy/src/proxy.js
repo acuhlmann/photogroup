@@ -47,6 +47,17 @@ export function wireOriginTeardown(proxy) {
     });
   });
 
+  // The other way: the origin dropped a response midway (a deploy or a VM
+  // stop kills the app). http-proxy only pipes the body, and a pipe ends its
+  // target on 'end', never on an abort, so the browser kept a dead update
+  // stream and never joined the room again (2026-11-19). Close the browser
+  // side too, so its EventSource reconnects.
+  proxy.on('proxyRes', (proxyRes, _req, res) => {
+    proxyRes.on('close', () => {
+      if (!proxyRes.complete && !res.destroyed) res.destroy();
+    });
+  });
+
   // Not 'open': http-proxy 1.18 emits it with the origin socket only
   // (`server.emit('open', proxySocket)`), and assuming a client socket there
   // threw inside a socket data callback, which took the whole Cloud Run

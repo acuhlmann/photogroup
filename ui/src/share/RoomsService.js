@@ -368,20 +368,51 @@ export default class RoomsService {
         return response.json();
     }
 
+    /**
+     * The server forgot this page while it still shows the room: it
+     * restarted (a deploy, or the VM stopped), or it dropped us while away
+     * and no reconnect told us. Join again, the same way a resume does.
+     * Calls that come at the same time share one join.
+     */
+    rejoin() {
+        if (!this._rejoining) {
+            Logger.warn('The server did not know this page in the room: joining again');
+            const join = this.master?.findExistingContent
+                ? this.master.findExistingContent(this.joinRoom)
+                : this.joinRoom();
+            this._rejoining = Promise.resolve(join).finally(() => { this._rejoining = null; });
+        }
+        return this._rejoining;
+    }
+
+    /**
+     * A request that needs this page's session in the room. `send` makes
+     * the request (again), so a second try carries the new session token.
+     * 403 means the server forgot the session; 404, when `roomGone`, that
+     * it forgot the room (joining makes it again with the same id).
+     */
+    async asMember(send, { roomGone = false } = {}) {
+        const response = await send();
+        const forgotten = response.status === 403 || (roomGone && response.status === 404);
+        if (!forgotten || !this.hasRoom) return response;
+        await this.rejoin();
+        return send();
+    }
+
     /** Room-wide settings, e.g. keepCopies for people who join later. */
     async updateRoomSettings(settings) {
-        const response = await fetch(this.url + '/' + this.id + '/settings', {
+        const response = await this.asMember(() => fetch(this.url + '/' + this.id + '/settings', {
             method: 'PUT',
             headers: { ...this.sessionHeaders(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
             body: JSON.stringify(settings)
-        });
+        }), { roomGone: true });
         if (!response.ok) throw new Error('Could not change the room (' + response.status + ')');
         return response.json();
     }
 
     /** Delete this room for everyone: its photo list and server copies go now. */
     async deleteRoom() {
-        const response = await fetch(this.url + '/' + this.id, { method: 'DELETE', headers: this.sessionHeaders() });
+        const response = await this.asMember(() => fetch(this.url + '/' + this.id, { method: 'DELETE', headers: this.sessionHeaders() }));
         if (!response.ok) throw new Error('Could not delete the room (' + response.status + ')');
         return response.json();
     }
@@ -736,7 +767,8 @@ export default class RoomsService {
      * room. Only the fields passed change; '' or rating 0 clears one.
      */
     async updateDetails(infoHash, fields) {
-        const response = await fetch(this.url + '/' + this.id + '/photos/details', {
+        // Not on 404: that is also "no such photo".
+        const response = await this.asMember(() => fetch(this.url + '/' + this.id + '/photos/details', {
             method: 'PUT',
             headers: {
                 'Accept': 'application/json',
@@ -748,7 +780,7 @@ export default class RoomsService {
                 sessionToken: this.sessionToken,
                 ...fields,
             }),
-        });
+        }));
         if (!response.ok) {
             const message = await response.text().catch(() => '');
             const error = new Error(message || ('Could not save details (' + response.status + ')'));
