@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { isSmallOnly } from '../gallery/arrivingText';
 import PropTypes from 'prop-types';
 import { useTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
@@ -1317,7 +1318,7 @@ function NetworkStage({ master, tiles = NO_TILES, onOpenPhoto, timeline, playbac
                         <br />
                         {thumb.tile.infoHash ? `infohash ${String(thumb.tile.infoHash).slice(0, 20)}…` : null}
                         <br />
-                        {`held by ${(thumb.tile.owners || []).length || 1} · ${thumb.tile.loading ? 'arriving' : 'here in full'}`}
+                        {`held by ${(thumb.tile.owners || []).length || 1} · ${isSmallOnly(thumb.tile) ? 'small size only (by camera)' : thumb.tile.loading ? 'arriving' : 'here in full'}`}
                         {thumb.tile.hasServerCopy ? ' · server copy' : ''}
                     </Box>
                     <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>

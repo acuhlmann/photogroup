@@ -39,7 +39,7 @@ import { notIncludedText, ratedKeys, selectedPhotos, toggleSelection } from './s
 import { canReadTorrentFile } from './saveRoom';
 import { removeLabel } from './removeLabel';
 import { keyOf, useArriving, usePreview } from './mediaView';
-import { useArrivingText } from './arrivingText';
+import { useArrivingText, isSmallOnly } from './arrivingText';
 import { PREVIEW_COPY, PREVIEW_HEIGHT, useSmallImage } from './smallImage';
 import { alreadyHave, HAVE_LABELS, useHaveChanges } from './alreadyHave';
 import { peerLabel } from '../topology/presence';
@@ -94,7 +94,7 @@ function Thumb({ tile, master, size, onOpen, onPick }) {
     if (tile.loading) {
         inside = (
             <>
-                {poster && <Box component="img" src={poster} alt="" sx={{ ...fill, filter: 'brightness(0.55)' }} />}
+                {poster && <Box component="img" src={poster} alt="" sx={{ ...fill, filter: isSmallOnly(tile) ? 'none' : 'brightness(0.55)' }} />}
                 <CircularProgress size={22} variant={percent > 0 ? 'determinate' : 'indeterminate'} value={percent}
                     sx={{ position: 'relative', color: poster ? '#fff' : undefined }} />
             </>

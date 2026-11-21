@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { arrivingText } from './arrivingText';
+import { arrivingText, isSmallOnly, SMALL_ONLY_TEXT } from './arrivingText';
 
 const tile = (over = {}) => ({ infoHash: 'abc', loading: true, owners: [{ peerId: 'alex', loading: false }], ...over });
 const alex = { peerId: 'alex', name: 'Alex' };
@@ -34,5 +34,16 @@ describe('arrivingText', () => {
     it('does not count this phone or a phone that still gets the photo', () => {
         const owners = [{ peerId: 'me', loading: false }, { peerId: 'kim', loading: true }];
         expect(arrivingText(tile({ owners }), { peers: [{ peerId: 'me' }, { peerId: 'kim' }], myPeerId: 'me' })).toBe('Arriving…');
+    });
+
+    it('says that only the small size came by camera, while nothing more is on the way', () => {
+        const tile = { infoHash: 'a', loading: true, smallFromLight: true, owners: [] };
+        expect(arrivingText(tile)).toBe(SMALL_ONLY_TEXT);
+        expect(isSmallOnly(tile)).toBe(true);
+        // The full size starts to come: the tile says so, and is a loading tile again.
+        const coming = { ...tile, torrentFile: { progress: 0.2 } };
+        expect(arrivingText(coming)).toBe('Arriving · 20%');
+        expect(isSmallOnly(coming)).toBe(false);
+        expect(isSmallOnly({ ...tile, loading: false })).toBe(false);
     });
 });

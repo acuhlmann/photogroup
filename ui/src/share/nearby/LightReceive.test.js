@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stallTip, seenText, NO_CODES_TIP, STALLED_TIP } from './LightReceive';
+import { stallTip, seenText, outcomeLines, NO_CODES_TIP, STALLED_TIP } from './LightReceive';
 
 describe('camera receiving feedback', () => {
     it('says nothing while codes are arriving', () => {
@@ -25,5 +25,14 @@ describe('camera receiving feedback', () => {
         expect(seenText({ codes: 25, have: 9, blocks: 50, msSinceFresh: 3200 }))
             .toBe('25 of about 50 codes read · 9 of 50 blocks · last code 3s ago');
         expect(seenText({ codes: 0, have: 0, blocks: 50, msSinceFresh: null })).toBe('');
+    });
+
+    it('says which photos came in small size', () => {
+        expect(outcomeLines([{ name: 'a.jpg', how: 'small' }])).toEqual(['a.jpg is here in small size.']);
+        expect(outcomeLines([{ name: 'a.jpg', how: 'smallSaved' }]))
+            .toEqual(['a.jpg is not in this room. It is saved on this phone in small size.']);
+        expect(outcomeLines([
+            { name: 'a.jpg', how: 'small' }, { name: 'b.jpg', how: 'small' }, { name: 'c.jpg', how: 'delivered' },
+        ])).toEqual(['1 photo is here.', '2 photos are here in small size.']);
     });
 });

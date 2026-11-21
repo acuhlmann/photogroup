@@ -28,6 +28,17 @@ export function setPosterSink(sink) {
     posterSink = sink;
 }
 
+/**
+ * A sharper preview that came another way (a photo in small size by camera):
+ * it takes the place of the one this device had. Returns its URL.
+ */
+export function holdPreview(infoHash, blob) {
+    // The one before is not freed: a view can still show it for a moment.
+    const url = URL.createObjectURL(blob);
+    fetched.set(infoHash, url);
+    return url;
+}
+
 /** The preview this device already has: kept, the room's poster, or one of the thumbnails it shared. */
 export function previewUrlOf(tile) {
     if (!tile) return null;
@@ -129,4 +140,4 @@ export function loadPreviewUrl(tile) {
     return loading.get(key);
 }
 
-export default { previewUrlOf, loadPreviewUrl, setPosterSink };
+export default { previewUrlOf, loadPreviewUrl, setPosterSink, holdPreview };
