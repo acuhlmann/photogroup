@@ -23,7 +23,7 @@ import { saveToDevice, savedWhereText } from '../gallery/saveToDevice';
 import ChooseFolderButton from '../gallery/saveToChosenFolder';
 import { canChooseFolder, replaceFailureMessage, replaceHint, replaceOriginal } from '../gallery/replaceOriginal';
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
-import { useArrivingText } from '../gallery/arrivingText';
+import { useArrivingText, isSmallOnly } from '../gallery/arrivingText';
 import MediaStage from '../gallery/MediaStage';
 import { ALONE_SIDE, GRID_SIDE, useSmallImage } from '../gallery/smallImage';
 
@@ -133,7 +133,7 @@ function SimpleTile({ tile, master, roomId, onOpen, onError, onRemove, alone }) 
                         sx={{
                             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block',
                             // A clip still arriving shows its first frame, dimmed under the progress.
-                            filter: tile.loading ? 'brightness(0.55)' : 'none',
+                            filter: tile.loading && !isSmallOnly(tile) ? 'brightness(0.55)' : 'none',
                         }} />
                 )}
                 {previewOnly ? (

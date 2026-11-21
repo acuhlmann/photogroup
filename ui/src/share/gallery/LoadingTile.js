@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { SMALL_ONLY_TEXT, isSmallOnly } from './arrivingText';
 import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import Box from "@mui/material/Box";
@@ -145,6 +146,7 @@ function LoadingTile({tile, master, name}) {
     else if (tile.previewOnly) loadingText = 'Preview only (Data saver)';
     else if (stalled && !have) loadingText = 'Connection stalled';
     else if (!have && tile.fromLight) loadingText = 'Received by camera';
+    else if (!have && tile.smallFromLight) loadingText = SMALL_ONLY_TEXT;
     else if (!have && tile.fromDirect) loadingText = 'Received over a direct link';
     else if (!have && tile.fromServerCopy) loadingText = 'Received from the server copy (P2P did not work)';
     else if (copyStatus && !isLoading && !tile.rendering) loadingText = copyStatus.text;
@@ -197,11 +199,12 @@ function LoadingTile({tile, master, name}) {
                         style={{
                             width: '100%',
                             display: 'block',
-                            filter: 'blur(2px) brightness(0.7)',
+                            // The small size by camera is a sharp photo, not a hint of one.
+                            filter: isSmallOnly(tile) ? 'none' : 'blur(2px) brightness(0.7)',
                         }}
                     />
                     {/* Progress overlay on thumbnail */}
-                    {!have && !tile.previewOnly && (
+                    {!have && !tile.previewOnly && !isSmallOnly(tile) && (
                         <Box
                             sx={{
                                 position: 'absolute',

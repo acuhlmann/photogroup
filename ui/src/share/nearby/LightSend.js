@@ -16,6 +16,8 @@ import { createLightSender, MAX_LIGHT_BYTES } from './lightFrames';
 import { qrSymbol, drawSymbol } from './qrCodec';
 import { LIGHT_LEVELS, DEFAULT_LEVEL, sendTimeText } from './lightSpeed';
 import { notePairing } from './pairingLog';
+import { canBeSmall, makeSmall, SMALL_MAX_BYTES } from './lightBundle';
+import SizeChoice from './SizeChoice';
 
 export const LIGHT_SEND_HELP = 'On the other phone: open the room menu, then "Get photos by camera". Point its camera at these codes. No network is necessary. The codes keep going until you close this, and a second try carries on where the first left off.';
 export const CODE_FAILED = "Couldn't make a code. Trying again…";
@@ -24,45 +26,64 @@ export const TOO_LARGE = 'This file is too large to send by camera.';
 
 /**
  * Shows one photo as a stream of codes for another phone's camera. The
- * codes never end: the other phone says when it has the photo.
+ * codes never end: the other phone says when it has the photo. A photo or
+ * video goes in small size first (fast); the person can change to full size.
  */
 export default function LightSend({ master, tile, open, onClose }) {
     const canvasRef = useRef(null);
     const [levelId, setLevelId] = useState(DEFAULT_LEVEL);
-    const [file, setFile] = useState(null);
+    // { full, small, canSmall }: full is null when it is too large for a camera transfer.
+    const [ready, setReady] = useState(null);
+    const [size, setSize] = useState('small');
     const [problem, setProblem] = useState('');
     const [rate, setRate] = useState(null);
     const level = LIGHT_LEVELS.find(each => each.id === levelId);
 
-    // The photo's bytes, as the torrent carries them.
+    // The photo's bytes, as the torrent carries them, and the photo in small size.
     useEffect(() => {
         if (!open) return undefined;
         let gone = false;
-        setFile(null);
+        setReady(null);
         setProblem('');
         Promise.resolve(master.findPhotoBytes?.(tile.infoHash))
             .then(async (blob) => {
                 if (gone) return;
-                if (!blob) setProblem(NOT_HERE);
-                else if (blob.size > MAX_LIGHT_BYTES) setProblem(TOO_LARGE);
-                else {
-                    const bytes = new Uint8Array(await blob.arrayBuffer());
-                    // Another photo may be open by now.
-                    if (!gone) setFile(bytes);
+                if (!blob) {
+                    setProblem(NOT_HERE);
+                    return;
                 }
+                const type = tile.fileType || blob.type || '';
+                const canSmall = canBeSmall({ type, sealed: !!tile.secure }) && blob.size > SMALL_MAX_BYTES;
+                const tooLarge = blob.size > MAX_LIGHT_BYTES;
+                if (tooLarge && !canSmall) {
+                    setProblem(TOO_LARGE);
+                    return;
+                }
+                const full = tooLarge ? null : new Uint8Array(await blob.arrayBuffer());
+                const small = canSmall ? await makeSmall(new Blob([blob], { type })) : null;
+                // Another photo may be open by now.
+                if (gone) return;
+                if (!full && !small) setProblem(TOO_LARGE);
+                else setReady({ full, small, canSmall: !!small });
             })
             .catch((err) => {
                 Logger.warn('Reading the photo for the camera transfer failed: ' + (err?.message || err));
                 if (!gone) setProblem(NOT_HERE);
             });
         return () => { gone = true; };
-    }, [open, master, tile.infoHash]);
+    }, [open, master, tile.infoHash, tile.fileType, tile.secure]);
+
+    const inSmall = !!ready?.small && (size === 'small' || !ready.full);
+    const file = ready ? (inSmall ? ready.small : ready.full) : null;
 
     // Show the codes, one after the other, at the level's pace.
     useEffect(() => {
         if (!open || !file) return undefined;
         const sender = createLightSender(
-            { id: tile.infoHash, name: tile.fileName || 'photo', type: tile.fileType || '', sealed: !!tile.secure },
+            {
+                id: tile.infoHash, name: tile.fileName || 'photo', type: tile.fileType || '', sealed: !!tile.secure,
+                ...(inSmall ? { small: true } : {}),
+            },
             file, level.frameBytes);
         const startedAt = Date.now();
         let stopped = false;
@@ -71,7 +92,7 @@ export default function LightSend({ master, tile, open, onClose }) {
         let windowStart = performance.now();
         let windowShown = 0;
         notePairing(master.emitter, {
-            channel: 'light', direction: 'out', what: 'photo', bytes: file.length,
+            channel: 'light', direction: 'out', what: inSmall ? 'photo in small size' : 'photo', bytes: file.length,
             detail: `${level.frameBytes} B codes · ${level.fps}/s`,
         });
         const step = async () => {
@@ -112,7 +133,7 @@ export default function LightSend({ master, tile, open, onClose }) {
             lock?.release().catch(() => {});
             Logger.info(`Camera transfer: showed ${shown} codes in ${Math.round((Date.now() - startedAt) / 1000)} s`);
         };
-    }, [open, file, level, tile, master.emitter]);
+    }, [open, file, inSmall, level, tile, master.emitter]);
 
     const actual = rate ? Math.round(rate.fps * (level.frameBytes - 20)) : null;
 
@@ -141,10 +162,20 @@ export default function LightSend({ master, tile, open, onClose }) {
                         </Box>
                         <Typography variant="body2" role="status" sx={{ fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
                             {file
-                                ? `${tile.fileName || 'Photo'} · ${FileUtil.formatBytes(file.length)} · ${sendTimeText(file.length, level)}`
+                                // With a size choice, the bytes and the time are on it.
+                                ? (ready.canSmall
+                                    ? `${tile.fileName || 'Photo'} in ${inSmall ? 'small' : 'full'} size`
+                                    : `${tile.fileName || 'Photo'} · ${FileUtil.formatBytes(file.length)} · ${sendTimeText(file.length, level)}`)
                                     + (actual ? ` · ${FileUtil.formatBytes(actual)}/s` : '')
                                 : 'Getting the photo ready…'}
                         </Typography>
+                        {ready?.canSmall && (
+                            <SizeChoice
+                                light level={level} value={inSmall ? 'small' : 'full'} onChange={setSize}
+                                smallBytes={ready.small.length} fullBytes={ready.full?.length ?? null}
+                                onlySmall={!ready.full}
+                            />
+                        )}
                         <Stack spacing={0.5} sx={{ alignItems: 'center' }}>
                             <ToggleButtonGroup
                                 exclusive size="small" value={levelId} aria-label="Speed"

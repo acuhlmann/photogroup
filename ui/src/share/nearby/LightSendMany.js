@@ -16,13 +16,14 @@ import { qrSymbol, drawSymbol } from './qrCodec';
 import { LIGHT_LEVELS, DEFAULT_LEVEL, sendTimeText } from './lightSpeed';
 import { notePairing } from './pairingLog';
 import { useCodeCamera } from './cameraCodes';
-import { decodePick, fitsBundle, makeThumb, packBundle, packSheet, MAX_SHEET_ITEMS } from './lightBundle';
+import { bytesInSize, canBeSmall, decodePick, fitsBundle, makeSmall, makeThumb, packBundle, packSheet, MAX_SHEET_ITEMS, SMALL_MAX_BYTES } from './lightBundle';
 import { roomTag } from './notes';
+import SizeChoice from './SizeChoice';
 
 export const SEND_MANY_TITLE = 'Send photos by camera';
 export const SEND_MANY_HELP = 'On the other phone: open PhotoGroup, then "Get photos by camera". Point its camera at these codes. No network is necessary.';
-export const SHEET_STEP = 'Step 1 of 2: the other phone gets the small pictures.';
-export const SHEET_PICK = 'Then the other person picks photos, and holds that phone\'s code in front of this camera.';
+export const SHEET_STEP = 'Step 1 of 2: the other phone gets a preview of each photo.';
+export const SHEET_PICK = 'Then the other person picks photos and a size, and holds that phone\'s code in front of this camera.';
 export const PHOTOS_STEP = 'Step 2 of 2: the photos go to the other phone.';
 export const NOTHING_TO_SEND = 'No photo is on this phone in full.';
 export const TOO_LARGE_TOGETHER = 'These photos are too large together to send by camera. Send fewer photos.';
@@ -31,6 +32,7 @@ const CODES_FAILED = "Couldn't make a code. Trying again…";
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 const level = LIGHT_LEVELS.find(each => each.id === DEFAULT_LEVEL);
+const sum = values => values.reduce((total, value) => total + value, 0);
 
 function posterBytes(poster) {
     try {
@@ -96,9 +98,10 @@ function useCodes({ canvasRef, stream, emitter, what }) {
 }
 
 /**
- * Shows some photos as codes for another phone's camera. First their small
- * pictures, so the person there can pick. Then the picked photos in full.
- * One photo goes in full at once.
+ * Shows some photos as codes for another phone's camera. First a preview of
+ * each, so the person there can pick photos and a size. Then the picked
+ * photos in that size: small (the default, fast) or full. One photo goes at
+ * once, in the size chosen here.
  *
  * @param {object} props
  * @param {Array<{id: string, name: string, type: string, size: number, sealed?: boolean, poster?: string,
@@ -112,11 +115,12 @@ export default function LightSendMany({ emitter, items, room, onClose }) {
     const [sheet, setSheet] = useState(null);
     const [bundle, setBundle] = useState(null);
     const [picked, setPicked] = useState(null); // indexes, or null while the sheet shows
+    const [size, setSize] = useState('small');
     const [problem, setProblem] = useState('');
     const tag = room ? roomTag(room) : undefined;
     const single = listed.length === 1;
 
-    // The sheet: each photo's small picture.
+    // The sheet: each photo's preview.
     useEffect(() => {
         if (single || !listed.length) return undefined;
         let gone = false;
@@ -136,20 +140,22 @@ export default function LightSendMany({ emitter, items, room, onClose }) {
         return () => { gone = true; };
     }, [listed, single, tag]);
 
-    const choose = useCallback((indexes) => {
+    const choose = useCallback((indexes, inSize) => {
         const valid = [...new Set(indexes)].filter(index => listed[index]);
         if (!valid.length) return;
-        if (!fitsBundle(valid.map(index => listed[index].size))) {
+        if (!fitsBundle(valid.map(index => bytesInSize(listed[index], inSize === 'small')))) {
             setProblem(TOO_LARGE_TOGETHER);
             return;
         }
         setProblem('');
+        setSize(inSize);
         setPicked(valid);
     }, [listed]);
 
-    useEffect(() => { if (single) choose([0]); }, [single, choose]);
+    // One photo goes at once, in small size: the person here can change it.
+    useEffect(() => { if (single) choose([0], 'small'); }, [single, choose]);
 
-    // The picked photos in full.
+    // The picked photos, in the size chosen.
     useEffect(() => {
         if (!picked) return undefined;
         let gone = false;
@@ -161,6 +167,16 @@ export default function LightSendMany({ emitter, items, room, onClose }) {
                 const blob = await item.load().catch(() => null);
                 if (gone) return;
                 if (!blob) continue;
+                if (size === 'small' && canBeSmall(item) && item.size > SMALL_MAX_BYTES) {
+                    const small = await makeSmall(blob);
+                    if (gone) return;
+                    if (small) {
+                        parts.push({ ...item, bytes: small, small: true });
+                        continue;
+                    }
+                    // This browser cannot read the file: it goes as it is, when it can.
+                    if (!fitsBundle([item.size])) continue;
+                }
                 parts.push({ ...item, bytes: new Uint8Array(await blob.arrayBuffer()) });
             }
             if (gone) return;
@@ -169,27 +185,32 @@ export default function LightSendMany({ emitter, items, room, onClose }) {
                 return;
             }
             const packed = packBundle(parts, { room: tag });
-            setBundle({ ...packed, sendId: lightSendId(packed.details, packed.file), count: parts.length });
+            setBundle({
+                ...packed, sendId: lightSendId(packed.details, packed.file), count: parts.length,
+                small: parts.some(part => part.small),
+            });
         })().catch((err) => {
             Logger.warn('Getting the photos ready failed: ' + (err?.message || err));
             if (!gone) setProblem(CODES_FAILED);
         });
         return () => { gone = true; };
-    }, [picked, listed, tag]);
+    }, [picked, size, listed, tag]);
 
     // The other phone's choice, read by this phone's front camera.
     const sheetId = sheet?.sendId;
     const onBytes = useCallback((bytes) => {
         const pick = decodePick(bytes);
-        if (pick && pick.sendId === sheetId) choose(pick.indexes);
+        if (pick && pick.sendId === sheetId) choose(pick.indexes, pick.small ? 'small' : 'full');
     }, [sheetId, choose]);
     const watching = !!sheet && !picked;
     const { failed: cameraFailed } = useCodeCamera({ videoRef, active: watching, onBytes, facing: 'user' });
 
     const stream = picked ? bundle : sheet;
-    const codeProblem = useCodes({ canvasRef, stream, emitter, what: picked ? 'photos' : 'small pictures' });
+    const codeProblem = useCodes({ canvasRef, stream, emitter, what: picked ? (bundle?.small ? 'photos in small size' : 'photos') : 'previews' });
     const shown = problem || codeProblem;
-    const allFit = fitsBundle(listed.map(item => item.size));
+    const allFit = fitsBundle(listed.map(item => bytesInSize(item, size === 'small')));
+    const pickedItems = picked ? picked.map(index => listed[index]) : [];
+    const fullFits = fitsBundle(pickedItems.map(item => item.size));
 
     return (
         <Dialog open onClose={onClose} fullScreen aria-labelledby="light-many-title"
@@ -221,9 +242,22 @@ export default function LightSendMany({ emitter, items, room, onClose }) {
                         {shown && <Typography role="alert" variant="body2" sx={{ color: '#b00020', textAlign: 'center' }}>{shown}</Typography>}
                         <Typography variant="body2" role="status" sx={{ fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
                             {!stream && !shown && 'Getting the photos ready…'}
-                            {stream && !picked && `${plural(listed.length, 'small picture')} · ${sendTimeText(stream.file.length, level)}`}
-                            {stream && picked && `${plural(bundle.count, 'photo')} · ${FileUtil.formatBytes(stream.file.length)} · ${sendTimeText(stream.file.length, level)}`}
+                            {stream && !picked && `${plural(listed.length, 'preview')} · ${sendTimeText(stream.file.length, level)}`}
+                            {/* The bytes and the time are on the size choice below. */}
+                            {stream && picked && `${plural(bundle.count, 'photo')} in ${bundle.small ? 'small' : 'full'} size`}
                         </Typography>
+                        {picked && (
+                            <SizeChoice
+                                light level={level} value={pickedItems.some(canBeSmall) ? size : 'full'}
+                                // What is on screen now is known exactly; the other size is about.
+                                smallUpTo={!(bundle && size === 'small')}
+                                smallBytes={bundle && size === 'small' ? bundle.file.length : sum(pickedItems.map(item => bytesInSize(item, true)))}
+                                fullBytes={bundle && size === 'full' ? bundle.file.length : sum(pickedItems.map(item => item.size))}
+                                onlyFull={!pickedItems.some(canBeSmall)}
+                                onlySmall={!fullFits}
+                                onChange={next => choose(picked, next)}
+                            />
+                        )}
                         {!picked && !single && (
                             <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', justifyContent: 'center' }}>
                                 {!cameraFailed && (
@@ -234,7 +268,7 @@ export default function LightSendMany({ emitter, items, room, onClose }) {
                                 <Stack spacing={0.75} sx={{ alignItems: 'flex-start', maxWidth: 260 }}>
                                     <Typography variant="body2" sx={{ color: '#444' }}>{SHEET_PICK}</Typography>
                                     {allFit && (
-                                        <Button size="small" variant="outlined" onClick={() => choose(listed.map((item, index) => index))} sx={{ textTransform: 'none', color: '#111', borderColor: '#888' }}>
+                                        <Button size="small" variant="outlined" onClick={() => choose(listed.map((item, index) => index), size)} sx={{ textTransform: 'none', color: '#111', borderColor: '#888' }}>
                                             {`Send all ${listed.length} photos`}
                                         </Button>
                                     )}
@@ -243,7 +277,7 @@ export default function LightSendMany({ emitter, items, room, onClose }) {
                         )}
                         {picked && !single && (
                             <Button size="small" onClick={() => { setPicked(null); setProblem(''); }} sx={{ textTransform: 'none', color: '#111' }}>
-                                Show the small pictures again
+                                Show the previews again
                             </Button>
                         )}
                         <Typography variant="body2" sx={{ color: '#444', textAlign: 'center', maxWidth: 420 }}>{SEND_MANY_HELP}</Typography>
@@ -266,9 +300,12 @@ LightSendMany.propTypes = {
     onClose: PropTypes.func.isRequired,
 };
 
-/** The files that a person picked on the front page, as photos to send. */
+/**
+ * The files that a person picked on the front page, as photos to send. A
+ * file too large to go in full can still go in small size.
+ */
 export function itemsOfFiles(files) {
-    return [...files].filter(file => fitsBundle([file.size])).map((file, index) => ({
+    return [...files].filter(file => fitsBundle([file.size]) || canBeSmall({ type: file.type })).map((file, index) => ({
         id: `file-${index}-${file.size}`, name: file.name || 'photo', type: file.type || '', size: file.size,
         load: async () => file,
     }));
@@ -286,7 +323,8 @@ export function RoomLightSend({ master, onClose }) {
             for (const id of ids) {
                 const photo = master.roomPhotos.get(id);
                 const blob = await master.findPhotoBytes(id).catch(() => null);
-                if (!photo || !blob || !fitsBundle([blob.size])) continue;
+                if (!photo || !blob) continue;
+                if (!fitsBundle([blob.size]) && !canBeSmall({ type: photo.fileType || blob.type, sealed: !!photo.secure })) continue;
                 const about = master.offlineRoom?.describe(id) || null;
                 found.push({
                     id, name: photo.fileName || 'photo', type: photo.fileType || '', size: blob.size, sealed: !!photo.secure,

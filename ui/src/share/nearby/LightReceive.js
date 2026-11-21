@@ -16,13 +16,14 @@ import FileUtil from '../util/FileUtil';
 import { getSharedLightReceiver } from './lightFrames';
 import { framesNeeded } from './fountain.js';
 import { readQrBytes, prepareReader, qrSymbol, drawSymbol } from './qrCodec';
-import { readSheet, readBundle, encodePick, fitsBundle } from './lightBundle';
-import { LIGHT_LEVELS, DEFAULT_LEVEL, sendTimeText } from './lightSpeed';
+import { readSheet, readBundle, encodePick, fitsBundle, bytesInSize, canBeSmall } from './lightBundle';
+import { LIGHT_LEVELS, DEFAULT_LEVEL } from './lightSpeed';
 import { notePairing } from './pairingLog';
+import SizeChoice from './SizeChoice';
 
 export const RECEIVE_TITLE = 'Get photos by camera';
 export const LIGHT_RECEIVE_HELP = 'On the other phone: tap "Send photos by camera". Point this camera at the codes so they fill the square. Hold both phones still, turn the other screen\'s brightness up, and keep glare off it.';
-export const CHOOSE_TEXT = 'Tap the photos that you want.';
+export const CHOOSE_TEXT = 'Tap the photos that you want, then choose a size.';
 export const PICK_TEXT = 'Hold this code in front of the camera of the other phone. When its codes change, point this camera at them again.';
 export const TOO_MANY = 'These photos are too large together. Choose fewer photos.';
 export const CAMERA_ERROR = 'The camera is not available. Allow the camera for this page, then try again.';
@@ -30,6 +31,8 @@ const OUTCOME = {
     delivered: name => `${name} is here.`,
     already: name => `You have ${name} already.`,
     saved: name => `${name} is not in this room. It is saved on this phone.`,
+    small: name => `${name} is here in small size.`,
+    smallSaved: name => `${name} is not in this room. It is saved on this phone in small size.`,
     rejected: () => 'This is not the photo that the room has. It was not added.',
     unknown: () => 'This photo is from a different private room. It cannot be opened here.',
 };
@@ -42,6 +45,8 @@ export function outcomeLines(results) {
     const lines = [];
     if (count('delivered')) lines.push(`${plural(count('delivered'), 'photo')} ${count('delivered') === 1 ? 'is' : 'are'} here.`);
     if (count('saved')) lines.push(`${plural(count('saved'), 'photo')} ${count('saved') === 1 ? 'is' : 'are'} saved on this phone.`);
+    if (count('small')) lines.push(`${plural(count('small'), 'photo')} ${count('small') === 1 ? 'is' : 'are'} here in small size.`);
+    if (count('smallSaved')) lines.push(`${plural(count('smallSaved'), 'photo')} ${count('smallSaved') === 1 ? 'is' : 'are'} saved on this phone in small size.`);
     if (count('already')) lines.push(`You have ${plural(count('already'), 'photo')} already.`);
     if (count('rejected')) lines.push(`${plural(count('rejected'), 'photo')} ${count('rejected') === 1 ? 'was' : 'were'} not added.`);
     if (count('unknown')) lines.push(`${plural(count('unknown'), 'photo')} from a different private room cannot be opened here.`);
@@ -95,6 +100,7 @@ export default function LightReceive({ master, open, onClose }) {
     const [view, setView] = useState('camera'); // camera, choose, pick
     const [sheet, setSheet] = useState(null);
     const [chosen, setChosen] = useState([]);
+    const [size, setSize] = useState('small');
     const [cameraRun, setCameraRun] = useState(0);
     const [now, setNow] = useState(() => Date.now());
     const timingRef = useRef({ startedAt: Date.now(), lastFreshAt: null });
@@ -152,7 +158,7 @@ export default function LightReceive({ master, open, onClose }) {
                 setOutcome(OUTCOME.rejected());
                 return;
             }
-            // The small pictures of some photos: the person picks.
+            // The previews of some photos: the person picks.
             const sheet = readSheet(result);
             const kind = result.details?.kind;
             // Says that it is a sheet or a bundle, but is not a correct one:
@@ -171,7 +177,7 @@ export default function LightReceive({ master, open, onClose }) {
                 setChosen([]);
                 setView('choose');
                 notePairing(master.emitter, {
-                    channel: 'light', direction: 'in', what: 'small pictures', bytes: result.file.length,
+                    channel: 'light', direction: 'in', what: 'previews', bytes: result.file.length,
                     ms: Math.round(seconds * 1000), detail: `${sheet.items.length} photos`,
                 });
                 return;
@@ -180,7 +186,10 @@ export default function LightReceive({ master, open, onClose }) {
             const results = [];
             try {
                 for (const part of parts) {
-                    results.push({ name: part.details.name, how: await master.acceptNearbyPhoto(part.details, part.file) });
+                    results.push({
+                        name: part.details.name,
+                        how: await master.acceptNearbyPhoto(part.details, part.file, { small: !!part.details.small }),
+                    });
                 }
             } catch (err) {
                 // The file is whole: the next code read tries to add it again.
@@ -195,7 +204,7 @@ export default function LightReceive({ master, open, onClose }) {
             receiver.reset();
             setOutcome(outcomeLines(results).join(' '));
             notePairing(master.emitter, {
-                channel: 'light', direction: 'in', what: 'photo', bytes: result.file.length,
+                channel: 'light', direction: 'in', what: parts.some(part => part.details.small) ? 'photo in small size' : 'photo', bytes: result.file.length,
                 ms: Math.round(seconds * 1000),
                 detail: `${FileUtil.formatBytes(result.file.length / Math.max(seconds, 0.1))}/s · ${state.blocks} blocks from ${send.read} codes`,
             });
@@ -313,22 +322,24 @@ export default function LightReceive({ master, open, onClose }) {
         msSinceFresh,
     }) : '';
 
-    // The small pictures are freed when another sheet comes or this closes.
+    // The previews are freed when another sheet comes or this closes.
     useEffect(() => () => { sheet?.items.forEach((item) => { if (item.url) URL.revokeObjectURL(item.url); }); }, [sheet]);
 
     // The code that carries the choice.
     useEffect(() => {
         if (view !== 'pick' || !sheet) return undefined;
         let gone = false;
-        qrSymbol(encodePick(sheet.sendId, chosen)).then((symbol) => {
+        qrSymbol(encodePick(sheet.sendId, chosen, { small: size === 'small' })).then((symbol) => {
             if (!gone && pickRef.current) drawSymbol(pickRef.current, symbol);
         }).catch(err => Logger.warn('Making a code failed: ' + (err?.message || err)));
         return () => { gone = true; };
-    }, [view, sheet, chosen]);
+    }, [view, sheet, chosen, size]);
 
     const toggle = index => setChosen(before => (before.includes(index) ? before.filter(each => each !== index) : [...before, index]));
-    const chosenBytes = sheet ? chosen.reduce((sum, index) => sum + sheet.items[index].size, 0) : 0;
-    const tooMany = sheet ? !fitsBundle(chosen.map(index => sheet.items[index].size)) : false;
+    const chosenItems = sheet ? chosen.map(index => sheet.items[index]) : [];
+    const bytesOf = small => chosenItems.reduce((sum, item) => sum + bytesInSize(item, small), 0);
+    const fullFits = fitsBundle(chosenItems.map(item => item.size));
+    const tooMany = !fitsBundle(chosenItems.map(item => bytesInSize(item, size === 'small')));
     const level = LIGHT_LEVELS.find(each => each.id === DEFAULT_LEVEL);
 
     return (
@@ -401,9 +412,17 @@ export default function LightReceive({ master, open, onClose }) {
                                 </Box>
                                 <Typography variant="body2" role="status" data-testid="light-chosen" sx={{ textAlign: 'center', color: tooMany ? 'error.main' : 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
                                     {tooMany ? TOO_MANY : chosen.length
-                                        ? `${plural(chosen.length, 'photo')} · ${FileUtil.formatBytes(chosenBytes)} · ${sendTimeText(chosenBytes, level)}`
-                                        : 'A photo by camera can take minutes. Choose few photos.'}
+                                        ? `${plural(chosen.length, 'photo')} chosen`
+                                        : 'A full-size photo by camera can take many minutes. Small size is fast.'}
                                 </Typography>
+                                {chosen.length > 0 && (
+                                    <SizeChoice
+                                        level={level} value={chosenItems.some(canBeSmall) ? size : 'full'} onChange={setSize}
+                                        smallUpTo smallBytes={bytesOf(true)} fullBytes={bytesOf(false)}
+                                        onlyFull={!chosenItems.some(canBeSmall)}
+                                        onlySmall={!fullFits}
+                                    />
+                                )}
                                 <Button variant="contained" disabled={!chosen.length || tooMany} onClick={() => setView('pick')} sx={{ textTransform: 'none' }}>
                                     Get these photos
                                 </Button>

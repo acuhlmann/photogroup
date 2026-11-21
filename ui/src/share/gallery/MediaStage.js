@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { isSmallOnly } from './arrivingText';
 import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -54,7 +55,7 @@ function MediaStage({ tile, neighbours, onStep, hasPrev, hasNext, children }) {
     } else if (poster) {
         media = (
             <Box component="img" src={poster} alt={tile.fileName || (tile.isVideo ? 'Clip' : 'Photo')}
-                sx={{ ...fit, filter: tile.previewOnly ? 'none' : 'brightness(0.6)' }} />
+                sx={{ ...fit, filter: tile.previewOnly || isSmallOnly(tile) ? 'none' : 'brightness(0.6)' }} />
         );
     } else if (tile.isAudio) {
         media = <AudiotrackRounded sx={{ fontSize: 96, color: 'rgba(255,255,255,0.6)' }} />;
@@ -67,7 +68,7 @@ function MediaStage({ tile, neighbours, onStep, hasPrev, hasNext, children }) {
             bgcolor: '#000', overflow: 'hidden', touchAction: 'pan-y pinch-zoom',
         }}>
             {media}
-            {tile.loading && !tile.previewOnly && (
+            {tile.loading && !tile.previewOnly && !isSmallOnly(tile) && (
                 <Box sx={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, color: '#fff' }}>
                     <CircularProgress variant={percent > 0 ? 'determinate' : 'indeterminate'} value={percent} size={48} sx={{ color: '#fff' }} />
                     <Typography variant="body2">{percent > 0 ? `Arriving · ${percent}%` : 'Arriving…'}</Typography>

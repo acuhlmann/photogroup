@@ -65,7 +65,7 @@ test.describe('with no server', () => {
     }
   });
 
-  test('photos go from the front page by camera: small pictures first, then the photo that was picked', async ({ browser }) => {
+  test('photos go from the front page by camera: previews first, then the photo that was picked', async ({ browser }) => {
     test.setTimeout(180000);
     const senderContext = await browser.newContext();
     const receiverContext = await browser.newContext({ acceptDownloads: true });
@@ -86,15 +86,18 @@ test.describe('with no server', () => {
 
       await receiver.getByRole('button', { name: /Send or get photos by camera/i }).click();
       await receiver.getByRole('button', { name: 'Get photos by camera' }).click();
-      // The receiver's camera reads the small pictures off the sender's screen.
+      // The receiver's camera reads the previews off the sender's screen.
       const sheet = receiver.getByTestId('light-sheet');
       expect(await showCodes(sender, receiver, () => sheet.isVisible())).toBe(true);
       await expect(sheet.getByRole('button')).toHaveCount(2);
-      await expect(sheet.locator('img')).toHaveCount(1);
+      // The clip has a preview too: one frame of it.
+      await expect(sheet.locator('img')).toHaveCount(2);
 
       // The person picks the photo. The sender's camera reads the choice.
       await sheet.getByRole('button', { name: /test-image\.jpg/ }).click();
       await expect(receiver.getByTestId('light-chosen')).toContainText('1 photo');
+      // A photo that is small already goes as it is, in either size.
+      await expect(receiver.getByTestId('size-small')).toContainText('4.');
       await receiver.getByRole('button', { name: 'Get these photos' }).click();
       const step = sender.getByTestId('light-many-step');
       expect(await showCodes(receiver, sender, async () => (await step.getAttribute('data-step')) === 'photos',
@@ -107,6 +110,91 @@ test.describe('with no server', () => {
       expect(await showCodes(sender, receiver, async () => /saved/.test(await progress.textContent()), { timeout: 90000 })).toBe(true);
       await expect(progress).toHaveText('test-image.jpg is not in this room. It is saved on this phone.');
       expect((await download).suggestedFilename()).toBe('test-image.jpg');
+    } finally {
+      await senderContext.close();
+      await receiverContext.close();
+    }
+  });
+
+  test('a large photo goes by camera in small size first, and in full size when the person picks it', async ({ browser }) => {
+    test.setTimeout(240000);
+    const senderContext = await browser.newContext();
+    const receiverContext = await browser.newContext({ acceptDownloads: true });
+    for (const context of [senderContext, receiverContext]) {
+      await fakeCamera(context);
+      await serverAway(context);
+    }
+    const sender = await senderContext.newPage();
+    const receiver = await receiverContext.newPage();
+    try {
+      await sender.goto('/', { waitUntil: 'domcontentloaded' });
+      await receiver.goto('/', { waitUntil: 'domcontentloaded' });
+      // A photo as large as a phone's: 2400 x 1800 with fine detail.
+      const big = await sender.evaluate(async () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 2400;
+        canvas.height = 1800;
+        const pen = canvas.getContext('2d');
+        const image = pen.createImageData(2400, 1800);
+        let seed = 7;
+        for (let i = 0; i < image.data.length; i += 4) {
+          seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+          const x = (i / 4) % 2400;
+          image.data[i] = (x / 10 + (seed & 63)) & 255;
+          image.data[i + 1] = ((i / 9600) + (seed >> 8 & 63)) & 255;
+          image.data[i + 2] = (seed >> 16) & 255;
+          image.data[i + 3] = 255;
+        }
+        pen.putImageData(image, 0, 0);
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+        return [...new Uint8Array(await blob.arrayBuffer())];
+      });
+      expect(big.length).toBeGreaterThan(1024 * 1024);
+
+      await sender.getByRole('button', { name: /Send or get photos by camera/i }).click();
+      await sender.getByTestId('nearby-files').setInputFiles([
+        { name: 'beach.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(big) },
+        { name: 'test-image.jpg', mimeType: 'image/jpeg', buffer: require('fs').readFileSync(TEST_IMAGE) },
+      ]);
+      await expect(sender.getByTestId('light-many-step')).toHaveAttribute('data-step', 'sheet', { timeout: 20000 });
+
+      await receiver.getByRole('button', { name: /Send or get photos by camera/i }).click();
+      await receiver.getByRole('button', { name: 'Get photos by camera' }).click();
+      const sheet = receiver.getByTestId('light-sheet');
+      expect(await showCodes(sender, receiver, () => sheet.isVisible())).toBe(true);
+      await sheet.getByRole('button', { name: /beach\.jpg/ }).click();
+
+      // Small size is the default: about 100 kB in well under a minute, not minutes.
+      const small = receiver.getByTestId('size-small');
+      const full = receiver.getByTestId('size-full');
+      await expect(small).toHaveAttribute('aria-pressed', 'true');
+      await expect(small).toContainText(/up to 100 kB · about \d+ seconds/);
+      await expect(full).toContainText(/MB · about \d+ minutes/);
+      await receiver.getByRole('button', { name: 'Get these photos' }).click();
+      const step = sender.getByTestId('light-many-step');
+      expect(await showCodes(receiver, sender, async () => (await step.getAttribute('data-step')) === 'photos',
+        { selector: '[data-testid="pick-code"]' })).toBe(true);
+      await expect(sender.getByText('1 photo in small size', { exact: true })).toBeVisible({ timeout: 20000 });
+      await expect(sender.getByTestId('size-small')).toHaveAttribute('aria-pressed', 'true');
+      // Now that it is made, the sender knows its exact size.
+      await expect(sender.getByTestId('size-small')).toContainText(/^Small size[\d.]+ kB · about \d+ seconds$/);
+
+      const download = receiver.waitForEvent('download', { timeout: 120000 });
+      await receiver.getByRole('button', { name: 'The other phone has my choice' }).click();
+      const progress = receiver.getByTestId('light-progress');
+      expect(await showCodes(sender, receiver, async () => /saved/.test(await progress.textContent()), { timeout: 150000 })).toBe(true);
+      await expect(progress).toHaveText('beach.jpg is not in this room. It is saved on this phone in small size.');
+      const saved = await download;
+      expect(saved.suggestedFilename()).toBe('beach (small).jpg');
+      const bytes = require('fs').readFileSync(await saved.path());
+      expect(bytes.length).toBeLessThanOrEqual(100 * 1024);
+      expect(bytes[0]).toBe(0xff);
+      expect(bytes[1]).toBe(0xd8);
+
+      // The sender can change to full size: the codes start again with the whole file.
+      await sender.getByTestId('size-full').click();
+      await expect(sender.getByText('1 photo in full size', { exact: true })).toBeVisible({ timeout: 20000 });
+      await expect(sender.getByTestId('size-full')).toContainText(/MB · about \d+ minutes$/);
     } finally {
       await senderContext.close();
       await receiverContext.close();

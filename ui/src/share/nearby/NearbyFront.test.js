@@ -129,12 +129,29 @@ describe('NearbyFront', () => {
         await act(async () => root.unmount());
     });
 
-    it('emits an error if selected files exceed the camera size limit', async () => {
+    it('opens the sender for a video too large for full size: it can go in small size', async () => {
         const master = createMockMaster();
         const { div, root } = await renderNearby(master);
 
         const fileInput = div.querySelector('[data-testid="nearby-files"]');
-        const big = { name: 'huge.mp4', type: 'video/mp4', size: MAX_LIGHT_BYTES + 1 };
+        const big = { name: 'huge.mp4', type: 'video/mp4', size: MAX_LIGHT_BYTES + 1, arrayBuffer: async () => new ArrayBuffer(0) };
+        Object.defineProperty(fileInput, 'files', { configurable: true, value: [big] });
+        await act(async () => {
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        expect(master.emitter.emit).not.toHaveBeenCalledWith('showError', FILES_TOO_LARGE);
+        expect(document.body.querySelector('#light-many-title')?.textContent).toBe(SEND_MANY_TITLE);
+
+        await act(async () => root.unmount());
+    });
+
+    it('emits an error if selected files exceed the camera size limit and cannot be small', async () => {
+        const master = createMockMaster();
+        const { div, root } = await renderNearby(master);
+
+        const fileInput = div.querySelector('[data-testid="nearby-files"]');
+        const big = { name: 'huge.zip', type: 'application/zip', size: MAX_LIGHT_BYTES + 1 };
         Object.defineProperty(fileInput, 'files', { configurable: true, value: [big] });
         await act(async () => {
             fileInput.dispatchEvent(new Event('change', { bubbles: true }));

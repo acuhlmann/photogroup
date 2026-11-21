@@ -88,6 +88,50 @@ test('a phone gets a photo from the codes on another screen', async ({ browser }
   }
 });
 
+test('a photo in small size by camera becomes the photo\'s preview, and the photo stays not here', async ({ browser }, testInfo) => {
+  const sharerContext = await browser.newContext();
+  const sharer = await sharerContext.newPage();
+  await sharer.goto('/', { waitUntil: 'domcontentloaded' });
+  await sharer.getByRole('button', { name: /Start a room/i }).click();
+  await expect(sharer).toHaveURL(/\?room=/, { timeout: 30000 });
+  const roomUrl = sharer.url();
+  const room = new URL(roomUrl).searchParams.get('room');
+  await sharer.locator('input#contained-button-file').first().setInputFiles(FIXTURE);
+  expect(await waitForImage(sharer, 30000)).toBe(true);
+  const { photos } = await (await sharer.request.get(`http://localhost:8081/api/rooms/${room}`)).json();
+  await sharerContext.close();
+
+  // A JPEG in small size: here the fixture stands in for it.
+  const { createLightSender } = await import('../../src/share/nearby/lightFrames.js');
+  const file = new Uint8Array(fs.readFileSync(FIXTURE));
+  const sender = createLightSender({ id: photos[0].infoHash, name: 'test-image.jpg', type: 'image/jpeg', small: true }, file, 900);
+  const frames = Array.from({ length: sender.blocks + 12 }, () => sender.next());
+  const video = testInfo.outputPath('small-codes.y4m');
+  fs.mkdirSync(path.dirname(video), { recursive: true });
+  fs.writeFileSync(video, await videoOfCodes(frames));
+
+  const receiverBrowser = await chromium.launch({
+    executablePath: testInfo.project.use.launchOptions?.executablePath,
+    args: ['--no-sandbox', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${video}`],
+  });
+  try {
+    const receiver = await (await receiverBrowser.newContext({ baseURL: 'http://localhost:3000' })).newPage();
+    await receiver.goto(roomUrl, { waitUntil: 'domcontentloaded' });
+    await expect(receiver.getByText('test-image.jpg').first()).toBeVisible({ timeout: 20000 });
+    await receiver.getByRole('button', { name: /Room menu/ }).click();
+    await receiver.getByRole('menuitem', { name: /Get photos by camera/ }).click();
+    await expect(receiver.getByTestId('light-progress')).toHaveText('test-image.jpg is here in small size.', { timeout: 30000 });
+    await receiver.getByRole('button', { name: 'Close' }).click();
+    await expect(receiver.getByText('Small size only').first()).toBeVisible({ timeout: 10000 });
+    // The list shows the small size, sharp: not dimmed like a photo on the way.
+    const thumb = receiver.locator('img[src^="blob:"]').first();
+    await expect(thumb).toBeVisible();
+    expect(await thumb.evaluate(img => getComputedStyle(img).filter)).toBe('none');
+  } finally {
+    await receiverBrowser.close();
+  }
+});
+
 test('a photo is shown as codes that carry the whole file', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: /Start a room/i }).click();

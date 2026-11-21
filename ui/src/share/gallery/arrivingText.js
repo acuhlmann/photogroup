@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react';
 import { getBaseInfoHash, getTorrent } from '../torrent/WebTorrentUtils';
 import { activeHolders, holdersOf } from '../topology/presence';
 
+/** What a photo says that came by camera only in small size, and has no more bytes on the way. */
+export const SMALL_ONLY_TEXT = 'Small size only';
+
+/** Whether the tile shows the photo in small size that came by camera, with no more of it on the way. */
+export function isSmallOnly(tile) {
+    return !!(tile && tile.smallFromLight && tile.loading && !(tile.torrentFile?.progress > 0));
+}
+
 /**
  * What a photo that is still arriving waits for, in a few words for its
  * tile. It says who it connects to before the first byte comes, so a tile
@@ -22,6 +30,7 @@ export function arrivingText(tile, { torrent, peers = [], myPeerId, device = 'ph
     if (active.length > 1) return `Connecting to ${active.length} ${device}s…`;
     if (active.length === 1) return `Connecting to a ${device}…`;
     if (holdersOf(tile, peers, myPeerId).length > 0) return `Waiting for the ${device} with this photo`;
+    if (tile?.smallFromLight) return SMALL_ONLY_TEXT;
     return 'Arriving…';
 }
 

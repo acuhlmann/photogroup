@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { packSheet, readSheet, packBundle, readBundle, encodePick, decodePick, fitsBundle, MAX_THUMB_BYTES, MAX_SHEET_ITEMS, MAX_BUNDLE_BYTES, MAX_DETAILS_BYTES } from './lightBundle';
+import { packSheet, readSheet, packBundle, readBundle, encodePick, decodePick, fitsBundle, bytesInSize, canBeSmall, smallName, MAX_THUMB_BYTES, MAX_SHEET_ITEMS, MAX_BUNDLE_BYTES, MAX_DETAILS_BYTES, SMALL_MAX_BYTES } from './lightBundle';
 import { createLightSender, createLightReceiver, MAX_LIGHT_BYTES } from './lightFrames';
 
 const bytes = (length, seed = 1) => Uint8Array.from({ length }, (unused, i) => (i * 7 + seed) & 0xff);
@@ -14,7 +14,7 @@ function through({ details, file }) {
     return receiver.result();
 }
 
-describe('photos by camera, small pictures first', () => {
+describe('photos by camera, previews first', () => {
     it('carries a sheet: name, size and small picture of each photo', () => {
         const sheet = readSheet(through(packSheet([
             { id: 'a', name: 'one.jpg', type: 'image/jpeg', size: 4000000, thumb: bytes(3000, 1) },
@@ -31,17 +31,41 @@ describe('photos by camera, small pictures first', () => {
         expect(sheet.items[0].thumb).toEqual(bytes(3000, 1));
     });
 
-    it('carries a bundle: the picked photos in full', () => {
+    it('carries a bundle: the picked photos, each in full or in small size', () => {
         const parts = readBundle(through(packBundle([
             { id: 'a', name: 'one.jpg', type: 'image/jpeg', bytes: bytes(5000, 1), about: { infoHash: 'a', fileName: 'one.jpg' } },
             { id: 'b', name: 'two.jpg', type: 'image/jpeg', bytes: bytes(1, 2), sealed: true },
+            { id: 'c', name: 'clip.mp4', type: 'video/mp4', bytes: bytes(900, 3), small: true },
         ], { room: 77 })));
         expect(parts.map(part => part.details)).toEqual([
             { id: 'a', name: 'one.jpg', type: 'image/jpeg', sealed: false, room: 77, about: { infoHash: 'a', fileName: 'one.jpg' } },
             { id: 'b', name: 'two.jpg', type: 'image/jpeg', sealed: true, room: 77 },
+            // The type stays the photo's: the bytes are a JPEG of it.
+            { id: 'c', name: 'clip.mp4', type: 'video/mp4', sealed: false, small: true, room: 77 },
         ]);
         expect(parts[0].file).toEqual(bytes(5000, 1));
         expect(parts[1].file).toEqual(bytes(1, 2));
+        expect(parts[2].file).toEqual(bytes(900, 3));
+    });
+
+    it('knows which photos can go in small size, and about how large they are then', () => {
+        const photo = { type: 'image/heic', size: 3000000 };
+        const clip = { type: 'video/mp4', size: 40000000 };
+        expect(canBeSmall(photo)).toBe(true);
+        expect(canBeSmall(clip)).toBe(true);
+        expect(canBeSmall({ ...photo, sealed: true })).toBe(false);
+        expect(canBeSmall({ type: 'application/pdf', size: 1 })).toBe(false);
+        expect(bytesInSize(photo, true)).toBe(SMALL_MAX_BYTES);
+        expect(bytesInSize(photo, false)).toBe(3000000);
+        // Small already: it goes as it is.
+        expect(bytesInSize({ type: 'image/jpeg', size: 4000 }, true)).toBe(4000);
+        expect(bytesInSize({ ...photo, sealed: true }, true)).toBe(3000000);
+    });
+
+    it('names a photo in small size', () => {
+        expect(smallName('beach.heic')).toBe('beach (small).jpg');
+        expect(smallName('clip.final.mp4')).toBe('clip.final (small).jpg');
+        expect(smallName('')).toBe('photo (small).jpg');
     });
 
     it('knows a sheet from a bundle from one photo', () => {
@@ -58,12 +82,18 @@ describe('photos by camera, small pictures first', () => {
         expect(readSheet({ details: { kind: 'sheet', items: Array.from({ length: MAX_SHEET_ITEMS + 1 }, () => ({ id: 'a', thumb: 0 })) }, file: bytes(1) })).toBeNull();
     });
 
-    it('carries the choice in one small code', () => {
+    it('carries the choice and the size in one small code', () => {
         const code = encodePick(0xdeadbeef, [3, 0, 3, 59, 60, -1]);
-        expect(code.length).toBe(8 + 3);
-        expect(decodePick(code)).toEqual({ sendId: 0xdeadbeef, indexes: [3, 0, 59] });
+        expect(code.length).toBe(9 + 3);
+        expect(decodePick(code)).toEqual({ sendId: 0xdeadbeef, indexes: [3, 0, 59], small: true });
+        expect(decodePick(encodePick(7, [1], { small: false }))).toEqual({ sendId: 7, indexes: [1], small: false });
         expect(decodePick(bytes(11))).toBeNull();
-        expect(decodePick(code.subarray(0, 9))).toBeNull();
+        expect(decodePick(code.subarray(0, 10))).toBeNull();
+    });
+
+    it('reads a choice from a phone with the app from before the size choice as full size', () => {
+        const old = Uint8Array.from([0x50, 0x4b, 1, 2, 0, 0, 0, 9, 4, 5]);
+        expect(decodePick(old)).toEqual({ sendId: 9, indexes: [4, 5], small: false });
     });
 
     it('says when photos are too large together', () => {

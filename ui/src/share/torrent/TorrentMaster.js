@@ -31,6 +31,8 @@ import OfflineRoom from '../nearby/offlineRoom';
 import NearbyNotes from '../nearby/nearbyNotes';
 import NearbyLinks from '../nearby/nearbyLinks';
 import { roomTag } from '../nearby/notes';
+import { smallName } from '../nearby/smallSize';
+import { holdPreview } from '../gallery/tilePreview';
 import LoadSteps from '../loading/loadSteps';
 
 /** The room's photos by the torrent that carries them (base infoHash), in room order. */
@@ -238,22 +240,40 @@ export default class TorrentMaster {
      * by camera, or over a direct link. It joins the room photo with the
      * same id. One from another room is saved instead when it came by
      * camera; a direct link sends only this room's photos.
-     * @param {{via?: 'light'|'direct'}} [options]
-     * @returns {Promise<'delivered'|'already'|'rejected'|'saved'|'unknown'>}
+     *
+     * With `small`, the bytes are the photo in small size (a JPEG), not the
+     * photo itself: it cannot be checked against the room's fingerprint, so
+     * it becomes the photo's preview, and the photo stays "not here" until
+     * its full size comes.
+     * @param {{via?: 'light'|'direct', small?: boolean}} [options]
+     * @returns {Promise<'delivered'|'already'|'rejected'|'saved'|'unknown'|'small'|'smallSaved'>}
      */
-    async acceptNearbyPhoto(details, bytes, { via = 'light' } = {}) {
+    async acceptNearbyPhoto(details, bytes, { via = 'light', small = false } = {}) {
         const find = () => this.serverFallback?.watched.get(details?.id)?.original || this.roomPhotos?.get(details?.id);
         let photo = find();
-        const blob = new Blob([bytes], { type: details?.type || '' });
+        const blob = small
+            ? new Blob([bytes], { type: 'image/jpeg' })
+            : new Blob([bytes], { type: details?.type || '' });
         if (!photo && await this.learnNearbyPhoto(details)) photo = find();
         if (!photo) {
             // A private room's photo is sealed: only its room can open it.
             if (details?.sealed || via === 'direct') return 'unknown';
             const { default: download } = await import('downloadjs');
+            if (small) {
+                download(blob, smallName(details?.name), 'image/jpeg');
+                return 'smallSaved';
+            }
             download(blob, details?.name || 'photo', details?.type || 'application/octet-stream');
             return 'saved';
         }
         if (await this.hasPhotoBytes(photo.infoHash)) return 'already';
+        if (small) {
+            if (photo.secure) return 'unknown';
+            const previewUrl = holdPreview(photo.infoHash, blob);
+            this.emitter.emit('photos', { type: 'update', item: [{ infoHash: photo.infoHash, previewUrl, smallFromLight: true }] });
+            Logger.info('Small size of ' + (photo.fileName || photo.infoHash) + ' by camera');
+            return 'small';
+        }
         return this.serverFallback.deliverNearby(photo, blob, via);
     }
 
