@@ -67,6 +67,18 @@ export function addedInThisRoom(torrent, roomId) {
     return !torrent?.addedInRoom || !roomId || torrent.addedInRoom === roomId;
 }
 
+/**
+ * A photo from the kept copy of the room, without what only the server can
+ * say now: who has it and whether it has a server copy.
+ */
+export function keptPhoto(photo) {
+    const kept = { ...photo, owners: [] };
+    Object.keys(kept).forEach(key => {
+        if (key === 'hasServerCopy' || key.startsWith('serverCopy')) delete kept[key];
+    });
+    return kept;
+}
+
 export default class TorrentMaster {
 
     constructor(service, emitter) {
@@ -458,6 +470,35 @@ export default class TorrentMaster {
 
                 return response.photos;
             });
+    }
+
+    /**
+     * Show the room as this device kept it while the server still answers:
+     * its photos (small pictures, and the full ones in the image cache) at
+     * once, marked `kept`. The server's list replaces it when it comes. Once
+     * per room, never after that list, and never an empty room: only the
+     * server can say that a room is empty.
+     */
+    async showKeptRoom() {
+        const room = this.service?.id;
+        if (!this.service?.hasRoom || !room || this.roomSynced || this._keptShown === room || !this.offlineRoom) return false;
+        this._keptShown = room;
+        try {
+            await this.offlineRoom.load();
+            if (this.roomSynced || this.service.id !== room) return false;
+            const photos = this.offlineRoom.descriptions().map(keptPhoto);
+            if (!photos.length) return false;
+            await this.serveCachedPhotos(photos);
+            if (this.roomSynced || this.service.id !== room) return false;
+            const here = photos.filter(photo => photo.fromCache).length;
+            this.loadSteps?.log('room', `${photos.length} ${photos.length === 1 ? 'photo' : 'photos'} from this device's copy of the room`
+                + (here ? ` (${here} in full)` : ''));
+            this.emitter.emit('photos', { type: 'all', item: photos, kept: true });
+            return true;
+        } catch (err) {
+            Logger.warn('Showing the kept room failed: ' + (err?.message || err));
+            return false;
+        }
     }
 
     /**

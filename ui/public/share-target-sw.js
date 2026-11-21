@@ -62,7 +62,9 @@ self.addEventListener('notificationclick', event => {
 
 const APP_CACHE = 'photogroup-app-v1';
 // How long a page load waits for the network before the kept page is used.
-const PAGE_WAIT_MS = 3000;
+// Short: a server that starts (or a slow network) must not hold up a page
+// this phone already has. The fresh page is still kept for the next visit.
+const PAGE_WAIT_MS = 1000;
 
 /** Whether the app is kept: the page asked for it at least once. */
 function keepsApp() {

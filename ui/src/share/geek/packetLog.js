@@ -74,6 +74,8 @@ export function describeEvent(name, args) {
             return { kind: 'photo', text: `+ ${photo.fileName || 'photo'} magnet ${short(photo.infoHash, 10)}${more}` };
         }
         if (first.type === 'delete') return { kind: 'photo', text: `− ${short(first.item?.infoHash || first.item, 10)} removed` };
+        // The kept copy of the room comes from this device, not the network.
+        if (first.kept) return null;
         if (first.type === 'all' && Array.isArray(first.item)) return { kind: 'sse', text: `room snapshot · ${first.item.length} photos` };
         return null;
     }

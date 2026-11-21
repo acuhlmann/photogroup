@@ -74,7 +74,7 @@ Extra ways to hand the room link to phones nearby; photos still go over WebRTC. 
 
 **Direct link** (two phones, no server): it is a fallback, not a menu item. While the server does not answer, a bar under the header (`ServerAwayBar.js`) says so and has "Connect to a phone near you" (`DirectLinkDialog.js`); the room menu has it only in geek mode while the server answers. Both phones open it; each shows a QR code and reads the other's with `cameraCodes.js`. The first code is a WebRTC offer, the second its answer (`linkCode.js`: only the ICE keys, the DTLS fingerprint and up to 6 UDP host/srflx addresses, about 90 bytes; the reader makes the SDP text again; a 16-bit mark of the room stops a link between two rooms). `directConnect.js` makes the connection with one negotiated data channel, STUN at most (never TURN), and does not wait for a STUN server that does not answer. `nearbyLinks.js` (on `master.nearbyLinks`) runs the exchange: both phones start with an offer, a phone that reads an offer shows an answer and keeps its own offer alive (so reading in either order works), and an answer that a browser gave up on is made again. The code is made only after the camera runs, because browsers give a page its real local address (not an mDNS name) only while it captures. Over the open link (`directLink.js`) each phone says which room photos it lacks (`master.missingPhotoIds`) and the other sends those it has, 16 KiB messages with backpressure, 256 MB per file at most; they go in through `acceptNearbyPhoto(…, { via: 'direct' })` (`fromDirect`). Before that each phone tells what its room lists (`photo` messages: the description and small picture of each photo, from `offlineRoom.descriptions()`), so a photo that was added with no server joins the room on the other phone (`offlineRoom.learn`). The link stays open after the dialog closes and ends with the page. Geek mode logs `pair` lines for the codes, the path and each photo. `preload.js` fetches the QR reader/writer and the sound modem a few seconds after a room opens (not with "Data saver"), since nothing can load once the server is gone. Do not use the browser's "offline" switch in tests: it stops WebRTC too (`direct-link.spec.js` blocks `/api` and draws the codes on a canvas camera).
 
-**Room with no server** (`offlineRoom.js`, on `master.offlineRoom`): the app opens with no network because the service worker keeps it (`public/share-target-sw.js`: the page asks with a `keep-app` message and the list of a build's files, `app-files.json`, which a plugin in `vite.config.mjs` writes; the page is network first with the kept one after 3 s or a 5xx, built `/assets/` are cache first; `/api` is never kept; a development server keeps nothing). `RoomsService.joinRoom`/`createRoom` return `offlineRoom.openOffline()` when the server was not reached (`serverNotReached`: fetch failed, or 502/503/504, which is also what the wake proxy answers while the VM starts): the room opens from the copy that `offlineRoom` keeps in IndexedDB `room-snapshots` (the photos as the server describes them, and the settings), or empty when it is new. `share` and `sharePoster` hold what the server did not get; the next join that the server answers gives it the held photos first (`reconcile`, the server recreates a room it does not know), and a private room that started offline is made private then. `offlineRoom.away` (event `serverAway`) is true from the first request that did not reach the server, an `offline` event or a broken news stream whose probe fails; a probe every 15 s and the `online` event join again. Tests: `offline-room.spec.js` blocks `/api` from the start. To try the kept app with the network off: `npx vite build && npx vite preview` (port 4173, proxies `/api`).
+**Room with no server** (`offlineRoom.js`, on `master.offlineRoom`): the app opens with no network because the service worker keeps it (`public/share-target-sw.js`: the page asks with a `keep-app` message and the list of a build's files, `app-files.json`, which a plugin in `vite.config.mjs` writes; the page is network first with the kept one after 1 s or a 5xx, built `/assets/` are cache first; `/api` is never kept; a development server keeps nothing). `RoomsService.joinRoom`/`createRoom` return `offlineRoom.openOffline()` when the server was not reached (`serverNotReached`: fetch failed, or 502/503/504, which is also what the wake proxy answers while the VM starts): the room opens from the copy that `offlineRoom` keeps in IndexedDB `room-snapshots` (the photos as the server describes them, and the settings), or empty when it is new. `share` and `sharePoster` hold what the server did not get; the next join that the server answers gives it the held photos first (`reconcile`, the server recreates a room it does not know), and a private room that started offline is made private then. `offlineRoom.away` (event `serverAway`) is true from the first request that did not reach the server, an `offline` event or a broken news stream whose probe fails; a probe every 15 s and the `online` event join again. Tests: `offline-room.spec.js` blocks `/api` from the start. To try the kept app with the network off: `npx vite build && npx vite preview` (port 4173, proxies `/api`).
 
 **Photos by camera, small pictures first** (`lightBundle.js`, `LightSendMany.js`): "Send photos by camera" is on the front page (`NearbyFront.js`, any files, no room) and in the room menu (the room's photos that are on this phone). More than one photo goes in two steps over the same code stream: a "sheet" (name, size and a JPEG of 160 px and 12 kB at most for each of up to 60 photos), then the receiver taps the photos it wants and shows one "pick" code, which the sender's front camera reads, then a "bundle" with the picked photos in full (64 MB at most together). The sender can also tap "Send all". One photo goes in full at once. `LightReceive` reads all three kinds (a single photo, a sheet, a bundle). With no room, or from another room, a received photo is saved on the phone; from the same room (the bundle carries the room mark and the photo's description) an unknown photo joins the room (`TorrentMaster.learnNearbyPhoto`). Sound is not used for pictures: a 15 kB small picture is over 10 minutes.
 
@@ -337,18 +337,32 @@ App.js (theme, layout)
 ### Opening the page and a room
 
 `ui/index.html` holds a small page that shows before the app's code is here
-(about 0.5 MB on a first visit): the front page's heading, or "Opening the
-room" with the steps Load the app / Connect to the server / Join the room, in
-the person's mode and colors (geek mode lists each file and request with its
-real size and time). Its script also starts `GET /api/__rtcConfig__` and
-`__trackerConfig__` at once; `RoomsService.getRtcConfig`/`getTrackerConfig`
-use those answers once (`takeEarly`). The app carries on with the same steps:
-`share/loading/loadSteps.js` (on `master.loadSteps`, event `loadSteps`) and
-`RoomLoading.js`, which `ShareCanvas` shows until the room's photo list is
-here (the gallery stays mounted, hidden, so it gets the list). A photo still
-arriving says who it connects to (`gallery/arrivingText.js`). Keep big
-libraries that only read photos (exifr, music-metadata: `metadata/parsers.js`)
-out of the first download, and import lodash one function at a time.
+(about 0.5 MB on a first visit): the front page's heading, or the room as it
+will look (its name, a small status bar, grey tiles) in the person's mode and
+colors (geek mode lists each file and request with its real size and time).
+Its script also starts `GET /api/__rtcConfig__` and `__trackerConfig__` at
+once; `RoomsService.getRtcConfig`/`getTrackerConfig` use those answers once
+(`takeEarly`).
+
+Nothing waits for the server, which can take a minute to start (wake proxy).
+The room shows at once: `TorrentMaster.showKeptRoom` (called by the gallery
+when it listens) emits `photos` `{type: 'all', kept: true}` from the copy of
+the room `offlineRoom` keeps, with the full photos from the image cache and
+small pictures (`poster`) for the rest. A kept list is for the eye only: it
+never marks the room synced (`useRoomSynced`, the gallery's empty state),
+`RoomPhotos` and the geek packet log ignore it, and who has a photo and its
+server copy are left out (`keptPhoto`). The server's list replaces it. The
+steps go on in `share/loading/loadSteps.js` (on `master.loadSteps`, event
+`loadSteps`) and show in `RoomLoading.js`, a small bar at the top of the room
+(floating on the map in geek mode) that says the step that runs; a tap shows
+all steps, with times in Photographer mode and the real events in geek mode.
+It says "The room is open" for a moment, then goes. Photos picked while the
+room opens wait in `Uploader` and are shared on `readyToUpload`. Simple
+mode's bar says "Finding who is here…" and keeps the invite code folded until
+the room's list is here. A photo still arriving says who it connects to
+(`gallery/arrivingText.js`). Keep big libraries that only read photos (exifr,
+music-metadata: `metadata/parsers.js`) out of the first download, and import
+lodash one function at a time.
 
 ### State Management
 

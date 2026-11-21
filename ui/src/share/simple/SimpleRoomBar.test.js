@@ -6,9 +6,9 @@ import EventEmitter from 'eventemitter3';
 vi.mock('clipboard-copy', () => ({ default: vi.fn().mockResolvedValue() }));
 
 const { default: copy } = await import('clipboard-copy');
-const { default: SimpleRoomBar } = await import('./SimpleRoomBar');
+const { default: SimpleRoomBar, FINDING_TEXT } = await import('./SimpleRoomBar');
 
-async function render(peers) {
+async function render(peers, props = {}) {
     const master = {
         emitter: new EventEmitter(),
         service: { id: 'room-1' },
@@ -17,7 +17,7 @@ async function render(peers) {
     };
     const div = document.createElement('div');
     const root = createRoot(div);
-    await act(async () => root.render(<SimpleRoomBar master={master} />));
+    await act(async () => root.render(<SimpleRoomBar master={master} {...props} />));
     return { div, root, master };
 }
 
@@ -39,6 +39,15 @@ describe('SimpleRoomBar', () => {
         expect(invite).toBeTruthy();
         await act(async () => invite.click());
         expect(div.textContent).toContain('Hide code');
+        await act(async () => root.unmount());
+    });
+
+    it('keeps the code folded while the room opens, with Invite at hand', async () => {
+        const { div, root } = await render([{ peerId: 'me' }], { synced: false });
+        expect(div.textContent).toContain(FINDING_TEXT);
+        expect(div.textContent).not.toContain('Just you so far');
+        expect(div.querySelector('.MuiCollapse-hidden')).not.toBeNull();
+        expect(Array.from(div.querySelectorAll('button')).some(button => button.textContent === 'Invite')).toBe(true);
         await act(async () => root.unmount());
     });
 
