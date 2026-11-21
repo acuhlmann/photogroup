@@ -7,7 +7,8 @@ import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
 import GroupRounded from "@mui/icons-material/GroupRounded";
 import Paper from "@mui/material/Paper";
 import Logger from 'js-logger';
-import _ from 'lodash';
+import groupBy from 'lodash/groupBy';
+import truncate from 'lodash/truncate';
 
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -95,10 +96,10 @@ function OwnersList(props) {
         const numOfOwners = owners.length;
         const names = owners.map(owner => {
             let name = owner.peerId;
-            name = _.truncate(name, {length: 10});
+            name = truncate(name, {length: 10});
             const peer = peers.items.find(item => item.peerId === owner.peerId);
             if(peer) {
-                name = peer.name || peer.device || _.truncate(peer.originPlatform, {length: 10});
+                name = peer.name || peer.device || truncate(peer.originPlatform, {length: 10});
             }
             return name;
         }).join(', ');
@@ -175,7 +176,7 @@ function OwnersList(props) {
             }
         }).filter(item => item);
 
-        const groups = _.groupBy(nats, 'natIp');
+        const groups = groupBy(nats, 'natIp');
 
         return Object.values(groups)
             .map((natClients, index) => {

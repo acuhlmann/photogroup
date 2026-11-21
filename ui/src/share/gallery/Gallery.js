@@ -9,7 +9,7 @@ import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import {withSnackbar} from "../compatibility/withSnackbar";
 import update from "immutability-helper";
-import _ from "lodash";
+import merge from 'lodash/merge';
 import LoadingTile from "./LoadingTile";
 import StringUtil from "../util/StringUtil";
 import ContentTile from "./ContentTile";
@@ -147,7 +147,7 @@ function Gallery(props) {
                 if(index > -1) {
                     // A new tile and a new list, so the memoized arrangement and
                     // the list rows see that the photo finished loading.
-                    photo = { ..._.merge(newTiles[index], photo) };
+                    photo = { ...merge(newTiles[index], photo) };
                     newTiles = update(newTiles, {$splice: [[index, 1, photo]]});
                 } else {
                     newTiles = update(newTiles, {$unshift: [photo]});

@@ -22,6 +22,24 @@ function restoreSession() {
 }
 
 /**
+ * A request that index.html started before the app's code was here (see
+ * its boot script), or null. Each one is used once: a later call asks again.
+ * It resolves to the JSON, or null when it failed.
+ */
+export function takeEarly(name, win = typeof window === 'undefined' ? null : window) {
+    const early = win && win.__pgEarly;
+    const request = early && early[name];
+    if (!request) return null;
+    early[name] = null;
+    return request;
+}
+
+function withoutComment(json) {
+    if (json && typeof json === 'object') delete json.comment;
+    return json;
+}
+
+/**
  * @emits RoomsService#urlChange
  * @type {array} latest server state of magnet urls
  */
@@ -59,11 +77,15 @@ export default class RoomsService {
             const urlParams = new URLSearchParams(window.location.search);
             if(urlParams.has('room')) {
                 this.id = urlParams.get('room');
+                const steps = this.master.loadSteps;
+                steps?.start('room');
                 // An event listener's rejection goes nowhere: say what failed.
                 try {
                     await this.master.findExistingContent(this.joinRoom);
                 } catch (err) {
                     Logger.error('open room failed: ' + (err?.message || err));
+                    steps?.log('room', 'Cannot open the room: ' + (err?.message || err));
+                    steps?.fail('room');
                 }
                 //this.emitter.emit('openRoomEnd');
                 this.emitter.emit('readyToUpload');
@@ -167,6 +189,7 @@ export default class RoomsService {
         this._sseDropped = false;
         source.addEventListener('open', () => {
             scope._sseReconnectAttempt = 0;
+            scope.master?.loadSteps?.log('sse', 'Room updates stream open (SSE)');
             // Back after the browser's own retry: anything broadcast in the
             // gap was missed, and after a long gap the room dropped us.
             if (scope._sseDropped) {
@@ -452,7 +475,13 @@ export default class RoomsService {
     }
 
     getRtcConfig() {
+        // index.html asked for it before the app's code was here.
+        const early = takeEarly('rtc');
+        if (early) return early.then(json => (json ? withoutComment(json) : this.fetchRtcConfig()));
+        return this.fetchRtcConfig();
+    }
 
+    fetchRtcConfig() {
         return fetch('/api/__rtcConfig__')
             .then(response => {
                 return response.json();
@@ -472,6 +501,12 @@ export default class RoomsService {
      * @returns {Promise<{wsUrl: string, port: number}>} The tracker configuration
      */
     getTrackerConfig() {
+        const early = takeEarly('tracker');
+        if (early) return early.then(json => (json ? withoutComment(json) : this.fetchTrackerConfig()));
+        return this.fetchTrackerConfig();
+    }
+
+    fetchTrackerConfig() {
         return fetch('/api/__trackerConfig__')
             .then(response => {
                 return response.json();
@@ -547,6 +582,7 @@ export default class RoomsService {
         const offlineRoom = this.master?.offlineRoom;
         if (!offlineRoom || !serverNotReached(err)) return null;
         Logger.warn('The server was not reached: the room opens from this phone');
+        this.master?.loadSteps?.log('room', 'The server was not reached: the room opens from the copy on this device');
         return offlineRoom.openOffline(options);
     }
 
@@ -567,6 +603,7 @@ export default class RoomsService {
         //await this.master.torrentsDb.clear();
 
         try {
+            const sentAt = performance.now();
             let response = await fetch(this.url + '/' + this.id, {
                 method: 'POST',
                 headers: {
@@ -574,6 +611,7 @@ export default class RoomsService {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(data)});
+            this.master?.loadSteps?.log('api', `POST /api/rooms/${this.id.slice(0, 8)}… · ${response.status} · ${Math.round(performance.now() - sentAt)} ms`);
 
             if (!response.ok) {
                 if (response.status === 404) {

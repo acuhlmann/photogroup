@@ -1,4 +1,4 @@
-import {get} from 'lodash';
+import get from 'lodash/get';
 import Logger from 'js-logger';
 import {XMLParser} from 'fast-xml-parser';
 

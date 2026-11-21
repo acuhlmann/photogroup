@@ -3,7 +3,7 @@ import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
-import _ from 'lodash';
+import get from 'lodash/get';
 
 import CheckRounded from "@mui/icons-material/CheckRounded";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -152,11 +152,11 @@ function LoadingTile({tile, master, name}) {
     const hasError = !!tile.uploadError;
 
     if(tile.rendering && !displayName) {
-        const fileSize = _.get(tile, 'file.size');
+        const fileSize = get(tile, 'file.size');
         if(fileSize && !tile.fileSize) {
             tile.fileSize = FileUtil.formatBytes(fileSize);
         }
-        displayName = StringUtil.addEmptySpaces([_.get(tile, 'file.name'), tile.fileSize, tile.picDateTaken]);
+        displayName = StringUtil.addEmptySpaces([get(tile, 'file.name'), tile.fileSize, tile.picDateTaken]);
     }
 
     if(isRendering && tile.fromCache) {

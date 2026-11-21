@@ -1,4 +1,4 @@
-import _ from 'lodash';
+import get from 'lodash/get';
 
 export default class StringUtil {
 
@@ -37,20 +37,20 @@ export default class StringUtil {
 
     static createNetworkLabel(item, ispSeparator='', noStripping) {
         // Always show IP address on first line
-        const ip = item.ip || _.get(item, 'network.ip') || '';
+        const ip = item.ip || get(item, 'network.ip') || '';
 
         // Build location line: city, region, country with flag emoji
         const locationParts = [];
         if (noStripping ? item.typeDetail : StringUtil.stripSrflx(item.typeDetail)) {
             locationParts.push(noStripping ? item.typeDetail : StringUtil.stripSrflx(item.typeDetail));
         }
-        const countryFlag = _.get(item, 'network.location.country_flag_emoji');
+        const countryFlag = get(item, 'network.location.country_flag_emoji');
         if (countryFlag) {
             locationParts.push(countryFlag);
         }
-        const city = _.get(item, 'network.city');
-        const regionName = _.get(item, 'network.region_name');
-        const country = _.get(item, 'network.country');
+        const city = get(item, 'network.city');
+        const regionName = get(item, 'network.region_name');
+        const country = get(item, 'network.country');
 
         const locationDetails = [];
         if (city) locationDetails.push(city);
@@ -62,9 +62,9 @@ export default class StringUtil {
             : locationDetails.join(', ');
 
         // Build ISP and org lines
-        const isp = _.get(item, 'network.connection.isp') || null;
-        const org = _.get(item, 'network.connection.org') || null;
-        const hostname = _.get(item, 'network.hostname');
+        const isp = get(item, 'network.connection.isp') || null;
+        const org = get(item, 'network.connection.org') || null;
+        const hostname = get(item, 'network.hostname');
 
         // Build the full label with IP on first line
         const lines = [ip];
@@ -94,12 +94,12 @@ export default class StringUtil {
      * IP is omitted from this label and should be shown in click details.
      */
     static createDisplayName(item) {
-        const isp = _.get(item, 'network.connection.isp') || null;
-        const org = _.get(item, 'network.connection.org') || null;
-        const city = _.get(item, 'network.city');
-        const country = _.get(item, 'network.country');
-        const hostname = _.get(item, 'network.hostname');
-        const countryFlag = _.get(item, 'network.location.country_flag_emoji');
+        const isp = get(item, 'network.connection.isp') || null;
+        const org = get(item, 'network.connection.org') || null;
+        const city = get(item, 'network.city');
+        const country = get(item, 'network.country');
+        const hostname = get(item, 'network.hostname');
+        const countryFlag = get(item, 'network.location.country_flag_emoji');
 
         // Prefer ISP name
         if (isp) {
@@ -124,6 +124,6 @@ export default class StringUtil {
             return typeDetail.trim();
         }
         // Last resort: IP
-        return item.ip || _.get(item, 'network.ip') || '?';
+        return item.ip || get(item, 'network.ip') || '?';
     }
 }

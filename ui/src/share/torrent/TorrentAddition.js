@@ -2,7 +2,6 @@ import Logger from 'js-logger';
 import shortid  from 'shortid';
 import StringUtil from "../util/StringUtil";
 import {format} from 'date-fns';
-import _ from 'lodash';
 import FileUtil from "../util/FileUtil";
 import React from "react";
 import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isDuplicateTorrentError, extractDuplicateTorrentId } from './WebTorrentUtils';
