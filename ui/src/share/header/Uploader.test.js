@@ -291,3 +291,36 @@ describe('Uploader on Android', () => {
     expect(model.seed.mock.calls[1][0]).toEqual([dropped]);
   });
 });
+
+describe('Uploader while the room opens', () => {
+  const { act } = require('react');
+  const EventEmitter = require('events');
+
+  it('takes photos at once and shares them when the room is open', async () => {
+    delete window.location;
+    window.location = { search: '?room=test123' };
+    const userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (X11; Linux x86_64) Chrome/140.0.0.0');
+    const model = { emitter: new EventEmitter(), seed: vi.fn() };
+    const info = vi.fn();
+    model.emitter.on('showInfo', info);
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    const root = createRoot(div);
+    await act(async () => root.render(<Uploader model={model} emitter={model.emitter} classes={{}} />));
+    const input = div.querySelector('input[type="file"]');
+    expect(input.disabled).toBe(false);
+
+    const photo = new File(['x'], 'beach.jpg', { type: 'image/jpeg' });
+    await act(async () => model.emitter.emit('filesSelected', [photo]));
+    await vi.waitFor(() => expect(info).toHaveBeenCalled());
+    expect(model.seed).not.toHaveBeenCalled();
+
+    await act(async () => model.emitter.emit('readyToUpload'));
+    expect(model.seed).toHaveBeenCalledTimes(1);
+    expect(model.seed.mock.calls[0][0]).toEqual([photo]);
+
+    await act(async () => root.unmount());
+    div.remove();
+    userAgent.mockRestore();
+  });
+});

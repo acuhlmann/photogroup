@@ -9,7 +9,10 @@ import QrCode2Rounded from '@mui/icons-material/QrCode2Rounded';
 import { CLIP_SIZE_NOTE } from '../torrent/ServerCopyLimits';
 import InviteCode from '../InviteCode';
 
-function peopleLabel(count) {
+export const FINDING_TEXT = 'Finding who is here…';
+
+function peopleLabel(count, synced) {
+    if (!synced && count <= 1) return FINDING_TEXT;
     if (count <= 1) return 'Just you so far';
     return `${count} people here`;
 }
@@ -18,11 +21,13 @@ function peopleLabel(count) {
  * The top of a room in simple mode: the code others scan to join, how many
  * are here, and one big button to add photos and clips (it opens the
  * header's file input). Leaving and naming the room are in the room menu at the top.
+ * It shows while the room still opens (`synced` false): the code stays folded
+ * until the room says that nobody else is here, so it does not show and fold away.
  */
-function SimpleRoomBar({ master, roomName = '' }) {
+function SimpleRoomBar({ master, roomName = '', synced = true }) {
     const [count, setCount] = useState(() => master.peers?.items?.length || 1);
     const [showCode, setShowCode] = useState(false);
-    const alone = count <= 1;
+    const alone = synced && count <= 1;
 
     useEffect(() => {
         const handleCount = numPeers => setCount(numPeers);
@@ -51,7 +56,7 @@ function SimpleRoomBar({ master, roomName = '' }) {
 
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <Typography variant="body1" role="status" sx={{ flex: 1, fontWeight: 600 }}>
-                    {peopleLabel(count)}
+                    {peopleLabel(count, synced)}
                 </Typography>
                 {!alone && (
                     <Button variant="outlined" color="inherit" startIcon={<QrCode2Rounded />}
@@ -81,6 +86,7 @@ function SimpleRoomBar({ master, roomName = '' }) {
 SimpleRoomBar.propTypes = {
     master: PropTypes.object.isRequired,
     roomName: PropTypes.string,
+    synced: PropTypes.bool,
 };
 
 export default SimpleRoomBar;

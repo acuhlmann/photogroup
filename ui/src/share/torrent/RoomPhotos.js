@@ -27,7 +27,9 @@ export default class RoomPhotos {
     constructor(emitter, { now = () => Date.now() } = {}) {
         this.photos = new Map();
         this.now = now;
-        emitter?.on?.('photos', event => this.apply(event));
+        // The copy of the room this device kept (`kept`) is for the eye only:
+        // who has a photo and its server copy come from the server's list.
+        emitter?.on?.('photos', event => { if (!event?.kept) this.apply(event); });
     }
 
     /**

@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { useTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import CircularProgress from '@mui/material/CircularProgress';
+import Skeleton from '@mui/material/Skeleton';
 import CloudUploadIcon from '@mui/icons-material/CloudUploadRounded';
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
@@ -61,7 +61,6 @@ function Gallery(props) {
     // Until the first room snapshot arrives, an empty gallery means "not
     // loaded yet", not "no photos": after a reload it looked like they were gone.
     const [roomSynced, setRoomSynced] = useState(() => !!master.roomSynced);
-    const [roomSyncTimedOut, setRoomSyncTimedOut] = useState(false);
     const photoHandlerRef = useRef(null);
     const dragCounterRef = useRef(0);
 
@@ -387,6 +386,8 @@ function Gallery(props) {
         // This effect re-runs on every tile change; without unsubscribing,
         // each photo event was handled once per past render.
         const stopPhotoSync = photoHandlerRef.current.sync();
+        // Now that the tiles listen: the room as this device kept it, until the server's list is here.
+        master.showKeptRoom?.();
 
         // Emit initial gallery state
         updateGalleryState();
@@ -423,19 +424,15 @@ function Gallery(props) {
     useEffect(() => {
         const emitter = master.emitter;
         /** Mark the room synced only after a complete photo snapshot arrives. */
+        // The copy of the room kept on this device (`kept`) shows its photos
+        // at once, but only the server can say the room is empty.
         const handlePhotos = event => {
-            if (event?.type === 'all' && Array.isArray(event.item)) {
-                clearTimeout(fallback);
-                setRoomSyncTimedOut(false);
+            if (event?.type === 'all' && Array.isArray(event.item) && !event.kept) {
                 setRoomSynced(true);
             }
         };
-        // Only a room snapshot can say the room is empty; if it is slow (or
-        // the join failed), keep saying so but let people add photos anyway.
-        const fallback = setTimeout(() => setRoomSyncTimedOut(true), 4000);
         emitter.on('photos', handlePhotos);
         return () => {
-            clearTimeout(fallback);
             emitter.removeListener('photos', handlePhotos);
         };
     }, [master.emitter]);
@@ -548,16 +545,16 @@ function Gallery(props) {
             }}
         >
             {tiles.length === 0 && !roomSynced ? (
-                <>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, py: 6 }}>
-                    {!roomSyncTimedOut && <CircularProgress size={18} thickness={4} />}
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        {roomSyncTimedOut
-                            ? 'This room is taking longer to load. Check your connection.'
-                            : "Loading this room's photos…"}
-                    </Typography>
+                // The outline of what comes. How far the room is, and what
+                // is slow, shows above it (loading/RoomLoading.js).
+                <Box data-testid="room-placeholder" role="img" aria-label="Loading this room's photos…"
+                    sx={variant === 'simple'
+                        ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, maxWidth: 560, mx: 'auto' }
+                        : { display: 'grid', gap: 1 }}>
+                    {[0, 1, 2, 3].map(index => (variant === 'simple'
+                        ? <Skeleton key={index} variant="rounded" sx={{ width: '100%', height: 'auto', aspectRatio: '1 / 1' }} />
+                        : <Skeleton key={index} variant="rounded" height={64} />))}
                 </Box>
-                </>
             ) : variant === 'simple' ? (
                 <SimpleGrid tiles={tiles} master={master} roomId={master.service && master.service.id} onError={showError}
                     onRemove={removePhoto} />

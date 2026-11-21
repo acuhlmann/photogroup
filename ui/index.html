@@ -63,12 +63,8 @@
       #pg-boot .front { text-align: center; padding: 32px 28px; max-width: 476px; }
       #pg-boot .wait { display: flex; align-items: center; justify-content: center; gap: 10px; height: 60px; border-radius: 12px;
         background: var(--line); color: var(--muted); font-weight: 700; font-size: 1.1rem; }
-      #pg-boot ol { list-style: none; margin: 0; padding: 0; }
-      #pg-boot li { display: flex; align-items: center; gap: 12px; padding: 10px 0; color: var(--muted); }
-      #pg-boot li.run { color: var(--ink); font-weight: 600; }
-      #pg-boot li .t { margin-left: auto; font: 0.8rem ui-monospace, "JetBrains Mono", monospace; color: var(--muted); }
       #pg-boot .dot { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid var(--line); box-sizing: border-box; }
-      #pg-boot .run .dot, #pg-boot .wait .dot { border-color: var(--accent); border-right-color: transparent; animation: pg-spin 0.8s linear infinite; }
+      #pg-boot .wait .dot, #pg-boot .pill .dot { border-color: var(--accent); border-right-color: transparent; animation: pg-spin 0.8s linear infinite; }
       #pg-boot .note { color: var(--muted); font-size: 0.9rem; line-height: 1.5; margin-top: 16px; }
       #pg-boot .rows { margin-top: 24px; }
       #pg-boot .row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
@@ -79,10 +75,20 @@
       #pg-boot .row i + i { width: 35%; }
       #pg-boot pre { text-align: left; font: 0.75rem/1.6 ui-monospace, "JetBrains Mono", monospace; color: var(--muted); white-space: pre-wrap; word-break: break-all;
         margin: 20px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); min-height: 6em; }
+      #pg-boot main.room { max-width: 560px; padding-top: 12px; }
+      #pg-boot .pill { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px;
+        background: var(--paper); font-weight: 600; font-size: 0.875rem; }
+      #pg-boot .pill .t { margin-left: auto; font: 0.75rem ui-monospace, "JetBrains Mono", monospace; color: var(--muted); font-weight: 400; }
+      #pg-boot .pill .dot { width: 16px; height: 16px; }
+      #pg-boot .big { margin: 16px 0 12px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+        background: var(--accent); color: var(--bg); font-weight: 700; font-size: 1.2rem; opacity: 0.55; }
+      #pg-boot .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      #pg-boot .grid b { display: block; aspect-ratio: 1; border-radius: 8px; background: var(--line); animation: pg-pulse 1.4s ease-in-out infinite; }
+      #pg-boot .room .rows { margin-top: 16px; }
       #pg-boot[data-mode="geek"] main { max-width: 640px; }
       @keyframes pg-spin { to { transform: rotate(360deg); } }
       @keyframes pg-pulse { 50% { opacity: 0.45; } }
-      @media (prefers-reduced-motion: reduce) { #pg-boot .dot, #pg-boot .rows i { animation: none; } }
+      @media (prefers-reduced-motion: reduce) { #pg-boot .dot, #pg-boot .rows i, #pg-boot .grid b { animation: none; } }
       #snackbar {
         visibility: hidden;
         min-width: 250px;
@@ -138,7 +144,7 @@
       You need to enable JavaScript to run this app.
     </noscript>
     <div id="root"><div id="pg-boot" role="status" aria-live="polite">
-      <div class="bar"><span class="mark"></span>PhotoGroup</div>
+      <div class="bar"><span class="mark"></span><span id="pg-boot-name">PhotoGroup</span></div>
       <main id="pg-boot-main"></main>
     </div></div>
     <script>
@@ -179,15 +185,18 @@
             var rooms = JSON.parse(store('photogroup.rooms') || '[]');
             for (var i = 0; i < rooms.length; i++) if (rooms[i] && rooms[i].id === room) name = rooms[i].name || '';
           } catch (e) {}
-          el('h1', '', name ? 'Opening “' + name + '”' : 'Opening the room');
-          var list = el('ol', '');
-          ['Load the app', 'Connect to the server', 'Join the room'].forEach(function (text, index) {
-            var li = el('li', index ? '' : 'run', '', list);
-            el('span', 'dot', '', li);
-            el('span', '', text, li);
-            if (mode === 'default' && !index) el('span', 't', '', li).id = 'pg-boot-t';
-          });
-          if (mode === 'default') {
+          // The room as it will look, with a small bar on top: the same bar the app shows next.
+          if (name) document.getElementById('pg-boot-name').textContent = name;
+          main.className = 'room';
+          var pill = el('div', 'pill');
+          el('span', 'dot', '', pill);
+          el('span', 'what', 'Loading the app…', pill);
+          el('span', 't', mode === 'simple' ? '1 of 3' : '', pill).id = 'pg-boot-t';
+          if (mode === 'simple') {
+            el('div', 'big', 'Add photos and clips');
+            var grid = el('div', 'grid');
+            for (var g = 0; g < 4; g++) el('b', '', '', grid);
+          } else if (mode === 'default') {
             var rows = el('div', 'rows');
             for (var r = 0; r < 4; r++) {
               var row = el('div', 'row', '', rows);
@@ -233,7 +242,7 @@
           if (!document.getElementById('pg-boot')) { clearInterval(timer); return; }
           var t = document.getElementById('pg-boot-t');
           var s = (Date.now() - started) / 1000;
-          if (t) t.textContent = s.toFixed(1) + ' s';
+          if (t && mode !== 'simple') t.textContent = s.toFixed(1) + ' s';
           if (s > 6 && !document.getElementById('pg-boot-slow')) {
             el('p', 'note', 'The connection is slow. Only the first visit loads all of the app. After that, this phone keeps it.').id = 'pg-boot-slow';
           }

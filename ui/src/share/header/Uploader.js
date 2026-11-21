@@ -53,17 +53,39 @@ const styles = theme => ({
     },
 });
 
+export const WAITING_TEXT = 'The photos are shared when the room is open.';
+
+function roomInLink() {
+    return new URLSearchParams(window.location.search).has('room');
+}
+
 function Uploader({classes, model, emitter, showButton = true}) {
     const [visible, setVisible] = useState(false);
-    const [disabled, setDisabled] = useState(true);
+    // In a room the button works at once: photos picked while the room still
+    // opens wait here and are shared when it is open.
+    const [disabled, setDisabled] = useState(() => !roomInLink());
     const [held, setHeld] = useState([]);
     const [unpacking, setUnpacking] = useState(false);
     const uploaderDomRef = useRef(null);
+    const readyRef = useRef(false);
+    const waitingRef = useRef([]);
+
+    const seed = useCallback((files, isSecure, origFiles) => {
+        model.seed(files, isSecure, origFiles, () => {
+            if (uploaderDomRef.current) {
+                uploaderDomRef.current.value = '';
+            }
+        });
+    }, [model]);
 
     useEffect(() => {
         const handleReadyToUpload = () => {
             setVisible(true);
             setDisabled(false);
+            readyRef.current = true;
+            const waiting = waitingRef.current;
+            waitingRef.current = [];
+            waiting.forEach(args => seed(...args));
         };
 
         model.emitter.on('readyToUpload', handleReadyToUpload);
@@ -71,15 +93,16 @@ function Uploader({classes, model, emitter, showButton = true}) {
         return () => {
             model.emitter.removeListener('readyToUpload', handleReadyToUpload);
         };
-    }, [model.emitter]);
+    }, [model.emitter, seed]);
 
     const share = useCallback((files, isSecure, origFiles) => {
-        model.seed(files, isSecure, origFiles, () => {
-            if (uploaderDomRef.current) {
-                uploaderDomRef.current.value = '';
-            }
-        });
-    }, [model]);
+        if (readyRef.current) {
+            seed(files, isSecure, origFiles);
+            return;
+        }
+        waitingRef.current.push([files, isSecure, origFiles]);
+        emitter.emit('showInfo', WAITING_TEXT);
+    }, [seed, emitter]);
 
     /**
      * In a private room every file is sealed with the room's key first; the
@@ -185,12 +208,7 @@ function Uploader({classes, model, emitter, showButton = true}) {
     // Closing leaves the held files out.
     const closeHeld = useCallback(() => setHeld([]), []);
 
-    const hasRoom = () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.has('room');
-    };
-
-    if (!visible && !hasRoom()) {
+    if (!visible && !roomInLink()) {
         return null;
     }
     const android = onAndroid();

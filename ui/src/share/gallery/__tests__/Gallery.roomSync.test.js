@@ -29,12 +29,24 @@ describe('Gallery room synchronization', () => {
         return master.emitter;
     }
 
-    it('does not show the empty-room prompt when the snapshot times out', () => {
+    it('shows placeholders, not the empty-room prompt, while the snapshot is on its way', () => {
         setup();
-        expect(container.textContent).toContain("Loading this room's photos…");
-        act(() => vi.advanceTimersByTime(4000));
-        expect(container.textContent).toContain('taking longer to load');
+        expect(container.querySelector('[data-testid="room-placeholder"]')).not.toBeNull();
+        act(() => vi.advanceTimersByTime(15000));
+        expect(container.querySelector('[data-testid="room-placeholder"]')).not.toBeNull();
         expect(container.textContent).not.toContain('Add photos and clips');
+    });
+
+    it('shows the kept copy of the room at once, but only the server says the room is empty', () => {
+        const emitter = setup();
+        act(() => emitter.emit('photos', { type: 'all', kept: true, item: [{
+            infoHash: 'kept', fileName: 'kept.jpg', img: 'blob:kept', loading: false,
+            picDateTaken: '10:0 Jan 1 2024',
+        }] }));
+        expect(container.querySelector('img[alt="kept.jpg"]')).not.toBeNull();
+        act(() => emitter.emit('photos', { type: 'all', item: [] }));
+        expect(container.querySelector('img[alt="kept.jpg"]')).toBeNull();
+        expect(container.textContent).toContain('Add photos and clips');
     });
 
     it('shows the empty-room prompt after a delayed empty snapshot', () => {
@@ -42,7 +54,6 @@ describe('Gallery room synchronization', () => {
         act(() => vi.advanceTimersByTime(4000));
         act(() => emitter.emit('photos', { type: 'all', item: [] }));
         expect(container.textContent).toContain('Add photos and clips');
-        expect(container.textContent).not.toContain('taking longer to load');
     });
 
     it('shows photos when a populated snapshot arrives after the timeout', () => {
@@ -54,7 +65,6 @@ describe('Gallery room synchronization', () => {
         }] }));
         expect(container.querySelector('img[alt="photo.jpg"]')).not.toBeNull();
         expect(container.textContent).not.toContain('Add photos and clips');
-        expect(container.textContent).not.toContain('taking longer to load');
     });
 
     it('waits for a snapshot rather than treating incremental events as synchronization', () => {
