@@ -17,6 +17,7 @@ import SimpleRoomBar from "./simple/SimpleRoomBar";
 import WebTorrent from 'webtorrent';
 import { takeRoomNotice } from "./roomNotice";
 import NotifyPrompt from './NotifyPrompt';
+import RoomLoading, { useRoomSynced } from './loading/RoomLoading';
 
 // Geek mode's network map is large and not the start mode: load it on first use.
 const GeekStage = lazy(() => import("./geek/GeekStage"));
@@ -68,6 +69,11 @@ function ShareCanvas({master, mode = 'default', roomName = '', enqueueSnackbar, 
 
     const [hasRoom, setHasRoom] = useState(false);
     const [tiles, setTiles] = useState([]);
+    // Until the room's photo list is here, show how far the opening is: an
+    // empty room in the meantime said "just you" and showed the invite code.
+    const synced = useRoomSynced(master);
+    const [gaveUp, setGaveUp] = useState(false);
+    const opening = !synced && !gaveUp;
 
     useEffect(() => {
         const notice = takeRoomNotice();
@@ -218,8 +224,15 @@ function ShareCanvas({master, mode = 'default', roomName = '', enqueueSnackbar, 
                 {geek ? <MapLoadBoundary>
                     <Suspense fallback={null}><GeekStage master={master} tiles={tiles} isMobile={isMobile} /></Suspense>
                 </MapLoadBoundary> : null}
+                {/* Geek mode draws the opening on the map as it happens: the steps sit on top of it. */}
+                {opening && (
+                    <Box sx={geek ? null : { flex: 1, minWidth: 0, overflow: 'auto' }}>
+                        <RoomLoading master={master} mode={mode} roomName={roomName} onGiveUp={() => setGaveUp(true)} />
+                    </Box>
+                )}
+                {/* Stays mounted while the room opens, so it gets the photo list. */}
                 <Box sx={{
-                    display: geek ? 'none' : 'block',
+                    display: geek || opening ? 'none' : 'block',
                     flex: 1,
                     minWidth: 0,
                     overflow: 'auto',
@@ -227,7 +240,9 @@ function ShareCanvas({master, mode = 'default', roomName = '', enqueueSnackbar, 
                     pt: { xs: 1.5, sm: 2 },
                     pb: 2,
                 }}>
-                    {simple ? <SimpleRoomBar master={master} roomName={roomName} /> : null}
+                    {/* Mounted once the room is open: it starts with the real number of people,
+                        so the invite code for a room with only you does not show and fold away. */}
+                    {simple && !opening ? <SimpleRoomBar master={master} roomName={roomName} /> : null}
                     {/* The one offer of a notice, seen as soon as there is a room to be told about. */}
                     <NotifyPrompt master={master} />
                     <Gallery master={master} variant={simple ? 'simple' : geek ? 'geek' : 'full'}

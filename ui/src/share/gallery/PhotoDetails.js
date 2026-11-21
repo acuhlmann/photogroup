@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import _ from 'lodash';
+import throttle from 'lodash/throttle';
 import Logger from 'js-logger';
 import FileUtil from '../util/FileUtil';
 import OwnersList from './OwnersList';
@@ -22,7 +22,7 @@ function PhotoDetails({ master, tile, roomTiles, headingId }) {
     const [fileName, setFileName] = useState('');
 
     const debouncedRename = useRef(
-        _.throttle((infoHash, value) => {
+        throttle((infoHash, value) => {
             if (!value) return;
             Logger.info('change name ' + value);
             master.service.update([{

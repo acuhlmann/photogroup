@@ -8,7 +8,8 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import FileUtil from "../../util/FileUtil";
-import _ from 'lodash';
+import get from 'lodash/get';
+import throttle from 'lodash/throttle';
 import StringUtil from "../../util/StringUtil";
 
 export default class PhotoDetailsRenderer {
@@ -16,7 +17,7 @@ export default class PhotoDetailsRenderer {
     constructor(service, view) {
         this.service = service;
         this.view = view;
-        this.debouncedServerPublish = _.throttle(this.batchChangeName.bind(this), 1000,
+        this.debouncedServerPublish = throttle(this.batchChangeName.bind(this), 1000,
             { 'leading': true, 'trailing': true });
     }
 
@@ -243,7 +244,7 @@ export default class PhotoDetailsRenderer {
         }).then(json => {
             Logger.info('reverseGeocode ' + json);
             if(json.error_message) return {};
-            let address = _.get(json, 'results[0].formatted_address');
+            let address = get(json, 'results[0].formatted_address');
             if(!address) {
                 address = noAddress;
             }

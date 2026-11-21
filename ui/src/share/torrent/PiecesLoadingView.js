@@ -7,7 +7,7 @@ import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
 import GroupRounded from "@mui/icons-material/GroupRounded";
 import Paper from "@mui/material/Paper";
 import Logger from 'js-logger';
-import _ from 'lodash';
+import inRange from 'lodash/inRange';
 
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -150,7 +150,7 @@ function PiecesLoadingView({master, tile, classes}) {
                         // Check if _selections exists and is an array with find method
                         const selections = torrent._selections;
                         const isSelected = Array.isArray(selections) 
-                            ? selections.find(item => _.inRange(index, item.from, item.to))
+                            ? selections.find(item => inRange(index, item.from, item.to))
                             : false;
                         brick = isSelected
                             ? <span key={index} className={classes.notStartedSelected}/>

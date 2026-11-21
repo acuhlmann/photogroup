@@ -8,7 +8,7 @@ import TorrentDeletion, { holdsRoomSnapshot } from "./TorrentDeletion";
 import TorrentCreator from "./TorrentCreator";
 import FileUtil from '../util/FileUtil';
 import platform from 'platform';
-import _ from 'lodash';
+import throttle from 'lodash/throttle';
 import humanizeDuration from 'humanize-duration'
 import MetadataParser from "../gallery/metadata/MetadataParser";
 import { getTorrent, getBaseInfoHash, getFilePathFromInfoHash, isCompoundInfoHash } from './WebTorrentUtils';
@@ -31,6 +31,7 @@ import OfflineRoom from '../nearby/offlineRoom';
 import NearbyNotes from '../nearby/nearbyNotes';
 import NearbyLinks from '../nearby/nearbyLinks';
 import { roomTag } from '../nearby/notes';
+import LoadSteps from '../loading/loadSteps';
 
 /** The room's photos by the torrent that carries them (base infoHash), in room order. */
 export function groupByTorrent(photos) {
@@ -74,6 +75,8 @@ export default class TorrentMaster {
         this.service = service;
         this.service.master = this;
         this.emitter = emitter;
+        // How far the page is with opening, for the steps people see.
+        this.loadSteps = new LoadSteps(emitter);
         this.peers = new Peers(emitter, [], service);
         this.metadata = new MetadataParser(this);
         this.STREAMING_VIDEO_FORMATS = ['mp4', 'm4v', 'm4a'];
@@ -418,6 +421,12 @@ export default class TorrentMaster {
                 // Show the room now: re-adding every torrent can take a while
                 // on a phone, and the gallery used to sit empty until it was done.
                 this.roomSynced = true;
+                if (this.loadSteps?.running('room')) {
+                    const here = photos.filter(photo => photo.fromCache).length;
+                    this.loadSteps.log('room', `${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}`
+                        + `${here ? ` (${here} kept on this device)` : ''} · ${peers.length} ${peers.length === 1 ? 'device' : 'devices'}`);
+                    this.loadSteps.done('room');
+                }
                 this.emitter.emit('photos', {type: 'all', item: photos, requestedAt});
 
                 const values = await this.resurrectLocallySavedTorrents(photos);
@@ -800,9 +809,9 @@ export default class TorrentMaster {
         }
 
         const self = this;
-        const debouncedServerPublish = _.throttle(self.publishLoadingStatus.bind(self), 1000,
+        const debouncedServerPublish = throttle(self.publishLoadingStatus.bind(self), 1000,
             { 'leading': true, 'trailing': false });
-        const debouncedDownload = _.throttle(self.sendDownloadEvent.bind(self), 200,
+        const debouncedDownload = throttle(self.sendDownloadEvent.bind(self), 200,
             { 'leading': true, 'trailing': false });
 
         let lastProgress = 0;
@@ -830,7 +839,7 @@ export default class TorrentMaster {
             }
         });
 
-        const debouncedUpload = _.throttle(self.sendUploadEvent.bind(self), 200,
+        const debouncedUpload = throttle(self.sendUploadEvent.bind(self), 200,
             { 'leading': true, 'trailing': false });
 
         let lastUpProgress = 0;

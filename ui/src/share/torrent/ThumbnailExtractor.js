@@ -8,8 +8,7 @@
  */
 import Logger from 'js-logger';
 import { posterFromFile } from '../util/videoFrame';
-import exifr from 'exifr/dist/full.esm.mjs';
-import * as musicMetadata from 'music-metadata';
+import { loadExifr, loadMusicMetadata } from '../gallery/metadata/parsers';
 
 /**
  * Default maximum size for thumbnails (width or height)
@@ -176,6 +175,7 @@ export async function getPreviewFromImage(filesArr, onEach) {
     const thumbnails = await mapLimited(filesArr, DECODE_AT_ONCE, async (file) => {
         let url = null;
         try {
+            const exifr = await loadExifr();
             url = await exifr.thumbnailUrl(file);
         } catch (e) {
             Logger.warn('Cannot find thumbnail from EXIF in ' + file.name + ': ' + e);
@@ -227,6 +227,7 @@ export async function getPreviewFromAudio(filesArr) {
     let metadatas = [];
 
     try {
+        const musicMetadata = await loadMusicMetadata();
         const parsePromises = filesArr.map(file => musicMetadata.parseBlob(file));
         metadatas = await Promise.all(parsePromises);
     } catch (e) {

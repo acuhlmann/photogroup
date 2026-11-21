@@ -334,6 +334,22 @@ App.js (theme, layout)
   clear. The key is kept in "Your rooms" so the room opens again without it
   in the link; a page without the key gets a notice and cannot add photos.
 
+### Opening the page and a room
+
+`ui/index.html` holds a small page that shows before the app's code is here
+(about 0.5 MB on a first visit): the front page's heading, or "Opening the
+room" with the steps Load the app / Connect to the server / Join the room, in
+the person's mode and colors (geek mode lists each file and request with its
+real size and time). Its script also starts `GET /api/__rtcConfig__` and
+`__trackerConfig__` at once; `RoomsService.getRtcConfig`/`getTrackerConfig`
+use those answers once (`takeEarly`). The app carries on with the same steps:
+`share/loading/loadSteps.js` (on `master.loadSteps`, event `loadSteps`) and
+`RoomLoading.js`, which `ShareCanvas` shows until the room's photo list is
+here (the gallery stays mounted, hidden, so it gets the list). A photo still
+arriving says who it connects to (`gallery/arrivingText.js`). Keep big
+libraries that only read photos (exifr, music-metadata: `metadata/parsers.js`)
+out of the first download, and import lodash one function at a time.
+
 ### State Management
 
 No Redux/Zustand -- state lives in `RoomsService.js` which is a plain class managing room state, peer lists, and photo arrays. Components subscribe via React patterns.

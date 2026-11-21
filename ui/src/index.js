@@ -18,11 +18,14 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import AppWrapper from './AppWrapper';
-import { NativeEventSource, EventSourcePolyfill } from 'event-source-polyfill';
 
-const EventSource = NativeEventSource || EventSourcePolyfill;
-// OR: may also need to set as global property
-window.EventSource =  global.EventSource =  NativeEventSource || EventSourcePolyfill;
+// Every browser the app supports has EventSource. Only an old one loads the
+// polyfill, so it is not in everyone's first download.
+if (!window.EventSource) {
+    import('event-source-polyfill').then(({ EventSourcePolyfill }) => {
+        window.EventSource = global.EventSource = EventSourcePolyfill;
+    }).catch(() => {});
+}
 
 // Photos shared from other apps open "/?shared=1"; send them to the last room before it is read.
 prepareShareLaunch();

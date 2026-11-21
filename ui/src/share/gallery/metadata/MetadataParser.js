@@ -1,12 +1,11 @@
 import {format, parse, getTime, toDate} from 'date-fns';
 import XmpParser from "./XmpParser";
 import ExifParser from "./ExifParser";
-import * as exifr from 'exifr';
 import FileUtil from "../../util/FileUtil";
 import Logger from 'js-logger';
-import * as mm from 'music-metadata';
+import { loadExifr, loadMusicMetadata } from './parsers';
 import StringUtil from "../../util/StringUtil";
-import _ from 'lodash';
+import get from 'lodash/get';
 import humanizeDuration from 'humanize-duration';
 import { concat, readBytes } from './embed/binary';
 import * as heif from './embed/heif';
@@ -52,6 +51,11 @@ function rawValueText(value) {
         return parts.length === value.length ? parts.join(',') : '';
     }
     return JSON.stringify(value);
+}
+
+/** music-metadata's rating (0 to 1) as 1 to 5 stars, as its ratingToStars does. */
+export function ratingToStars(rating) {
+    return rating === undefined ? 0 : 1 + Math.round(rating * 4);
 }
 
 export default class MetadataParser {
@@ -124,10 +128,12 @@ export default class MetadataParser {
     static async parseImage(file) {
         if (file && typeof file.slice === 'function' && heif.matches(await readBytes(file, 0, 64))) {
             const { exif, xmp } = await heif.readMetadataItems(file);
+            const exifr = exif ? await loadExifr() : null;
             const output = (exif && await exifr.parse(exif, true)) || {};
             if (xmp) output.xmp = xmp;
             return Object.keys(output).length ? output : undefined;
         }
+        const exifr = await loadExifr();
         return exifr.parse(file, true);
     }
 
@@ -172,8 +178,7 @@ export default class MetadataParser {
     }
 
     applyMediaMetadata(tile, metadata) {
-        const mmRef = mm;
-        const rating = _.get(metadata, ['common.rating']);
+        const rating = get(metadata, ['common.rating']);
         Logger.info('MetadataParser ' + Object.keys(metadata).join(',') + ' ' + (rating || ''));
 
         const duration = metadata.format.duration
@@ -186,7 +191,7 @@ export default class MetadataParser {
 
         // common.rating is a list of {source, rating 0..1}
         const rawRating = metadata.common.rating?.[0]?.rating;
-        const starRating = rawRating != null ? mmRef.ratingToStars(rawRating) : '';
+        const starRating = rawRating != null ? ratingToStars(rawRating) : '';
         metadata.common.starRating = starRating;
 
         if (tile.isVideo) {
@@ -206,7 +211,8 @@ export default class MetadataParser {
      * Parse audio/video metadata from a stream when possible so we never buffer
      * an entire multi-hundred-MB file on the main thread.
      */
-    parseMediaMetadata(tile) {
+    async parseMediaMetadata(tile) {
+        const mm = await loadMusicMetadata();
         const mimeType = tile.fileType || tile.elem?.type || tile.file?.type;
         const size = tile.torrentFile?.length ?? tile.file?.size ?? tile.elem?.size;
         const parseOptions = {
@@ -238,7 +244,8 @@ export default class MetadataParser {
         return Promise.resolve(null);
     }
 
-    readStreaming(tile, callback) {
+    async readStreaming(tile, callback) {
+        const mm = await loadMusicMetadata();
 
         const stream = tile.torrentFile.createReadStream();
         stream.on('data', (chunk) => {

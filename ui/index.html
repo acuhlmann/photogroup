@@ -47,7 +47,42 @@
     -->
     <title>PhotoGroup - Zero Install, Peer-to-Peer Photo Group Collaboration.</title>
 
+
     <style>
+      /* The page before the app runs: the same steps the app shows next. */
+      #pg-boot { --bg: #07090d; --ink: #e8eef6; --muted: #8b97a8; --line: rgba(232,238,246,0.09); --accent: #3dd6c3; --paper: #10141c;
+        position: fixed; inset: 0; overflow: auto; background: var(--bg); color: var(--ink);
+        font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      #pg-boot.light { --bg: #f3f5f7; --ink: #141820; --muted: #5c6775; --line: rgba(20,24,32,0.1); --accent: #0f766e; --paper: #fff; }
+      #pg-boot .bar { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); font-weight: 600; letter-spacing: -0.03em; }
+      #pg-boot .mark { width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--accent); box-sizing: border-box; }
+      #pg-boot main { max-width: 440px; margin: 0 auto; padding: 24px 16px; box-sizing: border-box; }
+      #pg-boot h1 { font-size: 1.5rem; line-height: 1.3; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 20px; }
+      #pg-boot .front h1 { font-size: 1.9rem; margin-bottom: 8px; }
+      #pg-boot .sub { color: var(--muted); margin: 0 0 24px; line-height: 1.5; }
+      #pg-boot .front { text-align: center; padding: 32px 28px; max-width: 476px; }
+      #pg-boot .wait { display: flex; align-items: center; justify-content: center; gap: 10px; height: 60px; border-radius: 12px;
+        background: var(--line); color: var(--muted); font-weight: 700; font-size: 1.1rem; }
+      #pg-boot ol { list-style: none; margin: 0; padding: 0; }
+      #pg-boot li { display: flex; align-items: center; gap: 12px; padding: 10px 0; color: var(--muted); }
+      #pg-boot li.run { color: var(--ink); font-weight: 600; }
+      #pg-boot li .t { margin-left: auto; font: 0.8rem ui-monospace, "JetBrains Mono", monospace; color: var(--muted); }
+      #pg-boot .dot { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid var(--line); box-sizing: border-box; }
+      #pg-boot .run .dot, #pg-boot .wait .dot { border-color: var(--accent); border-right-color: transparent; animation: pg-spin 0.8s linear infinite; }
+      #pg-boot .note { color: var(--muted); font-size: 0.9rem; line-height: 1.5; margin-top: 16px; }
+      #pg-boot .rows { margin-top: 24px; }
+      #pg-boot .row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+      #pg-boot .row b, #pg-boot .row i { display: block; border-radius: 6px; background: var(--line); animation: pg-pulse 1.4s ease-in-out infinite; }
+      #pg-boot .row b { width: 44px; height: 44px; flex: none; }
+      #pg-boot .row span { flex: 1; }
+      #pg-boot .row i { height: 12px; width: 60%; margin: 6px 0; }
+      #pg-boot .row i + i { width: 35%; }
+      #pg-boot pre { text-align: left; font: 0.75rem/1.6 ui-monospace, "JetBrains Mono", monospace; color: var(--muted); white-space: pre-wrap; word-break: break-all;
+        margin: 20px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); min-height: 6em; }
+      #pg-boot[data-mode="geek"] main { max-width: 640px; }
+      @keyframes pg-spin { to { transform: rotate(360deg); } }
+      @keyframes pg-pulse { 50% { opacity: 0.45; } }
+      @media (prefers-reduced-motion: reduce) { #pg-boot .dot, #pg-boot .rows i { animation: none; } }
       #snackbar {
         visibility: hidden;
         min-width: 250px;
@@ -102,7 +137,109 @@
     <noscript>
       You need to enable JavaScript to run this app.
     </noscript>
-    <div id="root"></div>
+    <div id="root"><div id="pg-boot" role="status" aria-live="polite">
+      <div class="bar"><span class="mark"></span>PhotoGroup</div>
+      <main id="pg-boot-main"></main>
+    </div></div>
+    <script>
+      // Before the app's code is here (about 0.5 MB on the first visit): show
+      // what happens, in the person's mode and colors, and ask the server for
+      // its settings at once so the app does not wait for them later.
+      (function () {
+        var get = function (url) {
+          return fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .catch(function () { return null; });
+        };
+        try { window.__pgEarly = { rtc: get('/api/__rtcConfig__'), tracker: get('/api/__trackerConfig__') }; } catch (e) {}
+
+        var boot = document.getElementById('pg-boot');
+        var main = document.getElementById('pg-boot-main');
+        var store = function (key) { try { return localStorage.getItem(key); } catch (e) { return null; } };
+        var mode = store('photogroup.uiMode');
+        if (['simple', 'default', 'geek'].indexOf(mode) < 0) mode = store('clientId') ? 'default' : 'simple';
+        var colors = store('photogroup.colors');
+        var light = colors === 'light' || (colors !== 'dark' && window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches);
+        boot.setAttribute('data-mode', mode);
+        if (light) boot.className = 'light';
+
+        var params = new URLSearchParams(location.search);
+        var room = params.get('room');
+        var el = function (tag, cls, text, parent) {
+          var node = document.createElement(tag);
+          if (cls) node.className = cls;
+          if (text) node.textContent = text;
+          (parent || main).appendChild(node);
+          return node;
+        };
+
+        if (room) {
+          var name = '';
+          try {
+            var rooms = JSON.parse(store('photogroup.rooms') || '[]');
+            for (var i = 0; i < rooms.length; i++) if (rooms[i] && rooms[i].id === room) name = rooms[i].name || '';
+          } catch (e) {}
+          el('h1', '', name ? 'Opening “' + name + '”' : 'Opening the room');
+          var list = el('ol', '');
+          ['Load the app', 'Connect to the server', 'Join the room'].forEach(function (text, index) {
+            var li = el('li', index ? '' : 'run', '', list);
+            el('span', 'dot', '', li);
+            el('span', '', text, li);
+            if (mode === 'default' && !index) el('span', 't', '', li).id = 'pg-boot-t';
+          });
+          if (mode === 'default') {
+            var rows = el('div', 'rows');
+            for (var r = 0; r < 4; r++) {
+              var row = el('div', 'row', '', rows);
+              el('b', '', '', row);
+              var lines = el('span', '', '', row);
+              el('i', '', '', lines);
+              el('i', '', '', lines);
+            }
+          }
+        } else {
+          main.className = 'front';
+          el('h1', '', mode === 'simple' ? 'Swap photos and clips with the people around you' : 'Share the pictures');
+          el('p', 'sub', mode === 'simple' ? 'No app, no account, no social media.'
+            : 'Share photos with all their camera details. See how big they are. Save them on your phone.');
+          var wait = el('div', 'wait');
+          el('span', 'dot', '', wait);
+          el('span', '', 'Getting ready…', wait);
+        }
+
+        // Geek mode: each file and request, with its real size and time.
+        if (mode === 'geek' && window.PerformanceObserver) {
+          var log = el('pre', '');
+          log.id = 'pg-boot-log';
+          var add = function (at, text) { log.textContent += '+' + (at / 1000).toFixed(2) + ' s  ' + text + '\n'; };
+          var kb = function (b) { return b ? (b < 100000 ? (b / 1000).toFixed(1) : Math.round(b / 1000)) + ' kB' : ''; };
+          var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+          if (nav) add(nav.responseEnd, 'GET ' + location.pathname + ' · ' + (kb(nav.transferSize) || 'from the cache') + ' · first byte ' + Math.round(nav.responseStart) + ' ms');
+          try {
+            new PerformanceObserver(function (entries) {
+              entries.getEntries().forEach(function (e) {
+                var api = e.name.indexOf('/api/__') >= 0;
+                if (!api && e.name.indexOf("/assets/") < 0) return;
+                add(e.responseEnd, (api ? 'GET ' : '') + e.name.replace(/^.*\/(api\/)?/, api ? '/api/' : '') + ' · '
+                  + (api ? '' : (kb(e.transferSize) || 'from the cache') + ' · ') + Math.round(e.duration) + ' ms');
+              });
+            }).observe({ type: 'resource', buffered: true });
+          } catch (e) {}
+        }
+
+        // The time in Photographer mode, and a note when the network is slow.
+        var started = Date.now();
+        var timer = setInterval(function () {
+          if (!document.getElementById('pg-boot')) { clearInterval(timer); return; }
+          var t = document.getElementById('pg-boot-t');
+          var s = (Date.now() - started) / 1000;
+          if (t) t.textContent = s.toFixed(1) + ' s';
+          if (s > 6 && !document.getElementById('pg-boot-slow')) {
+            el('p', 'note', 'The connection is slow. Only the first visit loads all of the app. After that, this phone keeps it.').id = 'pg-boot-slow';
+          }
+        }, 100);
+      })();
+    </script>
 
     <div id="snackbar">A new version of this app is available. Click <a id="reload" href="javascript:void(0);">here</a> to update.</div>
     <script>

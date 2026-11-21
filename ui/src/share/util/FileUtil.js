@@ -1,4 +1,5 @@
-import _ from "lodash";
+import replace from 'lodash/replace';
+import truncate from 'lodash/truncate';
 import prettyBytes from 'pretty-bytes';
 
 export default class FileUtil {
@@ -17,7 +18,7 @@ export default class FileUtil {
     static getFileNameWithoutSuffix(name) {
         if(name) {
             const suffix = FileUtil.getFileSuffix(name);
-            return _.replace(name, suffix, '');
+            return replace(name, suffix, '');
         } else {
             return null;
         }
@@ -25,7 +26,7 @@ export default class FileUtil {
 
     static truncateFileName(name) {
         const fileSuffix = FileUtil.getFileSuffix(name);
-        return _.truncate(FileUtil.getFileNameWithoutSuffix(name), {length: 30}) + fileSuffix
+        return truncate(FileUtil.getFileNameWithoutSuffix(name), {length: 30}) + fileSuffix
     }
 
     static formatBytes(bytes) {

@@ -39,6 +39,7 @@ import { notIncludedText, ratedKeys, selectedPhotos, toggleSelection } from './s
 import { canReadTorrentFile } from './saveRoom';
 import { removeLabel } from './removeLabel';
 import { keyOf, useArriving, usePreview } from './mediaView';
+import { useArrivingText } from './arrivingText';
 import { PREVIEW_COPY, PREVIEW_HEIGHT, useSmallImage } from './smallImage';
 import { alreadyHave, HAVE_LABELS, useHaveChanges } from './alreadyHave';
 import { peerLabel } from '../topology/presence';
@@ -238,8 +239,9 @@ function Actions({ tile, master, onOpen, onRemove }) {
     );
 }
 
-function TitleCell({ tile, facts }) {
+function TitleCell({ tile, facts, master }) {
     useHaveChanges();
+    const status = useArrivingText(tile, master, 'phone');
     const have = alreadyHave(tile);
     if (tile.secure && tile.sealedError) {
         return (
@@ -256,7 +258,7 @@ function TitleCell({ tile, facts }) {
                 {title || tile.fileName || 'Photo'}
             </Typography>
             {title && <Typography variant="caption" noWrap component="div" sx={{ ...muted, ...mono }}>{tile.fileName}</Typography>}
-            {tile.loading && <Typography variant="caption" sx={{ color: 'primary.main' }}>Arriving…</Typography>}
+            {tile.loading && <Typography variant="caption" sx={{ color: 'primary.main' }}>{status}</Typography>}
             {have && (
                 <Stack direction="row" spacing={0.5} data-testid="already-have" sx={{ alignItems: 'center' }}>
                     <CheckCircleRounded aria-hidden="true" sx={{ fontSize: 13, color: 'success.main' }} />
@@ -448,7 +450,7 @@ const PhoneRow = React.memo(function PhoneRow({ tile, fact, open, checked, maste
                     sx={{ minWidth: 0, flex: 1, display: 'block', textAlign: 'left', borderRadius: 1, py: 0.5,
                         '&.Mui-focusVisible': { boxShadow: `0 0 0 2px ${theme.palette.primary.main}` } }}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                        <Box sx={{ minWidth: 0, flex: 1 }}><TitleCell tile={tile} facts={fact} /></Box>
+                        <Box sx={{ minWidth: 0, flex: 1 }}><TitleCell tile={tile} facts={fact} master={master} /></Box>
                         {fact?.rating > 0 && <RatingStars value={fact.rating} size={13} />}
                     </Stack>
                     {fact?.camera && <Typography variant="caption" noWrap component="div" sx={muted}>{fact.camera}</Typography>}
@@ -490,7 +492,7 @@ const WideRow = React.memo(function WideRow({ tile, fact, from, selected, checke
                 '&:focus-visible': { boxShadow: `inset 0 0 0 2px ${theme.palette.primary.main}` } }}>
             <TableCell sx={{ px: '0 !important' }}><SelectBox tile={tile} checked={checked} onCheck={onCheck} /></TableCell>
             <TableCell><Thumb tile={tile} master={master} size={60} onOpen={() => onOpen(tile)} onPick={() => onPick(key)} /></TableCell>
-            <TableCell><TitleCell tile={tile} facts={fact} /></TableCell>
+            <TableCell><TitleCell tile={tile} facts={fact} master={master} /></TableCell>
             <TableCell>{fact?.rating > 0 ? <RatingStars value={fact.rating} size={14} />
                 : fact?.rating === -1 ? <Typography variant="caption" sx={{ color: 'error.main' }}>Rejected</Typography> : null}</TableCell>
             <TableCell><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{takenLabel(fact?.takenAt ?? null)}</Typography></TableCell>

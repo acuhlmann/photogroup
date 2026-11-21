@@ -41,11 +41,26 @@ export default class TorrentCreator {
     }
 
     async start() {
+        const steps = this.parent?.loadSteps;
+        steps?.start('server');
         // Fetch both RTC config and tracker config in parallel
         const [iceServers, trackerConfig] = await Promise.all([
             this.service.getRtcConfig(),
             this.service.getTrackerConfig()
         ]);
+        if (steps) {
+            steps.logConfigRequests();
+            const reached = Array.isArray(iceServers?.iceServers);
+            if (reached) {
+                const urls = iceServers.iceServers.flatMap(server => [].concat(server.urls || server.url || []));
+                const count = scheme => urls.filter(url => String(url).startsWith(scheme)).length;
+                steps.log('ice', `ICE servers: ${count('stun:')} STUN · ${count('turn')} TURN`);
+                steps.done('server');
+            } else {
+                steps.log('server', 'No answer from the server');
+                steps.fail('server');
+            }
+        }
 
         if(iceServers && Array.isArray(iceServers.iceServers)) {
             //TODO: does below make sense to add in addition to Twillio STUN?
@@ -108,6 +123,7 @@ export default class TorrentCreator {
             dht: false
         });
         Logger.info('client.peerId '+client.peerId);
+        this.parent?.loadSteps?.log('webtorrent', `WebTorrent ready · peer id ${String(client.peerId).slice(0, 16)}…`);
         window.client = client; // for easier debugging
         TorrentCreator.setupAnnounceUrls(this.trackerWsUrl);
         this.client = client;

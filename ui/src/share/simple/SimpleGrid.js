@@ -23,6 +23,7 @@ import { saveToDevice, savedWhereText } from '../gallery/saveToDevice';
 import ChooseFolderButton from '../gallery/saveToChosenFolder';
 import { canChooseFolder, replaceFailureMessage, replaceHint, replaceOriginal } from '../gallery/replaceOriginal';
 import { keyOf, useArriving, usePreview, viewable } from '../gallery/mediaView';
+import { useArrivingText } from '../gallery/arrivingText';
 import MediaStage from '../gallery/MediaStage';
 import { ALONE_SIDE, GRID_SIDE, useSmallImage } from '../gallery/smallImage';
 
@@ -91,8 +92,9 @@ function SaveButton({ tile, roomId, onError }) {
     );
 }
 
-function SimpleTile({ tile, roomId, onOpen, onError, onRemove, alone }) {
+function SimpleTile({ tile, master, roomId, onOpen, onError, onRemove, alone }) {
     const percent = useArriving(tile);
+    const status = useArrivingText(tile, master, 'phone');
     const poster = usePreview(tile);
     const showImage = !tile.loading && tile.img;
     // Only the preview is here (Data saver, or you have the photo); a tap gets the photo.
@@ -143,7 +145,7 @@ function SimpleTile({ tile, roomId, onOpen, onError, onRemove, alone }) {
                         <CircularProgress variant={percent > 0 ? 'determinate' : 'indeterminate'} value={percent} size={40}
                             sx={{ position: 'relative', color: picture ? '#fff' : undefined }} />
                         <Typography variant="body2" sx={{ position: 'relative', color: picture ? '#fff' : 'text.secondary' }}>
-                            {percent > 0 ? `Arriving · ${percent}%` : 'Arriving…'}
+                            {status}
                         </Typography>
                     </>
                 ) : !showImage && (
@@ -273,7 +275,7 @@ function SimpleGrid({ tiles: given, roomId, onError, onRemove, master }) {
                 pb: 3,
             }}>
                 {tiles.map(tile => (
-                    <SimpleTile key={keyOf(tile)} tile={tile} roomId={roomId} onError={onError} onRemove={onRemove} alone={tiles.length === 1}
+                    <SimpleTile key={keyOf(tile)} tile={tile} master={master} roomId={roomId} onError={onError} onRemove={onRemove} alone={tiles.length === 1}
                         onOpen={() => setOpenKey(keyOf(tile))} />
                 ))}
             </Box>
