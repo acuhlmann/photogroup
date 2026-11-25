@@ -292,6 +292,65 @@ describe('Uploader on Android', () => {
   });
 });
 
+describe('Uploader on an iPhone', () => {
+  const { readFileSync } = require('node:fs');
+  const path = require('node:path');
+  const { act } = require('react');
+  const EventEmitter = require('events');
+
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1';
+  const fixture = name => readFileSync(path.join(__dirname, '../gallery/metadata/embed/__fixtures__', name));
+  const placed = () => new File([fixture('gps.heic')], 'IMG_0001.HEIC', { type: 'image/heic' });
+  const bare = () => new File([fixture('iphone-no-gps.jpg')], 'IMG_0002.JPG', { type: 'image/jpeg' });
+
+  let userAgent;
+  let model;
+  let div;
+  let root;
+
+  beforeEach(async () => {
+    delete window.location;
+    window.location = { search: '?room=test123' };
+    userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(IPHONE);
+    model = { emitter: new EventEmitter(), seed: vi.fn() };
+    div = document.createElement('div');
+    document.body.appendChild(div);
+    root = createRoot(div);
+    await act(async () => root.render(<Uploader model={model} emitter={model.emitter} classes={{}} />));
+    await act(async () => model.emitter.emit('readyToUpload'));
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    div.remove();
+    userAgent.mockRestore();
+  });
+
+  const input = () => div.querySelector('input[type="file"]');
+  const choose = files => act(async () => {
+    Object.defineProperty(input(), 'files', { value: files, configurable: true });
+    input().dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const heldList = () => document.body.querySelector('[data-testid="location-held"]');
+
+  it('offers every image type, so Safari keeps HEIC, and no zips', () => {
+    expect(input().getAttribute('accept')).toBe('image/*,video/*,audio/*');
+  });
+
+  it('holds back iPhone photos without a location and says how to keep it', async () => {
+    const good = placed();
+    await choose([good, bare()]);
+
+    await vi.waitFor(() => expect(heldList()).not.toBeNull());
+    expect(model.seed).toHaveBeenCalledTimes(1);
+    expect(model.seed.mock.calls[0][0]).toEqual([good]);
+    expect(heldList().textContent).toBe('IMG_0002.JPG');
+    expect(document.body.textContent).toContain('This iPhone photo has no location');
+    expect(document.body.textContent).toContain('If it had a location, the iPhone removed it.');
+    expect(document.body.textContent).toContain('tap Options and turn on Location');
+  });
+});
+
 describe('Uploader while the room opens', () => {
   const { act } = require('react');
   const EventEmitter = require('events');

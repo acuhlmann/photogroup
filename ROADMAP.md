@@ -5,7 +5,8 @@ they don't already have, without losing anything (location, metadata) on
 the way. Each slice says why it matters, what we already know, where to
 start in the code, and when it's done.
 
-- **Up next:** iPhone originals.
+- **Up next:** check iPhone originals on a real iPhone (the steps are
+  under *iPhone uploads that keep originals*, in Done).
 - **Later:** recognising saved clips and audio, and adding a location to
   many photos at once.
 
@@ -13,40 +14,11 @@ start in the code, and when it's done.
 
 # Up next
 
-See **Make iPhone uploads originals** below.
+Check *iPhone uploads that keep originals* (in Done) on a real iPhone.
 
 ---
 
 # Later
-
-## Make iPhone uploads originals
-
-**Why:** the iPhone counterpart of the Android fix. Depending on the iOS
-version and the `accept` attribute, Safari may convert library HEIC photos
-to JPEG, compress videos, and drop location before the page sees them. Then
-iPhone users share copies, not originals, which undercuts the app's main
-purpose.
-
-**What we know (reports, not yet verified):**
-
-- Safari's file input can transcode HEIC → JPEG; listing `image/heic` in
-  `accept` changes this behaviour on some versions.
-- Some iOS versions strip GPS from library picks (reported around 16.4).
-- Picking through the Files app instead of Photos may give the original.
-
-**Work:**
-
-1. Test on an iPhone which pick routes (Photos vs. Files) and which `accept`
-   values deliver the original bytes, HEIC and video untouched, location kept.
-2. Steer Share towards that route on iOS, the way the Android note and zip route do.
-3. Detect converted or stripped files after picking (a JPEG where the name
-   says `.HEIC`, missing GPS on a camera photo) and hold them back like
-   `strippedLocation.js` does.
-
-**Done when:** a photo shared from an iPhone arrives byte-identical to the
-one in its Photos library, or the app explains why it couldn't.
-
----
 
 ## Recognise saved clips and audio in a folder check
 
@@ -77,6 +49,50 @@ their locations in one tap, and each one says which photo it came from.
 ---
 
 # Done
+
+## iPhone uploads that keep originals
+
+**Built, still to check on a real iPhone.** Safari on an iPhone picks from
+the Photos library through a picker that can hand the page copies. What
+we know (`header/iphoneUpload.js`):
+
+- **Format:** since WebKit 0f76043f (March 2024), Safari keeps HEIC as it
+  is when `accept` allows every image type. The input's `image/*` does
+  that. A list of single types (`image/jpeg`) makes Safari convert to
+  JPEG, and listing `image/heic` makes Safari 17 turn JPEG and PNG into
+  HEIC. So `image/*` stays, and `image/heic` is never added (unit test).
+- **Location:** removed since iOS 16.4, unless the person turns on
+  Location under Options in the photo picker (iOS 17 and later).
+- **Clips:** Safari still makes clips from the photo library smaller
+  (H.264). No `accept` value stops it. A pick from Files ("Choose File")
+  gives the original clip, so the way is: Photos › Share › Save to Files,
+  then Choose File.
+
+What the app does on an iPhone or iPad:
+
+- A dismissible note in the gallery says both steps
+  (`gallery/KeepOriginalsNote.js`, shared with the Android note).
+- Each picked file is read (`gallery/metadata/iphonePick.js`) and logged:
+  format, size in MB and bytes, camera, video codec, location, and a
+  name that doesn't match the format ("the name says HEIC, but it is
+  JPEG"). Settings › Show logs shows the lines.
+- iPhone photos and clips that arrive with no location (EXIF or QuickTime
+  make "Apple", no GPS) are held back in a "No location" dialog, with Pick
+  again and Share without location. An iPhone can't say if the camera
+  had location off, so the dialog says "if they had a location".
+
+**Still to check on a real iPhone** (can't be automated):
+
+- [ ] Add a HEIC photo from Photo Library: the log says HEIC, and the
+  size matches the Photos app's info (ⓘ).
+- [ ] Same photo, with Options › Location on in the picker: the log says
+  "location: yes", and the photo has a map card.
+- [ ] Same photo, with Location off: the "No location" dialog shows.
+- [ ] Add a clip from Photo Library: compare the logged size and codec
+  with the Photos app.
+- [ ] Save the clip to Files, then add it with Choose File: the size now
+  matches the Photos app, and the log says HEVC (or H.264 on "Most
+  Compatible").
 
 ## Helpers for adding a location back
 
@@ -177,7 +193,7 @@ originals through:
   app unpacks it in the browser (`header/unzipMedia.js`).
 
 Zips are accepted on Android only. A dismissible note in the gallery
-explains both routes (`gallery/AndroidLocationNote.js`). Photos that still
+explains both routes (`gallery/KeepOriginalsNote.js`). Photos that still
 arrive blanked are held back with the same steps
 (`gallery/metadata/strippedLocation.js`, `header/Uploader.js`). An earlier
 attempt opened `showOpenFilePicker` instead. It kept nothing and hid

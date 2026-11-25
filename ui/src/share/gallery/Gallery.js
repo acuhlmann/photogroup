@@ -22,7 +22,7 @@ import { cacheGet, shouldCacheBlob } from "../util/ImageBlobCache";
 import GalleryToolbar from "./GalleryToolbar";
 import RoomMap from "./RoomMap";
 import DownloadRoomButton from "./DownloadRoomButton";
-import AndroidLocationNote from "./AndroidLocationNote";
+import KeepOriginalsNote from "./KeepOriginalsNote";
 import { arrangeTiles, DEFAULT_VIEW } from "./arrangeTiles";
 import { onPlaceName, reverseGeocode } from "./metadata/geo";
 import { openSealedPhoto } from "./openSealed";
@@ -577,7 +577,7 @@ function Gallery(props) {
                         {CLIP_SIZE_NOTE}
                     </Typography>
                 </Box>
-                <AndroidLocationNote narrow />
+                <KeepOriginalsNote narrow />
                 {showNetworkReadout && (
                     <Box sx={{ maxWidth: 560, mx: 'auto' }}>
                         <NetworkReadout master={master} />
@@ -587,7 +587,7 @@ function Gallery(props) {
             ) : (
                 <>
                 {/* Add more with the header's Add photos button, or drop them anywhere here. */}
-                <AndroidLocationNote narrow={tiles.length < 2} />
+                <KeepOriginalsNote narrow={tiles.length < 2} />
                 {tiles.length > 1 && (
                     <GalleryToolbar
                         view={view}
