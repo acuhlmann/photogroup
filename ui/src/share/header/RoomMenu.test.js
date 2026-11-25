@@ -53,6 +53,15 @@ describe('RoomMenu', () => {
         await unmount();
     });
 
+    it('opens the problem report from the room menu', async () => {
+        const { unmount } = await render('Beach day');
+        await act(async () => document.querySelector('[aria-label^="Room: Beach day"]').click());
+        await act(async () => byText('Send a problem report').click());
+        expect(document.body.querySelector('#problem-report-title').textContent).toContain('Send a problem report');
+        expect(document.body.textContent).toContain('IP addresses of the devices in this room');
+        await unmount();
+    });
+
     it('leaves the room and says how to come back', async () => {
         const { master, unmount } = await render('Beach day');
         await act(async () => document.querySelector('[aria-label^="Room: Beach day"]').click());

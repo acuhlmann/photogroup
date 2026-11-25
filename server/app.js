@@ -10,6 +10,7 @@ import IpTranslator from './IpTranslator.js';
 import Tracker from './Tracker.js';
 import PushService from './PushService.js';
 import Rooms from './Rooms.js';
+import ProblemReports from './ProblemReports.js';
 
 // Helper for immediate logging with file backup (for PowerShell buffering issues)
 const logFile = createWriteStream(path.join(dirname(fileURLToPath(import.meta.url)), 'server.log'), { flags: 'a' });
@@ -77,6 +78,8 @@ async function init() {
     const rooms = new Rooms(updateChannel, remoteLog, app, emitter, ice, tracker, undefined, push);
     rooms.start();
     logImmediate('[App] Rooms started');
+
+    new ProblemReports({ app, remoteLog }).start();
     logImmediate('[App] Initialization complete - server ready');
 }
 

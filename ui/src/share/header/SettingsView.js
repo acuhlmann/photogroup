@@ -30,18 +30,12 @@ import { readPreference, savePreference } from '../preferences';
 import { askToNotify } from '../newPhotoNotices';
 import { enablePush, disablePush } from '../pushNotices';
 import PreferenceSwitch from './PreferenceSwitch';
-
-/* global __APP_VERSION__ */
+import { appVersion as getAppVersionString } from '../report/appVersion';
+import { recordLog } from '../report/appLog';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
     return <Slide direction="down" ref={ref} {...props} />;
 });
-
-function getAppVersionString() {
-    const base = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) ? __APP_VERSION__ : 'dev';
-    const build = import.meta?.env?.VITE_APP_VERSION;
-    return build ? `${base}.${build}` : base;
-}
 
 function SectionHeader({ label }) {
     return (
@@ -122,6 +116,8 @@ function SettingsView(props) {
 
     useEffect(() => {
         Logger.setHandler((messages, context) => {
+            // Kept for "Send a problem report" too, in every mode.
+            recordLog(context.level.name, messages[0]);
             const date = format(new Date(), "HH:mm:ss:SSS");
             log(date + ' ' + messages[0], context.level.name);
         });

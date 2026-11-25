@@ -141,6 +141,13 @@ function PacketLog({ timeline }) {
  */
 function GeekStage({ master, tiles, isMobile }) {
     const timeline = useMemo(() => createTimeline(), []);
+    // A problem report sends the packet log too, while the map runs.
+    useEffect(() => {
+        master.geekTimeline = timeline;
+        return () => {
+            if (master.geekTimeline === timeline) master.geekTimeline = null;
+        };
+    }, [master, timeline]);
     const [tab, setTab] = useState(0);
     const [open, setOpen] = useState(!isMobile);
     const [height, setHeight] = useState(() => {

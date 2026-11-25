@@ -13,6 +13,7 @@ import SimpleHowItWorks from './SimpleHowItWorks';
 import RecentRooms from '../RecentRooms';
 import NearbyFront from '../nearby/NearbyFront';
 import PrivateRoomSwitch from '../PrivateRoomSwitch';
+import { ProblemReportLink } from '../report/ProblemReport';
 
 const STEPS = [
     'One person starts a room.',
@@ -104,6 +105,7 @@ function SimpleFront({ master }) {
                 <Box>
                     <SimpleHowItWorks />
                 </Box>
+                <ProblemReportLink master={master} />
             </Stack>
         </Box>
     );

@@ -109,9 +109,8 @@ export function exportFileName(data) {
     return `photogroup-log-${data.room || 'room'}-${stamp}.json`;
 }
 
-/** Save the export as a file; returns the file name. */
-export function downloadExport(data, doc = document) {
-    const name = exportFileName(data);
+/** Save the export (or a problem report) as a file; returns the file name. */
+export function downloadExport(data, doc = document, name = exportFileName(data)) {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = doc.createElement('a');
