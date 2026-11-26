@@ -12,6 +12,7 @@ import { createRoom } from './openRoom';
 import RecentRooms from './RecentRooms';
 import NearbyFront from './nearby/NearbyFront';
 import PrivateRoomSwitch from './PrivateRoomSwitch';
+import { ProblemReportLink } from './report/ProblemReport';
 
 const frames = [
     {
@@ -221,6 +222,10 @@ function FrontView({ master }) {
                 >
                     Photos go directly from one person to another.
                 </Typography>
+
+                <Box sx={{ mt: 1.5 }}>
+                    <ProblemReportLink master={master} />
+                </Box>
             </Stack>
         </Box>
     );

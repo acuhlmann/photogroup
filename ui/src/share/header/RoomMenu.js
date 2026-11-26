@@ -25,6 +25,7 @@ import QrCodeScannerRounded from '@mui/icons-material/QrCodeScannerRounded';
 import QrCode2Rounded from '@mui/icons-material/QrCode2Rounded';
 import SyncAltRounded from '@mui/icons-material/SyncAltRounded';
 import GraphicEqRounded from '@mui/icons-material/GraphicEqRounded';
+import FeedbackOutlined from '@mui/icons-material/FeedbackOutlined';
 
 import RoomPrivacy from '../RoomPrivacy';
 import LightReceive, { RECEIVE_TITLE } from '../nearby/LightReceive';
@@ -39,6 +40,7 @@ import { leaveRoomNotice } from '../roomNotice';
 import { dropRoomSubscription } from '../pushNotices';
 import { roomCryptoKey } from '../privateRoom';
 import { sealText } from '../security/roomKey';
+import ProblemReport, { REPORT_TITLE } from '../report/ProblemReport';
 import { NICKNAME_KEY, MAX_NAME, NAME_ERROR, saveMyName } from './PeerNameField';
 
 export const ROOM_NAME_MAX = 60;
@@ -185,6 +187,7 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
     const [directLink, setDirectLink] = useState(false);
     const [bySound, setBySound] = useState(false);
     const [sendByCamera, setSendByCamera] = useState(false);
+    const [reporting, setReporting] = useState(false);
     const away = useServerAway(master);
     const geek = readMode() === 'geek';
 
@@ -267,6 +270,10 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
                         <ListItemText primary={NOTES_TITLE} secondary="Names and star ratings, with no network" />
                     </MenuItem>
                 )}
+                <MenuItem onClick={pick(() => setReporting(true))}>
+                    <ListItemIcon><FeedbackOutlined fontSize="small" /></ListItemIcon>
+                    <ListItemText primary={REPORT_TITLE} secondary="With the app log, no photos" />
+                </MenuItem>
                 <Divider />
                 <MenuItem onClick={pick(leave)}>
                     <ListItemIcon><LogoutRounded fontSize="small" /></ListItemIcon>
@@ -280,6 +287,8 @@ export default function RoomMenu({ master, name, label, isPrivate = false, missi
             {sendByCamera && <RoomLightSend master={master} onClose={() => setSendByCamera(false)} />}
             {directLink && <DirectLinkDialog master={master} open onClose={() => setDirectLink(false)} />}
             {bySound && <NotesBySound master={master} open onClose={() => setBySound(false)} />}
+            {reporting && <ProblemReport master={master} open inRoom isPrivate={isPrivate} roomName={name}
+                onClose={() => setReporting(false)} />}
         </>
     );
 }

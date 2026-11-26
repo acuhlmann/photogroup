@@ -19,3 +19,6 @@ bin
 google-cloud-sdk
 github-actions-key.json
 *.json.key
+
+# Problem reports copied off the VM by get-reports.sh
+/reports/

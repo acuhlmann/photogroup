@@ -13,6 +13,7 @@ import { keepAppForOffline, prepareShareLaunch, registerShareTarget } from './sh
 import { restoreRoomKey } from './share/privateRoom';
 import { readPreference } from './share/preferences';
 import { noteArrival } from './share/nearby/pairingLog';
+import { watchErrors } from './share/report/appLog';
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -33,6 +34,8 @@ prepareShareLaunch();
 restoreRoomKey();
 // A link from an NFC tag says so; geek mode shows it.
 noteArrival();
+// Errors nobody caught go into the log that a problem report sends.
+watchErrors();
 
 const container = document.getElementById('root');
 const root = createRoot(container);
