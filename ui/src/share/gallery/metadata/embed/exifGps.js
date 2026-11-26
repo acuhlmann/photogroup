@@ -22,11 +22,8 @@ function rationals(value) {
     return [[degrees, 1], [minutes, 1], [seconds, 10000]];
 }
 
-/**
- * The latitude/longitude entries of a TIFF block's GPS directory, with a
- * reader for its byte order, or null when they are missing or malformed.
- */
-function gpsFields(bytes) {
+/** Readers for a TIFF block in its byte order, or null when it is not one. */
+function tiffReader(bytes) {
     const little = bytes[0] === 0x49 && bytes[1] === 0x49;
     if (!little && !(bytes[0] === 0x4D && bytes[1] === 0x4D)) return null;
     const u16 = at => (little ? bytes[at] | (bytes[at + 1] << 8) : (bytes[at] << 8) | bytes[at + 1]);
@@ -43,8 +40,18 @@ function gpsFields(bytes) {
         }
         return list;
     };
-
     if (u16(2) !== 42) return null;
+    return { little, u16, u32, entries };
+}
+
+/**
+ * The latitude/longitude entries of a TIFF block's GPS directory, with a
+ * reader for its byte order, or null when they are missing or malformed.
+ */
+function gpsFields(bytes) {
+    const reader = tiffReader(bytes);
+    if (!reader) return null;
+    const { little, u32, entries } = reader;
     const pointer = entries(u32(4)).find(entry => entry.tag === GPS_IFD);
     if (!pointer) return null;
     const gps = Object.fromEntries(entries(u32(pointer.at + 8)).map(entry => [entry.tag, entry]));
@@ -107,4 +114,26 @@ export function gpsBlanked(tiff) {
 /** True when the block holds a real GPS position: the fields exist and are not blanked. */
 export function gpsPresent(tiff) {
     return !!gpsFields(tiff) && !gpsBlanked(tiff);
+}
+
+const MAKE = 0x10F;
+const MODEL = 0x110;
+
+/** The camera's make and model from a TIFF block ({make: 'Apple', model: 'iPhone 15'}), or null. */
+export function cameraMakeModel(tiff) {
+    const reader = tiffReader(tiff);
+    if (!reader) return null;
+    const { u32, entries } = reader;
+    const text = entry => {
+        if (!entry || entry.type !== ASCII || !entry.count) return '';
+        const start = entry.count <= 4 ? entry.at + 8 : u32(entry.at + 8);
+        const end = Math.min(start + entry.count, tiff.length);
+        let value = '';
+        for (let at = start; at < end && tiff[at]; at++) value += String.fromCharCode(tiff[at]);
+        return value.trim();
+    };
+    const ifd0 = entries(u32(4));
+    const make = text(ifd0.find(entry => entry.tag === MAKE));
+    const model = text(ifd0.find(entry => entry.tag === MODEL));
+    return make || model ? { make, model } : null;
 }

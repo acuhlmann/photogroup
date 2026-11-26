@@ -23,7 +23,9 @@ import { sealFile } from "../security/roomKey";
 import { partitionStripped } from "../gallery/metadata/strippedLocation";
 import { withoutLocation } from "../gallery/metadata/removeLocation";
 import { readPreference } from "../preferences";
+import { partitionIPhonePick } from "../gallery/metadata/iphonePick";
 import { ACCEPT, ANDROID_ACCEPT, KEEP_LOCATION_STEPS, onAndroid } from "./androidUpload";
+import { IPHONE_LOCATION_STEPS, onIPhone } from "./iphoneUpload";
 import { isZip, unpackZips } from "./unzipMedia";
 
 const SHOWN_HELD = 5;
@@ -52,6 +54,19 @@ const styles = theme => ({
         display: 'none',
     },
 });
+
+/** The first line of the hold-back dialog. */
+function heldIntro(android, count) {
+    const one = count === 1;
+    if (android) {
+        return one
+            ? "Android removed the location from this photo, so PhotoGroup did not share it:"
+            : "Android removed the location from these photos, so PhotoGroup did not share them:";
+    }
+    return one
+        ? "This iPhone photo has no location, so PhotoGroup did not share it yet:"
+        : "These iPhone photos have no location, so PhotoGroup did not share them yet:";
+}
 
 export const WAITING_TEXT = 'The photos are shared when the room is open.';
 
@@ -136,31 +151,32 @@ function Uploader({classes, model, emitter, showButton = true}) {
 
     /**
      * Share what was picked. On Android, zips are unpacked into the photos in
-     * them, and files Android removed the location from are held back.
+     * them, and files Android removed the location from are held back. On an
+     * iPhone, iPhone photos and clips that arrived without a location are
+     * held back.
      */
     const receive = useCallback(async (picked) => {
         let chosen = Array.from(picked || []);
-        if(!onAndroid()) {
-            if(chosen.length) {
-                proceed(chosen);
-            }
-            return;
-        }
-        if(chosen.some(isZip)) {
+        const android = onAndroid();
+        const iphone = !android && onIPhone();
+        if(android && chosen.some(isZip)) {
             setUnpacking(true);
             const { files, problems } = await unpackZips(chosen);
             setUnpacking(false);
             problems.forEach(message => emitter.emit('showError', message));
             chosen = files;
         }
+        if(!chosen.length) return;
         // Nothing to hold back when the person shares without locations anyway.
-        if(readPreference('removeLocation')) {
-            if(chosen.length) proceed(chosen);
+        if((!android && !iphone) || readPreference('removeLocation')) {
+            proceed(chosen);
             return;
         }
-        const { intact, stripped } = await partitionStripped(chosen);
-        if(stripped.length) {
-            setHeld(stripped);
+        const { intact, held: toHold } = iphone
+            ? await partitionIPhonePick(chosen)
+            : await partitionStripped(chosen).then(({ intact, stripped }) => ({ intact, held: stripped }));
+        if(toHold.length) {
+            setHeld(toHold);
             // Clear the input so the same files can be chosen again the right way.
             if(!intact.length && uploaderDomRef.current) {
                 uploaderDomRef.current.value = '';
@@ -262,12 +278,10 @@ function Uploader({classes, model, emitter, showButton = true}) {
                 fullWidth
                 aria-labelledby="location-held-title"
             >
-                <DialogTitle id="location-held-title">Location removed</DialogTitle>
+                <DialogTitle id="location-held-title">{android ? 'Location removed' : 'No location'}</DialogTitle>
                 <DialogContent>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                        {held.length === 1
-                            ? "Android removed the location from this photo, so PhotoGroup did not share it:"
-                            : "Android removed the location from these photos, so PhotoGroup did not share them:"}
+                        {heldIntro(android, held.length)}
                     </Typography>
                     <Box component="ul" data-testid="location-held" sx={{ m: 0, mb: 1.5, pl: 2.5 }}>
                         {held.slice(0, SHOWN_HELD).map((file, index) => (
@@ -282,7 +296,9 @@ function Uploader({classes, model, emitter, showButton = true}) {
                         )}
                     </Box>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        To keep the location, tap Pick again. {KEEP_LOCATION_STEPS}
+                        {android
+                            ? `To keep the location, tap Pick again. ${KEEP_LOCATION_STEPS}`
+                            : `${held.length === 1 ? 'If it had a location' : 'If they had a location'}, the iPhone removed it. To keep it, tap Pick again. ${IPHONE_LOCATION_STEPS}`}
                     </Typography>
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2 }}>

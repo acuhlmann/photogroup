@@ -49,23 +49,32 @@ function itemText(bytes, item) {
 const LOCATION_KEY = 'com.apple.quicktime.location.ISO6709';
 const MAX_MOOV = 64 * 1024 * 1024;
 
-/** Location in a meta box: an iTunes ©xyz item, or Apple's keyed one. */
-function locationInMeta(bytes, meta) {
+/** Apple's keyed items in a meta box ("com.apple.quicktime.make" and so on), as name → text. */
+function keyedItems(bytes, meta) {
+    const found = new Map();
     const kids = metaContents(bytes, meta);
     const ilst = kids.find(kid => kid.type === 'ilst');
-    if (!ilst) return null;
-    const items = contents(bytes, ilst);
-    const xyz = items.find(item => item.type === '\u00A9xyz');
-    if (xyz) return parseIso6709(itemText(bytes, xyz));
     const keys = kids.find(kid => kid.type === 'keys');
-    if (!keys) return null;
+    if (!ilst || !keys) return found;
     // keys: a full box, an entry count, then [size][namespace][name] entries;
     // ilst items are typed by their 1-based key index.
     const names = parseBoxes(bytes, keys.start + keys.header + 8, keys.end)
         .map(entry => decodeUtf8(bytes.subarray(entry.start + 8, entry.end)));
-    const index = names.indexOf(LOCATION_KEY) + 1;
-    const item = index && items.find(child => readUint(bytes, child.start + 4, 4) === index);
-    return item ? parseIso6709(itemText(bytes, item)) : null;
+    contents(bytes, ilst).forEach(item => {
+        const name = names[readUint(bytes, item.start + 4, 4) - 1];
+        if (name && !found.has(name)) found.set(name, itemText(bytes, item));
+    });
+    return found;
+}
+
+/** Location in a meta box: an iTunes ©xyz item, or Apple's keyed one. */
+function locationInMeta(bytes, meta) {
+    const ilst = metaContents(bytes, meta).find(kid => kid.type === 'ilst');
+    if (!ilst) return null;
+    const xyz = contents(bytes, ilst).find(item => item.type === '\u00A9xyz');
+    if (xyz) return parseIso6709(itemText(bytes, xyz));
+    const keyed = keyedItems(bytes, meta).get(LOCATION_KEY);
+    return keyed ? parseIso6709(keyed) : null;
 }
 
 /** 3GPP location box: name, role, then 16.16 fixed-point longitude, latitude, altitude. */
@@ -117,6 +126,51 @@ export async function readLocation(source) {
         if (found) return found;
     }
     return null;
+}
+
+const VIDEO_CODECS = { hvc1: 'HEVC', hev1: 'HEVC', avc1: 'H.264', avc3: 'H.264', av01: 'AV1', vp09: 'VP9' };
+const SAMPLE_PATH = ['mdia', 'minf', 'stbl', 'stsd'];
+
+/** The codec of the first video track ('HEVC', 'H.264', …), from its sample description. */
+function videoCodec(bytes, kids) {
+    for (const trak of kids.filter(kid => kid.type === 'trak')) {
+        let node = trak;
+        for (const type of SAMPLE_PATH) {
+            node = node && contents(bytes, node).find(kid => kid.type === type);
+        }
+        // stsd: a full box and an entry count, then sample entries ([size][format]…).
+        const entry = node && node.start + node.header + 8;
+        if (entry && entry + 8 <= node.end) {
+            const codec = VIDEO_CODECS[ascii(bytes, entry + 4, 4)];
+            if (codec) return codec;
+        }
+    }
+    return null;
+}
+
+/**
+ * The camera that made a video and its video codec: {make, model, codec},
+ * each null when the file doesn't say. iPhones note the make and model in
+ * Apple's keyed metadata.
+ */
+export async function readCamera(source) {
+    const none = { make: null, model: null, codec: null };
+    const top = await scanBoxes(source);
+    const moov = top.find(item => item.type === 'moov');
+    if (!moov || moov.end - moov.start > MAX_MOOV) return none;
+    const bytes = await readBytes(source, moov.start, moov.end);
+    const kids = contents(bytes, { ...moov, start: 0, end: bytes.length });
+    const udta = kids.find(kid => kid.type === 'udta');
+    const metas = [...kids, ...(udta ? contents(bytes, udta) : [])].filter(kid => kid.type === 'meta');
+    const keyed = metas.map(meta => keyedItems(bytes, meta));
+    const first = name => keyed.map(items => items.get(name)).find(Boolean) || null;
+    let codec = null;
+    try {
+        codec = videoCodec(bytes, kids);
+    } catch {
+        // A track we can't read says nothing about the codec.
+    }
+    return { make: first('com.apple.quicktime.make'), model: first('com.apple.quicktime.model'), codec };
 }
 
 /**
